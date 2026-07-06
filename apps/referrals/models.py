@@ -5,9 +5,11 @@ Partner / ReferralProgram / ProgramRedirectRule — never Zerodha*. Zerodha is
 seeded as row #1 of `programs` with partner code ZMPHZC; a future partner (Groww,
 insurance, MF...) is another row, never a code change.
 
-M1 scope: enough of Contexts 2 & 3 to seed the single program and hold its
-server-side destination-URL template + swappable reward copy. The referral
-identity / journey / event tables are M2+ and are NOT created here.
+M1 seeded Contexts 2 & 3 (partner, program, redirect template). M2 adds the
+lazily-created referral identity + referral (Contexts 5 & 6): on first click we
+create a ReferralIdentity (keyed by the raw client_id, id_source=native) and a
+Referral (with its source), alongside the immutable Click event (apps.events).
+Prospect/lead are NOT pulled in here — those are M3/M4.
 """
 from __future__ import annotations
 
@@ -93,3 +95,90 @@ class ProgramRedirectRule(AuditedModel, TenantScopedModel):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"redirect_rule<{self.program_id}:{self.priority}>"
+
+
+class ReferralIdentity(AuditedModel, SoftDeleteModel, TenantScopedModel):
+    """The identity of a referrer within a program (05-Database-Design Context 5).
+
+    Keyed by (partner, client_id, id_source). For Zerodha the client_id IS the raw
+    Zerodha client id carried in gorefer.in/r/{client_id} — no opaque token
+    (ADR-001). Created LAZILY on first click (never pre-provisioned), after the
+    client_id is format-validated. `token` stays NULL for Zerodha (reserved for a
+    future non-native partner id).
+    """
+
+    ID_SOURCE_CHOICES = [("native", "native"), ("generated", "generated")]
+    STATUS_CHOICES = [("active", "active"), ("disabled", "disabled")]
+
+    partner = models.ForeignKey(Partner, on_delete=models.PROTECT, related_name="referral_identities")
+    program = models.ForeignKey(ReferralProgram, on_delete=models.PROTECT, related_name="referral_identities")
+    client_id = models.CharField(max_length=64)
+    id_source = models.CharField(max_length=16, choices=ID_SOURCE_CHOICES, default="native")
+    token = models.CharField(max_length=64, null=True, blank=True)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="active")
+
+    class Meta:
+        db_table = "referral_identities"
+        constraints = [
+            # The identity key, resolved on every redirect, unique per tenant.
+            models.UniqueConstraint(
+                fields=["tenant", "partner", "client_id", "id_source"],
+                name="uq_referral_identity_key",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["program"]),
+            models.Index(fields=["status"]),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"identity<{self.client_id}>"
+
+
+class Referral(AuditedModel, SoftDeleteModel, TenantScopedModel):
+    """The act/instance of a referral (05-Database-Design Context 6).
+
+    Created lazily on first click alongside the identity. `referral_identity` is
+    NULLABLE — a partner-direct journey (GET /open) and a future Zoho-imported
+    off-platform conversion have NO referrer identity (Gap 1 / ADR-015). `source`
+    distinguishes them. Conversion/credit fields are NOT set here — they only ever
+    come from Zoho (M6), never fabricated.
+    """
+
+    SOURCE_CHOICES = [
+        ("referral_link", "referral_link"),
+        ("partner_direct", "partner_direct"),
+        ("zoho_import", "zoho_import"),
+    ]
+    STATUS_CHOICES = [
+        ("created", "created"),
+        ("opened", "opened"),
+        ("landing_viewed", "landing_viewed"),
+        ("signup_started", "signup_started"),
+        ("signup_completed", "signup_completed"),
+        ("confirmed", "confirmed"),
+        ("rewarded", "rewarded"),
+    ]
+
+    referral_identity = models.ForeignKey(
+        ReferralIdentity,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="referrals",
+    )
+    program = models.ForeignKey(ReferralProgram, on_delete=models.PROTECT, related_name="referrals")
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="created")
+    first_click_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "referrals"
+        indexes = [
+            models.Index(fields=["referral_identity"]),
+            models.Index(fields=["source"]),
+            models.Index(fields=["status"]),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"referral<{self.pk}:{self.source}>"

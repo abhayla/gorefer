@@ -1,8 +1,9 @@
 """Root URL configuration.
 
-M1 wires: the Django admin (M7 dashboard base; env-bootstrapped admin-only auth),
-the Django Ninja API mount, and a minimal server-rendered health/home page. No
-referral/redirect routes yet — those arrive in M2.
+Wires: the server-rendered home page, the Django Ninja API mount, the Django admin
+(M7 base), and the M2 redirect routes:
+  - GET /r/{client_id}  -> referral redirect (lazy journey + click + 302)
+  - GET /open           -> partner-direct redirect (302, no r=)
 """
 from __future__ import annotations
 
@@ -12,9 +13,12 @@ from django.urls import path
 from django.views.generic import TemplateView
 
 from api.router import api
+from apps.referrals.views import partner_direct_redirect, referral_redirect
 
 urlpatterns = [
     path("", TemplateView.as_view(template_name="home.html"), name="home"),
+    path("open", partner_direct_redirect, name="partner_direct"),
+    path("r/<str:client_id>", referral_redirect, name="referral_redirect"),
     path("api/", api.urls),
 ]
 

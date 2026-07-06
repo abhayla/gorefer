@@ -34,59 +34,39 @@ ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,12
 # DB_ENGINE=postgres  -> real deploy: PostgreSQL + django-tenants schema routing.
 # DB_ENGINE=sqlite    -> dev/CI convenience: single SQLite file, no tenant router.
 DB_ENGINE = os.environ.get("DB_ENGINE", "sqlite").strip().lower()
-USE_TENANTS = DB_ENGINE == "postgres"
 
 # --- Applications ----------------------------------------------------------
-# App split kept "tenant vs shared" aware from day one (ADR-024 line 269), so the
-# django-tenants boundary can light up without re-homing apps later.
-
-# Shared/global apps: identity of tenants themselves, Django admin, config baseline.
-SHARED_APPS = [
-    "django_tenants",  # must be first when tenants are active
-    "apps.tenants",    # holds the Tenant + Domain models (TENANT_MODEL)
+# Multi-tenancy is SINGLE-SCHEMA tenant_id discriminator (COORDINATION Q-M1-1
+# answer): no django-tenants schema routing. `apps.tenants` keeps a plain
+# Tenant/Domain registry; isolation is enforced by tenant-scoped model managers +
+# TenantResolutionMiddleware + composite unique constraints (per 05-Database-Design).
+# Schema-per-tenant physical isolation is deferred to backlog DF-7.
+INSTALLED_APPS = [
+    "apps.tenants",  # plain Tenant + Domain registry (no schema router)
     "django.contrib.contenttypes",
     "django.contrib.auth",
     "django.contrib.admin",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "apps.config",     # config cascade central layer is shared
-]
-
-# Tenant-scoped apps: the referral domain data partitions per tenant.
-TENANT_APPS = [
-    "django.contrib.contenttypes",
+    "apps.config",
     "apps.referrals",
     "apps.events",
     "apps.integrations",
 ]
 
-# TENANT_MODEL / TENANT_DOMAIN_MODEL are defined unconditionally: django-tenants'
-# DomainMixin references settings.TENANT_MODEL at import time. They are inert
-# without the schema router (which is only wired when USE_TENANTS).
-TENANT_MODEL = "tenants.Tenant"
-TENANT_DOMAIN_MODEL = "tenants.Domain"
-
-if USE_TENANTS:
-    INSTALLED_APPS = SHARED_APPS + [a for a in TENANT_APPS if a not in SHARED_APPS]
-else:
-    # SQLite/dev boot: same apps, no django-tenants app or router.
-    INSTALLED_APPS = [a for a in SHARED_APPS if a != "django_tenants"] + [
-        a for a in TENANT_APPS if a not in SHARED_APPS
-    ]
-
-MIDDLEWARE = (
-    (["django_tenants.middleware.main.TenantMainMiddleware"] if USE_TENANTS else [])
-    + [
-        "django.middleware.security.SecurityMiddleware",
-        "django.contrib.sessions.middleware.SessionMiddleware",
-        "django.middleware.common.CommonMiddleware",
-        "django.middleware.csrf.CsrfViewMiddleware",
-        "django.contrib.auth.middleware.AuthenticationMiddleware",
-        "django.contrib.messages.middleware.MessageMiddleware",
-        "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    ]
-)
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # Resolves the active tenant (Sprint 1: the single bootstrap tenant PIFS) and
+    # stashes it on the request for tenant-scoped writes.
+    "apps.tenants.middleware.TenantResolutionMiddleware",
+]
 
 ROOT_URLCONF = "gorefer.urls"
 
@@ -110,10 +90,12 @@ TEMPLATES = [
 WSGI_APPLICATION = "gorefer.wsgi.application"
 
 # --- Database --------------------------------------------------------------
-if USE_TENANTS:
+# Single-schema isolation (Q-M1-1): plain Postgres backend, NO django-tenants
+# backend/router. SQLite is the zero-dependency dev/CI path.
+if DB_ENGINE == "postgres":
     DATABASES = {
         "default": {
-            "ENGINE": "django_tenants.postgresql_backend",
+            "ENGINE": "django.db.backends.postgresql",
             "NAME": os.environ.get("DB_NAME", "gorefer"),
             "USER": os.environ.get("DB_USER", "gorefer"),
             "PASSWORD": os.environ.get("DB_PASSWORD", ""),
@@ -121,7 +103,6 @@ if USE_TENANTS:
             "PORT": os.environ.get("DB_PORT", "5432"),
         }
     }
-    DATABASE_ROUTERS = ("django_tenants.routers.TenantSyncRouter",)
 else:
     DATABASES = {
         "default": {
