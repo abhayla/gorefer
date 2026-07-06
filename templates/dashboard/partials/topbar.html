@@ -1,0 +1,45 @@
+{# Reusable admin top-bar + sync-freshness indicator (#19). #}
+<header class="bg-pifs-700 text-white sticky top-0 z-20 shadow-sm">
+  <div class="mx-auto max-w-[1120px] px-4 md:px-6">
+    <div class="flex items-center justify-between h-14">
+      <div class="flex items-center gap-3">
+        <div class="h-8 w-8 rounded-lg bg-white/10 ring-1 ring-white/20 flex items-center justify-center">
+          <span class="text-sm font-extrabold text-gold">P</span>
+        </div>
+        <div class="leading-tight">
+          <div class="text-sm font-bold tracking-tight">GoRefer <span class="text-pifs-100/70 font-medium">Admin</span></div>
+          <div class="text-[10px] text-pifs-100/70 hidden sm:block">Passive Income Financial Solutions</div>
+        </div>
+      </div>
+      <nav class="flex items-center gap-4 text-[12px] font-medium">
+        <a href="{% url 'dashboard' %}" class="hover:text-gold">Dashboard</a>
+        <a href="{% url 'dashboard_explorer' %}" class="hover:text-gold">Explorer</a>
+        <a href="{% url 'dashboard_logout' %}" class="text-pifs-100/70 hover:text-white">Sign out</a>
+      </nav>
+    </div>
+  </div>
+  {# Sync-freshness bar #}
+  <div class="bg-pifs-800/60 border-t border-white/5">
+    <div class="mx-auto max-w-[1120px] px-4 md:px-6 py-1.5 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-pifs-100/90">
+      <span class="inline-flex items-center gap-1.5">
+        {% if sync_health.zoho_state == "healthy" %}
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+          Zoho: synced {{ sync_health.zoho_last_sync|timesince }} ago <span class="text-emerald-300">✓</span>
+        {% else %}
+          <span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>
+          Zoho: no sync yet <span class="text-amber-300">⚠</span>
+        {% endif %}
+      </span>
+      <span class="text-white/20">·</span>
+      <span class="inline-flex items-center gap-1.5">
+        {% if sync_health.wati_state == "healthy" %}
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+          WATI: healthy <span class="text-emerald-300">✓</span>
+        {% else %}
+          <span class="h-1.5 w-1.5 rounded-full bg-slate-300"></span>
+          WATI: no sends yet
+        {% endif %}
+      </span>
+    </div>
+  </div>
+</header>
