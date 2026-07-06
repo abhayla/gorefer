@@ -31,6 +31,7 @@ Document map (start at `README.md` for the index):
 | `docs/workflow/11-Referral-Workflow-and-Edge-Cases.md` | End-to-end workflow. |
 | `docs/workflow/12-Resolved-Gaps-and-Edge-Case-Decisions.md` | **Authoritative edge-case decisions** (16 gaps, locked → ADR-015…020). |
 | `implementation/10-Claude-Code-Implementation-Guide.md` | **The build guide**: tech direction, standards, tests, git, DoD, build order. |
+| `COORDINATION.md` | **DA ⇆ Engineer coordination log** — the async channel between the Design Authority (Cowork planning session) and the Engineer (Claude Code). Read it before each mission; append a STATUS entry when you open a PR; log any surfaced inconsistency as a QUESTION and pause rather than guess. |
 | `review/` | LLM review pack (`09`) + review bundle. |
 | `_source-archive/` | Historical source-of-truth captures (context only). |
 
@@ -40,7 +41,7 @@ When docs 11 and 12 both speak to an edge case, **doc 12 (resolved gaps) wins**.
 
 ## 3. Your role
 
-You are the software **ENGINEER**, not the architect. Implement **exactly** what the spec says. **Never invent features, and never change the architecture.** Architectural decisions belong to the Design Authority. If you find an inconsistency, an OPEN decision, or a source conflict, **report it** (surface options + a recommendation) — do not guess and build on a silent pick.
+You are the software **ENGINEER**, not the architect. Implement **exactly** what the spec says. **Never invent features, and never change the architecture.** Architectural decisions belong to the Design Authority. If you find an inconsistency, an OPEN decision, or a source conflict, **report it** (surface options + a recommendation) — do not guess and build on a silent pick. **Report via `COORDINATION.md`**: append a STATUS entry when you open a mission PR, and log any surfaced inconsistency/ambiguity there as a QUESTION (then pause on that point). The Design Authority answers there; Abhay relays between the two sessions.
 
 ---
 
