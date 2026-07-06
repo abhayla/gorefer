@@ -97,8 +97,11 @@ def test_partner_direct_creates_none_referrer_journey(seeded, client):
 def test_raw_ip_stored_on_erasable_record_not_in_event(client):
     call_command("seed_program")
     client.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.7")
-    pii = VisitorPII.objects.get()
+    pii = VisitorPII.objects.get()  # raw IP recorded once, on the erasable record
     assert pii.raw_ip == "203.0.113.7"
-    event = Event.objects.get()
-    assert "203.0.113.7" not in str(event.metadata)
-    assert event.person_ref_id == pii.pk
+    # No event (click or landing_viewed) carries the raw IP in its metadata.
+    for event in Event.objects.all():
+        assert "203.0.113.7" not in str(event.metadata)
+    # The click event references the PII record by id only.
+    click = Event.objects.get(event_type="click")
+    assert click.person_ref_id == pii.pk

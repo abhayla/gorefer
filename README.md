@@ -43,6 +43,8 @@ cp .env.example .env
 # 3. Apply migrations (forward-only) and seed the single ReferralProgram (Zerodha)
 python manage.py migrate
 python manage.py seed_program          # idempotent: tenant + central config + partner + program + redirect rule
+python manage.py seed_demo             # optional: demo journeys/events so the funnel + dashboard render (no conversions)
+python manage.py recompute_rollups     # recompute daily/monthly rollups for any dirty periods (run by a worker in prod)
 
 # 4. (Optional) create the admin from env vars — no plaintext password, hash only
 #    Generate a hash:  python -c "from django.contrib.auth.hashers import make_password; print(make_password('your-pw'))"
