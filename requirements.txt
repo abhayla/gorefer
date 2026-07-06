@@ -1,0 +1,11 @@
+# GoRefer — Sprint 1 runtime + dev dependencies (stack LOCKED, ADR-024).
+Django>=5.1,<5.2
+django-ninja>=1.6,<2.0
+django-tenants>=3.10,<4.0
+psycopg2-binary>=2.9        # PostgreSQL driver (deploy); SQLite needs no driver
+python-dotenv>=1.0
+
+# Dev / CI
+pytest>=8.0
+pytest-django>=4.9
+ruff>=0.6
