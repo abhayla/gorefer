@@ -14,6 +14,7 @@ HUMAN_CONFIRMED = "human_confirmed"    # JS confirmation beacon cleared (real hu
 LEAD_CAPTURED = "lead_captured"        # capture-first form submit saved a lead
 REDIRECT_COMPLETED = "redirect_completed"  # user tapped Continue -> 302 to Zerodha
 SHARE_CLICKED = "share_clicked"        # referrer shared the link on a channel
+NOTIFICATION = "notification"          # a WATI transactional message reached a terminal status
 
 # Downstream events — ONLY ever produced from Zoho (M6). Never fabricated here.
 ACCOUNT_OPENED = "account_opened"
@@ -27,6 +28,7 @@ SRC_FORM = "form"
 SRC_REDIRECT = "redirect"
 SRC_BEACON = "beacon"
 SRC_ZOHO = "zoho"
+SRC_WATI = "wati"
 
 # The ordered funnel stages the journey timeline + funnel aggregation report on.
 # account_opened is source-only (Zoho, M6) and stays 0 / "pending Zoho" until then.

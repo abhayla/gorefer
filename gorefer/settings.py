@@ -49,11 +49,27 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django_q",  # background queue (ORM broker — NO Redis; ADR-024)
     "apps.config",
     "apps.referrals",
     "apps.events",
     "apps.integrations",
 ]
+
+# --- Background queue (django-q2, Postgres/ORM broker — NO Redis) -----------
+# Async WATI sends + retries + terminal-status polling, and the M4 dirty-day
+# recompute schedule run here. `sync` runs tasks inline (no worker) — the default
+# in dev/CI/demo so the whole flow is testable offline; set Q_ASYNC=true + run
+# `python manage.py qcluster` in production for real async.
+Q_CLUSTER = {
+    "name": "gorefer",
+    "orm": "default",  # use the default DB as the broker (no Redis)
+    "sync": os.environ.get("Q_ASYNC", "false").strip().lower() not in {"1", "true", "yes", "on"},
+    "timeout": 60,
+    "retry": 120,
+    "max_attempts": 5,
+    "catch_up": False,
+}
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -149,3 +165,5 @@ NSE_AP_NO = os.environ.get("NSE_AP_NO", "AP2516003693")
 # WATI BUSINESS number (config, not a secret) — the wa.me share target. Digits only
 # (no +/spaces) so it drops straight into a wa.me link. NOT Ashok's personal number.
 WATI_BUSINESS_NUMBER = os.environ.get("WATI_BUSINESS_NUMBER", "917080642020")
+# Office/Ashok alert recipient for the "new lead" notification (config, not secret).
+OFFICE_ALERT_NUMBER = os.environ.get("OFFICE_ALERT_NUMBER", "917388882020")

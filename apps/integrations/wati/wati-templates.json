@@ -1,0 +1,39 @@
+{
+  "_comment": "GoRefer WATI template manifest (M5). Three lead-time transactional templates, all UTILITY (first message to a non-opted-in number must be a warm utility notice — doc-08 A4). Submitted to Meta for approval as a parallel workstream; live sending stays behind ENABLE_WATI_SEND until APPROVED. Positional vars use {{n}} with Meta sample values.",
+  "templates": [
+    {
+      "name": "gorefer_office_new_lead",
+      "category": "UTILITY",
+      "language": "en",
+      "recipient_role": "office",
+      "body": "New GoRefer lead: {{1}} (mobile {{2}}), referred by client {{3}}. Please call to help them open their Zerodha account.",
+      "variables": [
+        {"index": 1, "meaning": "prospect_name", "sample": "Rahul Sharma"},
+        {"index": 2, "meaning": "prospect_mobile", "sample": "9876543210"},
+        {"index": 3, "meaning": "referrer_client_id", "sample": "RJ4521"}
+      ],
+      "buttons": []
+    },
+    {
+      "name": "gorefer_prospect_welcome",
+      "category": "UTILITY",
+      "language": "en",
+      "recipient_role": "prospect",
+      "body": "Hi {{1}}, {{2}} referred you to PIFS to open a free Zerodha demat & trading account. Our representative will call to help you complete it. Investments in the securities market are subject to market risks.",
+      "variables": [
+        {"index": 1, "meaning": "prospect_name", "sample": "Rahul"},
+        {"index": 2, "meaning": "referrer_display", "sample": "Ramesh Kumar"}
+      ],
+      "buttons": []
+    },
+    {
+      "name": "gorefer_referrer_used",
+      "category": "UTILITY",
+      "language": "en",
+      "recipient_role": "referrer",
+      "body": "Good news! Someone just used your PIFS referral link to start opening a Zerodha account. We'll keep you posted. Reward status is shown in your Zerodha Console.",
+      "variables": [],
+      "buttons": []
+    }
+  ]
+}
