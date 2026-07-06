@@ -1,7 +1,7 @@
 # GoRefer — Sprint 1 runtime + dev dependencies (stack LOCKED, ADR-024).
+# Multi-tenancy is single-schema tenant_id discriminator (Q-M1-1) — NO django-tenants.
 Django>=5.1,<5.2
 django-ninja>=1.6,<2.0
-django-tenants>=3.10,<4.0
 psycopg2-binary>=2.9        # PostgreSQL driver (deploy); SQLite needs no driver
 python-dotenv>=1.0
 
