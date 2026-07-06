@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PIFS — Referral Landing (Mockup)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          pifs: {
+            900: '#1b2e1f', // deepest green
+            800: '#233d29',
+            700: '#2f5136', // primary deep green
+            600: '#3d6a45',
+            500: '#4e8256', // olive-green accent
+            400: '#6fa377',
+            100: '#eaf1ea',
+            50:  '#f4f8f4',
+          },
+          gold: '#c8a24a', // muted premium accent
+        },
+        fontFamily: {
+          sans: ['Inter', 'system-ui', 'Segoe UI', 'sans-serif'],
+        },
+      },
+    },
+  };
+</script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  body { -webkit-font-smoothing: antialiased; }
+</style>
+</head>
+<body class="bg-pifs-50 font-sans text-pifs-900 min-h-screen">
+
+<!-- Outer container: mobile-first single column, centered on larger screens -->
+<div class="mx-auto max-w-md md:max-w-lg bg-white min-h-screen md:my-6 md:rounded-2xl md:shadow-xl md:border md:border-pifs-100 overflow-hidden">
+
+  <!-- Shared PIFS header (injected by shared.js) -->
+  <div id="gr-header"></div>
+
+  <!--
+    HERO / GREETING — PERSONALIZED referrer state.
+    DESIGN NOTE (07-UI-UX §9 "Referrer personalization is beacon-gated"):
+    On the real page the FIRST load shows a GENERIC greeting with NO name.
+    The referrer's first name is revealed ONLY AFTER the JS human-confirmation
+    beacon completes (and only to a request carrying a fresh server nonce),
+    to prevent enumeration of the id→name map. This mockup shows the
+    POST-BEACON, personalized state.
+  -->
+  <section class="px-5 pt-6 pb-2">
+    <div class="inline-flex items-center gap-1.5 rounded-full bg-pifs-100 text-pifs-700 text-[11px] font-semibold px-3 py-1 mb-3">
+      <span class="h-1.5 w-1.5 rounded-full bg-pifs-500"></span>
+      You've been personally referred
+    </div>
+    <h1 class="text-[22px] leading-snug font-extrabold tracking-tight text-pifs-900">
+      <span class="text-pifs-600">Ramesh Kumar</span> has invited you to open a free
+      Zerodha demat &amp; trading account.
+    </h1>
+    <p class="mt-2 text-sm text-pifs-800/70 leading-relaxed">
+      PIFS helps you open your account smoothly and gives you trusted guidance every step of the way.
+    </p>
+  </section>
+
+  <!-- Value proposition -->
+  <section class="px-5 pt-4 pb-1">
+    <ul class="space-y-2.5">
+      <li class="flex items-start gap-3">
+        <span class="mt-0.5 h-6 w-6 flex-none rounded-full bg-pifs-100 text-pifs-600 flex items-center justify-center">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 111.4-1.4l3.8 3.8 6.8-6.8a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>
+        </span>
+        <div>
+          <div class="text-sm font-semibold">Free account opening</div>
+          <div class="text-xs text-pifs-800/60">No charges to open your demat &amp; trading account.</div>
+        </div>
+      </li>
+      <li class="flex items-start gap-3">
+        <span class="mt-0.5 h-6 w-6 flex-none rounded-full bg-pifs-100 text-pifs-600 flex items-center justify-center">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 111.4-1.4l3.8 3.8 6.8-6.8a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>
+        </span>
+        <div>
+          <div class="text-sm font-semibold">Invest in stocks, mutual funds &amp; more</div>
+          <div class="text-xs text-pifs-800/60">Access India's markets from a single account.</div>
+        </div>
+      </li>
+      <li class="flex items-start gap-3">
+        <span class="mt-0.5 h-6 w-6 flex-none rounded-full bg-pifs-100 text-pifs-600 flex items-center justify-center">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 111.4-1.4l3.8 3.8 6.8-6.8a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>
+        </span>
+        <div>
+          <div class="text-sm font-semibold">Trusted personal guidance from PIFS</div>
+          <div class="text-xs text-pifs-800/60">A real person helps you complete your KYC on a call.</div>
+        </div>
+      </li>
+    </ul>
+  </section>
+
+  <!-- Capture form -->
+  <section class="px-5 pt-5">
+    <div class="rounded-2xl border border-pifs-100 bg-pifs-50/60 p-4">
+      <h2 class="text-sm font-bold text-pifs-900 mb-3">Enter your details to continue</h2>
+      <form id="leadForm" onsubmit="return false;" class="space-y-3" novalidate>
+        <div>
+          <label class="block text-[11px] font-semibold text-pifs-800/70 mb-1">Full name</label>
+          <input type="text" placeholder="e.g. Rahul Sharma"
+            class="w-full rounded-xl border border-pifs-100 bg-white px-3.5 py-3 text-sm placeholder:text-pifs-800/30 focus:outline-none focus:ring-2 focus:ring-pifs-500/40 focus:border-pifs-500" />
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-pifs-800/70 mb-1">Email</label>
+          <input type="email" placeholder="you@example.com"
+            class="w-full rounded-xl border border-pifs-100 bg-white px-3.5 py-3 text-sm placeholder:text-pifs-800/30 focus:outline-none focus:ring-2 focus:ring-pifs-500/40 focus:border-pifs-500" />
+        </div>
+
+        <!-- Mobile number with CLIENT-SIDE FORMAT VALIDATION (+91, 10 digits, starts 6-9) -->
+        <div>
+          <label class="block text-[11px] font-semibold text-pifs-800/70 mb-1">Mobile number</label>
+          <div id="mobileWrap"
+            class="flex rounded-xl border border-pifs-100 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-pifs-500/40 focus-within:border-pifs-500 transition-colors">
+            <span class="flex items-center px-3.5 text-sm font-semibold text-pifs-800/70 bg-pifs-100/70 border-r border-pifs-100">+91</span>
+            <input id="mobileInput" type="tel" inputmode="numeric" maxlength="10" placeholder="98765 43210"
+              aria-describedby="mobileMsg"
+              class="flex-1 px-3.5 py-3 text-sm placeholder:text-pifs-800/30 focus:outline-none bg-transparent" />
+            <!-- valid/invalid status icon -->
+            <span id="mobileIcon" class="hidden items-center pr-3.5"></span>
+          </div>
+          <!-- inline error / success message -->
+          <p id="mobileMsg" class="mt-1 text-[11px] font-medium min-h-[15px]"></p>
+        </div>
+
+        <!-- Consent -->
+        <label class="flex items-start gap-2.5 pt-1 cursor-pointer">
+          <input type="checkbox" class="mt-0.5 h-4 w-4 rounded border-pifs-300 text-pifs-600 focus:ring-pifs-500" />
+          <span class="text-[11px] leading-relaxed text-pifs-800/70">
+            I agree to be contacted about opening a Zerodha account and to PIFS processing my details.
+            <a href="#" class="text-pifs-600 font-semibold underline underline-offset-2">Privacy Policy</a>.
+          </span>
+        </label>
+      </form>
+    </div>
+  </section>
+
+  <!-- Referral ID echo -->
+  <div class="px-5 pt-3">
+    <div class="flex items-center justify-center gap-2 text-[11px] text-pifs-800/50 font-medium">
+      <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M9 2a1 1 0 000 2h1v12H9a1 1 0 100 2h4a1 1 0 100-2h-1V4h1a1 1 0 100-2H9z"/></svg>
+      Referral ID: <span class="font-bold text-pifs-700 tracking-wide">RJ4521</span>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <section class="px-5 pt-3 pb-2 space-y-3">
+    <!-- Primary -->
+    <button class="w-full rounded-xl bg-pifs-700 hover:bg-pifs-800 active:bg-pifs-900 transition-colors text-white text-sm font-bold py-3.5 shadow-sm flex items-center justify-center gap-2">
+      Continue to Zerodha
+      <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.3 4.3a1 1 0 011.4 0l5 5a1 1 0 010 1.4l-5 5a1 1 0 01-1.4-1.4L11.6 10 7.3 5.7a1 1 0 010-1.4z" clip-rule="evenodd"/></svg>
+    </button>
+    <!-- Secondary -->
+    <button class="w-full rounded-xl bg-white border-2 border-pifs-500 text-pifs-700 hover:bg-pifs-50 transition-colors text-sm font-bold py-3 flex items-center justify-center gap-2">
+      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 004.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0012.04 2zm5.8 14.17c-.25.7-1.44 1.33-1.98 1.37-.53.05-1.02.24-3.43-.72-2.89-1.14-4.73-4.11-4.87-4.3-.14-.19-1.16-1.54-1.16-2.94 0-1.4.73-2.09 1-2.38.24-.26.53-.33.71-.33.18 0 .36 0 .51.01.16.01.39-.06.6.46.25.6.83 2.09.9 2.24.07.15.12.32.02.51-.09.19-.14.31-.28.48-.14.16-.29.36-.42.48-.14.14-.28.29-.12.57.16.28.71 1.17 1.53 1.9 1.05.93 1.93 1.22 2.21 1.36.28.14.44.12.6-.07.16-.19.69-.8.87-1.08.18-.28.36-.23.6-.14.24.09 1.55.73 1.82.87.28.14.46.21.53.33.07.12.07.66-.18 1.36z"/></svg>
+      Share referral details on WhatsApp
+    </button>
+  </section>
+
+  <!-- Shared compliance disclosure block (injected by shared.js) -->
+  <div id="gr-disclosure"></div>
+
+</div>
+
+<!-- Shared components + helpers -->
+<script src="shared.js"></script>
+
+<!-- Mobile format validation (pure client-side) -->
+<script>
+  (function () {
+    var input = document.getElementById('mobileInput');
+    var wrap  = document.getElementById('mobileWrap');
+    var msg   = document.getElementById('mobileMsg');
+    var icon  = document.getElementById('mobileIcon');
+
+    var CHECK = '<svg class="h-4 w-4 text-emerald-600" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 111.4-1.4l3.8 3.8 6.8-6.8a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>';
+    var CROSS = '<svg class="h-4 w-4 text-red-500" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.3 4.3a1 1 0 011.4 0L10 8.6l4.3-4.3a1 1 0 111.4 1.4L11.4 10l4.3 4.3a1 1 0 01-1.4 1.4L10 11.4l-4.3 4.3a1 1 0 01-1.4-1.4L8.6 10 4.3 5.7a1 1 0 010-1.4z" clip-rule="evenodd"/></svg>';
+
+    // Base border classes to swap between neutral / error / valid states.
+    var BASE = 'flex rounded-xl border bg-white overflow-hidden transition-colors ';
+    var NEUTRAL = 'border-pifs-100 focus-within:ring-2 focus-within:ring-pifs-500/40 focus-within:border-pifs-500';
+    var VALID   = 'border-emerald-400 ring-2 ring-emerald-400/25';
+    var ERROR   = 'border-red-400 ring-2 ring-red-400/25';
+
+    function setState(state) {
+      if (state === 'valid') {
+        wrap.className = BASE + VALID;
+        icon.className = 'flex items-center pr-3.5';
+        icon.innerHTML = CHECK;
+        msg.textContent = 'Looks good — a valid Indian mobile number.';
+        msg.className = 'mt-1 text-[11px] font-medium min-h-[15px] text-emerald-600';
+      } else if (state === 'error') {
+        wrap.className = BASE + ERROR;
+        icon.className = 'flex items-center pr-3.5';
+        icon.innerHTML = CROSS;
+        msg.textContent = 'Enter a valid 10-digit mobile number starting with 6–9.';
+        msg.className = 'mt-1 text-[11px] font-medium min-h-[15px] text-red-500';
+      } else { // neutral
+        wrap.className = BASE + NEUTRAL;
+        icon.className = 'hidden items-center pr-3.5';
+        icon.innerHTML = '';
+        msg.textContent = '';
+        msg.className = 'mt-1 text-[11px] font-medium min-h-[15px]';
+      }
+    }
+
+    function evaluate(showEmptyAsNeutral) {
+      // keep digits only
+      var digits = input.value.replace(/\D/g, '');
+      if (digits !== input.value) input.value = digits;
+
+      if (digits.length === 0) { setState('neutral'); return; }
+      // Valid = exactly 10 digits, first digit 6-9  (use shared helper if present)
+      var valid = (window.GoRefer && window.GoRefer.isValidIndianMobile)
+        ? window.GoRefer.isValidIndianMobile(digits)
+        : /^[6-9]\d{9}$/.test(digits);
+
+      if (valid) { setState('valid'); return; }
+
+      // Not yet 10 digits AND still could become valid -> stay neutral while typing.
+      if (digits.length < 10 && /^[6-9]/.test(digits)) { setState('neutral'); return; }
+      setState('error');
+    }
+
+    input.addEventListener('input', function () { evaluate(true); });
+    input.addEventListener('blur', function () { evaluate(false); });
+  })();
+</script>
+</body>
+</html>
