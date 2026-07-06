@@ -78,8 +78,52 @@ def test_no_partner_code_in_client_facing_response_bodies():
         assert "signup.zerodha.com" not in body, f"raw Zerodha URL leaked in body of {path}"
 
 
-# --- Guardrail #2: account-status only from Zoho import (M6) ----------------
+# --- Guardrail #2 (ACTIVE, M6): account/conversion status ONLY from Zoho -----
 
-@pytest.mark.skip(reason="M6: Zoho import path not built yet")
-def test_account_status_only_settable_from_zoho_import():
-    raise AssertionError("implement in M6")
+def test_conversion_status_only_written_by_zoho_ingest_path():
+    """Static assertion: the ONLY code that sets a conversion/account status is the
+    Zoho ingest path. No other module writes Conversion.status / .account_opened_at
+    / referral.credited_referrer / referral.conversion_status."""
+    import inspect
+
+    from apps.integrations.zoho import ingest as zoho_ingest
+    from apps.referrals import lead_service, redirect_service, views
+
+    forbidden_writes = (
+        "conversion_status =",
+        "credited_referrer =",
+        "account_opened_at =",
+        ".status = \"account_opened\"",
+        "status='account_opened'",
+    )
+    # These non-Zoho modules must NOT set conversion/account status.
+    for module in (lead_service, redirect_service, views):
+        src = inspect.getsource(module)
+        for token in forbidden_writes:
+            assert token not in src, f"{module.__name__} must not set conversion status ({token})"
+    # The Zoho ingest module IS allowed to (it's the sole writer).
+    assert "conversion_status =" in inspect.getsource(zoho_ingest)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_lead_capture_never_sets_account_opened():
+    """Behavioural: a full lead capture (no Zoho webhook) produces NO account_opened
+    event and leaves conversion status empty — never fabricated internally."""
+    from django.test import Client
+
+    from apps.events.models import Event
+    from apps.referrals.models import Referral
+
+    call_command("seed_program")
+    c = Client()
+    c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="1.2.3.4")
+    c.post(
+        "/api/leads/",
+        data={"client_id": "RJ4521", "name": "Rahul", "mobile": "9876543210", "consent": True},
+        content_type="application/json",
+    )
+    assert Event.objects.filter(event_type="account_opened").count() == 0
+    referral = Referral.objects.get(source="referral_link")
+    assert referral.conversion_status == ""      # never set outside Zoho
+    assert referral.credited_referrer == ""
+    assert referral.account_opened_at is None

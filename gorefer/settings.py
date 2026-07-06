@@ -167,3 +167,8 @@ NSE_AP_NO = os.environ.get("NSE_AP_NO", "AP2516003693")
 WATI_BUSINESS_NUMBER = os.environ.get("WATI_BUSINESS_NUMBER", "917080642020")
 # Office/Ashok alert recipient for the "new lead" notification (config, not secret).
 OFFICE_ALERT_NUMBER = os.environ.get("OFFICE_ALERT_NUMBER", "917388882020")
+
+# --- Zoho webhook auth (M6, interim R2): static key + IP allowlist ---------
+# HMAC wax-seal is deferred (DF-2). The key is a SECRET (from env, never inline).
+ZOHO_WEBHOOK_KEY = os.environ.get("ZOHO_WEBHOOK_KEY", "")
+ZOHO_WEBHOOK_IP_ALLOWLIST = os.environ.get("ZOHO_WEBHOOK_IP_ALLOWLIST", "")  # csv; empty = any (dev)

@@ -38,9 +38,11 @@ def test_funnel_counts_from_events_account_opened_source_only(demo):
     stages = {s["stage"]: s for s in funnel_counts()}
     assert stages["click"]["count"] > 0
     assert stages["landing_viewed"]["count"] > 0
-    # account_opened is source-only and 0 (never derived from clicks/leads)
-    assert stages["account_opened"]["count"] == 0
+    # account_opened is source-only: it reflects ONLY Zoho-sourced account_opened
+    # events (seeded via the ingest path), never derived from clicks/leads.
     assert stages["account_opened"]["source_only"] is True
+    zoho_opened = Event.objects.filter(event_type="account_opened", source="zoho").count()
+    assert stages["account_opened"]["count"] == zoho_opened
 
 
 def test_funnel_excludes_bots(demo):
@@ -97,13 +99,16 @@ def test_sync_health_shows_no_sync_in_demo(demo):
 
 # --- NEVER FABRICATE CONVERSIONS ------------------------------------------
 
-def test_no_internal_path_creates_account_opened_events(demo):
-    # After the full demo flow, zero Zoho-only events exist (no internal producer).
-    assert Event.objects.filter(event_type__in=list(vocab.ZOHO_ONLY_EVENTS)).count() == 0
+def test_zoho_only_events_all_carry_zoho_source(demo):
+    # Every Zoho-only event (account_opened / reward / removed) must be tagged
+    # source=zoho — i.e. produced ONLY by the Zoho ingest path, never internally.
+    zoho_only = Event.objects.filter(event_type__in=list(vocab.ZOHO_ONLY_EVENTS))
+    assert zoho_only.exists()  # demo seeds conversions through the ingest path
+    assert zoho_only.exclude(source="zoho").count() == 0
 
 
-def test_seed_demo_creates_no_conversions(demo):
-    from apps.referrals.models import Lead
-    # Leads exist, but none are account_opened; conversion stays source-only.
-    assert Lead.objects.exclude(status="new").count() == 0
-    assert Event.objects.filter(event_type=vocab.ACCOUNT_OPENED).count() == 0
+def test_conversions_only_from_zoho_source_origin(demo):
+    from apps.integrations.models import Conversion
+    # Demo conversions exist, but ALL carry source_origin=zoho (mirrored, not made).
+    assert Conversion.objects.exists()
+    assert Conversion.objects.exclude(source_origin="zoho").count() == 0
