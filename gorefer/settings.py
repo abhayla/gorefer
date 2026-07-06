@@ -146,3 +146,6 @@ ADMIN_PASSWORD_HASH = os.environ.get("ADMIN_PASSWORD_HASH", "")
 # Provider-agnostic: these live in config/seed, never in Zerodha-named code.
 PARTNER_CODE = os.environ.get("PARTNER_CODE", "ZMPHZC")
 NSE_AP_NO = os.environ.get("NSE_AP_NO", "AP2516003693")
+# WATI BUSINESS number (config, not a secret) — the wa.me share target. Digits only
+# (no +/spaces) so it drops straight into a wa.me link. NOT Ashok's personal number.
+WATI_BUSINESS_NUMBER = os.environ.get("WATI_BUSINESS_NUMBER", "917080642020")

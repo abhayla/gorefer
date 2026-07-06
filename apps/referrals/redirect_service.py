@@ -22,11 +22,16 @@ from django.db import transaction
 
 from apps.events.bots import is_bot_user_agent
 from apps.events.models import Event, VisitorPII
+from apps.events.nonces import mint_nonce
 from apps.referrals.models import Partner, ProgramRedirectRule, Referral, ReferralIdentity, ReferralProgram
 
 logger = logging.getLogger("gorefer.redirect")
 
-CLICK_EVENT_TYPE = "ReferralLinkOpened"
+# Event vocabulary (DA M3 mission). M3 inserts the landing BEFORE the redirect:
+# GET /r/{id} renders the landing (landing_viewed); the 302 happens only when the
+# user taps "Continue to Zerodha" (redirect_completed).
+LANDING_VIEWED_EVENT = "landing_viewed"
+REDIRECT_COMPLETED_EVENT = "redirect_completed"
 PARTNER_DIRECT_EVENT_TYPE = "PartnerDirectOpened"
 
 
@@ -96,17 +101,17 @@ def _get_or_create_partner_direct_referral(tenant, program) -> Referral:
     return referral
 
 
-def _record_click(*, tenant, referral, visitor_id, user_agent, raw_ip, event_type):
-    """Write the immutable Click event + the SEPARATE erasable PII record.
+def _record_event(*, tenant, referral, visitor_id, user_agent, raw_ip, event_type):
+    """Write an immutable event + (if raw_ip) the SEPARATE erasable PII record.
 
     PII (raw IP) goes ONLY to VisitorPII; the event carries person_ref_id by id.
-    Scheduled via caller's transaction.on_commit so it never blocks the 302.
+    Returns the created Event so callers (landing) can reference it (e.g. beacon).
     """
     person_ref_id = None
     if raw_ip:
         pii = VisitorPII.objects.create(tenant=tenant, visitor_id=visitor_id or "", raw_ip=raw_ip)
         person_ref_id = pii.pk
-    Event.objects.create(
+    return Event.objects.create(
         tenant=tenant,
         event_type=event_type,
         referral=referral,
@@ -114,39 +119,64 @@ def _record_click(*, tenant, referral, visitor_id, user_agent, raw_ip, event_typ
         visitor_id=visitor_id,
         user_agent=user_agent or "",
         is_bot=False,
-        is_confirmed_human=False,  # promoted only by the JS beacon (M4)
+        is_confirmed_human=False,  # promoted only by the JS confirmation beacon
         person_ref_id=person_ref_id,
         metadata={},  # NEVER PII (CI-enforced)
     )
 
 
-def handle_referral_click(*, tenant, client_id: str, visitor_id, user_agent, raw_ip):
-    """Resolve a /r/{client_id} hit. Returns (destination_url, is_human_click).
+def handle_landing_view(*, tenant, client_id: str, visitor_id, user_agent, raw_ip):
+    """Resolve a /r/{client_id} landing view (M3: render page, NOT an immediate 302).
 
-    On a human click: lazily create identity+referral and schedule the Click write
-    on commit. On a bot/preview hit: create NOTHING, just return the destination so
-    the caller can still 302 the *bot* (a bot following the redirect is harmless;
-    it simply is not counted and leaves no journey).
+    On a human view: lazily create identity+referral, log a `landing_viewed` event
+    (append-only, PII-free), record the raw IP on the erasable VisitorPII record,
+    and MINT a one-time nonce for the beacon + name reveal. Returns
+    (referral, event, nonce). On a bot/preview hit: create NOTHING and return
+    (None, None, None) — the caller renders a generic page with no journey/nonce.
+
+    Written synchronously (not on_commit) because the landing render needs the
+    event + nonce; this is the page-render path, not the hot 302.
     """
     program = _active_program(tenant)
-    destination = assemble_destination(program, client_id=client_id)
 
     if is_bot_user_agent(user_agent):
         logger.info("bot/preview hit on /r/%s — no journey created", client_id)
-        return destination, False
+        return None, None, None
 
     referral = _lazy_get_or_create_referral(tenant, program, client_id)
-    transaction.on_commit(
-        lambda: _record_click(
-            tenant=tenant,
-            referral=referral,
-            visitor_id=visitor_id,
-            user_agent=user_agent,
-            raw_ip=raw_ip,
-            event_type=CLICK_EVENT_TYPE,
-        )
+    event = _record_event(
+        tenant=tenant,
+        referral=referral,
+        visitor_id=visitor_id,
+        user_agent=user_agent,
+        raw_ip=raw_ip,
+        event_type=LANDING_VIEWED_EVENT,
     )
-    return destination, True
+    nonce = mint_nonce(tenant=tenant, referral=referral, visitor_id=visitor_id or "", client_id=client_id)
+    return referral, event, nonce
+
+
+def build_continue_redirect(*, tenant, client_id: str, referral):
+    """Assemble the destination for "Continue to Zerodha" and log redirect_completed.
+
+    Returns the destination URL for a 302. The redirect_completed write goes on
+    transaction.on_commit so it never blocks the 302. Reuses the M2 engine —
+    partner code injected server-side, raw URL never exposed.
+    """
+    program = _active_program(tenant)
+    destination = assemble_destination(program, client_id=client_id)
+    if referral is not None:
+        transaction.on_commit(
+            lambda: _record_event(
+                tenant=tenant,
+                referral=referral,
+                visitor_id=None,
+                user_agent="",
+                raw_ip=None,
+                event_type=REDIRECT_COMPLETED_EVENT,
+            )
+        )
+    return destination
 
 
 def handle_partner_direct(*, tenant, visitor_id, user_agent, raw_ip):
@@ -160,7 +190,7 @@ def handle_partner_direct(*, tenant, visitor_id, user_agent, raw_ip):
 
     referral = _get_or_create_partner_direct_referral(tenant, program)
     transaction.on_commit(
-        lambda: _record_click(
+        lambda: _record_event(
             tenant=tenant,
             referral=referral,
             visitor_id=visitor_id,

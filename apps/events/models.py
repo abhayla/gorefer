@@ -76,3 +76,30 @@ class VisitorPII(TenantScopedModel):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"visitor_pii<{self.visitor_id}>"
+
+
+class ClickNonce(TenantScopedModel):
+    """One-time nonce gating the human-confirmation beacon + name reveal (ADR-021).
+
+    Minted server-side when a click is logged (M3), handed to the page JS. The
+    beacon (POST /api/click/confirm) verifies it, marks the click confirmed-human,
+    and CONSUMES it; the name-reveal endpoint requires the SAME fresh nonce. This
+    closes the id->name enumeration hole: without a valid, unused, unexpired nonce
+    the referrer's name is never returned. Single-use + short TTL + rate-limited.
+    """
+
+    nonce = models.CharField(max_length=64, unique=True, db_index=True)
+    visitor_id = models.CharField(max_length=64, db_index=True)
+    referral = models.ForeignKey(
+        "referrals.Referral", on_delete=models.CASCADE, null=True, blank=True, related_name="nonces"
+    )
+    client_id = models.CharField(max_length=64, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "click_nonces"
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"nonce<{self.nonce[:8]}…>"
