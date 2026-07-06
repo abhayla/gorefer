@@ -49,11 +49,32 @@ class Command(BaseCommand):
             self._seed_journey(tenant, program, client_id, clicks, landing, redirect, lead)
 
         self._seed_partner_direct(tenant, program)
+        conversions = self._seed_conversions(tenant)
         recomputed = recompute_dirty()
         self.stdout.write(self.style.SUCCESS(
-            f"Demo seeded: {len(DEMO_REFERRERS)} referrers + partner-direct; {recomputed} rollup period(s). "
-            f"No conversions (account_opened stays 0 — Zoho only)."
+            f"Demo seeded: {len(DEMO_REFERRERS)} referrers + partner-direct; "
+            f"{conversions} Zoho-sourced conversion(s); {recomputed} rollup period(s)."
         ))
+
+    def _seed_conversions(self, tenant):
+        """Seed demo conversions THROUGH the Zoho ingest path (never an internal
+        fabrication) — proving account_opened only ever comes from the Zoho path.
+        One on-platform (RJ4521 converts) + one off-platform zero-click (new id)."""
+        from apps.integrations.zoho.ingest import ingest_conversion
+
+        fixtures = [
+            {"event_id": "demo-conv-1", "opener_zerodha_account_id": "ZA9001",
+             "referrer_client_id": "RJ4521", "opener_name": "Demo Opener 1",
+             "status": "Account Opened", "account_opened_at": "2026-06-15T10:00:00"},
+            {"event_id": "demo-conv-2", "opener_zerodha_account_id": "ZA9002",
+             "referrer_client_id": "GW5500", "opener_name": "Demo Offplatform",
+             "status": "Account Opened", "account_opened_at": "2026-05-02T10:00:00"},
+        ]
+        n = 0
+        for fx in fixtures:
+            if ingest_conversion(tenant=tenant, payload=fx) is not None:
+                n += 1
+        return n
 
     def _seed_journey(self, tenant, program, client_id, clicks, landing, redirect, lead):
         identity, _ = ReferralIdentity.objects.get_or_create(
