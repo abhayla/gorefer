@@ -16,6 +16,7 @@ from django.utils import timezone
 from ninja import Router, Schema
 from ninja.errors import HttpError
 
+from apps.events import vocab
 from apps.events.bots import is_bot_user_agent
 from apps.events.models import Event
 from apps.events.nonces import consume_nonce, peek_nonce
@@ -46,12 +47,23 @@ def confirm_click(request, payload: ConfirmIn):
     if row is None:
         raise HttpError(401, "invalid or expired nonce")
 
-    # Promote the pending landing_viewed event for this visitor to confirmed-human.
+    # Promote this visitor's pending events to confirmed-human, and record an
+    # explicit human_confirmed event (source: beacon) for the funnel/timeline.
     visitor_id = payload.visitor_id or row.visitor_id
     if visitor_id:
         Event.objects.filter(
             visitor_id=visitor_id, is_confirmed_human=False, is_bot=False
         ).update(is_confirmed_human=True)
+        Event.objects.create(
+            tenant=row.tenant,
+            event_type=vocab.HUMAN_CONFIRMED,
+            source=vocab.SRC_BEACON,
+            referral=row.referral,
+            user_type="anonymous",
+            visitor_id=visitor_id,
+            is_confirmed_human=True,
+            metadata={},
+        )
     return {"confirmed": True}
 
 

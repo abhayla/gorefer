@@ -18,14 +18,13 @@ import logging
 from django.db import transaction
 
 from apps.common.phone import normalize_phone
+from apps.events import vocab
 from apps.events.models import Event
 from apps.integrations.base import LogOnlyZohoAdapter
 from apps.referrals.models import Lead, Prospect, Referral
 from gorefer.flags import flags
 
 logger = logging.getLogger("gorefer.leads")
-
-LEAD_CAPTURED_EVENT = "lead_captured"
 
 
 @transaction.atomic
@@ -63,7 +62,8 @@ def capture_lead(*, tenant, referral: Referral, name: str, mobile: str, email: s
     transaction.on_commit(
         lambda: Event.objects.create(
             tenant=tenant,
-            event_type=LEAD_CAPTURED_EVENT,
+            event_type=vocab.LEAD_CAPTURED,
+            source=vocab.SRC_FORM,
             referral=referral,
             user_type="prospect",
             person_ref_id=prospect.pk,
