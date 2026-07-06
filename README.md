@@ -63,7 +63,9 @@ python manage.py runserver
 #    /api/health                -> JSON liveness probe
 #    /api/analytics/funnel      -> read-only funnel (bots excluded; unique = approximate)
 #    /api/zoho/status-webhook   -> Zoho conversion webhook (the ONLY writer of account status)
-#    /admin/                    -> admin (behind ENABLE_ADMIN_DASHBOARD)
+#    /admin-panel/              -> M7 admin dashboard (login-gated; dashboard / explorer / journey)
+#    /django-admin/             -> Django admin base
+#    (both admin surfaces are behind ENABLE_ADMIN_DASHBOARD; sign in with the bootstrap admin)
 ```
 
 > **Conversions come ONLY from Zoho** (`/api/zoho/status-webhook`, behind `ENABLE_ZOHO_WRITE` for the outbound lead write; the inbound status webhook is the sole writer of account/reward status — never fabricated internally). `seed_demo` seeds demo conversions **through** that ingest path so the funnel's "Account opened" reflects real Zoho-sourced data, dated to the true open date.
