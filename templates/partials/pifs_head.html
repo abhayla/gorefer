@@ -1,0 +1,20 @@
+{# Reusable PIFS head: Tailwind + the approved PIFS green/gold theme (from the mockup). #}
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      colors: {
+        pifs: { 900:'#1b2e1f',800:'#233d29',700:'#2f5136',600:'#3d6a45',500:'#4e8256',400:'#6fa377',100:'#eaf1ea',50:'#f4f8f4' },
+        gold: '#c8a24a',
+      },
+      fontFamily: { sans: ['Inter','system-ui','Segoe UI','sans-serif'] },
+    } },
+  };
+</script>
+<script src="https://unpkg.com/htmx.org@2.0.3" crossorigin="anonymous"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  body { -webkit-font-smoothing: antialiased; }
+</style>
