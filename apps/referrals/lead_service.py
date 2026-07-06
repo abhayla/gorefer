@@ -21,6 +21,7 @@ from apps.common.phone import normalize_phone
 from apps.events import vocab
 from apps.events.models import Event
 from apps.integrations.base import LogOnlyZohoAdapter
+from apps.integrations.wati.notify import queue_lead_notifications
 from apps.referrals.models import Lead, Prospect, Referral
 from gorefer.flags import flags
 
@@ -71,9 +72,24 @@ def capture_lead(*, tenant, referral: Referral, name: str, mobile: str, email: s
         )
     )
 
+    # Fire the three lead-time WATI notifications (M5) — deduped, opt-in-aware,
+    # behind ENABLE_WATI_SEND (log-only in demo). on_commit so the send is enqueued
+    # only after the lead is durably saved (capture-first).
+    referrer_client_id = _referrer_client_id(referral)
+    transaction.on_commit(
+        lambda: queue_lead_notifications(
+            tenant=tenant, referral=referral, prospect=prospect, client_id=referrer_client_id
+        )
+    )
+
     # Zoho mirror (M6). Behind the flag → log-only in demo mode; request still ok.
     _mirror_to_zoho(lead=lead, prospect=prospect, referral=referral)
     return lead
+
+
+def _referrer_client_id(referral) -> str:
+    identity = referral.referral_identity
+    return identity.client_id if identity is not None else ""
 
 
 def _mirror_to_zoho(*, lead, prospect, referral):
