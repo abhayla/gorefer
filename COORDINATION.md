@@ -106,138 +106,39 @@ Two reminders as you build (not blockers):
 - A **bot/preview UA never creates a `referral_identity`/`referral` and never 302s as a human** — logged only.
 
 Green to finish M2 → open PR `mission-2-redirect` → append your DONE STATUS here. I'll review it against the M2 DoD and queue **M3 (branded landing page)**.
+never POSTs/submits to Zerodha) and **#3** (no raw Zerodha URL/partner code in any client-facing response).
+
+**One code implication of the Q-M1-1 answer I'm applying (not a new decision — executing the DA's answer):** the M1 skeleton left a `django-tenants` schema-router path that would activate under `DB_ENGINE=postgres`. Per the answer ("schema routing OFF; isolation via tenant-scoped managers + middleware + composite constraints"), I'm **removing the schema-router/tenant-DB-backend wiring** and keeping only the plain `Tenant`/`Domain` registry + a `tenant_id` discriminator with a tenant-resolution helper. If this crosses into anything the DA considers architectural rather than executional, flag it and I'll adjust — otherwise proceeding.
+
+**Two spec points I'll implement with the stated default and will convert to a QUESTION only if I hit a genuine conflict while building:**
+- **Journey/referral vs referral_identity on first click:** 05-Database-Design creates `referral_identity` + `referral` + `event` together on first click. For M2 I'll create the `referral_identity` (keyed by raw `client_id`, `id_source=native`) and a `referral` row (its `source`), plus the Click event — the minimal lazy triad — without pulling in prospect/lead (those are M3+).
+- **`/open` journey shape:** stored as a `referral` with `referral_identity=NULL`, `source=partner_direct` (Gap 1/ADR-015), no click-to-referrer link.
 
 ---
 
-### 2026-07-06 — FROM DA — REVIEW + MISSION — M2 APPROVED; next: M3 branded landing page
+### 2026-07-06 — FROM ENGINEER — STATUS — M2: redirect + lazy journey + click event — DONE (PR `mission-2-redirect`, #2)
 
-**M2 review: APPROVED — DoD fully met, strong work.** Standouts: the guardrail-#1 **socket-block behavioural test** (proves the redirect opens no socket, not merely "no HTTP import"); the `VisitorPII` / #16–#17 separation with a CI test asserting no PII in `Event.metadata`; case-insensitive `client_id` normalization; and the correct #3 nuance (partner code appears only in the 302 `Location`, which *is* the redirect). Bot handling, `/open` partner-direct NONE, and the on-commit non-blocking write are all correct. Merge order noted: **PR #1 → PR #2.** The DA's uncommitted doc edits (Q-M1-1 corrections) will be committed by Abhay — thanks for not bundling them into your code commit.
+**Built (all confirmed all three points; DoD holds — 51 tests pass / 1 skip, ruff clean, no migration drift; works in demo mode, no external system):**
 
-**Clarification that governs M3 (resolves a latent ADR-002 ⇄ M2 tension — DA decision, not a QUESTION for you):**
-Per **ADR-002 (landing experience FIRST)** and the locked **capture-first** strategy, **M3 changes `GET /r/{client_id}` to RENDER the branded LANDING page — not an immediate 302.** The M2 redirect engine (server-side URL assembly + click logging + 302) is **reused**, now triggered by the user tapping **"Continue to Zerodha"**, not on page load. `GET /open` (partner-direct) **stays a direct 302** (no landing). This is the intended vertical-slice evolution (M2 = working redirect engine; M3 = insert the landing in front), not a rework of M2's core. Expect M2's `/r/ → 302` test to move to the Continue action; `/r/` now returns 200 (landing).
+- **Single-schema `tenant_id` isolation (executing the Q-M1-1 answer):** removed the `django-tenants` schema-router / tenant-DB-backend wiring; kept a **plain `Tenant`/`Domain` registry** + `TenantResolutionMiddleware` (resolves to the single bootstrap tenant PIFS, hostname-ready for future tenants) + `resolve.py` helpers; **dropped the `django-tenants` dependency** (requirements + settings). Composite unique constraints carry `tenant_id` (e.g. `uq_referral_identity_key = (tenant, partner, client_id, id_source)`).
+- **`client_id` validator** — format only (≤20 alphanumeric; empty/oversized/illegal rejected), **no ownership check** (ADR-008/Gap 3); normalizes to uppercase so `r/rj4521` and `r/RJ4521` resolve to one referrer.
+- **Lazy triad on first click** — `ReferralIdentity` (raw `client_id`, `id_source=native`, `token` NULL for Zerodha) + `Referral` (`source=referral_link`) + immutable **Click event**; tenant-scoped; idempotent on the identity key (repeat clicks don't duplicate). Nothing stored before first click.
+- **`GET /r/{client_id}`** — sync Django view → validate → **302** to the **server-side-assembled** destination with `c=ZMPHZC` injected server-side (assembled from the `ProgramRedirectRule` template + Partner code; never from the request) → click/PII write on **`transaction.on_commit()`** so it never blocks the 302. `gr_vid` first-party cookie set on first click (HttpOnly, SameSite=Lax, 1yr).
+- **`GET /open`** — partner-direct **302** to `…?c=ZMPHZC` (**no `r=`**); `Referral` with `referral_identity=NULL, source=partner_direct` — never a synthetic referrer (Gap 1/ADR-015).
+- **Bot/preview UA filtering** (Gap 16) — WhatsApp/facebookexternalhit/Telegram/Slack/Twitter/LinkedIn/Google/Bing bots + prefetch/preview + missing-UA: a bot hit creates **NO** identity/referral/event and is **never** a human click (it may still follow the 302 — harmless, uncounted, no journey).
+- **PII placement (your reminder honoured)** — raw IP stored **only** on a separate erasable **`VisitorPII`** record (unhashed, #17), linked by `visitor_id`; the immutable `Event` references it via `person_ref_id` (by id) and carries **no PII** in row or metadata. A **CI test** asserts no PII key/value ever lands in `Event.metadata`. `Event` is append-only (no `updated_at`/soft-delete).
+- **Beacon stub** `POST /api/click/confirm` — contract wired; **does not** flip `is_confirmed_human` (real human-confirmation counting is M4; no fabrication).
+- **Admin** registrations for `ReferralIdentity`/`Referral` (and read-only `Event`/`VisitorPII`) — feeds the M7 dashboard base.
 
-### 2026-07-06 — FROM DA — MISSION — M3: Branded landing page + capture + two buttons
+**Guardrail tests now ACTIVE:**
+- **#1** — redirect service performs **no** outbound HTTP and **opens no socket** (static source scan for `requests`/`urllib`/`http.client`/`.submit(` **+** a behavioural test that blocks `socket.connect` and asserts the redirect still 302s). Redirect a real browser only; Zerodha's reCAPTCHA form is never submitted.
+- **#3** — no partner code (`ZMPHZC`) or raw Zerodha URL (`signup.zerodha.com`) in any client-facing **body** across `/`, `/api/health`, `/r/…`, `/open`. (It appears only in the 302 `Location` — that *is* the redirect.)
+- **#2** — stays SKIPPED until the Zoho import path exists (M6).
 
-Build **from the mockup `mockups/landing-mockup.html`** (it is the approved template) using **reusable components** (header, disclosure/footer, form, buttons — per the component rule; see `mockups/components.html` + `mockups/shared.js`). Per `implementation/10` §11 M3, ADR-002, and the landing decisions.
+**Deferred (correctly out of M2):** JS human-confirmation counting + unique-visitor aggregation + sessions/devices/rollups (M4); prospect/lead capture form (M3); Zoho/WATI adapters (M5/M6). Live-verified end-to-end: `/r/{id}`→302 (+cookie), `/open`→302 (no `r=`), beacon→`{"status":"accepted"}`.
 
-1. **`GET /r/{client_id}` renders the PIFS-branded, mobile-first landing.** **Must NOT resemble/clone Zerodha's page.** Log a **`landing_viewed`** event on render; the `gr_vid` cookie/journey from M2 continues.
-2. **Beacon-gated referrer name (#1/#3):** landing renders a **generic** greeting (no referrer name in the initial HTML). Page JS fires the **human-confirmation beacon** (M2 stub → now issues a one-time **nonce**); a **name-reveal endpoint** returns the referrer's display name **only** to a request carrying a valid, fresh nonce (rate-limited + bot-filtered). (Full confirmed-human *counting* / unique aggregation stays M4; here the beacon just gates the name + marks the human click.)
-3. **Capture form** (name, email, mobile) with **client-side format validation** (Indian +91, 10 digits, starts 6–9 — the mockup already has it). **OTP verification deferred (DF-6).** Fields fixed in Sprint 1 (per-partner field config = DF-5) but **read config-driven** labels/number/claim from the ADR-022 cascade — no hardcoding.
-4. **Two buttons:**
-   - **"Continue to Zerodha"** → **save the lead FIRST** to GoRefer (`Prospect`/`Lead` + a **`lead_captured`** event; **Zoho write stays behind `ENABLE_ZOHO_WRITE=false` → M6**, adapter logs the intended call in demo mode) → then **302** to the server-side-assembled `https://signup.zerodha.com/api/lead/?c=ZMPHZC&r={client_id}` (reuse M2's engine; emit **`redirect_completed`**). Never expose the raw URL / partner code in the page.
-   - **"Share referral details on WhatsApp"** → a **`wa.me`** deep link to the **WATI business number `+91 70806 42020`** (config-driven, ADR-022; **NOT** Ashok's personal number) with a **referring-language** pre-fill that **includes the referral id**. Emit a `share_clicked` event.
-5. **Referral ID echo** ("Referral ID: {client_id}") — self-serve confirmation, no separate confirm page.
-6. **Consent + Privacy Policy link** on the form (DPDP, ADR-020). **Compliance disclosure + market-risk warning auto-injected and NON-removable at any config tier** (A1/ADR-022 compliance-lock, ADR-014); the single `REFERRAL_INCENTIVE_CLAIM` field drives the "300 pts + 10% brokerage" wording.
-7. **PII:** captured mobile/name/email + raw IP live on the **erasable** Prospect/Lead/VisitorPII records — **never** in the immutable event log (#16/#17).
+**No new inconsistency surfaced.** Two operational notes for the relay/merge (not blockers, not architecture):
+1. **PR #2 is based on `mission-1-skeleton`** (M1 not merged yet) so its diff is M2-only; it will retarget to `main` automatically once M1 (PR #1) merges. Merge order: **PR #1 → PR #2.**
+2. The DA's spec edits to `CLAUDE.md`/`ADR-024`/`Deferred-Features-Backlog.md` (Q-M1-1 corrections) are still **uncommitted in the working tree** — I deliberately did **not** bundle them into my M2 code commit (couldn't verify authorship from my side). They need committing by whoever owns them; flagging so they aren't lost.
 
-**Guardrails / DoD (M3):** landing renders mobile-first from the mockup; does NOT resemble Zerodha; capture saves the lead to GoRefer (Zoho behind flag, demo-mode logs intended call); both buttons work (Continue → save + 302 via M2 engine; WhatsApp → `wa.me` business number w/ referral-id prefill); beacon-gated name reveal works (nonce, rate-limited); Referral ID echo present; consent + Privacy Policy link present; disclosure + risk warning auto-injected and un-removable; **guardrail test #3 still holds** (no raw Zerodha URL / partner code in the landing body); reusable components used; CI green. Open PR `mission-3-landing`; append a STATUS entry. Log any ambiguity as a QUESTION and pause on that point.
-
----
-
-### 2026-07-06 — FROM DA — REVIEW + MISSION — M3 APPROVED; next: M4 analytics / journey
-
-**M3 review: APPROVED — DoD fully met, excellent.** The landing-first restructure (`/r/` → 200 landing, 302 on `/continue` reusing the M2 engine), the enumeration-hole closure (single-use nonce, bot-filtered, 401 on forged/expired/used), building from the mockup with reusable partials, the PII-on-erasable-records discipline, and the live-browser verification (incl. catching the multi-line `{# #}` template-comment bug) are all exactly right.
-
-**Your two flagged points — decisions:**
-1. **Event vocabulary — your snake_case names are now CANONICAL.** Use `link_created, click, landing_viewed, human_confirmed, lead_captured, redirect_completed, share_clicked` (+ future `account_opened, reward_status_changed, conversion_removed`). doc-06's UPPER_CASE names (`LEAD_CREATED`, `LINK_SHARED`, …) are **superseded** — I'll reconcile doc-06's text to this list (DA cleanup). Every event carries a **source/origin tag + timestamp** (#18). Build M4 on the canonical names.
-2. **Referrer-name = null + generic greeting — CORRECT, good judgment not fabricating.** GoRefer has no name source for a raw `client_id` yet — names arrive only from **Zoho (M6)** or a future **customer-data import** (`client_id → name` for Abhay's own customers). So the reveal correctly returns `has_referrer=true, first_name=null`. The mechanism is built and dormant-valued; it lights up when a name source exists. (The #1 enumeration risk only bites once a name source exists — until then there's nothing to harvest — so you've built it right and early.)
-
-### 2026-07-06 — FROM DA — MISSION — M4: Analytics / journey (read-only, never fabricate conversions)
-
-Per `implementation/10` §11 M4 + review decisions #6/#18/#19.
-
-1. **Journey timeline (read model):** assemble each referral's event stream into an ordered timeline (`click → landing_viewed → human_confirmed → lead_captured → redirect_completed`; `account_opened`/`reward` arrive from Zoho in M6). Each node shows its **source/origin tag + timestamp** (#18). Feeds the M7 journey-detail screen (mockup `mockups/journey-detail-mockup.html`).
-2. **Funnel aggregation (read-only, from the immutable event stream):** stage counts (clicks → confirmed-human clicks → landing views → redirects → leads). **Bots excluded**; **unique-visitor counts are approximate and LABELLED as such** (ADR-018/019). Confirmed-human counting + unique aggregation (deferred from M2/M3) lands here, keyed on `is_confirmed_human` + `gr_vid`.
-3. **Rollup tables (daily + monthly) via workers with a DIRTY-DAYS recompute (#6/#34):** rollups recompute the affected day/month on any late/backdated event; raw events **partitioned by month** (data-retention decision — never hard-delete events). Dashboards read rollups, not the raw firehose.
-4. **Sync-freshness scaffold (#19):** model/fields `last_successful_zoho_sync_at` + WATI health + a staleness indicator; values populate in M5/M6 — in demo it shows "no sync yet." (The top-bar indicator in `mockups/admin-dashboard-mockup.html`.)
-5. **NEVER fabricate conversions:** `account_opened`/`reward` stay empty/None until Zoho (M6). Funnel shows conversion stages as 0 / "pending Zoho", clearly — never derived from clicks/leads. Add a test asserting no internal path sets a conversion/account status (the formal guardrail **#2** activates in M6 when the Zoho import path exists).
-6. **Provisional/final: none** — conversions will mirror Zoho as-mapped (M6); leave the conversion stages source-only here.
-
-**Guardrails / DoD (M4):** journey timeline + funnel aggregation + daily/monthly rollups (dirty-days recompute) + approximate unique / confirmed-human counts (labelled) + sync-freshness scaffold; canonical event vocabulary used; read-only, **no fabricated conversions** (test asserts `account_opened` stays source-only); events partitioned + rollups foldable; works in demo mode with seeded data; CI green. Open PR `mission-4-analytics`; append a STATUS entry. Log any ambiguity as a QUESTION and pause on that point.
-
----
-
-### 2026-07-06 — FROM DA — REVIEW + MISSION — M4 APPROVED; next: M5 WATI hooks
-
-**M4 review: APPROVED — DoD fully met, excellent.** Canonical vocabulary adopted + M2/M3 producers retrofitted, source/origin tag on every event (#18), the journey timeline matching the mockup, bots excluded + unique counts explicitly labelled approximate (ADR-018/019), dirty-day rollups verified idempotent/backdated-safe, sync-freshness scaffold, and `account_opened` held source-only at 0 (never fabricated). Demo funnel 13→4→3→2→0 is exactly right.
-
-**Your two scope notes — both correct, approved:**
-1. **Physical `events` partitioning deferred to scale — agreed.** Rollups + dirty-days deliver the correctness now; physical Postgres partitioning is an ops step for when the table grows. Logged as **backlog DF-8** so it isn't assumed done.
-2. **`recompute_rollups` scheduling → M5 background queue — agreed.** M5 is where the real async need appears (WATI sends/retries/terminal-status polling), so the background worker lands there and the dirty-day recompute gets scheduled on it.
-
-### 2026-07-06 — FROM DA — MISSION — M5: WATI hooks (transactional notifications, behind `ENABLE_WATI_SEND=false`)
-
-Per `implementation/10` §11 M5 + doc-08 contract + Gap 12/#20. This is lead-time notifications only — **NOT** the stale-lead auto-nudge (REQ-F01, deferred Sprint 2+), and **NOT** the conversion-time referrer thank-you (that's M6, tied to Zoho).
-
-1. **WATI adapter behind the doc-08 contract** (`integrations/wati`): send an approved template; **verify delivery by the TERMINAL message status (delivered/read/failed), NEVER HTTP 200** (doc-08 A3); classify failures by Meta error code. Behind **`ENABLE_WATI_SEND=false`** → in dev/demo the adapter **logs the intended call + payload** instead of sending, so the flow is testable end-to-end offline.
-2. **Background queue** = the async infra deferred from M4. **Recommend `django-q` (Postgres/ORM broker) so NO Redis is added yet** (Celery/Redis only if scheduled workflows later demand — ADR-024). Async sends + retries + terminal-status polling; also schedule the M4 `recompute_rollups` dirty-day job here. Sends fire via `transaction.on_commit()` after the lead is saved.
-3. **Three lead-time notifications** (triggered on `lead_captured`):
-   - **(a) Ashok / office** — "new lead: {name}, referred by {client_id}" (follow-up).
-   - **(b) New person (prospect)** — a warm **UTILITY** message naming the referrer + next steps (Meta rule: first message to a non-opted-in number is a warm utility notice).
-   - **(c) Referrer — ONLY if phone known** — "someone used your referral link." Phone-known = GoRefer actually has the referrer's phone (Abhay's own customers / Zoho); otherwise **skip, never guess**.
-4. **Deduped + opt-in-aware:** never send the same notification twice (idempotency key per recipient+template+journey); respect + record opt-in state.
-5. **Delivery-status consumption (Gap 12):** record the terminal status (delivered/read/clicked/failed) on each notification + a `notification`-type event (source-tagged); the funnel can then **start at "delivered"** so the ~33% WATI delivery leak is visible, not hidden.
-6. **Template manifest** (`wati-templates.json` per the doc-08 template contract): define the three templates (category UTILITY/MARKETING, language, body vars + Meta samples) so they can be submitted to Meta for approval **in parallel**. (Actual Meta approval + live sending is a parallel workstream the DA can drive with Abhay's WATI skills, gated by `ENABLE_WATI_SEND`.)
-
-**Guardrails / DoD (M5):** WATI adapter behind the doc-08 contract; `ENABLE_WATI_SEND=false` default → demo logs intended calls (whole flow works offline); three notifications fire on `lead_captured`, deduped + opt-in-aware; **WATI send tests assert on TERMINAL delivery status, not HTTP 200**; background queue wired (django-q, no Redis) + dirty-day recompute scheduled on it; delivery-status recorded + funnel-starts-at-delivered; template manifest present; **no stale-lead nudge**; CI green. Open PR `mission-5-wati`; append a STATUS. Log any ambiguity as a QUESTION and pause on that point.
-
----
-
-### 2026-07-06 — FROM DA — PLAN — Endgame after M7: comprehensive testing + INDEPENDENT verification (M8) before any manual test
-
-Abhay's directive: finish M5 → M6 → M7, THEN harden + independently verify EVERYTHING (functionality AND UI) until it fully meets the requirements; only after an **independent agent** confirms does Abhay test manually. Protocol:
-
-**Phase A — Builder hardening (Claude Code), iterative:** after M7, run comprehensive end-to-end + edge/adversarial tests across the WHOLE Sprint-1 Zerodha flow (not just per-mission): link → landing → beacon/name-gate → capture → lead-saved-first → Continue → redirect (correct `c=ZMPHZC&r=`) → funnel/rollups → WATI notifications (flag off, logged) → Zoho conversion mirror (flag off / fake) → admin dashboard + explorer + journey detail. All guardrail tests active as applicable; demo mode green; fix until 100%.
-
-**Phase B — INDEPENDENT verification (a SEPARATE agent — NOT the builder):** a fresh Claude Code agent/session with no stake in the code, given ONLY the specs (01–12), the DA **Acceptance Checklist**, and the running app. It must:
-- **Functionality:** run the full suite + its OWN adversarial tests; verify every REQ/BR/NFR/AC + all guardrail tests + every mission DoD; try to break it (bad/oversized client_ids, forged/expired/replayed nonces, bot UAs, replayed/forged webhooks, missing config, each flag on/off, tenant isolation).
-- **UI:** launch the app in demo mode and **render EVERY page in a real browser** (landing, thank-you, invalid-referral, admin login, dashboard, referral explorer, journey detail), screenshot at **mobile + desktop** widths, and check each against the **mockups + doc-07 UI spec**: mobile-first, compliance block present + non-removable, NOT a Zerodha clone, referral-id echo, generic-then-beacon name reveal, config-driven number/claim, etc.
-- Produce a **VERIFICATION REPORT** in `review/Verification-Report.md` — pass/fail per checklist item + evidence (test output + screenshots + a defect list).
-
-**Loop:** builder fixes each defect → independent agent re-verifies → until it signs off **100%**.
-
-**DA final review (me):** I review the independent report against the requirements and give the final GO. **Only then does Abhay test manually.**
-
-The DA will provide `review/Acceptance-Test-Plan.md` (every requirement, guardrail, UI page, DoD as concrete pass/fail criteria) around M6/M7 so Phase B has a rubric. Until then: proceed M5 → M6 → M7 as normal, and keep tests comprehensive along the way so Phase A is short.
-
----
-
-### 2026-07-06 — FROM DA — REVIEW + MISSION — M5 APPROVED; next: M6 Zoho lead + status sync
-
-**M5 review: APPROVED — DoD fully met, excellent.** Terminal-status-not-HTTP-200 verification (A3), Meta error-code classification, the three lead-time notifications via `transaction.on_commit` (capture-first), dedup by `role:template:journey`, opt-in awareness + first-warm-utility, referrer notified **only if phone known else skipped-with-reason** (never guessed), delivery-status consumption so the funnel starts at "delivered" (Gap 12), and the `wati-templates.json` manifest ready for Meta — all correct. django-q2 (ORM broker, no Redis) + scheduling the M4 `recompute_rollups` closes the M4 note. The `Customer` model is the right home for the referrer phone/name source.
-
-**Note for later (not a mission):** the `Customer` table (Abhay's own customers, `client_id → name/phone`) is what lights up both the **referrer-name reveal (#1)** and the **referrer notification (M5c)** for his own customer base. Loading that data from Abhay's existing records is a small **data-seeding step** we can do before go-live (separate from the mission loop).
-
-### 2026-07-06 — FROM DA — MISSION — M6: Zoho lead + status sync (behind `ENABLE_ZOHO_WRITE=false`; status ONLY from Zoho, NEVER fabricate)
-
-Per `implementation/10` §11 M6 + the locked conversion decisions (#6/#7/#8/#9/#10/#11/#12/#18/#19, ADR-013/016/017). This is the conversion/truth layer. **Flag off → demo/dev logs intended Zoho calls and uses fixture conversions to exercise every path offline.**
-
-1. **Zoho adapter (doc-08 contract, `apps/integrations/zoho`):** create Lead on submit (GoRefer already saves the lead FIRST in M3 — M6 adds the Zoho Lead **write** behind the flag; **stamp a GoRefer journey-reference on the Zoho lead** for best-effort opener→journey linking, #10); read account/reward status back. Secrets from env; adapter refuses live mode without config.
-2. **Conversion ingest = mirror Zoho as-mapped (the core):**
-   - Inbound account-status update: **match/credit the REFERRER by ZERODHA CLIENT ID** (#10) — NOT mobile (conversion data has no mobile). **Uniqueness/upsert key = opener ZERODHA ACCOUNT ID** (fallback `zoho_lead_id`), #11 — one account never becomes two.
-   - **NO provisional/final** — whatever Zoho maps is authoritative (#6). **Off-platform (zero-click) conversions auto-create** the referral/journey (#7, ADR-016) — a conversion can exist with zero clicks.
-   - **Explicit Zoho-status → GoRefer-stage map** (#12); past `redirect_completed`, **Zoho is the sole authority** (mirror, never advance a stage internally). **`account_opened` is the default terminal**; `reward_status_changed` fires **only if Zoho supplies a reward signal** (reward AMOUNTS live only in the Zerodha Console — never computed/stored).
-   - **True account-opening date** (ADR-017) stored as a first-class field, distinct from the sync/import date; **all conversion analytics run off the true open date** (no fake day-1 spike).
-   - **Removals propagate** (#6): a mapping removed in Zoho → a **`conversion_removed` reversal/tombstone** event → drop from the current view + **recompute the affected day/month rollups**; retain the audit trail. **Source/origin tag on every status change** (#18).
-3. **Sync worker (#7):** process the Zoho webhook reliably — **watermark** (resume point) + **dead-letter/problem-tray** (retry failed without loss) + **off-platform auto-create**. (Polling "pull" fallback deferred → DF-1.)
-4. **Idempotency guard (#8):** dedupe each update by a unique id (Zoho `event_id` / composite) in a `zoho_sync_idempotency` table; guard side-effects → exactly-once (pairs with #7 → no loss + no double-count).
-5. **Lazy per-referrer history fetch (#9):** when a referrer first appears (first click OR first conversion), pull **that referrer's** full Zoho history on demand. Full bulk backfill = DF-4 (deferred).
-6. **Webhook auth (interim):** basic static key **+ Zoho-IP allowlist**. HMAC "wax-seal" deferred → DF-2.
-7. **Sync-freshness (#19):** populate `last_successful_zoho_sync_at` on each successful sync + staleness alert (the M4 `SyncHealth` scaffold now lights up).
-8. **Guardrail test #2 ACTIVATES:** account/conversion status can be set **ONLY** from the Zoho-sourced import path, **NEVER** by an internal write/fabrication — assert it.
-
-**NOT in M6 (deferred):** the conversion-time **referrer thank-you** WhatsApp (Sprint 2, #7 side-effects); the stale-lead nudge (REQ-F01, Sprint 2); reward amount computation (never — Zerodha Console only).
-
-**Guardrails / DoD (M6):** Zoho adapter behind the doc-08 contract (flag off → logs intended calls); conversion ingest mirrors Zoho as-mapped (no provisional/final); referrer matched by Zerodha client id; opener keyed by Zerodha account id (upsert, idempotent); off-platform zero-click conversions auto-created; true open date stored + analytics run off it; removals propagate via reversal + rollup recompute + audit; explicit Zoho-status→stage map applied; source tags on status changes; sync worker (watermark + dead-letter); sync-freshness populated; **guardrail test #2 active**; whole flow works in demo with fixture Zoho data; CI green. Open PR `mission-6-zoho`; append a STATUS. Log any ambiguity as a QUESTION and pause on that point.
-
----
-
-### 2026-07-06 — FROM DA — INSTRUCTION — Housekeeping: commit DA docs + merge the PR stack (+ standing rule)
-
-You (Claude Code) own the git workflow — please handle this directly:
-
-1. **Commit the DA's doc edits** currently uncommitted in the working tree — they are **DA-authored and approved**, so you are explicitly authorized to commit them: `CLAUDE.md`, `docs/architecture/02` (ADR-021–024 + Round-2 folds), the other `docs/*` Round-2 folds, `review/*` (framework decision + captures, `Deferred-Features-Backlog.md`), `COORDINATION.md`, `README.md`, and `mockups/`. Suggested: a docs-only commit separate from code —
-   `git add -A && git commit -m "docs: DA design updates (Q-M1-1, ADR-024 stack, reviews, missions, mockups)"`.
-2. **Merge the PR stack in order: #1 → #2 → #3 → #4 → #5** (M1→M5), keeping `main` deployable at each step.
-
-**Standing rule going forward:** once the DA marks a mission **APPROVED** in this log, **merge that mission's PR (in order)** and commit any pending DA doc edits, so the stack never piles up. If a merge conflicts, flag it here as a QUESTION and pause on it.
+Ready for M3 (branded landing page) once reviewed.

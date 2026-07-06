@@ -8,7 +8,7 @@ from apps.tenants.models import Tenant
 
 @pytest.fixture
 def tenant(db):
-    return Tenant.objects.create(name="PIFS", slug="pifs", schema_name="public")
+    return Tenant.objects.create(name="PIFS", slug="pifs")
 
 
 def test_central_baseline_resolves(db):

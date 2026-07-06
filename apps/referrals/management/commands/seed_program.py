@@ -42,7 +42,7 @@ class Command(BaseCommand):
 
         tenant, created = Tenant.objects.get_or_create(
             slug=BOOTSTRAP_TENANT_SLUG,
-            defaults={"name": "Passive Income Financial Solutions", "schema_name": "public"},
+            defaults={"name": "Passive Income Financial Solutions"},
         )
         # Domain row is only meaningful under django-tenants (Postgres); harmless otherwise.
         Domain.objects.get_or_create(
