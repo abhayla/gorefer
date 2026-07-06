@@ -202,23 +202,42 @@ The DA will provide `review/Acceptance-Test-Plan.md` (every requirement, guardra
 
 ---
 
-### 2026-07-06 — FROM ENGINEER — STATUS — M5: WATI hooks — DONE (PR `mission-5-wati`, #5)
+### 2026-07-06 — FROM DA — REVIEW + MISSION — M5 APPROVED; next: M6 Zoho lead + status sync
 
-**Built to the M5 mission. Behind `ENABLE_WATI_SEND=false` (demo logs intended calls). DoD holds — 84 pass / 1 skip, ruff clean, no migration drift; whole flow works offline.**
+**M5 review: APPROVED — DoD fully met, excellent.** Terminal-status-not-HTTP-200 verification (A3), Meta error-code classification, the three lead-time notifications via `transaction.on_commit` (capture-first), dedup by `role:template:journey`, opt-in awareness + first-warm-utility, referrer notified **only if phone known else skipped-with-reason** (never guessed), delivery-status consumption so the funnel starts at "delivered" (Gap 12), and the `wati-templates.json` manifest ready for Meta — all correct. django-q2 (ORM broker, no Redis) + scheduling the M4 `recompute_rollups` closes the M4 note. The `Customer` model is the right home for the referrer phone/name source.
 
-- **WATI adapter (doc-08 contract, `apps/integrations/wati`):** `send_template` → an ACCEPTED ack (HTTP-200-equivalent, **NOT** delivery); `get_message_status` → the **TERMINAL** status (delivered/read/failed) — the only proof of delivery (A3). Failures classified by Meta error code (131049 marketing cap, 131048/131026 spam/quality, 131047, 470). Flag off → `LogOnlyWatiAdapter` logs the intended call + payload and simulates a delivered terminal status. Secrets from env/secret store, never inline (A7). `LiveWatiAdapter` reads `WATI_*` config and refuses to run without it; the real HTTP send/poll is wired alongside Meta template approval (parallel workstream).
-- **Background queue = django-q2 (ORM broker — NO Redis; ADR-024):** `Q_ASYNC=false` runs tasks **inline** in dev/CI/demo (no worker needed); prod runs `qcluster`. The **M4 dirty-day `recompute_rollups`** is scheduled here (`setup_schedules`, every 5 min) — closing the M4 scope note.
-- **Three lead-time notifications on `lead_captured`** (via `transaction.on_commit`, after the lead is durably saved — capture-first): (a) **office/Ashok** "new lead {name}, referred by {client_id}"; (b) **prospect** — warm **UTILITY** naming the referrer (Meta first-contact rule A4); (c) **referrer** — **only if phone known** (a `Customer` row now; Zoho lookup at M6), else **skipped with a reason, never guessed**. **Deduped** by idempotency key `role:template:journey`; **opt-in-aware** (opt-out hook + first-warm-utility). Phone normalized one canonical way (91-key) via the shared helper.
-- **Delivery-status consumption (Gap 12):** terminal status + Meta classification recorded on each `Notification`; a source-tagged `notification` event (delivery status in metadata, **no PII**) — the **funnel can start at "delivered"** so the ~33% WATI leak is visible, not hidden.
-- **Template manifest `wati-templates.json`:** the three UTILITY templates (positional vars + Meta sample values) ready for parallel Meta submission.
-- **New models:** `Customer` (05 Context 4, minimal — the referrer-phone source; NO PAN/KYC), `Notification` (dedup + terminal status + classification).
+**Note for later (not a mission):** the `Customer` table (Abhay's own customers, `client_id → name/phone`) is what lights up both the **referrer-name reveal (#1)** and the **referrer notification (M5c)** for his own customer base. Loading that data from Abhay's existing records is a small **data-seeding step** we can do before go-live (separate from the mission loop).
 
-**Verified in demo:** lead capture → office **delivered**, prospect **delivered**, referrer **skipped (phone unknown)**; with a `Customer` row the referrer is **delivered** to the normalized number; repeat capture does not duplicate notifications; 2 `notification` events emitted (source=wati, delivery_status=delivered, no PII).
+### 2026-07-06 — FROM DA — MISSION — M6: Zoho lead + status sync (behind `ENABLE_ZOHO_WRITE=false`; status ONLY from Zoho, NEVER fabricate)
 
-**Guardrails:** WATI send tests assert on **terminal delivery status, not HTTP 200**. **No stale-lead nudge** (REQ-F01) — a test guards that no nudge/stale function exists. #1/#3 still hold; #2 still skipped (M6).
+Per `implementation/10` §11 M6 + the locked conversion decisions (#6/#7/#8/#9/#10/#11/#12/#18/#19, ADR-013/016/017). This is the conversion/truth layer. **Flag off → demo/dev logs intended Zoho calls and uses fixture conversions to exercise every path offline.**
 
-**No new inconsistency surfaced.** Scope notes (not blocking): live WATI HTTP send + real terminal-status polling land with **Meta template approval** (the parallel workstream gated by `ENABLE_WATI_SEND`); the **conversion-time referrer thank-you** is M6 (needs Zoho); webhook HMAC wax-seal stays DF-2.
+1. **Zoho adapter (doc-08 contract, `apps/integrations/zoho`):** create Lead on submit (GoRefer already saves the lead FIRST in M3 — M6 adds the Zoho Lead **write** behind the flag; **stamp a GoRefer journey-reference on the Zoho lead** for best-effort opener→journey linking, #10); read account/reward status back. Secrets from env; adapter refuses live mode without config.
+2. **Conversion ingest = mirror Zoho as-mapped (the core):**
+   - Inbound account-status update: **match/credit the REFERRER by ZERODHA CLIENT ID** (#10) — NOT mobile (conversion data has no mobile). **Uniqueness/upsert key = opener ZERODHA ACCOUNT ID** (fallback `zoho_lead_id`), #11 — one account never becomes two.
+   - **NO provisional/final** — whatever Zoho maps is authoritative (#6). **Off-platform (zero-click) conversions auto-create** the referral/journey (#7, ADR-016) — a conversion can exist with zero clicks.
+   - **Explicit Zoho-status → GoRefer-stage map** (#12); past `redirect_completed`, **Zoho is the sole authority** (mirror, never advance a stage internally). **`account_opened` is the default terminal**; `reward_status_changed` fires **only if Zoho supplies a reward signal** (reward AMOUNTS live only in the Zerodha Console — never computed/stored).
+   - **True account-opening date** (ADR-017) stored as a first-class field, distinct from the sync/import date; **all conversion analytics run off the true open date** (no fake day-1 spike).
+   - **Removals propagate** (#6): a mapping removed in Zoho → a **`conversion_removed` reversal/tombstone** event → drop from the current view + **recompute the affected day/month rollups**; retain the audit trail. **Source/origin tag on every status change** (#18).
+3. **Sync worker (#7):** process the Zoho webhook reliably — **watermark** (resume point) + **dead-letter/problem-tray** (retry failed without loss) + **off-platform auto-create**. (Polling "pull" fallback deferred → DF-1.)
+4. **Idempotency guard (#8):** dedupe each update by a unique id (Zoho `event_id` / composite) in a `zoho_sync_idempotency` table; guard side-effects → exactly-once (pairs with #7 → no loss + no double-count).
+5. **Lazy per-referrer history fetch (#9):** when a referrer first appears (first click OR first conversion), pull **that referrer's** full Zoho history on demand. Full bulk backfill = DF-4 (deferred).
+6. **Webhook auth (interim):** basic static key **+ Zoho-IP allowlist**. HMAC "wax-seal" deferred → DF-2.
+7. **Sync-freshness (#19):** populate `last_successful_zoho_sync_at` on each successful sync + staleness alert (the M4 `SyncHealth` scaffold now lights up).
+8. **Guardrail test #2 ACTIVATES:** account/conversion status can be set **ONLY** from the Zoho-sourced import path, **NEVER** by an internal write/fabrication — assert it.
 
-**Merge order:** PRs stack #1 → #2 → #3 → #4 → #5 (M1 still unmerged). DA's Q-M1-1 spec edits remain uncommitted in the working tree.
+**NOT in M6 (deferred):** the conversion-time **referrer thank-you** WhatsApp (Sprint 2, #7 side-effects); the stale-lead nudge (REQ-F01, Sprint 2); reward amount computation (never — Zerodha Console only).
 
-Ready for M6 (Zoho lead + status sync) once reviewed.
+**Guardrails / DoD (M6):** Zoho adapter behind the doc-08 contract (flag off → logs intended calls); conversion ingest mirrors Zoho as-mapped (no provisional/final); referrer matched by Zerodha client id; opener keyed by Zerodha account id (upsert, idempotent); off-platform zero-click conversions auto-created; true open date stored + analytics run off it; removals propagate via reversal + rollup recompute + audit; explicit Zoho-status→stage map applied; source tags on status changes; sync worker (watermark + dead-letter); sync-freshness populated; **guardrail test #2 active**; whole flow works in demo with fixture Zoho data; CI green. Open PR `mission-6-zoho`; append a STATUS. Log any ambiguity as a QUESTION and pause on that point.
+
+---
+
+### 2026-07-06 — FROM DA — INSTRUCTION — Housekeeping: commit DA docs + merge the PR stack (+ standing rule)
+
+You (Claude Code) own the git workflow — please handle this directly:
+
+1. **Commit the DA's doc edits** currently uncommitted in the working tree — they are **DA-authored and approved**, so you are explicitly authorized to commit them: `CLAUDE.md`, `docs/architecture/02` (ADR-021–024 + Round-2 folds), the other `docs/*` Round-2 folds, `review/*` (framework decision + captures, `Deferred-Features-Backlog.md`), `COORDINATION.md`, `README.md`, and `mockups/`. Suggested: a docs-only commit separate from code —
+   `git add -A && git commit -m "docs: DA design updates (Q-M1-1, ADR-024 stack, reviews, missions, mockups)"`.
+2. **Merge the PR stack in order: #1 → #2 → #3 → #4 → #5** (M1→M5), keeping `main` deployable at each step.
+
+**Standing rule going forward:** once the DA marks a mission **APPROVED** in this log, **merge that mission's PR (in order)** and commit any pending DA doc edits, so the stack never piles up. If a merge conflicts, flag it here as a QUESTION and pause on it.
