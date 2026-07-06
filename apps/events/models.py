@@ -27,6 +27,9 @@ class Event(TenantScopedModel):
     """Immutable, append-only event (05 §12.1). No updated_at, no soft-delete."""
 
     event_type = models.CharField(max_length=64)
+    # Source/origin tag (#18): which system/event produced this row. The audit
+    # backbone for never-fabricate — every event is traceable to an origin.
+    source = models.CharField(max_length=32, default="system")
     referral = models.ForeignKey(
         "referrals.Referral", on_delete=models.PROTECT, null=True, blank=True, related_name="events"
     )
@@ -103,3 +106,84 @@ class ClickNonce(TenantScopedModel):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"nonce<{self.nonce[:8]}…>"
+
+
+class DailyMetric(TenantScopedModel):
+    """Pre-aggregated daily rollup (05 §12.2). Rebuildable from events; dashboards
+    read these cheap rows, not the raw firehose. Recomputed via the dirty-days set."""
+
+    metric_date = models.DateField()
+    program = models.ForeignKey("referrals.ReferralProgram", on_delete=models.CASCADE, related_name="+")
+    links_created = models.IntegerField(default=0)
+    clicks = models.IntegerField(default=0)
+    landing_views = models.IntegerField(default=0)
+    redirects = models.IntegerField(default=0)
+    leads = models.IntegerField(default=0)
+    accounts_opened = models.IntegerField(default=0)  # source-only (Zoho, M6); 0 until then
+    recomputed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "daily_metrics"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "metric_date", "program"], name="uq_daily_metric"
+            ),
+        ]
+
+
+class MonthlyMetric(TenantScopedModel):
+    """Pre-aggregated monthly rollup (mirrors DailyMetric at month grain)."""
+
+    year = models.IntegerField()
+    month = models.IntegerField()  # 1-12
+    program = models.ForeignKey("referrals.ReferralProgram", on_delete=models.CASCADE, related_name="+")
+    links_created = models.IntegerField(default=0)
+    clicks = models.IntegerField(default=0)
+    landing_views = models.IntegerField(default=0)
+    redirects = models.IntegerField(default=0)
+    leads = models.IntegerField(default=0)
+    accounts_opened = models.IntegerField(default=0)
+    recomputed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "monthly_metrics"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "year", "month", "program"], name="uq_monthly_metric"
+            ),
+        ]
+
+
+class DirtyPeriod(TenantScopedModel):
+    """The dirty-days set (#6/#34). Any add/fix/removal records the affected day (and
+    its month) here; a worker recomputes exactly those periods — no full rebuild.
+    Consistent after out-of-order / backdated data (e.g. a Zoho conversion landing in
+    its true prior period)."""
+
+    program = models.ForeignKey("referrals.ReferralProgram", on_delete=models.CASCADE, related_name="+")
+    period_date = models.DateField()  # the day marked dirty (its month is derived)
+    created_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "dirty_periods"
+        indexes = [models.Index(fields=["processed_at"])]
+
+
+class SyncHealth(TenantScopedModel):
+    """Sync-freshness scaffold (#19). Populated by M5/M6; in demo shows 'no sync yet'.
+    Guards against 'looks-current-but-isn't' data (fabrication-by-omission)."""
+
+    STATE_CHOICES = [
+        ("healthy", "healthy"), ("degraded", "degraded"),
+        ("stalled", "stalled"), ("no_sync", "no_sync"),
+    ]
+
+    last_successful_zoho_sync_at = models.DateTimeField(null=True, blank=True)
+    zoho_state = models.CharField(max_length=16, choices=STATE_CHOICES, default="no_sync")
+    last_successful_wati_at = models.DateTimeField(null=True, blank=True)
+    wati_state = models.CharField(max_length=16, choices=STATE_CHOICES, default="no_sync")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "sync_health"
