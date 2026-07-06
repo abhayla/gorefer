@@ -21,6 +21,11 @@ staticfiles/
 .coverage
 htmlcov/
 
+# Node (frontend build tooling only; the COMPILED static/css/app.css + vendored
+# static/js/htmx.min.js ARE committed so the app runs without Node at runtime).
+node_modules/
+package-lock.json
+
 # OS / editor
 .DS_Store
 Thumbs.db
