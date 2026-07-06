@@ -10,7 +10,10 @@ from ninja import NinjaAPI
 
 from gorefer.flags import flags
 
+from .click import router as click_router
+
 api = NinjaAPI(title="GoRefer API", version="0.1.0", description="GoRefer referral intelligence API")
+api.add_router("/click", click_router)
 
 
 @api.get("/health")
