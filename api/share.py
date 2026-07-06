@@ -9,6 +9,7 @@ from __future__ import annotations
 from ninja import Router, Schema
 from ninja.errors import HttpError
 
+from apps.events import vocab
 from apps.events.models import Event
 from apps.referrals.models import ReferralIdentity
 from apps.referrals.validators import InvalidClientId, validate_client_id
@@ -16,7 +17,6 @@ from apps.tenants.resolve import get_current_tenant
 
 router = Router()
 
-SHARE_CLICKED_EVENT = "share_clicked"
 _CHANNELS = {
     "whatsapp", "whatsapp_status", "facebook", "instagram",
     "linkedin", "x", "email", "copy_link", "qr",
@@ -50,7 +50,8 @@ def record_share(request, payload: ShareIn):
 
     Event.objects.create(
         tenant=tenant,
-        event_type=SHARE_CLICKED_EVENT,
+        event_type=vocab.SHARE_CLICKED,
+        source=vocab.SRC_SYSTEM,
         referral=referral,
         user_type="anonymous",
         metadata={"channel": payload.channel},  # channel is not PII

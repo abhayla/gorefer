@@ -10,6 +10,7 @@ from ninja import NinjaAPI
 
 from gorefer.flags import flags
 
+from .analytics import router as analytics_router
 from .click import router as click_router
 from .leads import router as leads_router
 from .share import router as share_router
@@ -18,6 +19,7 @@ api = NinjaAPI(title="GoRefer API", version="0.1.0", description="GoRefer referr
 api.add_router("/click", click_router)
 api.add_router("/leads", leads_router)
 api.add_router("/share", share_router)
+api.add_router("/analytics", analytics_router)
 
 
 @api.get("/health")

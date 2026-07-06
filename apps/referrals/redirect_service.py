@@ -20,19 +20,13 @@ import logging
 
 from django.db import transaction
 
+from apps.events import vocab
 from apps.events.bots import is_bot_user_agent
 from apps.events.models import Event, VisitorPII
 from apps.events.nonces import mint_nonce
 from apps.referrals.models import Partner, ProgramRedirectRule, Referral, ReferralIdentity, ReferralProgram
 
 logger = logging.getLogger("gorefer.redirect")
-
-# Event vocabulary (DA M3 mission). M3 inserts the landing BEFORE the redirect:
-# GET /r/{id} renders the landing (landing_viewed); the 302 happens only when the
-# user taps "Continue to Zerodha" (redirect_completed).
-LANDING_VIEWED_EVENT = "landing_viewed"
-REDIRECT_COMPLETED_EVENT = "redirect_completed"
-PARTNER_DIRECT_EVENT_TYPE = "PartnerDirectOpened"
 
 
 def _active_program(tenant) -> ReferralProgram:
@@ -101,11 +95,12 @@ def _get_or_create_partner_direct_referral(tenant, program) -> Referral:
     return referral
 
 
-def _record_event(*, tenant, referral, visitor_id, user_agent, raw_ip, event_type):
+def _record_event(*, tenant, referral, visitor_id, user_agent, raw_ip, event_type, source):
     """Write an immutable event + (if raw_ip) the SEPARATE erasable PII record.
 
     PII (raw IP) goes ONLY to VisitorPII; the event carries person_ref_id by id.
-    Returns the created Event so callers (landing) can reference it (e.g. beacon).
+    Every event carries a source/origin tag (#18). Returns the created Event so
+    callers (landing) can reference it (e.g. the beacon).
     """
     person_ref_id = None
     if raw_ip:
@@ -114,6 +109,7 @@ def _record_event(*, tenant, referral, visitor_id, user_agent, raw_ip, event_typ
     return Event.objects.create(
         tenant=tenant,
         event_type=event_type,
+        source=source,
         referral=referral,
         user_type="anonymous",
         visitor_id=visitor_id,
@@ -144,13 +140,15 @@ def handle_landing_view(*, tenant, client_id: str, visitor_id, user_agent, raw_i
         return None, None, None
 
     referral = _lazy_get_or_create_referral(tenant, program, client_id)
+    # The /r/ hit IS the click; the branded page render is the landing view. Emit
+    # both funnel stages (click precedes landing_viewed). Raw IP recorded once.
+    _record_event(
+        tenant=tenant, referral=referral, visitor_id=visitor_id, user_agent=user_agent,
+        raw_ip=raw_ip, event_type=vocab.CLICK, source=vocab.SRC_CLICK,
+    )
     event = _record_event(
-        tenant=tenant,
-        referral=referral,
-        visitor_id=visitor_id,
-        user_agent=user_agent,
-        raw_ip=raw_ip,
-        event_type=LANDING_VIEWED_EVENT,
+        tenant=tenant, referral=referral, visitor_id=visitor_id, user_agent=user_agent,
+        raw_ip=None, event_type=vocab.LANDING_VIEWED, source=vocab.SRC_CLICK,
     )
     nonce = mint_nonce(tenant=tenant, referral=referral, visitor_id=visitor_id or "", client_id=client_id)
     return referral, event, nonce
@@ -168,12 +166,8 @@ def build_continue_redirect(*, tenant, client_id: str, referral):
     if referral is not None:
         transaction.on_commit(
             lambda: _record_event(
-                tenant=tenant,
-                referral=referral,
-                visitor_id=None,
-                user_agent="",
-                raw_ip=None,
-                event_type=REDIRECT_COMPLETED_EVENT,
+                tenant=tenant, referral=referral, visitor_id=None, user_agent="",
+                raw_ip=None, event_type=vocab.REDIRECT_COMPLETED, source=vocab.SRC_REDIRECT,
             )
         )
     return destination
@@ -191,12 +185,8 @@ def handle_partner_direct(*, tenant, visitor_id, user_agent, raw_ip):
     referral = _get_or_create_partner_direct_referral(tenant, program)
     transaction.on_commit(
         lambda: _record_event(
-            tenant=tenant,
-            referral=referral,
-            visitor_id=visitor_id,
-            user_agent=user_agent,
-            raw_ip=raw_ip,
-            event_type=PARTNER_DIRECT_EVENT_TYPE,
+            tenant=tenant, referral=referral, visitor_id=visitor_id, user_agent=user_agent,
+            raw_ip=raw_ip, event_type=vocab.CLICK, source=vocab.SRC_CLICK,
         )
     )
     return destination, True
