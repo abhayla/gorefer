@@ -263,3 +263,27 @@ You (Claude Code) own the git workflow — please handle this directly:
 **Deferred (out of M6):** conversion-time referrer thank-you WhatsApp (Sprint 2); stale-lead nudge (Sprint 2); reward amount computation (never); HMAC wax-seal (DF-2); Zoho-API pull fallback (DF-1); bulk backfill (DF-4). Live Zoho HTTP wiring lands with sandbox verification (gated by `ENABLE_ZOHO_WRITE`).
 
 Ready for M7 (admin dashboard / referral explorer) once reviewed — the last build mission before the M8 endgame (Phase A hardening → Phase B independent verification).
+
+---
+
+### 2026-07-06 — FROM ENGINEER — STATUS — M7: admin dashboard / explorer / journey — DONE (PR `mission-7-admin`, #7) — LAST BUILD MISSION
+
+**Built to the M7 mission — the last build mission. Internal admin behind `ENABLE_ADMIN_DASHBOARD` + the M1 env-bootstrap admin login (staff-only). Built from the mockups with reusable components; renders in demo mode from seeded data. Headline counts read from the M4 ROLLUPS, not the raw firehose. DoD holds — 104 pass / 0 skip, ruff clean, no migration drift; verified live (login → dashboard).**
+
+**Housekeeping first (standing rule):** merged **M6 (PR #6) into `main`** in order — clean merge this time, `main` deployable (94 pass, no drift, ruff clean). PR #6 shows MERGED. M7 (this PR) is based on the merged `main`.
+
+**M7 build:**
+- **`apps/dashboard`:** read-only `queries.py` (KPIs/funnel/leaderboard/explorer/journey — all from M4 rollups + read models) + login-gated `views.py`, mounted at **`/admin-panel/`** only when the flag is on (Django admin base → `/django-admin/`).
+- **Admin login** from the mockup, gating every admin page via `login_required` + `is_staff` (customer login stays flagged off).
+- **Dashboard:** KPI cards (total clicks, **unique visitors [APPROX]**, leads, **accounts opened [FROM ZOHO]**, conversion rate); **funnel from rollups** (click → landing_viewed → redirect_completed → lead_captured → account_opened); **top-referrer leaderboard** (Zerodha client id + name-if-known from Customer); recent leads with **MASKED mobile**; **sync-freshness top-bar** (#19: "synced N ago ✓ / no sync ⚠"). Unique counts labelled approximate (ADR-018/019).
+- **Referral explorer:** search + **source/status filters**; columns per mockup; **partner-direct (— NONE —)** and **off-platform (`zoho_import`)** shown as distinct populations; rows link to journey detail.
+- **Journey detail:** M4 **timeline** (events + source tags + timestamps) + a **conversion side-panel** — status, **TRUE account-opening date** (distinct from the import/sync date), **credited referrer by Zerodha client id**, opener by **Zerodha account id**, `source=zoho`, reversal/tombstone note. No mobile on the conversion side.
+- Reusable partials: `topbar` (+ sync-freshness), `status_badge`, a dashboard base extending the shared `pifs_head`.
+
+**Guardrails:** **no "Coming Soon"/dead UI** (routes are absent when the flag is off — tested); **guardrail #3 holds** (no partner code / Zerodha URL in any admin response — tested across dashboard + explorer); **PII masked** (mobile shown as `987•••10`, full number never rendered). #1/#2 continue to hold.
+
+**One environment note (not a code issue):** browser **screenshots were flaky** in my sandbox — the Tailwind CDN fetch intermittently froze CDP capture. I verified rendering via curl + page-text extraction (login page confirmed branded + compliance footer; dashboard renders KPIs/funnel/leaderboard; no leaks). The **M8 Phase-B independent verification** will do the exhaustive browser rendering at mobile + desktop widths against the mockups/doc-07 — that's the right place for the definitive UI pass.
+
+**Sprint-1 build complete (M1–M7).** All seven vertical slices merged/mergeable; `main` deployable; all guardrail tests active (#1 redirect-never-submits, #2 status-only-from-Zoho, #3 no-partner-code-in-client-response) + the PII-in-events CI rule; demo mode runs the whole flow offline with `ENABLE_WATI_SEND`/`ENABLE_ZOHO_WRITE` off.
+
+**Ready for M8.** On your GO (after approving M7 + merging PR #7), I'll begin **Phase A hardening**: comprehensive end-to-end + edge/adversarial tests across the WHOLE Sprint-1 Zerodha flow (link → landing → beacon/name-gate → capture → lead-first → Continue → redirect → funnel/rollups → WATI (flag off) → Zoho conversion mirror → admin dashboard/explorer/journey), fixing until 100%, so Phase A is short and the independent agent (Phase B) has a clean, green base. If you'll drop `review/Acceptance-Test-Plan.md` (the rubric), I'll harden against it directly.
