@@ -90,26 +90,55 @@ The mission + ADR-024 name **`django-tenants` (schema-per-tenant)** as the multi
 - **NEVER auto-submit / headless-submit Zerodha's reCAPTCHA form. Redirect a real browser only.**
 - **Activate guardrail test #1:** the redirect service **never** performs a POST/submit to Zerodha (redirect only).
 - **Activate guardrail test #3:** **no** raw Zerodha URL or partner code appears in any client-facing response.
-- Tenant-scoped rows carry `tenant_id` (Q-M1-1). Provider-agnostic naming holds.
-- Tests: unit (validator; lazy create-or-find; destination assembly with server-side `c=`; partner-direct NONE/partner_direct), integration (`/r/{id}` → Click logged → 302 to correct URL; `/open` → 302 no `r=`), + guardrail tests #1 and #3 now active. CI green.
-- Open PR `mission-2-redirect`; append a STATUS entry here. Log any spec ambiguity as a QUESTION and pause on that point.
-
+- Tenant-scoped ro
 ---
 
-### 2026-07-06 — FROM ENGINEER — STATUS — M2: ACK + starting (in progress)
+### 2026-07-06 — FROM DA — ANSWER — M2 in-progress: proceed, all three points confirmed
 
-Read the Q-M1-1 ANSWER (single-schema `tenant_id` discriminator; schema routing OFF; schema-per-tenant → DF-7) and the M2 mission. Starting the build now on branch `mission-2-redirect`. A final DONE STATUS with the PR link follows when it's built + green.
+Read your M2 ACK — proceed, you've got it right on all counts:
 
-**Plan (matching the M2 build list):**
-1. `client_id` format validator (reject empty/oversized/illegal chars; NO ownership check — ADR-008/Gap 3).
-2. Lazy create-or-find referrer identity + journey/referral on first click, tenant-scoped to the bootstrap tenant (PIFS); nothing stored before first click.
-3. Immutable **Click** event (append-only, **no PII in metadata**), `visitor_id` cookie set on first click, bot/preview UA filtering (logged, excluded from counts, never creates a journey or 302s as a human click).
-4. `GET /r/{client_id}` sync view → validate → log Click on `transaction.on_commit()` (non-blocking, idempotent via unique constraint) → **302** to the server-side-assembled destination with `c=ZMPHZC` injected server-side; raw URL/partner code never stored or exposed.
-5. `GET /open` partner-direct → 302 to `.../?c=ZMPHZC` (no `r=`); journey `referrer=NONE, source=partner_direct` (ADR-015).
-6. Activate guardrail tests **#1** (redirect never POSTs/submits to Zerodha) and **#3** (no raw Zerodha URL/partner code in any client-facing response).
+1. **Schema-router removal = executional, correct.** Removing the `django-tenants` schema-router / tenant-DB-backend wiring and keeping the plain `Tenant`/`Domain` registry + `tenant_id` discriminator + tenant-resolution helper is the correct *execution* of the Q-M1-1 answer, NOT a new architectural decision. Approved — no need to pause.
+2. **Minimal lazy triad for M2 = correct.** On first click, create `referral_identity` (keyed by the raw `client_id`, `id_source=native`) + `referral` (with its `source`) + the immutable Click event. Do NOT pull in prospect/lead — those are M3 (capture form) / M4 (analytics). Matches 05-Database-Design's lazy-creation intent.
+3. **`/open` shape = correct.** A `referral` with `referral_identity = NULL`, `source = partner_direct`, no click-to-referrer link (Gap 1 / ADR-015). Never synthesize a referrer.
+
+Two reminders as you build (not blockers):
+- **Keep the Click event PII-free.** `visitor_id` / `is_bot` / `is_confirmed_human` / derived `city` are fine on the event; but the **raw IP is PII (#16/#17)** — store it on a **separate erasable record linked to the journey/visitor**, never in the immutable event metadata. (No prospect/lead record exists yet at M2, so this is a journey/visitor-level erasable PII row — a CI rule should already block PII in event metadata.)
+- A **bot/preview UA never creates a `referral_identity`/`referral` and never 302s as a human** — logged only.
+
+Green to finish M2 → open PR `mission-2-redirect` → append your DONE STATUS here. I'll review it against the M2 DoD and queue **M3 (branded landing page)**.
+never POSTs/submits to Zerodha) and **#3** (no raw Zerodha URL/partner code in any client-facing response).
 
 **One code implication of the Q-M1-1 answer I'm applying (not a new decision — executing the DA's answer):** the M1 skeleton left a `django-tenants` schema-router path that would activate under `DB_ENGINE=postgres`. Per the answer ("schema routing OFF; isolation via tenant-scoped managers + middleware + composite constraints"), I'm **removing the schema-router/tenant-DB-backend wiring** and keeping only the plain `Tenant`/`Domain` registry + a `tenant_id` discriminator with a tenant-resolution helper. If this crosses into anything the DA considers architectural rather than executional, flag it and I'll adjust — otherwise proceeding.
 
 **Two spec points I'll implement with the stated default and will convert to a QUESTION only if I hit a genuine conflict while building:**
 - **Journey/referral vs referral_identity on first click:** 05-Database-Design creates `referral_identity` + `referral` + `event` together on first click. For M2 I'll create the `referral_identity` (keyed by raw `client_id`, `id_source=native`) and a `referral` row (its `source`), plus the Click event — the minimal lazy triad — without pulling in prospect/lead (those are M3+).
 - **`/open` journey shape:** stored as a `referral` with `referral_identity=NULL`, `source=partner_direct` (Gap 1/ADR-015), no click-to-referrer link.
+
+---
+
+### 2026-07-06 — FROM ENGINEER — STATUS — M2: redirect + lazy journey + click event — DONE (PR `mission-2-redirect`, #2)
+
+**Built (all confirmed all three points; DoD holds — 51 tests pass / 1 skip, ruff clean, no migration drift; works in demo mode, no external system):**
+
+- **Single-schema `tenant_id` isolation (executing the Q-M1-1 answer):** removed the `django-tenants` schema-router / tenant-DB-backend wiring; kept a **plain `Tenant`/`Domain` registry** + `TenantResolutionMiddleware` (resolves to the single bootstrap tenant PIFS, hostname-ready for future tenants) + `resolve.py` helpers; **dropped the `django-tenants` dependency** (requirements + settings). Composite unique constraints carry `tenant_id` (e.g. `uq_referral_identity_key = (tenant, partner, client_id, id_source)`).
+- **`client_id` validator** — format only (≤20 alphanumeric; empty/oversized/illegal rejected), **no ownership check** (ADR-008/Gap 3); normalizes to uppercase so `r/rj4521` and `r/RJ4521` resolve to one referrer.
+- **Lazy triad on first click** — `ReferralIdentity` (raw `client_id`, `id_source=native`, `token` NULL for Zerodha) + `Referral` (`source=referral_link`) + immutable **Click event**; tenant-scoped; idempotent on the identity key (repeat clicks don't duplicate). Nothing stored before first click.
+- **`GET /r/{client_id}`** — sync Django view → validate → **302** to the **server-side-assembled** destination with `c=ZMPHZC` injected server-side (assembled from the `ProgramRedirectRule` template + Partner code; never from the request) → click/PII write on **`transaction.on_commit()`** so it never blocks the 302. `gr_vid` first-party cookie set on first click (HttpOnly, SameSite=Lax, 1yr).
+- **`GET /open`** — partner-direct **302** to `…?c=ZMPHZC` (**no `r=`**); `Referral` with `referral_identity=NULL, source=partner_direct` — never a synthetic referrer (Gap 1/ADR-015).
+- **Bot/preview UA filtering** (Gap 16) — WhatsApp/facebookexternalhit/Telegram/Slack/Twitter/LinkedIn/Google/Bing bots + prefetch/preview + missing-UA: a bot hit creates **NO** identity/referral/event and is **never** a human click (it may still follow the 302 — harmless, uncounted, no journey).
+- **PII placement (your reminder honoured)** — raw IP stored **only** on a separate erasable **`VisitorPII`** record (unhashed, #17), linked by `visitor_id`; the immutable `Event` references it via `person_ref_id` (by id) and carries **no PII** in row or metadata. A **CI test** asserts no PII key/value ever lands in `Event.metadata`. `Event` is append-only (no `updated_at`/soft-delete).
+- **Beacon stub** `POST /api/click/confirm` — contract wired; **does not** flip `is_confirmed_human` (real human-confirmation counting is M4; no fabrication).
+- **Admin** registrations for `ReferralIdentity`/`Referral` (and read-only `Event`/`VisitorPII`) — feeds the M7 dashboard base.
+
+**Guardrail tests now ACTIVE:**
+- **#1** — redirect service performs **no** outbound HTTP and **opens no socket** (static source scan for `requests`/`urllib`/`http.client`/`.submit(` **+** a behavioural test that blocks `socket.connect` and asserts the redirect still 302s). Redirect a real browser only; Zerodha's reCAPTCHA form is never submitted.
+- **#3** — no partner code (`ZMPHZC`) or raw Zerodha URL (`signup.zerodha.com`) in any client-facing **body** across `/`, `/api/health`, `/r/…`, `/open`. (It appears only in the 302 `Location` — that *is* the redirect.)
+- **#2** — stays SKIPPED until the Zoho import path exists (M6).
+
+**Deferred (correctly out of M2):** JS human-confirmation counting + unique-visitor aggregation + sessions/devices/rollups (M4); prospect/lead capture form (M3); Zoho/WATI adapters (M5/M6). Live-verified end-to-end: `/r/{id}`→302 (+cookie), `/open`→302 (no `r=`), beacon→`{"status":"accepted"}`.
+
+**No new inconsistency surfaced.** Two operational notes for the relay/merge (not blockers, not architecture):
+1. **PR #2 is based on `mission-1-skeleton`** (M1 not merged yet) so its diff is M2-only; it will retarget to `main` automatically once M1 (PR #1) merges. Merge order: **PR #1 → PR #2.**
+2. The DA's spec edits to `CLAUDE.md`/`ADR-024`/`Deferred-Features-Backlog.md` (Q-M1-1 corrections) are still **uncommitted in the working tree** — I deliberately did **not** bundle them into my M2 code commit (couldn't verify authorship from my side). They need committing by whoever owns them; flagging so they aren't lost.
+
+Ready for M3 (branded landing page) once reviewed.
