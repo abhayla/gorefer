@@ -12,7 +12,6 @@ from apps.events.analytics import (
     approximate_unique_visitors,
     build_journey_timeline,
     confirmed_human_clicks,
-    funnel_counts,
 )
 from apps.events.models import DailyMetric
 from apps.integrations.models import Conversion
@@ -31,8 +30,25 @@ def _rollup_totals(tenant):
     return {k: (v or 0) for k, v in agg.items()}
 
 
+def refresh_and_freshness(tenant=None):
+    """Recompute any dirty rollups so the dashboard is never stale (OBS-1), and
+    return a single 'counts as of' timestamp for the whole page. KPI, funnel, and
+    leaderboard all read the SAME rollup snapshot at this freshness."""
+    from django.utils import timezone
+
+    from apps.events.rollups import recompute_dirty
+
+    recompute_dirty()
+    qs = DailyMetric.objects.all()
+    if tenant is not None:
+        qs = qs.filter(tenant=tenant)
+    last = qs.order_by("-recomputed_at").values_list("recomputed_at", flat=True).first()
+    return last or timezone.now()
+
+
 def kpis(tenant=None) -> dict:
-    """KPI cards. accounts_opened is Zoho-sourced; unique visitors approximate."""
+    """KPI cards — ALL from the rollup snapshot (same source/freshness as the funnel).
+    accounts_opened is Zoho-sourced (true open date); unique visitors approximate."""
     totals = _rollup_totals(tenant)
     leads = totals["leads"]
     accounts = totals["accounts"]
@@ -48,14 +64,45 @@ def kpis(tenant=None) -> dict:
     }
 
 
+# Rollup column for each funnel stage (so the funnel reads the SAME source as KPIs).
+_STAGE_ROLLUP_COLUMN = {
+    "link_created": "links_created",
+    "click": "clicks",
+    "landing_viewed": "landing_views",
+    "redirect_completed": "redirects",
+    "lead_captured": "leads",
+    "account_opened": "accounts_opened",
+}
+
+
 def funnel(tenant=None) -> list[dict]:
-    """Funnel stages with a conversion% vs the previous stage (for the bars)."""
-    stages = funnel_counts(tenant=tenant)
-    prev = None
-    for s in stages:
-        s["pct_of_prev"] = (round(s["count"] / prev * 100) if prev else 100) if prev is not None else 100
-        prev = s["count"] if s["count"] else prev
+    """Funnel stages built from the SAME rollup snapshot as the KPIs (OBS-1), so a
+    KPI can never sit next to a differently-sourced funnel value."""
+    # Read every stage column from the rollups (same snapshot as the KPIs).
+    stage_counts = {stage: _rollup_column_sum(tenant, col) for stage, col in _STAGE_ROLLUP_COLUMN.items()}
+    stages, prev = [], None
+    for stage, label in vocab_funnel_stages():
+        count = stage_counts.get(stage, 0)
+        pct = (round(count / prev * 100) if prev else 100) if prev is not None else 100
+        stages.append({
+            "stage": stage, "label": label, "count": count,
+            "source_only": stage == "account_opened", "pct_of_prev": pct,
+        })
+        prev = count if count else prev
     return stages
+
+
+def _rollup_column_sum(tenant, column: str) -> int:
+    qs = DailyMetric.objects.all()
+    if tenant is not None:
+        qs = qs.filter(tenant=tenant)
+    return qs.aggregate(n=Sum(column))["n"] or 0
+
+
+def vocab_funnel_stages():
+    from apps.events import vocab
+
+    return vocab.FUNNEL_STAGES
 
 
 def top_referrers(tenant=None, limit: int = 10) -> list[dict]:
@@ -73,7 +120,12 @@ def top_referrers(tenant=None, limit: int = 10) -> list[dict]:
         client_id = identity.client_id
         clicks = ref.events.filter(event_type="click", is_bot=False).count()
         leads = ref.events.filter(event_type="lead_captured").count()
-        accounts = ref.events.filter(event_type="account_opened").count()
+        # Accounts = Zoho conversions credited to this referrer (single source of
+        # conversion truth), consistent with the KPI/funnel accounts_opened.
+        acc_qs = Conversion.objects.filter(referrer_client_id=client_id, is_reversed=False)
+        if tenant is not None:
+            acc_qs = acc_qs.filter(tenant=tenant)
+        accounts = acc_qs.count()
         name = _referrer_name(tenant, client_id)
         rows.append({"client_id": client_id, "name": name, "clicks": clicks,
                      "leads": leads, "accounts": accounts})

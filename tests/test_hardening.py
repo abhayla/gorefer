@@ -150,6 +150,63 @@ def test_k5_zoho_webhook_rejects_when_no_key_configured(settings):
     assert resp.status_code == 401  # no key configured => reject
 
 
+# --- DEF-1: missing/inactive redirect config -> branded 503, never a 500 ---
+
+@pytest.mark.django_db
+def test_def1_missing_redirect_rule_renders_branded_503():
+    """No active ProgramRedirectRule (or ReferralProgram) => branded 503
+    PARTNER_UNAVAILABLE HTML, NOT an uncaught 500 (06-API §4.1)."""
+    from apps.referrals.models import ProgramRedirectRule
+    call_command("seed_program")
+    c = Client()
+    # Prime a journey while config is healthy, then break the redirect config.
+    c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0")
+    ProgramRedirectRule.objects.update(is_active=False)  # no active rule
+    # The DESTINATION-building steps (Continue / partner-direct) must 503, never 500.
+    for path in ("/r/RJ4521/continue", "/open"):
+        resp = c.get(path, HTTP_USER_AGENT="Mozilla/5.0")
+        assert resp.status_code == 503, f"{path} should be 503, got {resp.status_code}"
+        body = resp.content.decode()
+        assert "temporarily unavailable" in body.lower()
+        assert "Traceback" not in body and "DoesNotExist" not in body  # never a raw error
+        assert "AP2516003693" in body  # compliance still injected on the branded 503
+    # The landing render itself doesn't build the destination, so it still renders
+    # (the 503 is specifically for the "destination cannot be built" step, §4.1).
+    assert c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0").status_code == 200
+
+
+@pytest.mark.django_db
+def test_def1_no_active_program_renders_branded_503():
+    from apps.referrals.models import ReferralProgram
+    call_command("seed_program")
+    c = Client()
+    c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0")
+    ReferralProgram.objects.update(status="inactive")  # no active program
+    resp = c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0")
+    assert resp.status_code == 503
+
+
+# --- OBS-1: dashboard KPI accounts_opened == funnel account_opened ----------
+
+@pytest.mark.django_db(transaction=True)
+def test_obs1_dashboard_counts_internally_consistent():
+    """KPI accounts_opened, funnel account_opened, and the true Conversion count
+    all agree (one source, one freshness) — no stale KPI beside a fresher funnel."""
+    from apps.dashboard import queries
+    from apps.integrations.models import Conversion
+    from apps.tenants.resolve import get_bootstrap_tenant
+    call_command("seed_program")
+    call_command("seed_demo")
+    t = get_bootstrap_tenant()
+    queries.refresh_and_freshness(t)  # recompute-on-view
+    k = queries.kpis(t)
+    funnel = {s["stage"]: s["count"] for s in queries.funnel(t)}
+    live_conv = Conversion.objects.filter(is_reversed=False).count()
+    assert k["accounts_opened"] == funnel["account_opened"] == live_conv
+    # Clicks agree between KPI and funnel too.
+    assert k["total_clicks"] == funnel["click"]
+
+
 # --- §I3: erasure path exists ---------------------------------------------
 
 @pytest.mark.django_db(transaction=True)

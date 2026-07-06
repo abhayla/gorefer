@@ -48,6 +48,9 @@ def _sync_health(tenant):
 @require_GET
 def dashboard(request):
     tenant = get_current_tenant(request)
+    # Recompute dirty rollups on view so KPI + funnel + leaderboard read one
+    # consistent, fresh snapshot (OBS-1); expose its "counts as of" timestamp.
+    counts_as_of = queries.refresh_and_freshness(tenant)
     ctx = {
         "kpis": queries.kpis(tenant),
         "funnel": queries.funnel(tenant),
@@ -55,6 +58,7 @@ def dashboard(request):
         "recent_leads": queries.recent_leads(tenant),
         "sync_health": _sync_health(tenant),
         "confirmed_clicks": queries.confirmed_clicks(tenant),
+        "counts_as_of": counts_as_of,
     }
     return render(request, "dashboard/dashboard.html", ctx)
 

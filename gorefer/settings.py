@@ -120,10 +120,20 @@ if DB_ENGINE == "postgres":
         }
     }
 else:
+    # SQLite dev/CI path. Resolve DB_NAME robustly + cross-platform: a bare name
+    # (no path separator) becomes BASE_DIR/<name>[.sqlite3] so a shared
+    # `.env.example` boots identically on Windows/macOS/Linux (DEF-2).
+    _sqlite_name = os.environ.get("DB_NAME") or "gorefer_dev.sqlite3"
+    if os.sep not in _sqlite_name and "/" not in _sqlite_name:
+        if not _sqlite_name.endswith(".sqlite3"):
+            _sqlite_name += ".sqlite3"
+        _sqlite_path = str(BASE_DIR / _sqlite_name)
+    else:
+        _sqlite_path = _sqlite_name
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": os.environ.get("DB_NAME", str(BASE_DIR / "gorefer_dev.sqlite3")),
+            "NAME": _sqlite_path,
         }
     }
 

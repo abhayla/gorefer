@@ -1,0 +1,21 @@
+{% extends "landing_base.html" %}
+{% comment %}
+Branded 503 PARTNER_UNAVAILABLE (06-API §4.1): the destination can't be built
+(missing/inactive ReferralProgram or ProgramRedirectRule config). Never a raw 500.
+No incentive panel; compliance disclosure + risk warning still auto-injected.
+{% endcomment %}
+{% block title %}Temporarily unavailable — PIFS{% endblock %}
+{% block body %}
+<section class="px-5 pt-8 pb-2 text-center">
+  <div class="mx-auto h-16 w-16 rounded-full bg-gold/15 flex items-center justify-center mb-4">
+    <svg class="h-8 w-8 text-gold" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+  </div>
+  <h1 class="text-[22px] leading-snug font-extrabold tracking-tight text-pifs-900">
+    This is temporarily unavailable.
+  </h1>
+  <p class="mt-2 text-sm text-pifs-800/70 leading-relaxed">
+    We couldn't open the account journey right now. Please try again in a little while,
+    or contact PIFS for help opening your Zerodha account.
+  </p>
+</section>
+{% endblock %}
