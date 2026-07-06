@@ -6,7 +6,15 @@ ENABLE_ADMIN_DASHBOARD).
 """
 from django.contrib import admin
 
-from .models import Partner, ProgramRedirectRule, Referral, ReferralIdentity, ReferralProgram
+from .models import (
+    Lead,
+    Partner,
+    ProgramRedirectRule,
+    Prospect,
+    Referral,
+    ReferralIdentity,
+    ReferralProgram,
+)
 
 
 @admin.register(Partner)
@@ -38,3 +46,15 @@ class ReferralIdentityAdmin(admin.ModelAdmin):
 class ReferralAdmin(admin.ModelAdmin):
     list_display = ("id", "source", "status", "referral_identity", "first_click_at", "created_at")
     list_filter = ("source", "status")
+
+
+@admin.register(Prospect)
+class ProspectAdmin(admin.ModelAdmin):
+    list_display = ("mobile", "name", "email", "city", "created_at")
+    search_fields = ("mobile", "email", "name")
+
+
+@admin.register(Lead)
+class LeadAdmin(admin.ModelAdmin):
+    list_display = ("id", "status", "submitted_by", "consent", "referral", "created_at")
+    list_filter = ("status", "submitted_by")
