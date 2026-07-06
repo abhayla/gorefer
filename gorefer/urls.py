@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from django.conf import settings
 from django.contrib import admin
-from django.urls import path
+from django.urls import include, path
 from django.views.generic import TemplateView
 
 from api.router import api
@@ -23,5 +23,8 @@ urlpatterns = [
     path("api/", api.urls),
 ]
 
+# The M7 admin dashboard (custom, built from the mockups) + Django admin base,
+# both gated by the feature flag (no dead UI when off).
 if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_ADMIN_DASHBOARD", True):
-    urlpatterns.append(path("admin/", admin.site.urls))
+    urlpatterns.append(path("django-admin/", admin.site.urls))
+    urlpatterns.append(path("admin-panel/", include("apps.dashboard.urls")))

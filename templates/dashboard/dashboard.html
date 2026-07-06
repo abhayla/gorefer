@@ -1,0 +1,135 @@
+{% extends "dashboard/base.html" %}
+{% block title %}GoRefer Admin — Dashboard{% endblock %}
+{% block content %}
+
+{# KPI cards — headline counts read from M4 rollups #}
+<section>
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+    <div class="rounded-xl bg-white border border-pifs-100 p-4 shadow-sm">
+      <div class="text-[11px] font-semibold text-pifs-800/50 uppercase tracking-wide">Total clicks</div>
+      <div class="mt-1 text-2xl font-extrabold text-pifs-900">{{ kpis.total_clicks }}</div>
+      <div class="mt-1 text-[10.5px] text-pifs-800/40 font-medium">confirmed-human: {{ confirmed_clicks }}</div>
+    </div>
+    <div class="rounded-xl bg-white border border-pifs-100 p-4 shadow-sm">
+      <div class="text-[11px] font-semibold text-pifs-800/50 uppercase tracking-wide">Unique visitors</div>
+      <div class="mt-1 flex items-end gap-1.5">
+        <span class="text-2xl font-extrabold text-pifs-900">{{ kpis.unique_visitors }}</span>
+        <span class="text-[9px] font-bold text-gold bg-gold/10 rounded px-1 py-0.5 mb-1">APPROX</span>
+      </div>
+      <div class="mt-1 text-[10.5px] text-pifs-800/40 font-medium">bot-filtered, cookie-keyed</div>
+    </div>
+    <div class="rounded-xl bg-white border border-pifs-100 p-4 shadow-sm">
+      <div class="text-[11px] font-semibold text-pifs-800/50 uppercase tracking-wide">Leads captured</div>
+      <div class="mt-1 text-2xl font-extrabold text-pifs-900">{{ kpis.leads_captured }}</div>
+    </div>
+    <div class="rounded-xl bg-white border border-pifs-100 p-4 shadow-sm">
+      <div class="text-[11px] font-semibold text-pifs-800/50 uppercase tracking-wide">Accounts opened</div>
+      <div class="mt-1 flex items-end gap-1.5">
+        <span class="text-2xl font-extrabold text-pifs-900">{{ kpis.accounts_opened }}</span>
+        <span class="text-[9px] font-bold text-pifs-600 bg-pifs-100 rounded px-1 py-0.5 mb-1">FROM ZOHO</span>
+      </div>
+      <div class="mt-1 text-[10.5px] text-pifs-800/40 font-medium">Zoho-sourced only</div>
+    </div>
+    <div class="rounded-xl bg-pifs-700 text-white p-4 shadow-sm">
+      <div class="text-[11px] font-semibold text-pifs-100/70 uppercase tracking-wide">Conversion rate</div>
+      <div class="mt-1 text-2xl font-extrabold">{{ kpis.conversion_rate }}%</div>
+      <div class="mt-1 text-[10.5px] text-pifs-100/70 font-medium">leads → accounts</div>
+    </div>
+  </div>
+</section>
+
+<section class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+  {# Funnel — from rollups/read models #}
+  <div class="lg:col-span-3 rounded-xl bg-white border border-pifs-100 p-5 shadow-sm">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-bold text-pifs-900">Referral funnel</h2>
+      <span class="text-[10.5px] text-pifs-800/40 font-medium">from event rollups</span>
+    </div>
+    <div class="space-y-2.5">
+      {% for s in funnel %}
+        <div class="flex items-center gap-3">
+          <div class="w-28 flex-none text-[11.5px] font-medium text-pifs-800/70">{{ s.label }}</div>
+          <div class="flex-1 bg-pifs-50 rounded-md h-7 overflow-hidden relative">
+            <div class="h-full rounded-md flex items-center justify-end pr-2 bg-pifs-600"
+                 style="width: {% if s.pct_of_prev < 7 %}7{% else %}{{ s.pct_of_prev }}{% endif %}%">
+              <span class="text-[11px] font-bold text-white">{{ s.count }}</span>
+            </div>
+          </div>
+          <div class="w-16 flex-none text-right text-[10px] font-medium text-pifs-800/40">
+            {% if s.source_only %}Zoho{% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# Top referrers leaderboard #}
+  <div class="lg:col-span-2 rounded-xl bg-white border border-pifs-100 p-5 shadow-sm">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-sm font-bold text-pifs-900">Top referrers</h2>
+      <span class="text-[10.5px] text-pifs-800/40 font-medium">by accounts opened</span>
+    </div>
+    <table class="w-full text-[12px]">
+      <thead>
+        <tr class="text-left text-[10px] uppercase tracking-wide text-pifs-800/45 border-b border-pifs-100">
+          <th class="py-2 font-semibold">Referrer</th>
+          <th class="py-2 font-semibold text-right">Clk</th>
+          <th class="py-2 font-semibold text-right">Ld</th>
+          <th class="py-2 font-semibold text-right">Acc</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-pifs-50">
+        {% for r in top_referrers %}
+          <tr>
+            <td class="py-2.5">
+              <div class="leading-tight">
+                <div class="font-semibold text-pifs-900">{{ r.name|default:"—" }}</div>
+                <div class="text-[10px] text-pifs-800/45 font-mono">{{ r.client_id }}</div>
+              </div>
+            </td>
+            <td class="py-2.5 text-right tabular-nums text-pifs-800/70">{{ r.clicks }}</td>
+            <td class="py-2.5 text-right tabular-nums text-pifs-800/70">{{ r.leads }}</td>
+            <td class="py-2.5 text-right tabular-nums font-bold text-pifs-900">{{ r.accounts }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="py-4 text-center text-[11px] text-pifs-800/40">No referrers yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{# Recent leads — mobile MASKED (admin PII minimization) #}
+<section class="rounded-xl bg-white border border-pifs-100 p-5 shadow-sm">
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-sm font-bold text-pifs-900">Recent leads</h2>
+    <a href="{% url 'dashboard_explorer' %}" class="text-[11px] font-semibold text-pifs-600 hover:text-pifs-700">Open Referral Explorer →</a>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-[12.5px] min-w-[560px]">
+      <thead>
+        <tr class="text-left text-[10px] uppercase tracking-wide text-pifs-800/45 border-b border-pifs-100">
+          <th class="py-2.5 font-semibold">Name</th>
+          <th class="py-2.5 font-semibold">Mobile</th>
+          <th class="py-2.5 font-semibold">Referrer</th>
+          <th class="py-2.5 font-semibold">Status</th>
+          <th class="py-2.5 font-semibold text-right">Date</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-pifs-50">
+        {% for l in recent_leads %}
+          <tr class="hover:bg-pifs-50/60 transition-colors">
+            <td class="py-2.5 font-semibold text-pifs-900">{{ l.name }}</td>
+            <td class="py-2.5 font-mono text-pifs-800/70 tabular-nums">{{ l.mobile_masked }}</td>
+            <td class="py-2.5 text-pifs-800/70">{{ l.referrer }}</td>
+            <td class="py-2.5">{% include "dashboard/partials/status_badge.html" with status=l.status %}</td>
+            <td class="py-2.5 text-right text-[11px] text-pifs-800/50 whitespace-nowrap">{{ l.created_at|date:"d M, g:i A" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="py-4 text-center text-[11px] text-pifs-800/40">No leads yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
