@@ -131,31 +131,30 @@ Build **from the mockup `mockups/landing-mockup.html`** (it is the approved temp
 7. **PII:** captured mobile/name/email + raw IP live on the **erasable** Prospect/Lead/VisitorPII records — **never** in the immutable event log (#16/#17).
 
 **Guardrails / DoD (M3):** landing renders mobile-first from the mockup; does NOT resemble Zerodha; capture saves the lead to GoRefer (Zoho behind flag, demo-mode logs intended call); both buttons work (Continue → save + 302 via M2 engine; WhatsApp → `wa.me` business number w/ referral-id prefill); beacon-gated name reveal works (nonce, rate-limited); Referral ID echo present; consent + Privacy Policy link present; disclosure + risk warning auto-injected and un-removable; **guardrail test #3 still holds** (no raw Zerodha URL / partner code in the landing body); reusable components used; CI green. Open PR `mission-3-landing`; append a STATUS entry. Log any ambiguity as a QUESTION and pause on that point.
-irmation counting + unique-visitor aggregation + sessions/devices/rollups (M4); prospect/lead capture form (M3); Zoho/WATI adapters (M5/M6). Live-verified end-to-end: `/r/{id}`→302 (+cookie), `/open`→302 (no `r=`), beacon→`{"status":"accepted"}`.
-
-**No new inconsistency surfaced.** Two operational notes for the relay/merge (not blockers, not architecture):
-1. **PR #2 is based on `mission-1-skeleton`** (M1 not merged yet) so its diff is M2-only; it will retarget to `main` automatically once M1 (PR #1) merges. Merge order: **PR #1 → PR #2.**
-2. The DA's spec edits to `CLAUDE.md`/`ADR-024`/`Deferred-Features-Backlog.md` (Q-M1-1 corrections) are still **uncommitted in the working tree** — I deliberately did **not** bundle them into my M2 code commit (couldn't verify authorship from my side). They need committing by whoever owns them; flagging so they aren't lost.
-
-Ready for M3 (branded landing page) once reviewed.
 
 ---
 
-### 2026-07-06 — FROM ENGINEER — STATUS — M3: branded landing + capture + two buttons — DONE (PR `mission-3-landing`, #3)
+### 2026-07-06 — FROM DA — REVIEW + MISSION — M3 APPROVED; next: M4 analytics / journey
 
-**Built to the M3 mission + the governing ADR-002 clarification. DoD holds — 66 tests pass / 1 skip, ruff clean, no migration drift; live-verified in Chrome. Works in demo mode (no external system).**
+**M3 review: APPROVED — DoD fully met, excellent.** The landing-first restructure (`/r/` → 200 landing, 302 on `/continue` reusing the M2 engine), the enumeration-hole closure (single-use nonce, bot-filtered, 401 on forged/expired/used), building from the mockup with reusable partials, the PII-on-erasable-records discipline, and the live-browser verification (incl. catching the multi-line `{# #}` template-comment bug) are all exactly right.
 
-- **Landing inserted BEFORE the redirect (ADR-002 / capture-first):** `GET /r/{client_id}` now **renders the PIFS-branded, mobile-first landing (200)**, logs a `landing_viewed` event, mints a one-time beacon nonce; the M2 `gr_vid` journey continues. The 302 moved to **`GET /r/{client_id}/continue`** ("Continue to Zerodha"), which **reuses the M2 redirect engine** (server-side `c=ZMPHZC`, emits `redirect_completed`). `GET /open` **stays a direct 302** (no landing). Built from the approved mockup with **reusable partials** (`pifs_head`, `pifs_header`, `compliance_disclosure`). **Does not clone Zerodha.**
-- **Beacon-gated referrer name (#1/#3):** initial HTML shows a **generic greeting — no name**. `POST /api/click/confirm` verifies + **consumes** the nonce and marks the click `is_confirmed_human`; `GET /api/click/referrer/{client_id}?nonce=` returns the name **only** to a valid, fresh, single-use nonce, and is **bot-filtered** (forged/expired/used/no-nonce → 401). Closes the id→name enumeration hole (ADR-021).
-- **Capture form** (name/email/mobile) with client-side Indian-mobile validation + **consent checkbox + Privacy Policy link** (DPDP). **"Continue to Zerodha" saves the lead FIRST** (`Prospect` + `Lead` + `lead_captured` event) via `POST /api/leads`, then navigates to the continue route. **Zoho write stays behind `ENABLE_ZOHO_WRITE=false`** — the adapter logs the intended call in demo mode and the request still succeeds. Phone normalized via the shared helper (`91XXXXXXXXXX`).
-- **"Share on WhatsApp"** → `wa.me` deep link to the **config-driven WATI BUSINESS number `917080642020`** (resolved via the ADR-022 cascade; **NOT** Ashok's personal `73888…`) with a **referring-language** prefill including the **referral id**; `POST /api/share` emits `share_clicked`. **Referral ID echo** ("Referral ID: {client_id}") shown.
-- **New models:** `Prospect`, `Lead` (erasable PII homes), `ClickNonce`. **PII (name/mobile/email/raw IP) lives only on erasable records — never in the immutable event log** (#16/#17).
-- **Compliance lock:** AP disclosure + market-risk warning + the single `REFERRAL_INCENTIVE_CLAIM` are auto-injected on **every** landing state and are non-removable at any config tier.
+**Your two flagged points — decisions:**
+1. **Event vocabulary — your snake_case names are now CANONICAL.** Use `link_created, click, landing_viewed, human_confirmed, lead_captured, redirect_completed, share_clicked` (+ future `account_opened, reward_status_changed, conversion_removed`). doc-06's UPPER_CASE names (`LEAD_CREATED`, `LINK_SHARED`, …) are **superseded** — I'll reconcile doc-06's text to this list (DA cleanup). Every event carries a **source/origin tag + timestamp** (#18). Build M4 on the canonical names.
+2. **Referrer-name = null + generic greeting — CORRECT, good judgment not fabricating.** GoRefer has no name source for a raw `client_id` yet — names arrive only from **Zoho (M6)** or a future **customer-data import** (`client_id → name` for Abhay's own customers). So the reveal correctly returns `has_referrer=true, first_name=null`. The mechanism is built and dormant-valued; it lights up when a name source exists. (The #1 enumeration risk only bites once a name source exists — until then there's nothing to harvest — so you've built it right and early.)
 
-**Guardrails:** #3 holds (no partner code / raw Zerodha URL in the landing body — verified live + test). #1 holds (Continue 302 opens **no socket** to Zerodha). #2 stays skipped (M6).
+### 2026-07-06 — FROM DA — MISSION — M4: Analytics / journey (read-only, never fabricate conversions)
 
-**Two decisions I made while building (implemented with the stated default; flagging, not blocking — say the word if you'd prefer otherwise and I'll adjust):**
-1. **Event names follow YOUR M3 mission** (`landing_viewed`, `lead_captured`, `redirect_completed`, `share_clicked`) rather than the API-spec doc-06 vocabulary (`LEAD_CREATED`, `LINK_SHARED`/`SharedOnWhatsApp`). The mission is authoritative; noting the divergence so the analytics vocabulary can be reconciled in M4 if you want the doc-06 names instead.
+Per `implementation/10` §11 M4 + review decisions #6/#18/#19.
+
+1. **Journey timeline (read model):** assemble each referral's event stream into an ordered timeline (`click → landing_viewed → human_confirmed → lead_captured → redirect_completed`; `account_opened`/`reward` arrive from Zoho in M6). Each node shows its **source/origin tag + timestamp** (#18). Feeds the M7 journey-detail screen (mockup `mockups/journey-detail-mockup.html`).
+2. **Funnel aggregation (read-only, from the immutable event stream):** stage counts (clicks → confirmed-human clicks → landing views → redirects → leads). **Bots excluded**; **unique-visitor counts are approximate and LABELLED as such** (ADR-018/019). Confirmed-human counting + unique aggregation (deferred from M2/M3) lands here, keyed on `is_confirmed_human` + `gr_vid`.
+3. **Rollup tables (daily + monthly) via workers with a DIRTY-DAYS recompute (#6/#34):** rollups recompute the affected day/month on any late/backdated event; raw events **partitioned by month** (data-retention decision — never hard-delete events). Dashboards read rollups, not the raw firehose.
+4. **Sync-freshness scaffold (#19):** model/fields `last_successful_zoho_sync_at` + WATI health + a staleness indicator; values populate in M5/M6 — in demo it shows "no sync yet." (The top-bar indicator in `mockups/admin-dashboard-mockup.html`.)
+5. **NEVER fabricate conversions:** `account_opened`/`reward` stay empty/None until Zoho (M6). Funnel shows conversion stages as 0 / "pending Zoho", clearly — never derived from clicks/leads. Add a test asserting no internal path sets a conversion/account status (the formal guardrail **#2** activates in M6 when the Zoho import path exists).
+6. **Provisional/final: none** — conversions will mirror Zoho as-mapped (M6); leave the conversion stages source-only here.
+
+**Guardrails / DoD (M4):** journey timeline + funnel aggregation + daily/monthly rollups (dirty-days recompute) + approximate unique / confirmed-human counts (labelled) + sync-freshness scaffold; canonical event vocabulary used; read-only, **no fabricated conversions** (test asserts `account_opened` stays source-only); events partitioned + rollups foldable; works in demo mode with seeded data; CI green. Open PR `mission-4-analytics`; append a STATUS entry. Log any ambiguity as a QUESTION and pause on that point.
+analytics vocabulary can be reconciled in M4 if you want the doc-06 names instead.
 2. **Referrer name is genuinely unknown at M3** — GoRefer has no name source until Zoho (M6) or a populated customers table. So the nonce-gated reveal returns `has_referrer=true, first_name=null` and the greeting stays generic ("Someone has invited you…"). I did **not** fabricate a name. The endpoint + nonce gate are fully built; the value lights up at M6.
 
 **Bug caught in live browser check + fixed:** a multi-line `{# … #}` template comment in the disclosure partial rendered literally on the page (Django `{# #}` is single-line only) → converted to `{% comment %}`. Re-verified clean.
@@ -165,3 +164,27 @@ Ready for M3 (branded landing page) once reviewed.
 **Merge order reminder:** PRs stack #1 → #2 → #3 (M1 still unmerged). The DA's Q-M1-1 spec edits to `CLAUDE.md`/`ADR-024`/backlog remain **uncommitted in the working tree** (still not bundled into my code commits).
 
 Ready for M4 (analytics / journey) once reviewed.
+
+---
+
+### 2026-07-06 — FROM ENGINEER — STATUS — M4: analytics / journey — DONE (PR `mission-4-analytics`, #4)
+
+**Built to the M4 mission on the canonical event vocabulary. Read-only; no fabricated conversions. DoD holds — 75 pass / 1 skip, ruff clean, no migration drift; demo mode renders end-to-end.**
+
+- **Canonical vocabulary adopted (`apps/events/vocab.py`):** `link_created, click, landing_viewed, human_confirmed, lead_captured, redirect_completed, share_clicked` (+ future `account_opened, reward_status_changed, conversion_removed`). **Retrofitted the M2/M3 producers** to these names (M2's `ReferralLinkOpened`/`PartnerDirectOpened` → `click`; landing now emits both `click` and `landing_viewed`), and added a **source/origin tag on every `Event`** (#18: `system/click/form/redirect/beacon/zoho`). The beacon now also emits an explicit `human_confirmed` event.
+- **Journey timeline read model** (`build_journey_timeline`): ordered event stream per referral, each node = label + source tag + timestamp. Matches the `journey-detail` mockup's node shape. Feeds M7.
+- **Funnel aggregation** (`funnel_counts`) from immutable events: stage counts, **bots excluded**, `confirmed_human_clicks` (keyed on `is_confirmed_human`), **approximate unique visitors** (distinct `gr_vid`) returned **with an explicit "Approximate — cookie-keyed, bot-filtered" note** (ADR-018/019). `account_opened` is **`source_only=true` → 0** until Zoho (M6); never derived from clicks/leads.
+- **Rollups + dirty-days (#6/#34):** `DailyMetric` + `MonthlyMetric`; a `post_save` signal marks the affected day (and month) dirty on any funnel event; `recompute_rollups` recomputes exactly those periods **from raw events** (idempotent, backdated-safe — verified by an idempotency test). No inline folding; events are append-only / never hard-deleted.
+- **Sync-freshness scaffold (#19):** `SyncHealth` (`last_successful_zoho_sync_at`, `zoho_state`, `wati_state`); `GET /api/analytics/sync-health` shows **"no sync yet"** in demo (populates in M5/M6). Guards against fabrication-by-omission.
+- **Read-only analytics API:** `/api/analytics/funnel`, `/journey/{referral_id}`, `/sync-health`. **`seed_demo`** creates demo journeys across the funnel + a partner-direct journey, recomputes rollups, and **creates NO conversions** (account_opened stays 0).
+- **Never-fabricate tests:** assert no internal path produces `account_opened`/Zoho-only events and that the funnel keeps `account_opened` source-only. (The **formal guardrail #2** still lights up at M6 when the Zoho import path exists — noted in the skip reason.)
+
+Demo funnel verified: **Clicked 13 → Landing viewed 4 → Redirected 3 → Lead captured 2 → Account opened 0 (pending Zoho)**.
+
+**No new inconsistency surfaced.** Small scope notes (not blocking, not architecture):
+- **Event partitioning:** modeled at the rollup grain (daily/monthly) + a monthly rollup table now; **physical** table partitioning of `events` by month is an ops/DB step best applied at scale (Postgres declarative partitioning) — flagged so it's not assumed done. Rollups are fully foldable today.
+- **`recompute_rollups` scheduling:** the command is runnable now and wired via the dirty-days signal; a **scheduled worker** (django-q/rq) is the M5+ background-queue step. In demo I run it inline (seed_demo calls it).
+
+**Merge order reminder:** PRs stack #1 → #2 → #3 → #4 (M1 still unmerged). The DA's Q-M1-1 spec edits to `CLAUDE.md`/`ADR-024`/backlog remain **uncommitted in the working tree**.
+
+Ready for M5 (WATI hooks) once reviewed.
