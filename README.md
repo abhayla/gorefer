@@ -70,6 +70,16 @@ python manage.py runserver
 
 > **Conversions come ONLY from Zoho** (`/api/zoho/status-webhook`, behind `ENABLE_ZOHO_WRITE` for the outbound lead write; the inbound status webhook is the sole writer of account/reward status — never fabricated internally). `seed_demo` seeds demo conversions **through** that ingest path so the funnel's "Account opened" reflects real Zoho-sourced data, dated to the true open date.
 
+**Frontend assets** (compiled Tailwind — NO CDN runtime; light + offline for mobile-first, ADR-003):
+
+```bash
+npm install            # once (installs tailwindcss)
+npm run build:css      # compile static/css/app.css (purged from templates/); rerun after template changes
+# npm run watch:css    # or watch during development
+```
+
+HTMX is vendored at `static/js/htmx.min.js`; the compiled CSS is `static/css/app.css`. Both are committed so the app runs without Node at runtime; rebuild the CSS whenever templates change (a test asserts the asset exists).
+
 **Tests + lint** (CI runs the same on the SQLite path):
 
 ```bash
