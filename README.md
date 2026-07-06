@@ -46,6 +46,11 @@ python manage.py seed_program          # idempotent: tenant + central config + p
 python manage.py seed_demo             # optional: demo journeys/events so the funnel + dashboard render (no conversions)
 python manage.py recompute_rollups     # recompute daily/monthly rollups for any dirty periods (run by a worker in prod)
 
+# Background queue (django-q2, ORM broker — no Redis). In dev/CI/demo, Q_ASYNC=false
+# runs tasks INLINE (no worker needed). In production set Q_ASYNC=true and run:
+#   python manage.py setup_schedules    # register the recurring rollup recompute (idempotent)
+#   python manage.py qcluster           # the worker: WATI sends + terminal-status polling + schedules
+
 # 4. (Optional) create the admin from env vars — no plaintext password, hash only
 #    Generate a hash:  python -c "from django.contrib.auth.hashers import make_password; print(make_password('your-pw'))"
 #    Put ADMIN_EMAIL + ADMIN_PASSWORD_HASH in .env, then:

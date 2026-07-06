@@ -7,6 +7,7 @@ ENABLE_ADMIN_DASHBOARD).
 from django.contrib import admin
 
 from .models import (
+    Customer,
     Lead,
     Partner,
     ProgramRedirectRule,
@@ -15,6 +16,12 @@ from .models import (
     ReferralIdentity,
     ReferralProgram,
 )
+
+
+@admin.register(Customer)
+class CustomerAdmin(admin.ModelAdmin):
+    list_display = ("client_id", "first_name", "last_name", "mobile", "status")
+    search_fields = ("client_id", "mobile", "email")
 
 
 @admin.register(Partner)

@@ -18,6 +18,39 @@ from django.db import models
 from apps.common.models import AuditedModel, SoftDeleteModel, TenantScopedModel
 
 
+class Customer(AuditedModel, SoftDeleteModel, TenantScopedModel):
+    """An existing Zerodha client who refers — the referrer (05 Context 4).
+
+    Deliberately MINIMAL — GoRefer must not become a customer master (NO PAN / KYC /
+    brokerage). Used in M5 only to resolve a referrer's phone when GoRefer actually
+    knows it (Abhay's own customers); otherwise the referrer notification is skipped.
+    Eligibility/status are display-only — their source of truth is Zerodha/Zoho.
+    """
+
+    program = models.ForeignKey(
+        "referrals.ReferralProgram", on_delete=models.PROTECT, related_name="customers"
+    )
+    partner = models.ForeignKey("referrals.Partner", on_delete=models.PROTECT, related_name="customers")
+    client_id = models.CharField(max_length=64)
+    mobile = models.CharField(max_length=20, blank=True, default="")
+    email = models.EmailField(blank=True, default="")
+    first_name = models.CharField(max_length=80, blank=True, default="")
+    last_name = models.CharField(max_length=80, blank=True, default="")
+    status = models.CharField(max_length=20, default="active")
+
+    class Meta:
+        db_table = "customers"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "program", "client_id"], name="uq_customer_program_client"
+            ),
+        ]
+        indexes = [models.Index(fields=["mobile"]), models.Index(fields=["email"])]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"customer<{self.client_id}>"
+
+
 class Partner(AuditedModel, SoftDeleteModel, TenantScopedModel):
     """The external org whose referral journeys GoRefer manages (Sprint 1: PIFS).
 
