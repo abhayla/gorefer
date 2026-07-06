@@ -37,3 +37,13 @@ Owner: Abhay/PIFS. Each entry: what, why deferred, trigger to revisit.
 - **What:** verify the prospect's mobile via OTP (SMS/WhatsApp) on the GoRefer capture form — correctness / anti-typo, reduces junk leads.
 - **Why deferred (Abhay, July 2026):** Sprint 1 does client-side FORMAT validation only (Indian +91, 10 digits). OTP adds an OTP flow + cost + friction — later phase.
 - **Revisit when:** mistyped/junk leads become a problem, or higher lead quality is needed.
+
+### DF-7 — Schema-per-tenant (or per-tenant DB) physical isolation
+- **What:** move a tenant (or all tenants) from the single-schema `tenant_id` discriminator model to Postgres schema-per-tenant (e.g. django-tenants) or a dedicated per-tenant database, for hard physical isolation.
+- **Why deferred (Abhay/DA, July 2026 — resolves COORDINATION Q-M1-1):** Sprint 1+ uses **single-schema tenant_id discriminator** (matches ADR-023 + 05-Database-Design; simpler, better platform-wide analytics, sufficient isolation via tenant-scoped managers + composite constraints at this scale).
+- **Revisit when:** a specific enterprise/regulated tenant demands physical isolation, or cross-tenant leakage risk/compliance requires it. Migrating one tenant to its own schema/DB later is possible without a full rebuild.
+
+### DF-8 — Physical monthly partitioning of the `events` table
+- **What:** apply Postgres declarative partitioning (by month) to the immutable `events` table for query/maintenance efficiency at scale, and enable cold-archival of old partitions (rollups kept forever).
+- **Why deferred (DA, M4, July 2026):** at Sprint-1 volume (~0.5–3M rows/yr) it's unnecessary. M4 already delivers the correctness that matters — append-only events + daily/monthly rollups with dirty-day recompute (fully foldable), so analytics don't scan the raw firehose. Physical partitioning is an ops/DB step best applied when the table actually grows.
+- **Revisit when:** the `events` table gets large (tens of millions of rows) or query/vacuum times degrade. Pairs with the cold-archive horizon in the data-retention decision.
