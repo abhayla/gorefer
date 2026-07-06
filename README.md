@@ -35,12 +35,24 @@ python -m venv .venv
 .venv/Scripts/activate          # Windows (Git Bash);  source .venv/bin/activate on macOS/Linux
 pip install -r requirements.txt
 
-# 2. Configure env (copy the template, fill values)
-cp .env.example .env
-#   - For a zero-dependency run keep DB_ENGINE=sqlite (no Postgres needed).
-#   - For a production-shaped run set DB_ENGINE=postgres + the DB_* vars (enables django-tenants).
+# 2. Provision the database. Postgres is the DEFAULT (ADR-021); it matches
+#    production and exercises Postgres-only behaviour (JSONB, partial-unique
+#    constraints, case-sensitivity). Create a dedicated least-privilege role + db
+#    (run as a Postgres superuser; substitute your own role password):
+#      CREATE ROLE gorefer LOGIN PASSWORD '<choose-one>';
+#      CREATE DATABASE gorefer_dev OWNER gorefer;
+#      \c gorefer_dev
+#      GRANT ALL ON SCHEMA public TO gorefer;
+#      ALTER ROLE gorefer CREATEDB;   -- lets the test runner create test_gorefer_dev
+#    (SQLite is an optional fallback: set DB_ENGINE=sqlite for a zero-dependency run.)
 
-# 3. Apply migrations (forward-only) and seed the single ReferralProgram (Zerodha)
+# 3. Configure env (copy the template; fill values in the gitignored .env — NEVER commit).
+cp .env.example .env
+#    .env.example lists KEY NAMES only. Set the Postgres DB_* vars:
+#      DB_ENGINE=postgres  DB_NAME=gorefer_dev  DB_HOST=127.0.0.1  DB_PORT=5432
+#      DB_USER=gorefer     DB_PASSWORD=<the gorefer role password>
+
+# 4. Apply migrations (forward-only) and seed the single ReferralProgram (Zerodha)
 python manage.py migrate
 python manage.py seed_program          # idempotent: tenant + central config + partner + program + redirect rule
 python manage.py seed_demo             # optional: demo journeys/events so the funnel + dashboard render (no conversions)
@@ -51,12 +63,12 @@ python manage.py recompute_rollups     # recompute daily/monthly rollups for any
 #   python manage.py setup_schedules    # register the recurring rollup recompute (idempotent)
 #   python manage.py qcluster           # the worker: WATI sends + terminal-status polling + schedules
 
-# 4. (Optional) create the admin from env vars — no plaintext password, hash only
+# 5. (Optional) create the admin from env vars — no plaintext password, hash only
 #    Generate a hash:  python -c "from django.contrib.auth.hashers import make_password; print(make_password('your-pw'))"
 #    Put ADMIN_EMAIL + ADMIN_PASSWORD_HASH in .env, then:
 python manage.py bootstrap_admin       # idempotent
 
-# 5. Run
+# 6. Run
 python manage.py runserver
 #    /                          -> PIFS-branded home (compliance footer auto-injected)
 #    /r/{client_id}             -> branded landing (renders; Continue -> 302 to Zerodha)

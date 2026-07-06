@@ -31,9 +31,12 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "true").strip().lower() in {"1", "true", 
 ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h]
 
 # --- Database engine selection ---------------------------------------------
-# DB_ENGINE=postgres  -> real deploy: PostgreSQL + django-tenants schema routing.
-# DB_ENGINE=sqlite    -> dev/CI convenience: single SQLite file, no tenant router.
-DB_ENGINE = os.environ.get("DB_ENGINE", "sqlite").strip().lower()
+# DB_ENGINE=postgres  -> DEFAULT: PostgreSQL (ADR-021), single-schema tenant_id.
+# DB_ENGINE=sqlite    -> optional zero-dependency fallback (CI/quick local); CI and
+#                        the test suite set this explicitly. Postgres is the default
+#                        so dev matches production and Postgres-only behaviour
+#                        (JSONB, constraints, case-sensitivity) is exercised locally.
+DB_ENGINE = os.environ.get("DB_ENGINE", "postgres").strip().lower()
 
 # --- Applications ----------------------------------------------------------
 # Multi-tenancy is SINGLE-SCHEMA tenant_id discriminator (COORDINATION Q-M1-1
