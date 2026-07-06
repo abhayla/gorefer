@@ -26,6 +26,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build + verify Tailwind CSS is fresh (no CDN runtime)
+        run: |
+          npm install
+          npm run build:css
+          git diff --exit-code static/css/app.css \
+            || (echo "static/css/app.css is stale — run 'npm run build:css' and commit." && exit 1)
+
       - name: Lint (ruff)
         run: ruff check .
 
