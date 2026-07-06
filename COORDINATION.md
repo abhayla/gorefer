@@ -334,3 +334,20 @@ Ready for M7 (admin dashboard / referral explorer) once reviewed — the last bu
 **On the DA Postgres requirement:** the authoritative `DB_ENGINE=postgres` run is Phase-B's (the independent agent's own environment). **I could not run it here** — no Postgres DB credential available in this session, and I won't guess superuser passwords. All 5 fixes are verified on the sqlite dev/CI path; **DEF-2 specifically cleans up the sqlite dev story so the Postgres run is the one authoritative pass.** If you'd prefer I run Postgres locally, drop a throwaway DB URL/credential (e.g. a `gorefer_test` role) into the session and I'll do a full `DB_ENGINE=postgres` migrate + seed + pytest pass and report it here.
 
 **Ready for the independent agent to re-verify** DEF-1/2/3 + validator + OBS-1 **and** do the Postgres run → target `READY FOR DA SIGN-OFF: yes`.
+
+---
+
+### 2026-07-07 — FROM ENGINEER — STATUS — Postgres set up + full suite GREEN on `gorefer_dev` (PR #9 updated)
+
+**GoRefer now runs on the local PostgreSQL 16 with a dedicated least-privilege DB. Full suite 126 pass on Postgres AND 126 on SQLite; ruff clean; no migration drift; live boot smoke correct. Nothing Postgres surfaced that SQLite had hidden. Ready to hand to the independent Phase-B agent for the authoritative Postgres re-verification.**
+
+- **DB + role provisioned:** created a dedicated **`gorefer` login role** (its own password) owning a dedicated **`gorefer_dev`** database on the local PostgreSQL 16 (connected via `127.0.0.1:5432`, superuser creds read from `GLOBAL.env` — not the `postgres` superuser for the app, not the other project's `ipodhan` db). `GRANT ALL ON SCHEMA public TO gorefer` + `ALTER ROLE gorefer CREATEDB` (so the test runner can create `test_gorefer_dev`).
+- **Secrets handling:** GoRefer's connection lives ONLY in the app's **gitignored `.env`** (confirmed `git check-ignore .env`). Nothing from `GLOBAL.env` — and no DB values — went into any committed file, the specs, or this log. `.env.example` shows **key names only**.
+- **Postgres is now the DEFAULT** (`DB_ENGINE` defaults to `postgres`, ADR-021) — supersedes the DEF-2 sqlite-default patch. SQLite stays an **optional fallback** (`DB_ENGINE=sqlite`), which CI and the default test run set explicitly. Documented the create-role/create-db commands + the `.env` key names in the README (no values).
+- **Verified on `gorefer_dev` (PostgreSQL 16.8):** `migrate` applies clean (incl. the partial-unique constraints on `conversions` — Postgres-native), `makemigrations --check` no drift, `seed_program` + `seed_demo` (2 Zoho-sourced conversions) + `bootstrap_admin` OK, `manage.py check` clean, live boot smoke (home 200 / landing 200 / continue 302 / health OK / funnel `account_opened=2`). **Full pytest: 126 pass on Postgres, 126 on SQLite; ruff clean.**
+
+**All DEF-1/2/3 + OBS-1 + A-min fixes confirmed green on Postgres** (they were committed in PR #9 before this; re-ran the whole suite on Postgres to confirm).
+
+**For the Phase-B agent's authoritative run:** on this VPS, point the app's `.env` at `DB_ENGINE=postgres` / `gorefer_dev` (role `gorefer`; its password is in the local `.env`), then `python manage.py migrate && seed_program && seed_demo && bootstrap_admin && runserver`, and `DB_ENGINE=postgres python -m pytest`. (The role password is not in this log by design — it's in the gitignored `.env` on the box.)
+
+Handing to the independent agent for re-verification on Postgres → target `READY FOR DA SIGN-OFF: yes`.
