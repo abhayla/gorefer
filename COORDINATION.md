@@ -154,37 +154,71 @@ Per `implementation/10` §11 M4 + review decisions #6/#18/#19.
 6. **Provisional/final: none** — conversions will mirror Zoho as-mapped (M6); leave the conversion stages source-only here.
 
 **Guardrails / DoD (M4):** journey timeline + funnel aggregation + daily/monthly rollups (dirty-days recompute) + approximate unique / confirmed-human counts (labelled) + sync-freshness scaffold; canonical event vocabulary used; read-only, **no fabricated conversions** (test asserts `account_opened` stays source-only); events partitioned + rollups foldable; works in demo mode with seeded data; CI green. Open PR `mission-4-analytics`; append a STATUS entry. Log any ambiguity as a QUESTION and pause on that point.
-analytics vocabulary can be reconciled in M4 if you want the doc-06 names instead.
-2. **Referrer name is genuinely unknown at M3** — GoRefer has no name source until Zoho (M6) or a populated customers table. So the nonce-gated reveal returns `has_referrer=true, first_name=null` and the greeting stays generic ("Someone has invited you…"). I did **not** fabricate a name. The endpoint + nonce gate are fully built; the value lights up at M6.
-
-**Bug caught in live browser check + fixed:** a multi-line `{# … #}` template comment in the disclosure partial rendered literally on the page (Django `{# #}` is single-line only) → converted to `{% comment %}`. Re-verified clean.
-
-**Deferred (out of M3):** confirmed-human *counting* / unique-visitor aggregation + sessions/devices/rollups (M4); OTP (DF-6); per-partner field config (DF-5); real Zoho/WATI adapters (M5/M6).
-
-**Merge order reminder:** PRs stack #1 → #2 → #3 (M1 still unmerged). The DA's Q-M1-1 spec edits to `CLAUDE.md`/`ADR-024`/backlog remain **uncommitted in the working tree** (still not bundled into my code commits).
-
-Ready for M4 (analytics / journey) once reviewed.
 
 ---
 
-### 2026-07-06 — FROM ENGINEER — STATUS — M4: analytics / journey — DONE (PR `mission-4-analytics`, #4)
+### 2026-07-06 — FROM DA — REVIEW + MISSION — M4 APPROVED; next: M5 WATI hooks
 
-**Built to the M4 mission on the canonical event vocabulary. Read-only; no fabricated conversions. DoD holds — 75 pass / 1 skip, ruff clean, no migration drift; demo mode renders end-to-end.**
+**M4 review: APPROVED — DoD fully met, excellent.** Canonical vocabulary adopted + M2/M3 producers retrofitted, source/origin tag on every event (#18), the journey timeline matching the mockup, bots excluded + unique counts explicitly labelled approximate (ADR-018/019), dirty-day rollups verified idempotent/backdated-safe, sync-freshness scaffold, and `account_opened` held source-only at 0 (never fabricated). Demo funnel 13→4→3→2→0 is exactly right.
 
-- **Canonical vocabulary adopted (`apps/events/vocab.py`):** `link_created, click, landing_viewed, human_confirmed, lead_captured, redirect_completed, share_clicked` (+ future `account_opened, reward_status_changed, conversion_removed`). **Retrofitted the M2/M3 producers** to these names (M2's `ReferralLinkOpened`/`PartnerDirectOpened` → `click`; landing now emits both `click` and `landing_viewed`), and added a **source/origin tag on every `Event`** (#18: `system/click/form/redirect/beacon/zoho`). The beacon now also emits an explicit `human_confirmed` event.
-- **Journey timeline read model** (`build_journey_timeline`): ordered event stream per referral, each node = label + source tag + timestamp. Matches the `journey-detail` mockup's node shape. Feeds M7.
-- **Funnel aggregation** (`funnel_counts`) from immutable events: stage counts, **bots excluded**, `confirmed_human_clicks` (keyed on `is_confirmed_human`), **approximate unique visitors** (distinct `gr_vid`) returned **with an explicit "Approximate — cookie-keyed, bot-filtered" note** (ADR-018/019). `account_opened` is **`source_only=true` → 0** until Zoho (M6); never derived from clicks/leads.
-- **Rollups + dirty-days (#6/#34):** `DailyMetric` + `MonthlyMetric`; a `post_save` signal marks the affected day (and month) dirty on any funnel event; `recompute_rollups` recomputes exactly those periods **from raw events** (idempotent, backdated-safe — verified by an idempotency test). No inline folding; events are append-only / never hard-deleted.
-- **Sync-freshness scaffold (#19):** `SyncHealth` (`last_successful_zoho_sync_at`, `zoho_state`, `wati_state`); `GET /api/analytics/sync-health` shows **"no sync yet"** in demo (populates in M5/M6). Guards against fabrication-by-omission.
-- **Read-only analytics API:** `/api/analytics/funnel`, `/journey/{referral_id}`, `/sync-health`. **`seed_demo`** creates demo journeys across the funnel + a partner-direct journey, recomputes rollups, and **creates NO conversions** (account_opened stays 0).
-- **Never-fabricate tests:** assert no internal path produces `account_opened`/Zoho-only events and that the funnel keeps `account_opened` source-only. (The **formal guardrail #2** still lights up at M6 when the Zoho import path exists — noted in the skip reason.)
+**Your two scope notes — both correct, approved:**
+1. **Physical `events` partitioning deferred to scale — agreed.** Rollups + dirty-days deliver the correctness now; physical Postgres partitioning is an ops step for when the table grows. Logged as **backlog DF-8** so it isn't assumed done.
+2. **`recompute_rollups` scheduling → M5 background queue — agreed.** M5 is where the real async need appears (WATI sends/retries/terminal-status polling), so the background worker lands there and the dirty-day recompute gets scheduled on it.
 
-Demo funnel verified: **Clicked 13 → Landing viewed 4 → Redirected 3 → Lead captured 2 → Account opened 0 (pending Zoho)**.
+### 2026-07-06 — FROM DA — MISSION — M5: WATI hooks (transactional notifications, behind `ENABLE_WATI_SEND=false`)
 
-**No new inconsistency surfaced.** Small scope notes (not blocking, not architecture):
-- **Event partitioning:** modeled at the rollup grain (daily/monthly) + a monthly rollup table now; **physical** table partitioning of `events` by month is an ops/DB step best applied at scale (Postgres declarative partitioning) — flagged so it's not assumed done. Rollups are fully foldable today.
-- **`recompute_rollups` scheduling:** the command is runnable now and wired via the dirty-days signal; a **scheduled worker** (django-q/rq) is the M5+ background-queue step. In demo I run it inline (seed_demo calls it).
+Per `implementation/10` §11 M5 + doc-08 contract + Gap 12/#20. This is lead-time notifications only — **NOT** the stale-lead auto-nudge (REQ-F01, deferred Sprint 2+), and **NOT** the conversion-time referrer thank-you (that's M6, tied to Zoho).
 
-**Merge order reminder:** PRs stack #1 → #2 → #3 → #4 (M1 still unmerged). The DA's Q-M1-1 spec edits to `CLAUDE.md`/`ADR-024`/backlog remain **uncommitted in the working tree**.
+1. **WATI adapter behind the doc-08 contract** (`integrations/wati`): send an approved template; **verify delivery by the TERMINAL message status (delivered/read/failed), NEVER HTTP 200** (doc-08 A3); classify failures by Meta error code. Behind **`ENABLE_WATI_SEND=false`** → in dev/demo the adapter **logs the intended call + payload** instead of sending, so the flow is testable end-to-end offline.
+2. **Background queue** = the async infra deferred from M4. **Recommend `django-q` (Postgres/ORM broker) so NO Redis is added yet** (Celery/Redis only if scheduled workflows later demand — ADR-024). Async sends + retries + terminal-status polling; also schedule the M4 `recompute_rollups` dirty-day job here. Sends fire via `transaction.on_commit()` after the lead is saved.
+3. **Three lead-time notifications** (triggered on `lead_captured`):
+   - **(a) Ashok / office** — "new lead: {name}, referred by {client_id}" (follow-up).
+   - **(b) New person (prospect)** — a warm **UTILITY** message naming the referrer + next steps (Meta rule: first message to a non-opted-in number is a warm utility notice).
+   - **(c) Referrer — ONLY if phone known** — "someone used your referral link." Phone-known = GoRefer actually has the referrer's phone (Abhay's own customers / Zoho); otherwise **skip, never guess**.
+4. **Deduped + opt-in-aware:** never send the same notification twice (idempotency key per recipient+template+journey); respect + record opt-in state.
+5. **Delivery-status consumption (Gap 12):** record the terminal status (delivered/read/clicked/failed) on each notification + a `notification`-type event (source-tagged); the funnel can then **start at "delivered"** so the ~33% WATI delivery leak is visible, not hidden.
+6. **Template manifest** (`wati-templates.json` per the doc-08 template contract): define the three templates (category UTILITY/MARKETING, language, body vars + Meta samples) so they can be submitted to Meta for approval **in parallel**. (Actual Meta approval + live sending is a parallel workstream the DA can drive with Abhay's WATI skills, gated by `ENABLE_WATI_SEND`.)
 
-Ready for M5 (WATI hooks) once reviewed.
+**Guardrails / DoD (M5):** WATI adapter behind the doc-08 contract; `ENABLE_WATI_SEND=false` default → demo logs intended calls (whole flow works offline); three notifications fire on `lead_captured`, deduped + opt-in-aware; **WATI send tests assert on TERMINAL delivery status, not HTTP 200**; background queue wired (django-q, no Redis) + dirty-day recompute scheduled on it; delivery-status recorded + funnel-starts-at-delivered; template manifest present; **no stale-lead nudge**; CI green. Open PR `mission-5-wati`; append a STATUS. Log any ambiguity as a QUESTION and pause on that point.
+
+---
+
+### 2026-07-06 — FROM DA — PLAN — Endgame after M7: comprehensive testing + INDEPENDENT verification (M8) before any manual test
+
+Abhay's directive: finish M5 → M6 → M7, THEN harden + independently verify EVERYTHING (functionality AND UI) until it fully meets the requirements; only after an **independent agent** confirms does Abhay test manually. Protocol:
+
+**Phase A — Builder hardening (Claude Code), iterative:** after M7, run comprehensive end-to-end + edge/adversarial tests across the WHOLE Sprint-1 Zerodha flow (not just per-mission): link → landing → beacon/name-gate → capture → lead-saved-first → Continue → redirect (correct `c=ZMPHZC&r=`) → funnel/rollups → WATI notifications (flag off, logged) → Zoho conversion mirror (flag off / fake) → admin dashboard + explorer + journey detail. All guardrail tests active as applicable; demo mode green; fix until 100%.
+
+**Phase B — INDEPENDENT verification (a SEPARATE agent — NOT the builder):** a fresh Claude Code agent/session with no stake in the code, given ONLY the specs (01–12), the DA **Acceptance Checklist**, and the running app. It must:
+- **Functionality:** run the full suite + its OWN adversarial tests; verify every REQ/BR/NFR/AC + all guardrail tests + every mission DoD; try to break it (bad/oversized client_ids, forged/expired/replayed nonces, bot UAs, replayed/forged webhooks, missing config, each flag on/off, tenant isolation).
+- **UI:** launch the app in demo mode and **render EVERY page in a real browser** (landing, thank-you, invalid-referral, admin login, dashboard, referral explorer, journey detail), screenshot at **mobile + desktop** widths, and check each against the **mockups + doc-07 UI spec**: mobile-first, compliance block present + non-removable, NOT a Zerodha clone, referral-id echo, generic-then-beacon name reveal, config-driven number/claim, etc.
+- Produce a **VERIFICATION REPORT** in `review/Verification-Report.md` — pass/fail per checklist item + evidence (test output + screenshots + a defect list).
+
+**Loop:** builder fixes each defect → independent agent re-verifies → until it signs off **100%**.
+
+**DA final review (me):** I review the independent report against the requirements and give the final GO. **Only then does Abhay test manually.**
+
+The DA will provide `review/Acceptance-Test-Plan.md` (every requirement, guardrail, UI page, DoD as concrete pass/fail criteria) around M6/M7 so Phase B has a rubric. Until then: proceed M5 → M6 → M7 as normal, and keep tests comprehensive along the way so Phase A is short.
+
+---
+
+### 2026-07-06 — FROM ENGINEER — STATUS — M5: WATI hooks — DONE (PR `mission-5-wati`, #5)
+
+**Built to the M5 mission. Behind `ENABLE_WATI_SEND=false` (demo logs intended calls). DoD holds — 84 pass / 1 skip, ruff clean, no migration drift; whole flow works offline.**
+
+- **WATI adapter (doc-08 contract, `apps/integrations/wati`):** `send_template` → an ACCEPTED ack (HTTP-200-equivalent, **NOT** delivery); `get_message_status` → the **TERMINAL** status (delivered/read/failed) — the only proof of delivery (A3). Failures classified by Meta error code (131049 marketing cap, 131048/131026 spam/quality, 131047, 470). Flag off → `LogOnlyWatiAdapter` logs the intended call + payload and simulates a delivered terminal status. Secrets from env/secret store, never inline (A7). `LiveWatiAdapter` reads `WATI_*` config and refuses to run without it; the real HTTP send/poll is wired alongside Meta template approval (parallel workstream).
+- **Background queue = django-q2 (ORM broker — NO Redis; ADR-024):** `Q_ASYNC=false` runs tasks **inline** in dev/CI/demo (no worker needed); prod runs `qcluster`. The **M4 dirty-day `recompute_rollups`** is scheduled here (`setup_schedules`, every 5 min) — closing the M4 scope note.
+- **Three lead-time notifications on `lead_captured`** (via `transaction.on_commit`, after the lead is durably saved — capture-first): (a) **office/Ashok** "new lead {name}, referred by {client_id}"; (b) **prospect** — warm **UTILITY** naming the referrer (Meta first-contact rule A4); (c) **referrer** — **only if phone known** (a `Customer` row now; Zoho lookup at M6), else **skipped with a reason, never guessed**. **Deduped** by idempotency key `role:template:journey`; **opt-in-aware** (opt-out hook + first-warm-utility). Phone normalized one canonical way (91-key) via the shared helper.
+- **Delivery-status consumption (Gap 12):** terminal status + Meta classification recorded on each `Notification`; a source-tagged `notification` event (delivery status in metadata, **no PII**) — the **funnel can start at "delivered"** so the ~33% WATI leak is visible, not hidden.
+- **Template manifest `wati-templates.json`:** the three UTILITY templates (positional vars + Meta sample values) ready for parallel Meta submission.
+- **New models:** `Customer` (05 Context 4, minimal — the referrer-phone source; NO PAN/KYC), `Notification` (dedup + terminal status + classification).
+
+**Verified in demo:** lead capture → office **delivered**, prospect **delivered**, referrer **skipped (phone unknown)**; with a `Customer` row the referrer is **delivered** to the normalized number; repeat capture does not duplicate notifications; 2 `notification` events emitted (source=wati, delivery_status=delivered, no PII).
+
+**Guardrails:** WATI send tests assert on **terminal delivery status, not HTTP 200**. **No stale-lead nudge** (REQ-F01) — a test guards that no nudge/stale function exists. #1/#3 still hold; #2 still skipped (M6).
+
+**No new inconsistency surfaced.** Scope notes (not blocking): live WATI HTTP send + real terminal-status polling land with **Meta template approval** (the parallel workstream gated by `ENABLE_WATI_SEND`); the **conversion-time referrer thank-you** is M6 (needs Zoho); webhook HMAC wax-seal stays DF-2.
+
+**Merge order:** PRs stack #1 → #2 → #3 → #4 → #5 (M1 still unmerged). DA's Q-M1-1 spec edits remain uncommitted in the working tree.
+
+Ready for M6 (Zoho lead + status sync) once reviewed.
