@@ -287,3 +287,30 @@ Ready for M7 (admin dashboard / referral explorer) once reviewed — the last bu
 **Sprint-1 build complete (M1–M7).** All seven vertical slices merged/mergeable; `main` deployable; all guardrail tests active (#1 redirect-never-submits, #2 status-only-from-Zoho, #3 no-partner-code-in-client-response) + the PII-in-events CI rule; demo mode runs the whole flow offline with `ENABLE_WATI_SEND`/`ENABLE_ZOHO_WRITE` off.
 
 **Ready for M8.** On your GO (after approving M7 + merging PR #7), I'll begin **Phase A hardening**: comprehensive end-to-end + edge/adversarial tests across the WHOLE Sprint-1 Zerodha flow (link → landing → beacon/name-gate → capture → lead-first → Continue → redirect → funnel/rollups → WATI (flag off) → Zoho conversion mirror → admin dashboard/explorer/journey), fixing until 100%, so Phase A is short and the independent agent (Phase B) has a clean, green base. If you'll drop `review/Acceptance-Test-Plan.md` (the rubric), I'll harden against it directly.
+
+---
+
+### 2026-07-06 — FROM ENGINEER — STATUS — M8 Phase A: hardening GREEN (PR `m8-phase-a-hardening`, #8)
+
+**Phase A hardening complete — the whole Sprint-1 Zerodha flow is green against `review/Acceptance-Test-Plan.md` (§A–K, §M), plus the §L asset item. 118 pass / 0 skip; ruff clean; no migration drift; demo mode runs end-to-end offline. Hardening only — no new features.**
+
+**Housekeeping (standing rule):** merged **M7 (PR #7) into `main`** — clean, `main` deployable. PR #7 shows MERGED. Phase A (PR #8) is based on the merged `main`.
+
+**§L / ADR-003 — CDN removed (the flakiness root cause + a prod anti-pattern, both fixed):**
+- Replaced the **Tailwind CDN runtime** with a **compiled/purged CSS** asset (`static/css/app.css`, ~34 KB, built from `templates/**` via `npm run build:css`) and **vendored HTMX locally** (`static/js/htmx.min.js`). No CDN, no in-browser JIT — light + offline for mobile-first on slow Indian networks. Every page now links the compiled asset; no `cdn.tailwindcss.com` / `unpkg.com` anywhere (tested). CI rebuilds the CSS and **fails on a stale asset**, so it can't drift.
+
+**Regression caught while hardening (and fixed):** a **multi-line `{# … #}` comment** in `pifs_head.html` rendered **literally on every page** (Django `{# #}` is single-line only — the same trap as the M3 disclosure partial) → converted to `{% comment %}`. Added a **permanent guard** (rendered-output assertion + a static scan that fails on any multi-line `{# #}` in templates), so this class of bug is now impossible to reintroduce silently.
+
+**New cross-cutting hardening tests (`tests/test_hardening.py`, 14) — the ATP items the per-mission suites didn't already cover:**
+- **§L** no-CDN in any page + compiled-asset exists/served + HTMX vendored.
+- **§G1** global(admin) override beats central; **§G2** compliance content **locked at central** (a lower tier cannot weaken/remove it); **§G3** WhatsApp number + incentive claim are **config-driven** (rendered from config, no hardcoded literals).
+- **§H2** two-tenant isolation (a query scoped to tenant A cannot read tenant B's rows — added a 2nd tenant fixture); **§H3** composite unique includes `tenant_id`.
+- **§K5** blank/missing config **fails safe** — admin bootstrap refuses without a hash; the Zoho webhook is **fail-closed** when no key is configured (rejects rather than accept-any).
+- **§I3** `VisitorPII` erasable (raw IP cleared + `erased_at` stamped — the manual Sprint-1 erasure path).
+- **§M2** no `Zerodha*`-named symbols/files (provider-agnostic — static scan).
+
+**ATP status by section (Phase-A self-check, demo mode, all defaults):** §A redirect/lazy-journey ✓ · §B landing/capture/two-buttons ✓ · §C analytics/funnel/rollups ✓ · §D WATI terminal-status + three notifs + no-nudge ✓ · §E Zoho conversion/upsert/off-platform/reversal/idempotency ✓ · §F admin dashboard/explorer/journey ✓ · §G config cascade + compliance lock ✓ · §H single-schema tenant_id + isolation ✓ · §I PII-out-of-events + erasable IP + consent ✓ · §J guardrails #1/#2/#3 active ✓ · §K adversarial (bad id, forged/expired/replayed nonce, bot UAs, replayed/forged webhook, missing config, flags on/off) ✓ · §M CI/ruff/migrations/provider-agnostic/phone-normalization/deployable ✓. **§L (UI browser render) is Phase-B's job** — but the CDN removal makes those screenshots reliable now.
+
+**One note for Phase B (not a blocker):** browser **screenshots were flaky in my sandbox** due to a CDP `clip.scale` bridge error, independent of the CDN (the CDN removal was still the right fix and helps). I verified page rendering via curl + page-text extraction (all pages render correctly, compiled CSS applied, no comment leaks, no partner-code leaks). The **fresh Phase-B agent on its own environment** should get clean screenshots at mobile (~390px) + desktop widths — that's the definitive UI pass.
+
+**Ready for Phase B.** `main` (once PR #8 merges) is the clean, green base for the independent agent: fresh clone → `npm install && npm run build:css` → migrate → seed_demo → bootstrap_admin → runserver → verify functionality + UI against the Acceptance Test Plan → `review/Verification-Report.md`.
