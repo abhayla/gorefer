@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PIFS GoRefer — Admin Login (Mockup)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          pifs: {
+            900: '#1b2e1f', 800: '#233d29', 700: '#2f5136', 600: '#3d6a45',
+            500: '#4e8256', 400: '#6fa377', 100: '#eaf1ea', 50: '#f4f8f4',
+          },
+          gold: '#c8a24a',
+        },
+        fontFamily: { sans: ['Inter', 'system-ui', 'Segoe UI', 'sans-serif'] },
+      },
+    },
+  };
+</script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  body { -webkit-font-smoothing: antialiased; }
+</style>
+</head>
+<body class="bg-pifs-50 font-sans text-pifs-900 min-h-screen flex flex-col">
+
+<!-- Subtle green wash background -->
+<div class="flex-1 flex items-center justify-center px-4 py-10 bg-gradient-to-b from-pifs-100/60 to-pifs-50">
+
+  <div class="w-full max-w-sm">
+
+    <!-- Brand mark -->
+    <div class="flex flex-col items-center text-center mb-6">
+      <div class="h-14 w-14 rounded-2xl bg-pifs-700 ring-1 ring-pifs-800/30 flex items-center justify-center shadow-sm">
+        <span class="text-2xl font-extrabold tracking-tight text-gold">P</span>
+      </div>
+      <div class="mt-3">
+        <div class="text-lg font-extrabold tracking-tight text-pifs-900">GoRefer <span class="text-pifs-600 font-semibold">Admin</span></div>
+        <div class="text-[11px] text-pifs-800/60 font-medium">Passive Income Financial Solutions</div>
+      </div>
+    </div>
+
+    <!-- Login card -->
+    <div class="rounded-2xl bg-white border border-pifs-100 shadow-xl p-6">
+      <h1 class="text-base font-bold text-pifs-900">Sign in to continue</h1>
+      <p class="mt-1 text-[11.5px] text-pifs-800/55 leading-relaxed">
+        Admin-only access. Referral management &amp; referral intelligence for the PIFS team.
+      </p>
+
+      <form onsubmit="return false;" class="mt-5 space-y-4">
+        <div>
+          <label class="block text-[11px] font-semibold text-pifs-800/70 mb-1">Email</label>
+          <input type="email" placeholder="admin@passiveincome.in" autocomplete="username"
+            class="w-full rounded-xl border border-pifs-100 bg-white px-3.5 py-3 text-sm placeholder:text-pifs-800/30 focus:outline-none focus:ring-2 focus:ring-pifs-500/40 focus:border-pifs-500" />
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-[11px] font-semibold text-pifs-800/70">Password</label>
+            <a href="#" class="text-[10.5px] font-semibold text-pifs-600 hover:text-pifs-700">Forgot?</a>
+          </div>
+          <div class="flex rounded-xl border border-pifs-100 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-pifs-500/40 focus-within:border-pifs-500">
+            <input id="pw" type="password" placeholder="••••••••••" autocomplete="current-password"
+              class="flex-1 px-3.5 py-3 text-sm placeholder:text-pifs-800/30 focus:outline-none" />
+            <button type="button" onclick="togglePw()" class="px-3.5 text-[11px] font-semibold text-pifs-600 hover:text-pifs-700 border-l border-pifs-100">Show</button>
+          </div>
+        </div>
+
+        <label class="flex items-center gap-2.5 cursor-pointer select-none">
+          <input type="checkbox" class="h-4 w-4 rounded border-pifs-300 text-pifs-600 focus:ring-pifs-500" />
+          <span class="text-[11.5px] text-pifs-800/70 font-medium">Keep me signed in on this device</span>
+        </label>
+
+        <button class="w-full rounded-xl bg-pifs-700 hover:bg-pifs-800 active:bg-pifs-900 transition-colors text-white text-sm font-bold py-3.5 shadow-sm">
+          Sign in
+        </button>
+      </form>
+
+      <!-- Sprint-1 admin-only note -->
+      <div class="mt-5 flex items-start gap-2 rounded-xl bg-pifs-50 border border-pifs-100 px-3 py-2.5">
+        <svg class="h-4 w-4 flex-none text-pifs-500 mt-0.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm2.5 8V5.5a2.5 2.5 0 00-5 0V9h5z" clip-rule="evenodd"/></svg>
+        <p class="text-[10.5px] leading-relaxed text-pifs-800/60">
+          This is a single-admin console for Sprint&nbsp;1. Customer self-service login is not enabled yet.
+        </p>
+      </div>
+    </div>
+
+    <!-- Compliance footer -->
+    <p class="text-center text-[10px] text-pifs-800/40 mt-5 leading-relaxed">
+      Passive Income Financial Solutions Pvt. Ltd. · Authorised Person NSE AP Reg. No. AP2516003693<br/>
+      Investments in the securities market are subject to market risks.
+    </p>
+
+  </div>
+</div>
+
+<script>
+  function togglePw() {
+    const el = document.getElementById('pw');
+    el.type = el.type === 'password' ? 'text' : 'password';
+    event.target.textContent = el.type === 'password' ? 'Show' : 'Hide';
+  }
+</script>
+</body>
+</html>
