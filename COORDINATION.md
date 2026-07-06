@@ -314,3 +314,23 @@ Ready for M7 (admin dashboard / referral explorer) once reviewed — the last bu
 **One note for Phase B (not a blocker):** browser **screenshots were flaky in my sandbox** due to a CDP `clip.scale` bridge error, independent of the CDN (the CDN removal was still the right fix and helps). I verified page rendering via curl + page-text extraction (all pages render correctly, compiled CSS applied, no comment leaks, no partner-code leaks). The **fresh Phase-B agent on its own environment** should get clean screenshots at mobile (~390px) + desktop widths — that's the definitive UI pass.
 
 **Ready for Phase B.** `main` (once PR #8 merges) is the clean, green base for the independent agent: fresh clone → `npm install && npm run build:css` → migrate → seed_demo → bootstrap_admin → runserver → verify functionality + UI against the Acceptance Test Plan → `review/Verification-Report.md`.
+
+---
+
+### 2026-07-07 — FROM ENGINEER — STATUS — Phase-B dispositions fixed (PR `m8-phase-a-fixes`, #9) — hand back for re-verification
+
+**All 5 Phase-B dispositions fixed, hardening only. 126 pass / 0 skip; ruff clean; no migration drift; demo green. Ready to hand back to the independent agent (incl. the Postgres run).**
+
+**Housekeeping:** merged **Phase A (PR #8) into `main`**; PR #9 is based on it.
+
+- **DEF-1 (MUST-FIX) — branded 503, never a 500:** `ReferralProgram`/`ProgramRedirectRule.DoesNotExist` now render the branded **503 `PARTNER_UNAVAILABLE`** page (06-API §4.1). Wrapped the config-resolution in `referral_redirect` / `referral_continue` / `partner_direct_redirect`. Nuance kept faithful to the spec: the **landing render itself still 200s** (it doesn't build the destination); the 503 fires on the destination-building steps (Continue / `/open`). Regression tests: Continue + `/open` → 503 with compliance block + no traceback; inactive program → 503.
+- **DEF-2 — cross-platform sqlite default:** `.env.example` now `DB_NAME=gorefer_dev.sqlite3`, and settings resolves any **bare `DB_NAME`** to `BASE_DIR/<name>.sqlite3` under `DB_ENGINE=sqlite` (so a shared `.env.example` boots identically on Win/macOS/Linux). Verified: `DB_NAME=gorefer` → `…/gorefer.sqlite3`. Dropped the stale django-tenants comment.
+- **DEF-3 — home hero copy:** referral links + landing are **shipped**, not "arriving in the next slices."
+- **OBS-1 — dashboard internally consistent:** KPI + funnel + leaderboard now read **one rollup snapshot at one freshness**; the view **recomputes dirty rollups on load** and shows a **"counts as of {time}"** note. Root cause fixed: `accounts_opened` is rolled up from **`Conversion.account_opened_at` (TRUE open date, ADR-017)**, not the event timestamp — so a backdated conversion lands in its real period and **KPI == funnel == live conversion count** (verified by a new consistency test). Leaderboard accounts count Zoho conversions by referrer client id.
+- **A-min (your decision) — validator ↔ spec:** tightened `client_id` to **`^[A-Za-z0-9]{4,16}$`** per 06-API §4.1. I did **not** need to flag a real id outside 4–16 — every Zerodha client id observed (RJ4521, DA1707, …) is 6 chars, well inside the bound — so I applied it. Boundary (4 & 16 accepted) + out-of-range (3 & 17 rejected) tests added.
+
+**L2 (thank-you):** confirmed N-A; no orphan thank-you *app* template exists (only the design mockup), so nothing to remove.
+
+**On the DA Postgres requirement:** the authoritative `DB_ENGINE=postgres` run is Phase-B's (the independent agent's own environment). **I could not run it here** — no Postgres DB credential available in this session, and I won't guess superuser passwords. All 5 fixes are verified on the sqlite dev/CI path; **DEF-2 specifically cleans up the sqlite dev story so the Postgres run is the one authoritative pass.** If you'd prefer I run Postgres locally, drop a throwaway DB URL/credential (e.g. a `gorefer_test` role) into the session and I'll do a full `DB_ENGINE=postgres` migrate + seed + pytest pass and report it here.
+
+**Ready for the independent agent to re-verify** DEF-1/2/3 + validator + OBS-1 **and** do the Postgres run → target `READY FOR DA SIGN-OFF: yes`.
