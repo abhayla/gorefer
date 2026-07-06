@@ -205,6 +205,17 @@ class Referral(AuditedModel, SoftDeleteModel, TenantScopedModel):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="created")
     first_click_at = models.DateTimeField(null=True, blank=True)
 
+    # --- Conversion fields — set ONLY from the Zoho import path (M6). Never
+    # fabricated by an internal write (guardrail #2). ---
+    conversion_status = models.CharField(max_length=20, blank=True, default="")  # mirrors Zoho
+    conversion_source = models.CharField(max_length=20, blank=True, default="")  # 'zoho'
+    credited_referrer = models.CharField(max_length=64, blank=True, default="")  # winning client_id (Zoho)
+    reward_status = models.CharField(max_length=40, blank=True, default="")      # display-only, Zoho signal
+    # TRUE Zoho account-opening date (ADR-017), distinct from the sync date; all
+    # conversion analytics run off THIS, never the import date.
+    account_opened_at = models.DateTimeField(null=True, blank=True)
+    conversion_synced_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         db_table = "referrals"
         indexes = [

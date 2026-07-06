@@ -58,10 +58,15 @@ python manage.py bootstrap_admin       # idempotent
 
 # 5. Run
 python manage.py runserver
-#    /            -> PIFS-branded home (compliance footer auto-injected)
-#    /api/health  -> JSON liveness probe
-#    /admin/      -> admin (behind ENABLE_ADMIN_DASHBOARD)
+#    /                          -> PIFS-branded home (compliance footer auto-injected)
+#    /r/{client_id}             -> branded landing (renders; Continue -> 302 to Zerodha)
+#    /api/health                -> JSON liveness probe
+#    /api/analytics/funnel      -> read-only funnel (bots excluded; unique = approximate)
+#    /api/zoho/status-webhook   -> Zoho conversion webhook (the ONLY writer of account status)
+#    /admin/                    -> admin (behind ENABLE_ADMIN_DASHBOARD)
 ```
+
+> **Conversions come ONLY from Zoho** (`/api/zoho/status-webhook`, behind `ENABLE_ZOHO_WRITE` for the outbound lead write; the inbound status webhook is the sole writer of account/reward status — never fabricated internally). `seed_demo` seeds demo conversions **through** that ingest path so the funnel's "Account opened" reflects real Zoho-sourced data, dated to the true open date.
 
 **Tests + lint** (CI runs the same on the SQLite path):
 

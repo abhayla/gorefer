@@ -20,10 +20,9 @@ from django.db import transaction
 from apps.common.phone import normalize_phone
 from apps.events import vocab
 from apps.events.models import Event
-from apps.integrations.base import LogOnlyZohoAdapter
 from apps.integrations.wati.notify import queue_lead_notifications
+from apps.integrations.zoho.adapter import get_zoho_adapter, gorefer_reference_for
 from apps.referrals.models import Lead, Prospect, Referral
-from gorefer.flags import flags
 
 logger = logging.getLogger("gorefer.leads")
 
@@ -93,10 +92,21 @@ def _referrer_client_id(referral) -> str:
 
 
 def _mirror_to_zoho(*, lead, prospect, referral):
-    if not flags.ENABLE_ZOHO_WRITE:
-        LogOnlyZohoAdapter().create_lead(
-            payload={"lead_id": lead.pk, "referral_id": referral.pk, "mobile": prospect.mobile}
-        )
-        return
-    # Real Zoho adapter lands in M6.
-    logger.info("ENABLE_ZOHO_WRITE=true but Zoho adapter is M6 — no-op for now.")
+    """Write the Lead to Zoho (M6), stamping a GoRefer journey-reference (#10).
+
+    Behind ENABLE_ZOHO_WRITE — log-only in demo. Captures the returned zoho_lead_id
+    on the Lead so a later conversion can be joined back. Never sets account status
+    (that comes ONLY from the webhook ingest path — guardrail #2).
+    """
+    adapter = get_zoho_adapter()
+    gref = gorefer_reference_for(referral)
+    result = adapter.create_lead(
+        payload={
+            "name": prospect.name, "mobile": prospect.mobile, "email": prospect.email,
+            "referred_by": _referrer_client_id(referral),
+        },
+        gorefer_reference=gref,
+    )
+    if result and result.zoho_lead_id and not lead.zoho_lead_id:
+        lead.zoho_lead_id = result.zoho_lead_id
+        lead.save(update_fields=["zoho_lead_id", "updated_at"])
