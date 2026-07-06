@@ -241,3 +241,25 @@ You (Claude Code) own the git workflow — please handle this directly:
 2. **Merge the PR stack in order: #1 → #2 → #3 → #4 → #5** (M1→M5), keeping `main` deployable at each step.
 
 **Standing rule going forward:** once the DA marks a mission **APPROVED** in this log, **merge that mission's PR (in order)** and commit any pending DA doc edits, so the stack never piles up. If a merge conflicts, flag it here as a QUESTION and pause on it.
+
+---
+
+### 2026-07-06 — FROM ENGINEER — STATUS — M6: Zoho lead + status sync — DONE (PR `mission-6-zoho`, #6)
+
+**Built to the M6 mission — the conversion truth layer. Guardrail #2 now ACTIVE. Behind `ENABLE_ZOHO_WRITE=false` (demo logs intended calls; conversions exercised via fixtures through the SAME webhook ingest path — never an internal write). DoD holds — 94 pass / 0 skip, ruff clean, no migration drift; demo green end-to-end.**
+
+**Housekeeping done first (per your instruction + the new standing rule):** committed the DA doc edits (`docs: DA design updates …`) and **merged the PR stack #1→#5 into `main` in order**, keeping `main` deployable at each step (verified: 84 pass, no drift, ruff clean, README fix landed). PRs #1–#5 are merged-through-main (#1 MERGED, #2–#5 CLOSED with a merge-through-main note). One snag I fixed: the ordered merge briefly regressed COORDINATION.md to an M2-era version (a `--theirs` auto-resolve); I restored the full log from the docs commit and re-verified. **M6 (this PR) is based on the merged `main`.**
+
+**M6 build:**
+- **Zoho adapter (doc-08):** `create_lead` stamps a GoRefer journey-reference on the Zoho lead (#10) + records `zoho_lead_id` on the Lead; `fetch_referrer_history` for the lazy per-referrer pull (#9). Secrets from env; live adapter refuses without config.
+- **Conversion ingest (mirror Zoho as-mapped):** referrer credited by **Zerodha CLIENT ID** (#10, not mobile); opener **upsert key = Zerodha ACCOUNT ID** (fallback `zoho_lead_id`, #11); **off-platform zero-click** conversions auto-create the journey (`source=zoho_import`, #7/ADR-016); explicit **Zoho-status→stage map** (#12); `account_opened` default terminal; **reward only if Zoho signals** (status only, no amounts); **TRUE open date** stored (ADR-017, analytics run off it); **removals propagate** via `is_reversed` tombstone + `conversion_removed` event + rollup recompute (#6); **source tag on every status change** (#18).
+- **Webhook** `POST /api/zoho/status-webhook` = the SOLE conversion-mutation entry point. Interim auth **static key + Zoho-IP allowlist** (HMAC wax-seal → DF-2). **Watermark** (resume point) + **dead-letter tray** (retry, never drop) + **idempotency guard** (#8, exactly-once via `zoho_sync_idempotency`). **Sync-freshness** (#19) populates the M4 `SyncHealth` on each success.
+- **New models:** `Conversion` (no mobile; no provisional/final), `ZohoSyncIdempotency`, `ZohoSyncWatermark`, `ZohoDeadLetter`; conversion fields on `Referral` (all Zoho-sourced). `seed_demo` seeds 2 conversions **through** the ingest path — demo funnel now shows **Account opened = 2 (Zoho-sourced)**.
+
+**Guardrail #2 (now active):** static assertion (only the Zoho ingest module sets conversion status; lead_service/redirect_service/views do not) + behavioural (a full lead capture produces no `account_opened`, leaves conversion fields empty) + every Zoho-only event carries `source=zoho`. #1/#3 still hold.
+
+**One thing I had to change in existing tests (flagging — not a spec change):** three M4 analytics tests asserted `seed_demo` creates **zero** conversions / `account_opened=0` (true at M4). M6 correctly seeds Zoho-sourced conversions via the ingest path, so I updated those three to the stronger post-M6 invariant: conversions/`account_opened` events **exist but ALL carry `source=zoho`/`source_origin=zoho`** (never produced internally). If you'd rather demo mode ship **without** seeded conversions (keeping account_opened at 0 until a real Zoho webhook), say so and I'll gate the demo fixtures behind a flag — but I judged that showing the full funnel (incl. a Zoho-sourced conversion) in demo is more faithful to "works end-to-end in demo mode."
+
+**Deferred (out of M6):** conversion-time referrer thank-you WhatsApp (Sprint 2); stale-lead nudge (Sprint 2); reward amount computation (never); HMAC wax-seal (DF-2); Zoho-API pull fallback (DF-1); bulk backfill (DF-4). Live Zoho HTTP wiring lands with sandbox verification (gated by `ENABLE_ZOHO_WRITE`).
+
+Ready for M7 (admin dashboard / referral explorer) once reviewed — the last build mission before the M8 endgame (Phase A hardening → Phase B independent verification).
