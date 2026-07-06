@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Event, VisitorPII
+from .models import ClickNonce, Event, VisitorPII
 
 
 @admin.register(Event)
@@ -13,3 +13,8 @@ class EventAdmin(admin.ModelAdmin):
 @admin.register(VisitorPII)
 class VisitorPIIAdmin(admin.ModelAdmin):
     list_display = ("visitor_id", "raw_ip", "city", "created_at", "erased_at")
+
+
+@admin.register(ClickNonce)
+class ClickNonceAdmin(admin.ModelAdmin):
+    list_display = ("nonce", "visitor_id", "client_id", "created_at", "expires_at", "consumed_at")

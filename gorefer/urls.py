@@ -13,11 +13,12 @@ from django.urls import path
 from django.views.generic import TemplateView
 
 from api.router import api
-from apps.referrals.views import partner_direct_redirect, referral_redirect
+from apps.referrals.views import partner_direct_redirect, referral_continue, referral_redirect
 
 urlpatterns = [
     path("", TemplateView.as_view(template_name="home.html"), name="home"),
     path("open", partner_direct_redirect, name="partner_direct"),
+    path("r/<str:client_id>/continue", referral_continue, name="referral_continue"),
     path("r/<str:client_id>", referral_redirect, name="referral_redirect"),
     path("api/", api.urls),
 ]

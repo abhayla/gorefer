@@ -1,0 +1,31 @@
+{% extends "landing_base.html" %}
+{% comment %}
+Branded fallback for a malformed referral id (never a raw error; no journey created).
+No incentive panel (no valid referrer to credit) — the compliance disclosure + risk
+warning are STILL auto-injected. show_incentive=False hides only the benefit panel.
+{% endcomment %}
+{% block title %}Referral link not valid — PIFS{% endblock %}
+{% block body %}
+<section class="px-5 pt-8 pb-2 text-center">
+  <div class="mx-auto h-16 w-16 rounded-full bg-gold/15 flex items-center justify-center mb-4">
+    <svg class="h-8 w-8 text-gold" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.1c.765-1.36 2.72-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.492-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+  </div>
+  <h1 class="text-[22px] leading-snug font-extrabold tracking-tight text-pifs-900">
+    This referral link isn't valid.
+  </h1>
+  <p class="mt-2 text-sm text-pifs-800/70 leading-relaxed">
+    The link you followed may have been mistyped or is no longer active. No problem — you can still
+    open your free Zerodha demat &amp; trading account with PIFS.
+  </p>
+</section>
+<section class="px-5 pt-5 pb-2 space-y-3">
+  <a href="/open"
+    class="w-full rounded-xl bg-pifs-700 hover:bg-pifs-800 active:bg-pifs-900 transition-colors text-white text-sm font-bold py-3.5 shadow-sm flex items-center justify-center gap-2">
+    Open a Zerodha account with PIFS
+    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.3 4.3a1 1 0 011.4 0l5 5a1 1 0 010 1.4l-5 5a1 1 0 01-1.4-1.4L11.6 10 7.3 5.7a1 1 0 010-1.4z" clip-rule="evenodd"/></svg>
+  </a>
+  <p class="text-center text-[11px] text-pifs-800/50">
+    Have a valid referral link? Please re-open it from the message you received.
+  </p>
+</section>
+{% endblock %}

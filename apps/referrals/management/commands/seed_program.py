@@ -55,7 +55,12 @@ class Command(BaseCommand):
         baseline = {
             "referral_incentive_claim": flags.REFERRAL_INCENTIVE_CLAIM,
             "nse_ap_no": getattr(settings, "NSE_AP_NO", ""),
+            "sebi_reg_no": "INZ000031633",
             "attribution_window_days": 60,
+            # WhatsApp share target = WATI BUSINESS number (NOT Ashok's personal),
+            # config-driven via the cascade (ADR-022). Digits only for wa.me.
+            "wati_business_number": settings.WATI_BUSINESS_NUMBER,
+            "privacy_policy_url": "https://gorefer.in/privacy",
         }
         for key, value in baseline.items():
             ConfigCentral.objects.get_or_create(key=key, defaults={"value": value})

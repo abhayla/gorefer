@@ -182,3 +182,65 @@ class Referral(AuditedModel, SoftDeleteModel, TenantScopedModel):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"referral<{self.pk}:{self.source}>"
+
+
+class Prospect(AuditedModel, SoftDeleteModel, TenantScopedModel):
+    """The person who may open an account — the "friend" (05 Context 7).
+
+    An ERASABLE PII record: name/mobile/email/city live here (and on Lead), never
+    in the immutable event log (#16/#17). Unconverted PII is anonymized after 12
+    months (Sprint 1: manual erasure). `mobile` is the canonical normalized key.
+    """
+
+    mobile = models.CharField(max_length=20, db_index=True)
+    name = models.CharField(max_length=120, blank=True, default="")
+    email = models.EmailField(blank=True, default="")
+    city = models.CharField(max_length=120, blank=True, default="")
+    lead_source = models.CharField(max_length=40, blank=True, default="")
+
+    class Meta:
+        db_table = "prospects"
+        indexes = [models.Index(fields=["email"])]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"prospect<{self.mobile}>"
+
+
+class Lead(AuditedModel, SoftDeleteModel, TenantScopedModel):
+    """CRM-linkage lead — GoRefer's shadow of the Zoho pipeline (05 Context 11).
+
+    Saved to GoRefer FIRST on form submit (capture-first); Zoho mirroring is M6
+    (behind ENABLE_ZOHO_WRITE). Account/reward STATUS is set only from Zoho, never
+    fabricated. This is an erasable PII home; the immutable event log holds none.
+    `submitted_by` distinguishes the friend filling their own details vs the
+    referrer filling the friend's.
+    """
+
+    STATUS_CHOICES = [
+        ("new", "new"),
+        ("contacted", "contacted"),
+        ("interested", "interested"),
+        ("kyc_started", "kyc_started"),
+        ("account_opened", "account_opened"),
+        ("rejected", "rejected"),
+    ]
+    SUBMITTED_BY_CHOICES = [("friend", "friend"), ("referrer", "referrer")]
+
+    referral = models.ForeignKey(Referral, on_delete=models.PROTECT, related_name="leads")
+    prospect = models.ForeignKey(Prospect, on_delete=models.PROTECT, related_name="leads")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="new")
+    status_source = models.CharField(max_length=20, blank=True, default="")  # 'zoho' when imported (M6)
+    submitted_by = models.CharField(max_length=12, choices=SUBMITTED_BY_CHOICES, default="friend")
+    consent = models.BooleanField(default=False)
+    zoho_lead_id = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    account_opened_at = models.DateTimeField(null=True, blank=True)  # TRUE Zoho date (M6)
+
+    class Meta:
+        db_table = "leads"
+        indexes = [
+            models.Index(fields=["referral"]),
+            models.Index(fields=["status"]),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"lead<{self.pk}:{self.status}>"

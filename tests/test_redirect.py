@@ -33,20 +33,22 @@ def test_partner_direct_destination_has_no_r_param(seeded):
     assert "r=" not in url.split("?", 1)[1]
 
 
-# --- /r/{client_id} human click -> lazy triad + 302 -----------------------
+# --- /r/{client_id} landing view (M3: renders 200, lazy journey + landing_viewed) --
 
-@pytest.mark.django_db(transaction=True)
-def test_referral_click_creates_lazy_triad_and_302(client):
-    # transaction=True so transaction.on_commit (the click write) actually fires.
-    call_command("seed_program")
+def test_referral_landing_renders_200_and_creates_lazy_journey(seeded, client):
     resp = client.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0 (Android)", REMOTE_ADDR="203.0.113.7")
-    assert resp.status_code == 302
-    assert resp.headers["Location"] == "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=RJ4521"
+    assert resp.status_code == 200  # landing page, NOT an immediate 302 (ADR-002)
     assert ReferralIdentity.objects.count() == 1
     assert Referral.objects.filter(source="referral_link").count() == 1
-    assert Event.objects.filter(event_type="ReferralLinkOpened").count() == 1
-    # visitor cookie set on first click
-    assert "gr_vid" in resp.cookies
+    assert Event.objects.filter(event_type="landing_viewed").count() == 1
+    assert "gr_vid" in resp.cookies  # visitor cookie set on first landing
+
+
+def test_continue_action_302s_to_zerodha(seeded, client):
+    client.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.7")
+    resp = client.get("/r/RJ4521/continue", HTTP_USER_AGENT="Mozilla/5.0")
+    assert resp.status_code == 302
+    assert resp.headers["Location"] == "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=RJ4521"
 
 
 def test_client_id_normalized_uppercase(seeded, client):
@@ -54,7 +56,7 @@ def test_client_id_normalized_uppercase(seeded, client):
     assert ReferralIdentity.objects.get().client_id == "RJ4521"
 
 
-def test_repeat_click_same_visitor_is_idempotent_on_identity(seeded, client):
+def test_repeat_landing_same_visitor_is_idempotent_on_identity(seeded, client):
     client.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.7")
     client.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.7")
     assert ReferralIdentity.objects.count() == 1
@@ -68,12 +70,12 @@ def test_invalid_client_id_returns_400_and_creates_nothing(seeded, client):
     assert Referral.objects.count() == 0
 
 
-# --- bot/preview UA: redirect but NO journey ------------------------------
+# --- bot/preview UA: generic landing, NO journey --------------------------
 
 def test_bot_preview_creates_no_journey(seeded, client):
     resp = client.get("/r/RJ4521", HTTP_USER_AGENT="WhatsApp/2.23.20")
-    assert resp.status_code == 302  # bot may follow, harmless
-    assert ReferralIdentity.objects.count() == 0
+    assert resp.status_code == 200  # generic landing renders, but...
+    assert ReferralIdentity.objects.count() == 0  # ...no journey/identity for a bot
     assert Referral.objects.count() == 0
     assert Event.objects.count() == 0
 

@@ -50,7 +50,11 @@ def test_redirect_makes_no_network_connection(monkeypatch):
     monkeypatch.setattr(socket.socket, "connect", _guarded_connect)
     try:
         call_command("seed_program")
-        resp = Client().get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.7")
+        c = Client()
+        # Landing render (M3) opens no socket...
+        assert c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.7").status_code == 200
+        # ...and the Continue 302 assembles the URL without ever connecting to Zerodha.
+        resp = c.get("/r/RJ4521/continue", HTTP_USER_AGENT="Mozilla/5.0")
         assert resp.status_code == 302
     finally:
         monkeypatch.setattr(socket.socket, "connect", real_connect)
@@ -64,7 +68,9 @@ def test_no_partner_code_in_client_facing_response_bodies():
     in the 302 Location header (that IS the redirect), but NEVER in a rendered
     response BODY a user sees."""
     call_command("seed_program")
+    # Prime a journey so the landing renders fully.
     c = Client()
+    c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.7")
     for path in ("/", "/api/health", "/r/RJ4521", "/open"):
         resp = c.get(path, HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.7")
         body = resp.content.decode()
