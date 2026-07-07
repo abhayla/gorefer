@@ -36,14 +36,27 @@ def test_landing_has_compliance_referral_echo_and_business_whatsapp(seeded, clie
     # Compliance disclosure + risk warning (non-removable)
     assert "AP2516003693" in html
     assert "market risks" in html
-    # Single swappable incentive claim
-    assert "10% brokerage share" in html
-    # WhatsApp deep link to the WATI BUSINESS number, never Ashok's personal 73888.
-    assert "wa.me/917080642020" in html
+    # Single swappable incentive claim (reordered — DA polish #2)
+    assert "10% brokerage share + 300 reward points" in html
+    # The WATI BUSINESS number is exposed to the page (JS builds the wa.me deep link
+    # from it at click time — DA polish #1); never Ashok's personal 73888.
+    assert "917080642020" in html
     assert "7388882020" not in html
     # Consent + Privacy Policy present
     assert "Privacy Policy" in html
     assert "consentInput" in html
+
+
+def test_whatsapp_share_message_built_from_form_in_js():
+    """The exact DA share message + config number are constructed client-side in
+    landing.js (from the form inputs at click time), URL-encoded."""
+    from pathlib import Path
+    js = (Path(__file__).resolve().parent.parent / "static" / "js" / "landing.js").read_text(encoding="utf-8")
+    assert "My Referral ID: " in js
+    assert "*Here are referral details*" in js
+    assert "Name: " in js and "Phone Number: " in js and "Email: " in js
+    assert "https://wa.me/" in js and "GR.watiNumber" in js
+    assert "encodeURIComponent" in js
 
 
 def test_landing_does_not_clone_zerodha(seeded, client):

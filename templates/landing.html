@@ -101,7 +101,9 @@ Never resembles/clones Zerodha. Raw Zerodha URL / partner code never appear here
     Continue to Zerodha
     <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.3 4.3a1 1 0 011.4 0l5 5a1 1 0 010 1.4l-5 5a1 1 0 01-1.4-1.4L11.6 10 7.3 5.7a1 1 0 010-1.4z" clip-rule="evenodd"/></svg>
   </button>
-  <a id="whatsappBtn" href="{{ whatsapp_share_url }}" target="_blank" rel="noopener"
+  {% comment %}href built by landing.js at click time from the config WATI number
+     + referral id + whatever the prospect typed into the form.{% endcomment %}
+  <a id="whatsappBtn" href="#" target="_blank" rel="noopener"
     class="w-full rounded-xl bg-white border-2 border-pifs-500 text-pifs-700 hover:bg-pifs-50 transition-colors text-sm font-bold py-3 flex items-center justify-center gap-2">
     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 004.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0012.04 2z"/></svg>
     Share referral details on WhatsApp
@@ -115,6 +117,7 @@ Never resembles/clones Zerodha. Raw Zerodha URL / partner code never appear here
     clientId: "{{ client_id|escapejs }}",
     nonce: "{{ nonce|escapejs }}",
     continueUrl: "/r/{{ client_id|escapejs }}/continue",
+    watiNumber: "{{ wati_business_number|escapejs }}",
   };
 </script>
 <script src="/static/js/landing.js"></script>
