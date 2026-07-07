@@ -351,3 +351,23 @@ Ready for M7 (admin dashboard / referral explorer) once reviewed — the last bu
 **For the Phase-B agent's authoritative run:** on this VPS, point the app's `.env` at `DB_ENGINE=postgres` / `gorefer_dev` (role `gorefer`; its password is in the local `.env`), then `python manage.py migrate && seed_program && seed_demo && bootstrap_admin && runserver`, and `DB_ENGINE=postgres python -m pytest`. (The role password is not in this log by design — it's in the gitignored `.env` on the box.)
 
 Handing to the independent agent for re-verification on Postgres → target `READY FOR DA SIGN-OFF: yes`.
+
+---
+
+### 2026-07-07 — FROM ENGINEER — STATUS — Polish round done (3 tweaks); Referrer Profile NOT built (PR #9 updated)
+
+**All three polish tweaks implemented + docs kept in sync + re-verified. 129 pass on SQLite AND Postgres; ruff clean; no migration drift; verified live on the Postgres demo. Did NOT build the Referrer Profile screen (#4) — pending Abhay's mockup sign-off.**
+
+1. **WhatsApp "Share Referral Details" prefill** — replaced with your exact message (`My Referral ID: {client_id}` / `*Here are referral details*` / `Name:` / `Phone Number:` / `Email:`). It's now **built client-side in `landing.js` at click time** from the landing-form inputs (name/phone/email; empty fields left blank so the prospect types them in WhatsApp), **URL-encoded**, targeting the **config-driven WATI business number** (`window.GR.watiNumber`, resolved from config). The view passes the number, not a pre-built URL — the wa.me deep link is no longer in the server HTML.
+2. **Incentive claim reordered → `10% brokerage share + 300 reward points`** in the single `REFERRAL_INCENTIVE_CLAIM` config field (ADR-022): `flags.py` default + `.env` (local) + `.env.example` + the two tests. The central-config seed pulls from the flag, so the reorder flows through to `config_central` too (verified: `config_central.referral_incentive_claim` now reads the new order).
+3. **Explorer Referrer column** — shows the referrer **NAME when known** (Customer/Zoho), else a clear **"— name not on file —"** (italic), **never a duplicate of the client id**. "Referral ID" column keeps the Zerodha client id. The referrer cell **links to the journey** for now, and I left a comment marking it to repoint at the Referrer Profile once #4 ships. New tests: name-when-known (with a `Customer`) and name-not-on-file.
+
+**Docs kept in sync (my code-adjacent duties):** `.env.example` reordered incentive claim; code comments on the landing view + `landing.js` + explorer template explain the new WhatsApp-build and referrer-column behaviour; tests updated. The README references `REFERRAL_INCENTIVE_CLAIM` by **name only** (no literal), so no README change was needed; no config **key** changed, so no `.env.example` key edits beyond the value. (You've already updated `CLAUDE.md` §4, `implementation/10` §4, and `docs/ui-ux/07` — thanks.)
+
+**Regression note:** I introduced two multi-line `{# … #}` comments (in `landing.html` + `explorer.html`) — the Phase-A guard test caught them immediately; converted to `{% comment %}` and re-verified (the guard is doing its job).
+
+**Live-verify housekeeping:** while smoke-testing I'd accumulated ~30 orphaned `runserver` processes from earlier rounds (Windows doesn't reap the bash-launched children); cleaned them all up and confirmed the three tweaks on a single fresh server against Postgres `gorefer_dev`.
+
+**Referrer Profile / Referrer-360 (#4): NOT built** — awaiting your doc-07 §6(e) section + mockup after Abhay's sign-off. The data it needs already exists (referrals + events + rollups + VisitorPII), so it'll be a read-model + one page when you issue the mission.
+
+Ready for the independent agent to re-verify the three tweaks (functionality + UI) on Postgres.
