@@ -38,9 +38,18 @@
             <td class="py-2.5 font-mono text-pifs-700">
               <a href="{% url 'dashboard_journey' row.id %}" class="hover:underline">{{ row.client_id|default:"—" }}</a>
             </td>
+            {% comment %}Referrer column: NAME when known, else "name not on file" —
+               never a duplicate of the client id. Partner-direct has no referrer.
+               Links to the journey now; will point at the Referrer Profile once
+               that screen ships (DA #4, pending mockup sign-off).{% endcomment %}
             <td class="py-2.5 text-pifs-800/70">
-              {% if row.is_partner_direct %}<span class="text-pifs-800/40">— NONE —</span>
-              {% else %}{{ row.referrer|default:"—" }}{% endif %}
+              {% if row.is_partner_direct %}
+                <span class="text-pifs-800/40">— NONE —</span>
+              {% elif row.referrer_name %}
+                <a href="{% url 'dashboard_journey' row.id %}" class="text-pifs-700 hover:underline">{{ row.referrer_name }}</a>
+              {% else %}
+                <span class="text-pifs-800/40 italic">— name not on file —</span>
+              {% endif %}
             </td>
             <td class="py-2.5">
               {% if row.source == 'referral_link' %}

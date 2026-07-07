@@ -94,9 +94,11 @@ def test_g3_incentive_and_whatsapp_number_config_driven():
     # WhatsApp number is seeded to central config and rendered into the wa.me link.
     assert ConfigCentral.objects.filter(key="wati_business_number").exists()
     html = Client().get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0").content.decode()
-    assert "wa.me/917080642020" in html
+    # The config-driven WATI business number is exposed to the page (JS builds the
+    # wa.me deep link from it at click time — see tweak #1).
+    assert "917080642020" in html
     # The single incentive claim renders from flags.REFERRAL_INCENTIVE_CLAIM.
-    assert "300 reward points + 10% brokerage share" in html
+    assert "10% brokerage share + 300 reward points" in html
 
 
 # --- §H2: tenant isolation with a 2nd tenant ------------------------------

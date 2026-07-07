@@ -59,15 +59,18 @@ def _set_visitor_cookie(response, visitor_id: str, is_new: bool):
 
 
 def _landing_context(request, tenant, client_id: str, nonce: str | None):
-    """Config-driven landing context (no referrer NAME in initial HTML — #1/#3)."""
+    """Config-driven landing context (no referrer NAME in initial HTML — #1/#3).
+
+    The WhatsApp deep link is built client-side (landing.js) at click time from the
+    config-driven WATI business number + the referral id + whatever the prospect
+    typed into the form (name/phone/email), so only the number is passed here.
+    """
     tenant_id = tenant.id if tenant is not None else None
     wa_number = resolve("wati_business_number", tenant_id=tenant_id, default="")
-    wa_text = f"Hi, I'd like to refer someone for a Zerodha account. Referral ID: {client_id}"
     return {
         "client_id": client_id,
         "nonce": nonce or "",
         "wati_business_number": wa_number,
-        "whatsapp_share_url": f"https://wa.me/{wa_number}?text={wa_text}",
         "privacy_policy_url": resolve("privacy_policy_url", tenant_id=tenant_id, default="#"),
         "REFERRAL_INCENTIVE_CLAIM": flags.REFERRAL_INCENTIVE_CLAIM,
         "show_incentive": True,  # a valid referrer -> show the referral-benefit panel

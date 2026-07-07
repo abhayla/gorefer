@@ -186,10 +186,13 @@ def explorer_rows(tenant=None, *, source: str = "", status: str = "", search: st
         if status and status != row_status:
             continue
         last = ref.events.order_by("-timestamp").values_list("timestamp", flat=True).first()
+        # Referrer column shows the NAME when known (Customer/Zoho); it never
+        # duplicates the client id. Unknown -> a clear "name not on file" marker so
+        # the "Referral ID" and "Referrer" columns are visibly distinct (DA polish).
         rows.append({
             "id": ref.id,
             "client_id": client_id,
-            "referrer": _referrer_name(tenant, client_id) or (client_id if client_id else ""),
+            "referrer_name": _referrer_name(tenant, client_id),  # "" when unknown
             "source": ref.source,
             "clicks": clicks,
             "landing_views": landing,

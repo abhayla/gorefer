@@ -10,7 +10,7 @@ def test_default_flags_match_spec():
     assert f.ENABLE_ASSET_GENERATOR is False
     assert f.ENABLE_ADMIN_DASHBOARD is True
     assert f.ENABLE_DEMO_MODE is True
-    assert f.REFERRAL_INCENTIVE_CLAIM == "300 reward points + 10% brokerage share"
+    assert f.REFERRAL_INCENTIVE_CLAIM == "10% brokerage share + 300 reward points"
 
 
 def test_env_override_parses_bool(monkeypatch):

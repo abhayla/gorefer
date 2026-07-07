@@ -49,8 +49,8 @@ class FeatureFlags:
     ENABLE_DEMO_MODE: bool = True
 
     # Compliance: the single swappable "10% brokerage" claim string (ADR-014).
-    # This is the ONLY place the incentive claim wording lives.
-    REFERRAL_INCENTIVE_CLAIM: str = "300 reward points + 10% brokerage share"
+    # This is the ONLY place the incentive claim wording lives (default; env overrides).
+    REFERRAL_INCENTIVE_CLAIM: str = "10% brokerage share + 300 reward points"
 
     @classmethod
     def from_env(cls) -> "FeatureFlags":
