@@ -4,13 +4,12 @@
   <title>{% block title %}GoRefer Admin{% endblock %}</title>
   {% include "partials/pifs_head.html" %}
 </head>
-<body class="bg-pifs-50 font-sans text-pifs-900 min-h-screen">
+<body class="bg-bg font-sans text-ink-900 min-h-screen text-[13px]">
   {% block topbar %}{% include "dashboard/partials/topbar.html" %}{% endblock %}
-  <main class="mx-auto max-w-[1120px] px-4 md:px-6 py-6 space-y-6">
+  <main class="mx-auto max-w-[1140px] px-5 py-5 space-y-4">
     {% block content %}{% endblock %}
-    <p class="text-center text-[10px] text-pifs-800/35 pt-2">
-      Passive Income Financial Solutions Pvt. Ltd. · Authorised Person NSE AP Reg. No. {{ NSE_AP_NO }} ·
-      Investments in the securities market are subject to market risks.
+    <p class="text-center text-[10px] text-ink-300 pt-1">
+      {{ AP_DISCLOSURE_BLOCK }} · {{ MARKET_RISK_WARNING }}
     </p>
   </main>
 </body>

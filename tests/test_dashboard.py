@@ -87,6 +87,34 @@ def test_explorer_shows_off_platform_population(admin_client):
     assert "Off-platform" in html
 
 
+def test_explorer_referrer_column_no_name_marker(admin_client):
+    """Referrer column shows 'name not on file' when unknown — never a duplicate of
+    the client id (DA polish #3). Demo referrers have no Customer record."""
+    html = admin_client.get("/admin-panel/explorer/?source=referral_link").content.decode()
+    assert "— name not on file —" in html
+
+
+@pytest.mark.django_db
+def test_explorer_referrer_column_shows_name_when_known():
+    # seed_demo already seeds a Customer for RJ4521 (the name source), so its name
+    # lights up in the explorer; update it to a distinctive value to assert on.
+    from apps.referrals.models import Customer, ReferralProgram
+    call_command("seed_program")
+    call_command("seed_demo")
+    program = ReferralProgram.objects.get()
+    Customer.objects.update_or_create(
+        tenant=program.tenant, program=program, client_id="RJ4521",
+        defaults={"partner": program.partner, "first_name": "Ramesh",
+                  "last_name": "Kumar", "mobile": "9998887777"},
+    )
+    User = get_user_model()
+    User.objects.create_user(username="a@b.in", password="pw12345!", is_staff=True)
+    c = Client()
+    c.login(username="a@b.in", password="pw12345!")
+    html = c.get("/admin-panel/explorer/?source=referral_link").content.decode()
+    assert "Ramesh Kumar" in html  # name shown for the known referrer
+
+
 # --- journey detail --------------------------------------------------------
 
 def test_journey_detail_shows_timeline_and_conversion(admin_client):

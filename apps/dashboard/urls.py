@@ -12,4 +12,7 @@ urlpatterns = [
     path("", views.dashboard, name="dashboard"),
     path("explorer/", views.explorer, name="dashboard_explorer"),
     path("journey/<int:referral_id>/", views.journey, name="dashboard_journey"),
+    # Referral Profile / User Referral Screen (M9).
+    path("referrers/", views.referrer_search, name="dashboard_referrer_search"),
+    path("referrer/<str:client_id>/", views.referrer_profile, name="dashboard_referrer"),
 ]

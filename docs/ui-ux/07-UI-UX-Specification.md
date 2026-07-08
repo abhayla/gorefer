@@ -43,8 +43,11 @@ These follow the GoRefer Constitution and the Foundation Spec's product philosop
 | c | Admin Dashboard | `/admin` | Admin | JWT | Yes |
 | d | Referral Explorer | `/admin/referrals` | Admin | JWT | Yes |
 | e | Referral Journey detail | `/admin/referrals/{client_id}` | Admin | JWT | Yes |
+| h | Referral Profile (User Referral Screen) | `/admin-panel/referrer/{client_id}/` | Admin | JWT | **Yes (M9)** |
 | f | "My Referrals" (customer) | `/me` | Customer | (future) | **No — feature-flag disabled** |
 | g | Referral Landing Experience | `/landing/{client_id}` | Referral visitor | none | Yes |
+
+> **Visual language (2026-07-08, DA DESIGN LOCKED).** All screens are built in **"Variant C · Cobalt Clean-Fintech"** — Inter; background `#f4f6fb`; cobalt-600 `#2F5BFF` primary accent; ink ramp `#0f1729/#334155/#64748b/#94a3b8`; thin `#e9edf3` lines; `rounded-2xl` cards with a soft shadow; pill buttons/tabs; rounded-full filter chips; circular SVG KPI rings; sortable table headers. Tokens are CSS variables (so DF-10 theming is a later config layer). The `mockups/*.html` are the visual truth. The compliance disclosure + market-risk warning stay verbatim on every customer page regardless of skin.
 
 ---
 
@@ -226,6 +229,8 @@ These follow the GoRefer Constitution and the Foundation Spec's product philosop
 
 **Primary action.** **Apply filters** (the search that produces the list). Each result row's tap-through to the Journey detail is the secondary action.
 
+**Columns / referrer display (updated 2026-07-07).** The **Referral ID** column = the referrer's raw Zerodha `client_id` (ADR-001). The **Referrer** column shows the referrer's **name when known** (from a `Customer` row or Zoho); when the name is not on file it shows **"— name not on file —"**, and **NOT** a duplicate of the client_id. (Sprint-1 reality: names light up only once Customer data is loaded or Zoho supplies them, so most Referrer cells read "— name not on file —" for now — this is why the two columns looked identical.) Each **Referrer** cell links to that referrer's **Referrer Profile** page (new screen — §6(e), pending Abhay's UI sign-off).
+
 **Layout — desktop**
 ```
 ┌───────────────────────────────────────────────────────────────┐
@@ -330,6 +335,47 @@ On mobile, the filter bar collapses into a **Filters** sheet (tap to expand, app
 
 ---
 
+## 7e. (h) Referral Profile — "User Referral Screen" — `/admin-panel/referrer/{client_id}/` (M9)
+
+**Purpose.** The single-referrer 360 view: **everything referred by one Zerodha client id** — the referrer's Zoho-enriched identity, per-partner referral links, every click they generated (with geo/device/traffic), and the people they referred. Admin-only in Sprint 1; the same layout supports the future customer "My Referrals" (§8) with PII masked. **Visual truth:** `mockups/referral-profile-mockup.html` (Variant C).
+
+**Primary action.** None mutating — this screen **reads**. Its dominant elements are the identity band + the two data tabs.
+
+### Data sources
+- **Zoho READ enrichment (read-only; WRITE stays OFF — `ENABLE_ZOHO_READ`).** A referrer is matched to their Zoho **Contact by `ClientId`**; the top band + Referred-People tab read Zoho. In demo/CI (flag off) a **fixture-backed** adapter returns seeded data — the whole screen works offline. Zoho WRITE is **not** enabled (PIFS enters Zoho leads manually — DF-9); this is enrichment only, never a status write (guardrail #2 preserved). Missing Zoho value → **"— not on file —"**.
+- **GoRefer's own captured data.** Clicks/leads/accounts aggregates, and the **Clicks tab** per-row detail (geo from the click Event's country/state, **city + raw IP from the erasable `VisitorPII`**, device/OS/browser parsed from the user-agent, channel from the click), come from GoRefer's event stream — never Zoho.
+
+### Layout (Variant C; matches the mockup)
+1. **Breadcrumb** back to the Referral Explorer + the client_id.
+2. **Identity band** — avatar/initials, name (Zoho `Full_Name`, else "— name not on file —"), client_id chip, **Active-Investor** chip; enrichment chips: City/State, Profession, Account Status, Opened date (TRUE Zoho open date, ADR-017), Reward wording (from `REFERRAL_INCENTIVE_CLAIM`). Plus **4 headline aggregates** — **Clicks, Unique visitors** (approx, bot-filtered, labelled `*`), **Leads, Accounts** — the first three rendered as circular SVG KPI rings.
+3. **Per-link summary strip** — one card per **real, enabled** partner link (partner name, partner code, `gorefer.in/r/{client_id}`, per-link clicks/leads/accounts). Today: **Zerodha only** — the illustrative "Loan" card in the mockup is **NOT shipped** (it only demonstrates the multi-partner layout). The structure is config/data-driven, so N partners render with no redesign (ties to DF-5/DF-9).
+4. **Two tabs on one screen:**
+   - **Clicks** — one row per click: **Date/time · Partner/Link · Channel · City · Region · Country · IP · Device · OS/Browser · Traffic (Human/Bot) · Outcome**. Filters above the table: **All / Human / Bot / Mobile / Desktop / WhatsApp** + a free-text **city/IP** search; sortable headers. **Bot/preview rows are dimmed and excluded** from the click & visitor totals (logged, not counted — ADR-019).
+   - **Referred People** — one row per identified person (from Zoho): **Name · City · Profession · Partner · Account Status · Opened · Reward**. A person appears only after they submit the form or Zoho records them.
+
+### Config-over-code
+- **No hardcoded copy or columns.** The Clicks/People **column sets**, the filter set, and user-facing strings (the "approx / bot-filtered" note, the "— not on file —" marker) come from a **config constant** (`PROFILE_CONFIG`), not inline literals — per-partner column tuning is a config change (DF-5 pattern). Reward wording continues to come from the single `REFERRAL_INCENTIVE_CLAIM` field.
+
+### PII masking (built now, applied later)
+- The **admin** view shows **full IP + phone**. A config rule **`PII_MASK_FOR_CUSTOMER_VIEW`** (built now, dormant) masks IP → city-only and phone → partial in the **future** customer/referrer view; it activates only when `ENABLE_CUSTOMER_LOGIN` turns on. No dead UI now.
+
+### Entry points
+1. The **Referrer cell in the Referral Explorer** (§6/(d)) links here.
+2. A **search** entry (`/admin-panel/referrers/`, the "Referral Profile" nav item) — search by client_id or name; an exact client_id jumps straight in.
+3. Future: the top-referrers leaderboard rows (dashboard) link here.
+
+### States
+- **Valid referrer** — full screen as above (Zoho-enriched where a Contact matches; GoRefer aggregates always).
+- **No footprint** — a well-formed client_id with **no** GoRefer referral and **no** Zoho conversion → **404** (not a fabricated empty profile). A malformed client_id → 404 (validator).
+- **Zoho unmatched** — the screen still renders from GoRefer's own data; Zoho fields show "— not on file —".
+
+### Self-click note (deferred — NOT built)
+- A later polish: if a click's mobile later matches the referrer's known Zoho mobile, tag it **"self-click"** and exclude from conversion counts. Logged as a backlog note; **not** in this mission.
+
+**API / implementation.** Server-rendered (Django, HTMX/Variant C), route `/admin-panel/referrer/{client_id}/`. The Clicks table filters/sorts client-side from a server-rendered JSON payload; column config is passed as JSON (config-over-code). Zoho READ adapter behind the doc-08 contract (`apps/integrations/zoho/read.py`).
+
+---
+
 ## 8. (f) "My Referrals" — Customer View — `/me` — **DISABLED (feature flag)**
 
 > **Status: architecture-ready, UI disabled in Sprint 1.** This screen is **not** shipped. It is documented so the data model, routing, and API can be designed to accommodate it without a later redesign (Foundation principle 1, "build once, scale forever"). Per Foundation principle 2 ("expose only today's capabilities"), it is gated behind a feature flag `feature.customer_portal = false` that removes the route from the router and hides all entry points — there is **no disabled button, no greyed menu, no "Coming Soon"** anywhere a real user can see. This section is design intent only.
@@ -377,6 +423,8 @@ On mobile, the filter bar collapses into a **Filters** sheet (tap to expand, app
 1. **"Continue to Zerodha"** — opens a short form (name, email, phone). On submit, GoRefer saves the lead (referrer = the `client_id` from the URL, partner = `ZMPHZC`) to GoRefer **and** Zoho, then redirects the real browser to `signup.zerodha.com/api/lead?c=ZMPHZC&r={client_id}`. Auto-filling Zerodha's own form with the captured name/email/phone is an **OPEN, build-time POC** (currently believed not possible); the form still captures the lead regardless — it is **not** a dependency. (The form-first choice is Abhay's decision and may be removed later.)
 2. **"Share referral details on WhatsApp"** — a **client-side `wa.me` deep link** to a **config-driven WhatsApp number**, resolved through the 3-tier configuration cascade (CENTRAL default = the WATI business number `+91 70806 42020` PIFS operates → overridable at GLOBAL/admin and, later, USER tier). The personal number `+91 73888 82020` is **never** a hardcoded customer-facing value. The link is pre-filled with **referring** language + the referral id — e.g. `wa.me/{wati_business_number}?text=Hi, I'd like to refer someone for a Zerodha account. Referral ID: {client_id}` (**not** "I want to open an account" — the actor is *referring*). Tapping it fires a `SharedOnWhatsApp` event (`POST /api/share`, channel `whatsapp`) and opens WhatsApp. Because the inbound lands on the WATI business number carrying the referral id, it is **auto-attributed** via Wati → a Zoho lead, reconciled to the journey by referral id + mobile. In the **partner-direct variant** the prefill omits the referral id. **Accepted downside:** the person can edit the pre-filled text before sending, so attribution here is high-but-not-perfect.
 
+**Helpline "call" line (2026-07-08).** Below the two buttons the landing page shows a quiet **"Prefer a call? Free, fully-assisted account opening — call {SUPPORT_HELPLINE_PHONE}"** line with a `tel:` link. The number is the **config value `SUPPORT_HELPLINE_PHONE`** (default `+91 73888 82020`, Ashok) — **distinct** from the WhatsApp-share WATI number (`WATI_BUSINESS_NUMBER`, `917080642020`), and config-driven (no inline literal). (There is **no separate thank-you page** in Sprint 1 — the capture flow saves the lead then redirects to Zerodha per M3; if a post-submit interstitial is ever added it reads the same config.)
+
 **Layout — mobile-first (this page is overwhelmingly viewed on mobile from WhatsApp)**
 ```
 ┌───────────────────────────┐
@@ -413,7 +461,17 @@ On mobile, the filter bar collapses into a **Filters** sheet (tap to expand, app
 
 **Continue-to-Zerodha flow.** Tapping **Continue to Zerodha** reveals the short form (Name, Email, Phone). Submitting posts to `POST /api/leads` with `source=landing_need_help`; GoRefer saves the lead **first** (referrer = `client_id`, partner = `ZMPHZC`), mirrors to Zoho, fires the Wati messages, then redirects the browser to `https://signup.zerodha.com/api/lead?c=ZMPHZC&r={client_id}`. GoRefer **never** auto-submits Zerodha's reCAPTCHA-gated form — a real human lands on Zerodha's page (locked decision #4); a human (Ashok) can also complete KYC on a call.
 
-**Share-on-WhatsApp flow.** Tapping **Share referral details on WhatsApp** emits `SharedOnWhatsApp` and opens the person's WhatsApp to `wa.me/{office}` with the referring-language message pre-filled.
+**Share-on-WhatsApp flow (message updated 2026-07-07).** Tapping **Share referral details on WhatsApp** emits `share_clicked` (`SharedOnWhatsApp`) and opens the person's WhatsApp to `wa.me/{WATI business number}` (config-driven) with the message below pre-filled (URL-encoded). `{name}` / `{phone}` / `{email}` are filled from the landing form inputs when the visitor has entered them, else left blank for them to type in WhatsApp; `{client_id}` is the referral id from the URL:
+
+```
+Hi, I'd like to refer for a Zerodha account. My Referral ID: {client_id}
+*Here are referral details*
+Name: {name}
+Phone Number: {phone}
+Email: {email}
+```
+
+(The partner-direct variant omits the `My Referral ID` line.)
 
 **States.**
 - **Loading** — branded skeleton (logo + spinner), no Zerodha branding ever.

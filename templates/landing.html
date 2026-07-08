@@ -4,18 +4,19 @@ Branded PIFS landing (M3). Initial HTML shows a GENERIC greeting — NO referrer
 (#1/#3 enumeration guard). Page JS fires the human-confirmation beacon with the
 server nonce; only then does it fetch the referrer name via the nonce-gated endpoint.
 Never resembles/clones Zerodha. Raw Zerodha URL / partner code never appear here.
+Variant C skin — no behaviour change (skin ≠ content).
 {% endcomment %}
 {% block body %}
 <section class="px-5 pt-6 pb-2">
-  <div class="inline-flex items-center gap-1.5 rounded-full bg-pifs-100 text-pifs-700 text-[11px] font-semibold px-3 py-1 mb-3">
-    <span class="h-1.5 w-1.5 rounded-full bg-pifs-500"></span>
+  <div class="inline-flex items-center gap-1.5 rounded-full bg-cobalt-50 text-cobalt-600 text-[11px] font-semibold px-3 py-1 mb-3">
+    <span class="h-1.5 w-1.5 rounded-full bg-cobalt-500"></span>
     You've been personally referred
   </div>
-  <h1 class="text-[22px] leading-snug font-extrabold tracking-tight text-pifs-900">
-    <span id="gr-referrer" class="text-pifs-600">Someone</span> has invited you to open a free
+  <h1 class="text-[22px] leading-snug font-extrabold tracking-tight text-ink-900">
+    <span id="gr-referrer" class="text-cobalt-600">Someone</span> has invited you to open a free
     Zerodha demat &amp; trading account.
   </h1>
-  <p class="mt-2 text-sm text-pifs-800/70 leading-relaxed">
+  <p class="mt-2 text-sm text-ink-500 leading-relaxed">
     PIFS helps you open your account smoothly and gives you trusted guidance every step of the way.
   </p>
 </section>
@@ -23,89 +24,97 @@ Never resembles/clones Zerodha. Raw Zerodha URL / partner code never appear here
 <section class="px-5 pt-4 pb-1">
   <ul class="space-y-2.5">
     <li class="flex items-start gap-3">
-      <span class="mt-0.5 h-6 w-6 flex-none rounded-full bg-pifs-100 text-pifs-600 flex items-center justify-center">
+      <span class="mt-0.5 h-6 w-6 flex-none rounded-full bg-cobalt-50 text-cobalt-600 flex items-center justify-center">
         <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 111.4-1.4l3.8 3.8 6.8-6.8a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>
       </span>
       <div>
         <div class="text-sm font-semibold">Free account opening</div>
-        <div class="text-xs text-pifs-800/60">No charges to open your demat &amp; trading account.</div>
+        <div class="text-xs text-ink-500">No charges to open your demat &amp; trading account.</div>
       </div>
     </li>
     <li class="flex items-start gap-3">
-      <span class="mt-0.5 h-6 w-6 flex-none rounded-full bg-pifs-100 text-pifs-600 flex items-center justify-center">
+      <span class="mt-0.5 h-6 w-6 flex-none rounded-full bg-cobalt-50 text-cobalt-600 flex items-center justify-center">
         <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 111.4-1.4l3.8 3.8 6.8-6.8a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>
       </span>
       <div>
         <div class="text-sm font-semibold">Invest in stocks, mutual funds &amp; more</div>
-        <div class="text-xs text-pifs-800/60">Access India's markets from a single account.</div>
+        <div class="text-xs text-ink-500">Access India's markets from a single account.</div>
       </div>
     </li>
     <li class="flex items-start gap-3">
-      <span class="mt-0.5 h-6 w-6 flex-none rounded-full bg-pifs-100 text-pifs-600 flex items-center justify-center">
+      <span class="mt-0.5 h-6 w-6 flex-none rounded-full bg-cobalt-50 text-cobalt-600 flex items-center justify-center">
         <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 111.4-1.4l3.8 3.8 6.8-6.8a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>
       </span>
       <div>
         <div class="text-sm font-semibold">Trusted personal guidance from PIFS</div>
-        <div class="text-xs text-pifs-800/60">A real person helps you complete your KYC on a call.</div>
+        <div class="text-xs text-ink-500">A real person helps you complete your KYC on a call.</div>
       </div>
     </li>
   </ul>
 </section>
 
 <section class="px-5 pt-5">
-  <div class="rounded-2xl border border-pifs-100 bg-pifs-50/60 p-4">
-    <h2 class="text-sm font-bold text-pifs-900 mb-3">Enter your details to continue</h2>
+  <div class="rounded-2xl border border-line bg-bg/60 p-4">
+    <h2 class="text-sm font-bold text-ink-900 mb-3">Enter your details to continue</h2>
     <form id="leadForm" class="space-y-3" novalidate>
       <div>
-        <label class="block text-[11px] font-semibold text-pifs-800/70 mb-1">Full name</label>
+        <label class="block text-[11px] font-semibold text-ink-700 mb-1">Full name</label>
         <input id="nameInput" type="text" placeholder="e.g. Rahul Sharma"
-          class="w-full rounded-xl border border-pifs-100 bg-white px-3.5 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pifs-500/40 focus:border-pifs-500" />
+          class="w-full rounded-lg border border-line bg-white px-3.5 py-3 text-sm placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-cobalt-500/30 focus:border-cobalt-500" />
       </div>
       <div>
-        <label class="block text-[11px] font-semibold text-pifs-800/70 mb-1">Email</label>
+        <label class="block text-[11px] font-semibold text-ink-700 mb-1">Email</label>
         <input id="emailInput" type="email" placeholder="you@example.com"
-          class="w-full rounded-xl border border-pifs-100 bg-white px-3.5 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pifs-500/40 focus:border-pifs-500" />
+          class="w-full rounded-lg border border-line bg-white px-3.5 py-3 text-sm placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-cobalt-500/30 focus:border-cobalt-500" />
       </div>
       <div>
-        <label class="block text-[11px] font-semibold text-pifs-800/70 mb-1">Mobile number</label>
-        <div id="mobileWrap" class="flex rounded-xl border border-pifs-100 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-pifs-500/40 focus-within:border-pifs-500 transition-colors">
-          <span class="flex items-center px-3.5 text-sm font-semibold text-pifs-800/70 bg-pifs-100/70 border-r border-pifs-100">+91</span>
+        <label class="block text-[11px] font-semibold text-ink-700 mb-1">Mobile number</label>
+        <div id="mobileWrap" class="flex rounded-lg border border-line bg-white overflow-hidden focus-within:ring-2 focus-within:ring-cobalt-500/30 focus-within:border-cobalt-500 transition-colors">
+          <span class="flex items-center px-3.5 text-sm font-semibold text-ink-700 bg-cobalt-50 border-r border-line">+91</span>
           <input id="mobileInput" type="tel" inputmode="numeric" maxlength="10" placeholder="98765 43210"
             aria-describedby="mobileMsg" class="flex-1 px-3.5 py-3 text-sm focus:outline-none bg-transparent" />
         </div>
         <p id="mobileMsg" class="mt-1 text-[11px] font-medium min-h-[15px]"></p>
       </div>
       <label class="flex items-start gap-2.5 pt-1 cursor-pointer">
-        <input id="consentInput" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-pifs-300 text-pifs-600 focus:ring-pifs-500" />
-        <span class="text-[11px] leading-relaxed text-pifs-800/70">
+        <input id="consentInput" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-ink-300 text-cobalt-600 focus:ring-cobalt-500" />
+        <span class="text-[11px] leading-relaxed text-ink-500">
           I agree to be contacted about opening a Zerodha account and to PIFS processing my details.
-          <a href="{{ privacy_policy_url }}" class="text-pifs-600 font-semibold underline underline-offset-2">Privacy Policy</a>.
+          <a href="{{ privacy_policy_url }}" class="text-cobalt-600 font-semibold underline underline-offset-2">Privacy Policy</a>.
         </span>
       </label>
-      <p id="formMsg" class="text-[11px] font-medium text-red-500 min-h-[15px]"></p>
+      <p id="formMsg" class="text-[11px] font-medium text-danger min-h-[15px]"></p>
     </form>
   </div>
 </section>
 
 {# Referral ID echo — self-serve confirmation, no separate confirm page. #}
 <div class="px-5 pt-3">
-  <div class="flex items-center justify-center gap-2 text-[11px] text-pifs-800/50 font-medium">
+  <div class="flex items-center justify-center gap-2 text-[11px] text-ink-500 font-medium">
     <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M9 2a1 1 0 000 2h1v12H9a1 1 0 100 2h4a1 1 0 100-2h-1V4h1a1 1 0 100-2H9z"/></svg>
-    Referral ID: <span class="font-bold text-pifs-700 tracking-wide">{{ client_id }}</span>
+    Referral ID: <span class="font-bold text-cobalt-600 tracking-wide">{{ client_id }}</span>
   </div>
 </div>
 
 <section class="px-5 pt-3 pb-2 space-y-3">
   <button id="continueBtn" type="button"
-    class="w-full rounded-xl bg-pifs-700 hover:bg-pifs-800 active:bg-pifs-900 transition-colors text-white text-sm font-bold py-3.5 shadow-sm flex items-center justify-center gap-2">
+    class="w-full rounded-full bg-cobalt-600 hover:bg-cobalt-500 transition-colors text-white text-sm font-bold py-3.5 card flex items-center justify-center gap-2">
     Continue to Zerodha
     <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.3 4.3a1 1 0 011.4 0l5 5a1 1 0 010 1.4l-5 5a1 1 0 01-1.4-1.4L11.6 10 7.3 5.7a1 1 0 010-1.4z" clip-rule="evenodd"/></svg>
   </button>
-  <a id="whatsappBtn" href="{{ whatsapp_share_url }}" target="_blank" rel="noopener"
-    class="w-full rounded-xl bg-white border-2 border-pifs-500 text-pifs-700 hover:bg-pifs-50 transition-colors text-sm font-bold py-3 flex items-center justify-center gap-2">
+  {% comment %}href built by landing.js at click time from the config WATI number
+     + referral id + whatever the prospect typed into the form.{% endcomment %}
+  <a id="whatsappBtn" href="#" target="_blank" rel="noopener"
+    class="w-full rounded-full bg-white border-2 border-cobalt-500 text-cobalt-600 hover:bg-cobalt-50 transition-colors text-sm font-bold py-3 flex items-center justify-center gap-2">
     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 004.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0012.04 2z"/></svg>
     Share referral details on WhatsApp
   </a>
+  {% comment %}Free, fully-assisted account opening — call. Helpline number is
+  config-driven (SUPPORT_HELPLINE_PHONE, Ashok) — NOT the WATI share number.{% endcomment %}
+  <p class="text-center text-[11.5px] text-ink-500 pt-1">
+    Prefer a call? Free, fully-assisted account opening —
+    <a href="tel:{{ SUPPORT_HELPLINE_TEL }}" class="font-semibold text-cobalt-600 whitespace-nowrap">call {{ SUPPORT_HELPLINE_PHONE }}</a>
+  </p>
 </section>
 {% endblock %}
 
@@ -115,6 +124,7 @@ Never resembles/clones Zerodha. Raw Zerodha URL / partner code never appear here
     clientId: "{{ client_id|escapejs }}",
     nonce: "{{ nonce|escapejs }}",
     continueUrl: "/r/{{ client_id|escapejs }}/continue",
+    watiNumber: "{{ wati_business_number|escapejs }}",
   };
 </script>
 <script src="/static/js/landing.js"></script>

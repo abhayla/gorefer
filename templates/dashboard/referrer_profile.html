@@ -1,0 +1,135 @@
+{% extends "dashboard/base.html" %}
+{% load static %}
+{% block title %}{{ band.name }} — Referral Profile{% endblock %}
+{% block content %}
+
+{# Breadcrumb #}
+<div class="flex items-center gap-2 text-[11px] text-ink-500">
+  <a href="{% url 'dashboard_explorer' %}" class="hover:text-cobalt-600 font-medium">← Referral Explorer</a>
+  <span class="text-ink-300">/</span>
+  <span class="font-mono font-semibold text-cobalt-600">{{ client_id }}</span>
+</div>
+
+{# Identity card + KPI rings + Zoho enrichment chips #}
+<section class="bg-white border border-line rounded-2xl card p-5 flex flex-col lg:flex-row lg:items-center gap-5">
+  <div class="flex items-start gap-4 flex-1">
+    <div class="h-14 w-14 rounded-2xl bg-cobalt-600 text-white flex items-center justify-center text-lg font-extrabold card shrink-0">{{ band.initials }}</div>
+    <div>
+      <div class="flex items-center gap-2 flex-wrap">
+        <h1 class="text-[19px] font-extrabold tracking-tight {% if not band.name_known %}text-ink-300 italic{% endif %}">{{ band.name }}</h1>
+        <span class="font-mono text-[11px] font-bold text-cobalt-600 bg-cobalt-50 rounded-full px-2 py-0.5">{{ client_id }}</span>
+        {% if band.is_active_investor %}
+          <span class="text-[10px] font-bold text-positive bg-positive/10 rounded-full px-2 py-0.5">● Active Investor</span>
+        {% endif %}
+      </div>
+      <p class="text-[11px] text-ink-300 mt-0.5">Referral Profile · everything referred by this Zerodha client</p>
+      <div class="mt-2.5 flex flex-wrap gap-x-5 gap-y-1 text-[12px]">
+        <span class="text-ink-500">{{ band.chips.city_state }}</span><span class="text-ink-300">·</span>
+        <span class="text-ink-500">{{ band.chips.profession }}</span><span class="text-ink-300">·</span>
+        <span class="text-ink-500">{{ band.chips.account_status }}{% if band.chips.opened_on != config.not_on_file %} — opened {{ band.chips.opened_on }}{% endif %}</span><span class="text-ink-300">·</span>
+        <span class="text-ink-500">Reward {{ band.chips.reward }}</span>
+      </div>
+      <div class="text-[10px] text-ink-300 mt-1.5 flex items-center gap-1.5">
+        <span class="h-1.5 w-1.5 rounded-full {% if band.zoho_matched %}bg-positive{% else %}bg-ink-300{% endif %}"></span>
+        Profile fields from Zoho CRM (matched by Client Id). Shown as “{{ config.not_on_file }}” when Zoho has no value.
+      </div>
+    </div>
+  </div>
+  {# KPI rings — Clicks / Leads / Accounts #}
+  <div class="flex gap-3">
+    <div class="ring-card"><div data-ring data-display="{{ band.aggregates.clicks }}" data-frac="{{ ring_fractions.clicks }}" data-label="CLICKS" data-color="#2F5BFF"></div></div>
+    <div class="ring-card"><div data-ring data-display="{{ band.aggregates.leads }}" data-frac="{{ ring_fractions.leads }}" data-label="LEADS" data-color="#f59e0b"></div></div>
+    <div class="ring-card"><div data-ring data-display="{{ band.aggregates.accounts }}" data-frac="{{ ring_fractions.accounts }}" data-label="ACCOUNTS" data-color="#16a34a"></div></div>
+    <div class="ring-card"><div class="flex flex-col items-center justify-center h-[60px]"><span class="text-lg font-extrabold">{{ band.aggregates.unique_visitors }}<span class="text-[9px] font-bold text-amber-600 align-super">*</span></span></div><div class="text-[9px] uppercase tracking-wide text-ink-300 mt-0.5">Visitors</div></div>
+  </div>
+</section>
+
+{# Per-link summary strip — real, enabled partners only (today: Zerodha). #}
+<section class="bg-white border border-line rounded-2xl card p-4">
+  <div class="text-[10px] uppercase tracking-wide text-ink-300 font-semibold mb-2.5">Referral links</div>
+  <div class="flex gap-3 overflow-x-auto pb-1">
+    {% for card in cards %}
+      <div class="rounded-2xl bg-white border border-line card px-4 py-3 min-w-[240px]">
+        <div class="flex items-center justify-between">
+          <span class="font-bold text-ink-900 text-[13px]">{{ card.partner_name }}</span>
+          <span class="font-mono text-[10px] text-cobalt-600 bg-cobalt-50 rounded-full px-2 py-0.5">{{ card.partner_code }}</span>
+        </div>
+        <div class="font-mono text-[11px] text-ink-500 mt-1.5">{{ card.link }}</div>
+        <div class="flex gap-4 mt-2.5 text-[11px]">
+          <span><b class="text-ink-900 tabular-nums">{{ card.clicks }}</b> <span class="text-ink-500">clicks</span></span>
+          <span><b class="text-amber-500 tabular-nums">{{ card.leads }}</b> <span class="text-ink-500">leads</span></span>
+          <span><b class="text-positive tabular-nums">{{ card.accounts }}</b> <span class="text-ink-500">accounts</span></span>
+        </div>
+      </div>
+    {% empty %}
+      <div class="text-[12px] text-ink-300 px-1 py-2">No referral links with activity yet.</div>
+    {% endfor %}
+  </div>
+</section>
+
+{# Tabs: Clicks · Referred People #}
+<section class="bg-white border border-line rounded-2xl card overflow-hidden">
+  <div class="flex items-center gap-2 p-3 border-b border-line">
+    <button onclick="grTab('c')" id="tc" class="px-4 py-2 rounded-full text-[12.5px] font-semibold bg-cobalt-600 text-white">Clicks · {{ clicks|length }}</button>
+    <button onclick="grTab('p')" id="tp" class="px-4 py-2 rounded-full text-[12.5px] font-semibold text-ink-500 hover:bg-cobalt-50">Referred People · {{ people|length }}</button>
+    <span class="ml-auto text-[10px] text-ink-300 pr-1 hidden sm:inline">Admin view — full detail · customer view masks IP &amp; phone</span>
+  </div>
+
+  {# Clicks filters #}
+  <div id="cf" class="px-4 py-2.5 border-b border-line flex flex-wrap items-center gap-1.5 text-[11.5px]">
+    <span class="text-ink-300 mr-1">Filter:</span>
+    {% for f in config.clicks_filters %}
+      <button class="chip {% if f == 'all' %}chip-on{% endif %}" data-k="{{ f }}">{% if f == 'all' %}All{% else %}{{ f }}{% endif %}</button>
+    {% endfor %}
+    <input id="q" oninput="grRenderC()" placeholder="city / IP…" class="ml-auto border border-line rounded-full px-3 py-1.5 text-[12px] w-36 focus:outline-none focus:border-cobalt-500"/>
+  </div>
+
+  {# Clicks table (rendered client-side from server JSON; sortable + filterable) #}
+  <div id="clicksWrap" class="overflow-x-auto">
+    <table class="w-full text-[12px] min-w-[900px]">
+      <thead><tr id="chead" class="text-left text-[10px] uppercase tracking-wide text-ink-300 border-b border-line bg-cobalt-50/40"></tr></thead>
+      <tbody id="cbody" class="divide-y divide-line"></tbody>
+    </table>
+    <div id="clicksEmpty" class="hidden px-5 py-10 text-center text-[12px] text-ink-500">No clicks match these filters.</div>
+    <div class="flex items-center justify-between px-4 py-2.5 text-[11px] text-ink-300 border-t border-line">
+      <span>* {{ config.unique_note }}</span>
+    </div>
+  </div>
+
+  {# Referred People table (server-rendered, from Zoho READ) #}
+  <div id="peopleWrap" class="hidden">
+    <div class="px-4 py-2.5 border-b border-line text-[11px] text-ink-500">
+      One row per identified person — sourced from Zoho (leads &amp; opened accounts). A person appears here only after they submit the form or Zoho records them.
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-[12px] min-w-[760px]">
+        <thead><tr class="text-left text-[10px] uppercase tracking-wide text-ink-300 border-b border-line bg-cobalt-50/40">
+          {% for key, label in config.people_columns %}<th class="py-2 px-3 font-semibold">{{ label }}</th>{% endfor %}
+        </tr></thead>
+        <tbody class="divide-y divide-line">
+          {% for p in people %}
+            <tr class="hover:bg-cobalt-50/40">
+              <td class="py-1.5 px-3">{% if p.name_known %}<span class="font-semibold">{{ p.name }}</span>{% else %}<span class="italic text-ink-300">{{ p.name }}</span>{% endif %}</td>
+              <td class="py-1.5 px-3">{{ p.city }}</td>
+              <td class="py-1.5 px-3 text-ink-500">{{ p.profession }}</td>
+              <td class="py-1.5 px-3">{{ p.partner }}</td>
+              <td class="py-1.5 px-3">{{ p.status }}</td>
+              <td class="py-1.5 px-3 text-ink-500">{{ p.opened }}</td>
+              <td class="py-1.5 px-3">{% if p.reward != '—' %}<span class="text-positive font-semibold">{{ p.reward }}</span>{% else %}<span class="text-ink-300">—</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="{{ config.people_columns|length }}" class="py-8 text-center text-[12px] text-ink-300">No referred people recorded in Zoho yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+{# Server → client data: click rows + column config (config-driven, no inline literals). #}
+{{ clicks|json_script:"gr-clicks" }}
+{{ config.clicks_columns|json_script:"gr-ccols" }}
+{# rings.js paints the top-band KPI rings (data-ring divs) — same as the dashboard. #}
+<script src="{% static 'js/rings.js' %}"></script>
+<script src="{% static 'js/referral_profile.js' %}"></script>
+{% endblock %}

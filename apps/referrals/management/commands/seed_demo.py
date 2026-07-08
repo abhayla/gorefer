@@ -14,9 +14,10 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from apps.events import vocab
-from apps.events.models import Event
+from apps.events.models import Event, VisitorPII
 from apps.events.rollups import recompute_dirty
 from apps.referrals.models import (
+    Customer,
     Lead,
     Prospect,
     Referral,
@@ -33,6 +34,30 @@ DEMO_REFERRERS = [
     ("SG2210", 1, True, True, True),
 ]
 
+# Known-customer names (the Zoho/Customer name source) so the Explorer / leaderboard /
+# Referral Profile show a NAME even with Zoho READ off. (first_name, last_name)
+DEMO_CUSTOMERS = {
+    "RJ4521": ("Rajesh", "Joshi"),
+    "DA1707": ("Amit", "Deshpande"),
+}
+
+# Per-click enrichment for the featured referrer's Referral Profile Clicks tab —
+# distinct city/IP/device/channel per row + one bot row (dimmed, excluded from totals).
+# Each dict → one click Event (+ VisitorPII for city/IP). Geo on the Event (country/
+# state); city + raw IP on the erasable VisitorPII (never on the immutable Event).
+FEATURED_CLICKS = [
+    {"vid": "demo-rj-1", "ua": "Mozilla/5.0 (Linux; Android 14) Chrome/126",
+     "channel": "WhatsApp", "city": "Pune", "state": "MH", "ip": "49.36.142.18", "bot": False},
+    {"vid": "demo-rj-2", "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17) Safari/605",
+     "channel": "WhatsApp", "city": "Mumbai", "state": "MH", "ip": "103.21.58.9", "bot": False},
+    {"vid": "demo-rj-3", "ua": "Mozilla/5.0 (Windows NT 10.0) Chrome/126",
+     "channel": "Direct", "city": "Pune", "state": "MH", "ip": "49.36.142.18", "bot": False},
+    {"vid": "demo-rj-4", "ua": "Mozilla/5.0 (Linux; Android 13) Chrome/125",
+     "channel": "QR", "city": "Nashik", "state": "MH", "ip": "157.48.203.7", "bot": False},
+    {"vid": "demo-rj-bot", "ua": "Googlebot/2.1 (+http://www.google.com/bot.html)",
+     "channel": "WhatsApp", "city": "", "state": "", "ip": "66.249.66.1", "bot": True},
+]
+
 
 class Command(BaseCommand):
     help = "Seed demo journeys + events + rollups (no conversions — Zoho-only). Demo only."
@@ -45,6 +70,7 @@ class Command(BaseCommand):
             self.stderr.write("Run seed_program first.")
             return
 
+        self._seed_customers(tenant, program)
         for client_id, clicks, landing, redirect, lead in DEMO_REFERRERS:
             self._seed_journey(tenant, program, client_id, clicks, landing, redirect, lead)
 
@@ -86,8 +112,21 @@ class Command(BaseCommand):
             defaults={"program": program, "status": "opened"},
         )
         vid = f"demo-{client_id.lower()}"
-        for _ in range(clicks):
-            self._ev(tenant, referral, vocab.CLICK, vocab.SRC_CLICK, vid, confirmed=True)
+        if client_id == "RJ4521":
+            # Featured referrer: distinct, enriched clicks (UA/channel/geo + VisitorPII
+            # IP/city) so the Referral Profile Clicks tab renders varied rows + one bot.
+            for detail in FEATURED_CLICKS:
+                self._ev(
+                    tenant, referral, vocab.CLICK, vocab.SRC_CLICK, detail["vid"],
+                    confirmed=not detail["bot"], is_bot=detail["bot"], ua=detail["ua"],
+                    channel=detail["channel"], state=detail["state"], country="India",
+                )
+                self._pii(tenant, detail["vid"], detail["ip"], detail["city"])
+            # Landing/lead/redirect below stitch to the first human click's visitor id.
+            vid = FEATURED_CLICKS[0]["vid"]
+        else:
+            for _ in range(clicks):
+                self._ev(tenant, referral, vocab.CLICK, vocab.SRC_CLICK, vid, confirmed=True)
         if landing:
             self._ev(tenant, referral, vocab.LANDING_VIEWED, vocab.SRC_CLICK, vid)
             self._ev(tenant, referral, vocab.HUMAN_CONFIRMED, vocab.SRC_BEACON, vid, confirmed=True)
@@ -111,9 +150,28 @@ class Command(BaseCommand):
         )
         self._ev(tenant, referral, vocab.CLICK, vocab.SRC_CLICK, "demo-open", confirmed=True)
 
-    def _ev(self, tenant, referral, event_type, source, vid, confirmed=False):
+    def _seed_customers(self, tenant, program):
+        """Seed the known-customer name source (the Zoho/Customer name lookup)."""
+        for client_id, (first, last) in DEMO_CUSTOMERS.items():
+            Customer.objects.get_or_create(
+                tenant=tenant, program=program, client_id=client_id,
+                defaults={"partner": program.partner, "first_name": first, "last_name": last},
+            )
+
+    def _pii(self, tenant, vid, ip, city):
+        """The SEPARATE erasable PII record (raw IP + derived city), keyed by visitor
+        id — never on the immutable Event (#16/#17). Powers the profile Clicks tab."""
+        VisitorPII.objects.get_or_create(
+            tenant=tenant, visitor_id=vid,
+            defaults={"raw_ip": ip or None, "city": city or ""},
+        )
+
+    def _ev(self, tenant, referral, event_type, source, vid, confirmed=False, *,
+            is_bot=False, ua="", channel="", state="", country=""):
+        metadata = {"channel": channel} if channel else {}
         Event.objects.create(
             tenant=tenant, event_type=event_type, source=source, referral=referral,
-            user_type="anonymous", visitor_id=vid, is_bot=False, is_confirmed_human=confirmed,
-            metadata={},
+            user_type="anonymous", visitor_id=vid, is_bot=is_bot,
+            is_confirmed_human=confirmed, user_agent=ua, state=state, country=country,
+            metadata=metadata,
         )

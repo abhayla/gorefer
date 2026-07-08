@@ -314,3 +314,251 @@ Ready for M7 (admin dashboard / referral explorer) once reviewed — the last bu
 **One note for Phase B (not a blocker):** browser **screenshots were flaky in my sandbox** due to a CDP `clip.scale` bridge error, independent of the CDN (the CDN removal was still the right fix and helps). I verified page rendering via curl + page-text extraction (all pages render correctly, compiled CSS applied, no comment leaks, no partner-code leaks). The **fresh Phase-B agent on its own environment** should get clean screenshots at mobile (~390px) + desktop widths — that's the definitive UI pass.
 
 **Ready for Phase B.** `main` (once PR #8 merges) is the clean, green base for the independent agent: fresh clone → `npm install && npm run build:css` → migrate → seed_demo → bootstrap_admin → runserver → verify functionality + UI against the Acceptance Test Plan → `review/Verification-Report.md`.
+
+---
+
+### 2026-07-07 — FROM ENGINEER — STATUS — Phase-B dispositions fixed (PR `m8-phase-a-fixes`, #9) — hand back for re-verification
+
+**All 5 Phase-B dispositions fixed, hardening only. 126 pass / 0 skip; ruff clean; no migration drift; demo green. Ready to hand back to the independent agent (incl. the Postgres run).**
+
+**Housekeeping:** merged **Phase A (PR #8) into `main`**; PR #9 is based on it.
+
+- **DEF-1 (MUST-FIX) — branded 503, never a 500:** `ReferralProgram`/`ProgramRedirectRule.DoesNotExist` now render the branded **503 `PARTNER_UNAVAILABLE`** page (06-API §4.1). Wrapped the config-resolution in `referral_redirect` / `referral_continue` / `partner_direct_redirect`. Nuance kept faithful to the spec: the **landing render itself still 200s** (it doesn't build the destination); the 503 fires on the destination-building steps (Continue / `/open`). Regression tests: Continue + `/open` → 503 with compliance block + no traceback; inactive program → 503.
+- **DEF-2 — cross-platform sqlite default:** `.env.example` now `DB_NAME=gorefer_dev.sqlite3`, and settings resolves any **bare `DB_NAME`** to `BASE_DIR/<name>.sqlite3` under `DB_ENGINE=sqlite` (so a shared `.env.example` boots identically on Win/macOS/Linux). Verified: `DB_NAME=gorefer` → `…/gorefer.sqlite3`. Dropped the stale django-tenants comment.
+- **DEF-3 — home hero copy:** referral links + landing are **shipped**, not "arriving in the next slices."
+- **OBS-1 — dashboard internally consistent:** KPI + funnel + leaderboard now read **one rollup snapshot at one freshness**; the view **recomputes dirty rollups on load** and shows a **"counts as of {time}"** note. Root cause fixed: `accounts_opened` is rolled up from **`Conversion.account_opened_at` (TRUE open date, ADR-017)**, not the event timestamp — so a backdated conversion lands in its real period and **KPI == funnel == live conversion count** (verified by a new consistency test). Leaderboard accounts count Zoho conversions by referrer client id.
+- **A-min (your decision) — validator ↔ spec:** tightened `client_id` to **`^[A-Za-z0-9]{4,16}$`** per 06-API §4.1. I did **not** need to flag a real id outside 4–16 — every Zerodha client id observed (RJ4521, DA1707, …) is 6 chars, well inside the bound — so I applied it. Boundary (4 & 16 accepted) + out-of-range (3 & 17 rejected) tests added.
+
+**L2 (thank-you):** confirmed N-A; no orphan thank-you *app* template exists (only the design mockup), so nothing to remove.
+
+**On the DA Postgres requirement:** the authoritative `DB_ENGINE=postgres` run is Phase-B's (the independent agent's own environment). **I could not run it here** — no Postgres DB credential available in this session, and I won't guess superuser passwords. All 5 fixes are verified on the sqlite dev/CI path; **DEF-2 specifically cleans up the sqlite dev story so the Postgres run is the one authoritative pass.** If you'd prefer I run Postgres locally, drop a throwaway DB URL/credential (e.g. a `gorefer_test` role) into the session and I'll do a full `DB_ENGINE=postgres` migrate + seed + pytest pass and report it here.
+
+**Ready for the independent agent to re-verify** DEF-1/2/3 + validator + OBS-1 **and** do the Postgres run → target `READY FOR DA SIGN-OFF: yes`.
+
+---
+
+### 2026-07-07 — FROM ENGINEER — STATUS — Postgres set up + full suite GREEN on `gorefer_dev` (PR #9 updated)
+
+**GoRefer now runs on the local PostgreSQL 16 with a dedicated least-privilege DB. Full suite 126 pass on Postgres AND 126 on SQLite; ruff clean; no migration drift; live boot smoke correct. Nothing Postgres surfaced that SQLite had hidden. Ready to hand to the independent Phase-B agent for the authoritative Postgres re-verification.**
+
+- **DB + role provisioned:** created a dedicated **`gorefer` login role** (its own password) owning a dedicated **`gorefer_dev`** database on the local PostgreSQL 16 (connected via `127.0.0.1:5432`, superuser creds read from `GLOBAL.env` — not the `postgres` superuser for the app, not the other project's `ipodhan` db). `GRANT ALL ON SCHEMA public TO gorefer` + `ALTER ROLE gorefer CREATEDB` (so the test runner can create `test_gorefer_dev`).
+- **Secrets handling:** GoRefer's connection lives ONLY in the app's **gitignored `.env`** (confirmed `git check-ignore .env`). Nothing from `GLOBAL.env` — and no DB values — went into any committed file, the specs, or this log. `.env.example` shows **key names only**.
+- **Postgres is now the DEFAULT** (`DB_ENGINE` defaults to `postgres`, ADR-021) — supersedes the DEF-2 sqlite-default patch. SQLite stays an **optional fallback** (`DB_ENGINE=sqlite`), which CI and the default test run set explicitly. Documented the create-role/create-db commands + the `.env` key names in the README (no values).
+- **Verified on `gorefer_dev` (PostgreSQL 16.8):** `migrate` applies clean (incl. the partial-unique constraints on `conversions` — Postgres-native), `makemigrations --check` no drift, `seed_program` + `seed_demo` (2 Zoho-sourced conversions) + `bootstrap_admin` OK, `manage.py check` clean, live boot smoke (home 200 / landing 200 / continue 302 / health OK / funnel `account_opened=2`). **Full pytest: 126 pass on Postgres, 126 on SQLite; ruff clean.**
+
+**All DEF-1/2/3 + OBS-1 + A-min fixes confirmed green on Postgres** (they were committed in PR #9 before this; re-ran the whole suite on Postgres to confirm).
+
+**For the Phase-B agent's authoritative run:** on this VPS, point the app's `.env` at `DB_ENGINE=postgres` / `gorefer_dev` (role `gorefer`; its password is in the local `.env`), then `python manage.py migrate && seed_program && seed_demo && bootstrap_admin && runserver`, and `DB_ENGINE=postgres python -m pytest`. (The role password is not in this log by design — it's in the gitignored `.env` on the box.)
+
+Handing to the independent agent for re-verification on Postgres → target `READY FOR DA SIGN-OFF: yes`.
+
+---
+
+### 2026-07-07 — FROM ENGINEER — STATUS — Polish round done (3 tweaks); Referrer Profile NOT built (PR #9 updated)
+
+**All three polish tweaks implemented + docs kept in sync + re-verified. 129 pass on SQLite AND Postgres; ruff clean; no migration drift; verified live on the Postgres demo. Did NOT build the Referrer Profile screen (#4) — pending Abhay's mockup sign-off.**
+
+1. **WhatsApp "Share Referral Details" prefill** — replaced with your exact message (`My Referral ID: {client_id}` / `*Here are referral details*` / `Name:` / `Phone Number:` / `Email:`). It's now **built client-side in `landing.js` at click time** from the landing-form inputs (name/phone/email; empty fields left blank so the prospect types them in WhatsApp), **URL-encoded**, targeting the **config-driven WATI business number** (`window.GR.watiNumber`, resolved from config). The view passes the number, not a pre-built URL — the wa.me deep link is no longer in the server HTML.
+2. **Incentive claim reordered → `10% brokerage share + 300 reward points`** in the single `REFERRAL_INCENTIVE_CLAIM` config field (ADR-022): `flags.py` default + `.env` (local) + `.env.example` + the two tests. The central-config seed pulls from the flag, so the reorder flows through to `config_central` too (verified: `config_central.referral_incentive_claim` now reads the new order).
+3. **Explorer Referrer column** — shows the referrer **NAME when known** (Customer/Zoho), else a clear **"— name not on file —"** (italic), **never a duplicate of the client id**. "Referral ID" column keeps the Zerodha client id. The referrer cell **links to the journey** for now, and I left a comment marking it to repoint at the Referrer Profile once #4 ships. New tests: name-when-known (with a `Customer`) and name-not-on-file.
+
+**Docs kept in sync (my code-adjacent duties):** `.env.example` reordered incentive claim; code comments on the landing view + `landing.js` + explorer template explain the new WhatsApp-build and referrer-column behaviour; tests updated. The README references `REFERRAL_INCENTIVE_CLAIM` by **name only** (no literal), so no README change was needed; no config **key** changed, so no `.env.example` key edits beyond the value. (You've already updated `CLAUDE.md` §4, `implementation/10` §4, and `docs/ui-ux/07` — thanks.)
+
+**Regression note:** I introduced two multi-line `{# … #}` comments (in `landing.html` + `explorer.html`) — the Phase-A guard test caught them immediately; converted to `{% comment %}` and re-verified (the guard is doing its job).
+
+**Live-verify housekeeping:** while smoke-testing I'd accumulated ~30 orphaned `runserver` processes from earlier rounds (Windows doesn't reap the bash-launched children); cleaned them all up and confirmed the three tweaks on a single fresh server against Postgres `gorefer_dev`.
+
+**Referrer Profile / Referrer-360 (#4): NOT built** — awaiting your doc-07 §6(e) section + mockup after Abhay's sign-off. The data it needs already exists (referrals + events + rollups + VisitorPII), so it'll b
+---
+
+## [DA note — 2026-07-07] Lead-write policy + Lead Destination requirement (from User Referral Screen design)
+
+Two decisions from Abhay, logged for when the Zoho + User Referral Screen mission is issued:
+
+1. **PIFS Zerodha tenant writes NO lead to Zoho.** Ashok enters Zoho leads **manually** today and that process stays. So `ENABLE_ZOHO_WRITE` remains **off** for PIFS. Zoho **READ** (enrichment: Mailing_City/State, Profession, Account_Status, Account_Opened_On, IsReferrer, Referrer_Client_Id, Is_Active_Investor, Referral_Bonus, opt-out flags — matched by `ClientId`) is what we wire. Consequence: no GoRefer journey-id stamp on the Zoho lead → journey↔Zoho-contact link is **match-based** (mobile/email/ClientId), accepted.
+
+2. **New tracked requirement → DF-9 (Deferred-Features-Backlog):** pluggable per-user **Lead Destination** adapter (none/manual, Zoho, Google Sheet, webhook, CSV, other), chosen from **central config**, no code change per user. Build later; do NOT implement in the upcoming screen mission — just don't hardcode Zoho as the only sink.
+
+No action required from the Engineer yet — this is context for the forthcoming "Zoho-read enrichment + User Referral Screen" mission (design still being finalized with Abhay). — DA
+
+---
+
+## [DA → Engineer — 2026-07-07] MISSION M9 — Zoho-READ enrichment + User Referral Screen ("Referral Profile")
+
+**Status: READY TO BUILD.** Design locked with Abhay via a 7-question grill-me. Visual truth = `mockups/referral-profile-mockup.html` (build to match it — **Variant C · Cobalt Clean-Fintech** theme; see the DESIGN LOCKED entry below for tokens). Author the spec into `docs/ui-ux/07` §6(e) as part of this mission and keep code-adjacent docs in sync.
+
+### Part A — Zoho READ enrichment (read-only; WRITE stays OFF)
+- Wire a **read-only** Zoho CRM adapter. **Do NOT enable Zoho WRITE** — PIFS enters leads into Zoho manually (Ashok). `ENABLE_ZOHO_WRITE` stays `false`. Add/keep `ENABLE_ZOHO_READ` flag (default off in CI/demo; on where creds present). In demo mode the adapter returns seeded fixtures, not live calls.
+- Match a referrer to their Zoho Contact by **`ClientId`** (the raw Zerodha client id in the link). Pull these Contact fields for the top band: `Full_Name`, `Mailing_City`, `Mailing_State`, `Mailing_Country`, `Profession`, `Account_Status`, `Account_Opened_On` (TRUE open date — analytics use this per ADR-017), `Is_Active_Investor`, `IsReferrer`, `Partner_Id`, `Referral_Bonus`, `Referral_Bonus_Amount`, `Email_Opt_Out`, `WhatsApp_Opt_Out`, `Do_not_contact`. Missing value → render "— not on file —".
+- The **Referred People** tab reads Zoho **Leads + Contacts** referred by this ClientId (via `Referrer_Client_Id`): Name, City, Profession, Partner, Account Status, Opened date, Reward flag.
+- Zoho creds live in the app's gitignored `.env` (never commit). Reference `.env.example` with placeholder keys only.
+
+### Part B — User Referral Screen (route `/admin-panel/referrer/{client_id}/`)
+- **Admin-only** (Sprint 1). Title: "{Name} — Referral Profile" (name if known via Zoho, else "— name not on file —"). Internal name: User Referral Screen.
+- **Top band:** avatar/initials, name, client_id, Active-Investor chip; Zoho enrichment chips (City/State, Profession, Account Status, Opened date, Reward); 4 headline aggregates — **Clicks, Unique visitors (approx, bot-filtered, label with `*`), Leads, Accounts**.
+- **Per-link summary strip:** one card per referral link (partner). Card = partner name, partner code, the `gorefer.in/r/{client_id}` link, and per-link clicks/leads/accounts. **Render only real enabled links** (today: Zerodha only — do NOT ship the illustrative "Loan" card from the mockup; that card exists in the mockup solely to show the multi-partner layout). Structure must support N partners with no redesign (config-driven; ties to DF-5/DF-9).
+- **Two tabs on one screen:**
+  - **Clicks** (one row per click): columns **Date/time · Partner/Link · Channel (share-channel: WhatsApp/Direct/QR/other) · City · Region · Country · IP · Device · OS/Browser · Traffic (Human/Bot) · Outcome**. Geo/device derived from GoRefer's own captured click + VisitorPII (IP) + user-agent. Bot/preview rows shown dimmed + excluded from click/visitor totals. Filters above table: **Date, Partner, City, IP, Device, Traffic(Human/Bot)**.
+  - **Referred People** (one row per identified person, from Zoho): Name · City · Profession · Partner · Account Status · Opened · Reward.
+- **PII masking (config, build now / apply later):** admin view = full IP + phone. Add a config-driven masking rule (e.g. `PII_MASK_FOR_CUSTOMER_VIEW`) that masks IP→city-only and phone→partial in the FUTURE customer/referrer view. It only activates when `ENABLE_CUSTOMER_LOGIN` turns on; admin view stays full. No dead UI now.
+- **Entry points:** (1) Referrer cell in the Explorer links here (already specced in doc 07 §6(d)); (2) a search box (client_id / name); (3) future top-referrers leaderboard.
+- **Self-click note (later polish, do NOT build now):** if a click's mobile later matches the referrer's known Zoho mobile, tag it "self-click" and exclude from conversion counts. Log as a backlog note; not in this mission.
+
+### Config-over-code (hard requirement)
+- No hardcoded copy/columns. Column sets per partner come from config (DF-5 pattern). Any user-facing string (labels, the "approx/bot-filtered" note, masking format, reward wording) is a config constant, not inline literal. Reward wording continues to come from the single `REFERRAL_INCENTIVE_CLAIM` field.
+
+### Guardrails / DoD
+- Respect the 3 guardrail tests (no partner code/URL in client-facing bodies — but this is an ADMIN screen, so internal detail is allowed; still never auto-submit/POST to Zerodha; status only from Zoho).
+- Demo mode works end-to-end with Zoho flags OFF (seeded fixtures). Tests: view renders, filters filter, tab switch, Zoho-read adapter unit-tested against fixtures + a terminal/real-read integration test behind the flag.
+- Open a PR; append a STATUS entry here; update `docs/ui-ux/07` §6(e), README, `.env.example`. Log any inconsistency as a QUESTION and pause.
+
+Reference the mockup for exact layout/spacing/theme. — DA
+
+---
+
+## [DA → Engineer — 2026-07-08] DESIGN LOCKED — GoRefer visual language = "Variant C · Cobalt Clean-Fintech"
+
+Abhay reviewed four style variants and **approved Variant C**. All GoRefer screens (admin + customer-facing) were rebuilt in it and signed off. **`mockups/*.html` are now the visual truth for the whole UI** — build every screen (M9 and beyond) to match these, not the old green theme.
+
+**Variant C design tokens — implement as CSS-variable tokens so DF-10 theming is a later config layer, not a rewrite:**
+- Font **Inter**. Background `#f4f6fb`; surfaces white. Line/divider `#e9edf3` (thin 1px).
+- Ink: 900 `#0f1729` · 700 `#334155` · 500 `#64748b` · 300 `#94a3b8`.
+- **Primary accent cobalt:** 600 `#2F5BFF` · 500 `#4b70ff` · 50 `#eef2ff`.
+- Semantic: accounts/positive green `#16a34a` · leads/pending amber `#f59e0b` · bot/error rose `#f43f5e` · intermediate sky/indigo.
+- Cards: `rounded-2xl` (16px) + border-line + soft shadow `0 1px 2px rgba(16,23,41,.04), 0 8px 24px -12px rgba(16,23,41,.12)`.
+- Buttons/tabs: **pill** (rounded-full); active = filled cobalt-600 white. Filter **chips** rounded-full with visible active state (cobalt fill).
+- KPI conversion metrics = **circular SVG rings**; else rounded stat cards.
+- Header: white/90 backdrop-blur sticky, rounded cobalt logo tile, pill nav, cobalt avatar circle.
+- Tables: **sortable headers** (click → ▲/▼), right-aligned numbers, compact rows, hover cobalt-50/40, pagination pill controls. **No per-row `/r/{id}` link** (the link lives in the per-partner card).
+- Tailwind compiled/purged in production (not the CDN the mockups use); compliance disclosure + market-risk warning stay verbatim on every customer page regardless of skin.
+
+Note: this cobalt choice is a deliberate GoRefer per-project decision (GLOBAL.md's data-dense default was neutral/Zerodha-style; Abhay chose the cobalt consumer-app direction for GoRefer). It does NOT change the GLOBAL.md global default. — DA
+
+---
+
+### 2026-07-08 — FROM ENGINEER — QUESTION+DECISION — M9 theming scope: re-skin the whole app to Variant C (not just the new screen)
+
+**Surfaced before writing code (as required — flagging, not silently resolving).** The DESIGN LOCKED entry (2026-07-08) says Variant C cobalt is now the visual truth for **all** GoRefer screens, but the **existing app templates are still in the OLD green `pifs-*` theme** — `dashboard`, `explorer`, `journey`, `login`, `home`, `landing`, `landing_invalid`, `partner_unavailable`, plus the `topbar`/`pifs_head`/`compliance_disclosure` partials — and `tailwind.config.js` defines **only** the green `pifs-*`/`gold` tokens (no cobalt). So M9's spec ("built in the Variant C visual language") is ambiguous: new screen only, or a full re-skin.
+
+**Decision (Abhay, via grill-me):** **re-skin the WHOLE app to Variant C within M9**, then build the Referral Profile screen. So M9 will:
+1. Add the Variant C tokens as **CSS-variable tokens** (cobalt/ink/line/bg + semantic) to `input.css` + `tailwind.config.js`, so DF-10 theming is a later config layer, not a rewrite.
+2. Convert every existing template to Variant C to match the updated `mockups/*.html` (which are already all Variant C): header/topbar, dashboard, explorer, journey, login, home, landing (+ base/invalid), partner-unavailable, and the shared partials.
+3. Build the new **Referral Profile** screen (`referral-profile-mockup.html`) in Variant C.
+
+**Guardrails held through the re-skin:** compliance disclosure + market-risk warning stay **verbatim** on every customer page; the compliance-lock / config-driven claim (`REFERRAL_INCENTIVE_CLAIM`) and number are untouched (skin ≠ content); no functional/route/behaviour change — templates + CSS only; all Sprint-1 guardrail tests (#1/#2/#3) + the multi-line-`{# #}` guard + no-CDN rule stay green; the CI stale-CSS check is respected (rebuild `app.css`). If the re-skin turns out to require any behavioural change I'll pause and flag it here.
+
+Proceeding on this basis. — Engineer
+
+---
+
+### 2026-07-08 — FROM ENGINEER — STATUS — M9: Zoho-READ enrichment + Referral Profile + Variant C re-skin — DONE (PR `mission-9-referral-profile`)
+
+**Built to the M9 mission (Part A Zoho READ + Part B User Referral Screen) AND the whole-app Variant C re-skin (the theming-scope decision above). Zoho WRITE stays OFF; READ is read-only + fixture-backed in demo. Demo works end-to-end offline with all Zoho/WATI flags off. 152 pass / 0 skip; ruff clean; no migration drift; live boot smoke correct on the sqlite dev path.**
+
+**Part A — Zoho READ enrichment (read-only; WRITE stays OFF):**
+- New flag **`ENABLE_ZOHO_READ`** (default off → seeded fixtures; independent of `ENABLE_ZOHO_WRITE`, which stays off for PIFS — Ashok enters Zoho leads manually, DF-9).
+- New read-only adapter `apps/integrations/zoho/read.py` (doc-08 contract): `fetch_contact_by_client_id` (match by `ClientId`, pulls the top-band Contact fields incl. `Account_Opened_On`=TRUE open date/ADR-017, opt-out flags) + `fetch_referred_people`. Handles the `ClientId`/`Client_Id` field-name inconsistency (doc-08 B4); missing value → `None` → "— not on file —". `LogOnly` returns fixtures; `Live` refuses without `ZOHO_*` creds. **Guardrail #2 preserved** — READ never sets conversion status (test asserts viewing the profile creates no `Conversion`).
+
+**Part B — Referral Profile / "User Referral Screen" (`/admin-panel/referrer/{client_id}/`, admin-only):**
+- `apps/dashboard/profile.py` (read-only queries) + views `referrer_profile` + `referrer_search`. Top band (Zoho chips + 4 aggregates as KPI rings), per-link cards (**real enabled partners only — the mockup's illustrative "Loan" card is NOT shipped**; structure supports N partners), **Clicks tab** (per-click Date/Partner/Channel/City/Region/Country/IP/Device/OS-Browser/Traffic/Outcome — geo/device from GoRefer's OWN Event + VisitorPII/IP + user-agent; bots dimmed + excluded from totals; client-side filter/sort), **Referred People tab** (Zoho READ). 404 for a no-footprint / malformed client id.
+- **Config-over-code:** columns/filters/user-facing strings come from `PROFILE_CONFIG` (no inline literals); reward wording still from `REFERRAL_INCENTIVE_CLAIM`. **PII masking** config `PII_MASK_FOR_CUSTOMER_VIEW` built now + dormant (admin view stays full; masks only when `ENABLE_CUSTOMER_LOGIN` turns on — no dead UI).
+- **Entry points:** Explorer referrer cell → profile; a **search** entry (`/admin-panel/referrers/`, the "Referral Profile" nav item, by client_id/name); leaderboard rows also link in. **Self-click tagging deferred** → logged as **DF-11** (not built).
+- `seed_demo` enriched: the featured referrer (RJ4521) gets distinct clicks (UA/channel/geo + VisitorPII IP/city) + one bot click, and `Customer` rows (RJ4521/DA1707) so names light up — so the profile renders meaningfully in demo with Zoho flags off.
+
+**Variant C re-skin (per the decision above):** tokens as **CSS variables** in `input.css` + `tailwind.config.js` (DF-10 = later config layer; incl. a dormant `[data-theme="dark"]` hook). Converted every template — home, login, landing (+base/invalid), partner-unavailable, dashboard (KPI rings), explorer, journey, topbar (+ Referral Profile nav + active-state), status_badge, compliance/header partials — to cobalt. **Compliance disclosure + market-risk warning verbatim + un-removable throughout.** Rebuilt/committed `app.css` (CI stale-CSS check respected); Tailwind now also scans `static/js/**` so JS-emitted classes aren't purged.
+
+**Guardrails / DoD:** #1/#2/#3 + PII-in-events + no-CDN + multi-line-`{# #}` guards all green. Guardrail #3 note: the Referral Profile per-link card shows the partner code `ZMPHZC` — allowed, it's an **admin** screen (the #3 test still asserts NO partner code on client-facing `/`, `/r/{id}`, `/open`, and the dashboard/explorer). No auto-submit to Zerodha; status only from Zoho. Docs kept in sync: `docs/ui-ux/07` new §7e/(h) + Variant C note in the screen inventory; README (routes + Zoho-READ + Variant C notes); `.env.example` (`ENABLE_ZOHO_READ`, `PII_MASK_FOR_CUSTOMER_VIEW`); `Deferred-Features-Backlog` DF-11.
+
+**One test I had to update (flagging — not a spec change):** `test_explorer_referrer_column_shows_name_when_known` did `Customer.objects.create(RJ4521,…)`, which now collides with the `Customer` that `seed_demo` seeds for RJ4521; switched it to `update_or_create` (its intent — "name shows when a Customer exists" — is now also satisfied by the seed itself). The companion "name-not-on-file" test still holds via MK9033/SG2210 (no Customer).
+
+**Note on the authoritative Postgres run:** as before, I verified on the **sqlite dev/CI path** (no throwaway Postgres credential in this session). Nothing here is engine-specific (no new models/migrations — only a settings constant + a flag + read-only queries/templates). The independent Phase-B agent's Postgres run remains the authoritative pass; drop a `gorefer_test` DB URL and I'll run `DB_ENGINE=postgres` migrate+seed+pytest here too.
+
+**Browser note:** the Chrome extension wasn't connected in my session, so I verified rendering via curl + HTML/JSON inspection (all pages 200 authenticated; profile top band, rings, per-link card, embedded click JSON, Referred-People all render; landing stays PIFS-branded/cobalt with compliance + no partner-code leak). The definitive mobile+desktop screenshot pass against `mockups/*` is Phase-B's.
+
+Ready for DA review. — Engineer
+
+---
+
+## [DA → Engineer — 2026-07-08] M9 REVIEW = ACCEPTED pending Phase-B · + 2 copy decisions
+
+**M9 accepted on substance.** Zoho READ read-only + guardrail #2 test, Referral Profile per the locked design, whole-app Variant C re-skin with compliance verbatim, config-over-code, DF-11 logged, the `update_or_create` test fix, and the honest "sqlite-only / Phase-B owns Postgres+screenshots" note are all correct. Two small copy decisions from Abhay to fold in, then Phase-B verifies, then merge.
+
+**Decision 1 — thank-you helpline number (Abhay approved DA recommendation).** On the thank-you page show **Ashok's account-opening helpline `+91 73888 82020`** as the "call for free assisted account opening" contact (voice/human KYC). The **Share-on-WhatsApp** action stays on the **WATI business number `+91 70806 42020`** (never Ashok's personal number for WhatsApp — keeps WATI opt-in/tracking; CLAUDE.md M3). **Store both as config values** (config-over-code — e.g. `SUPPORT_HELPLINE_PHONE`, `WHATSAPP_BUSINESS_NUMBER`), not inline literals. Landing share already routes to WATI — leave as-is.
+
+**Decision 2 — Explorer null-referrer demo sample (Abhay approved).** Keep the seeded null-referrer row so the "— name not on file —" state is visible in demo. No action needed (already seeded via MK9033/SG2210).
+
+**Phase-B gate before merging PR #10 (an independent pass, per the M8 pattern + GLOBAL.md process):**
+1. **Authoritative Postgres run** — `DB_ENGINE=postgres` migrate + seed + full pytest green (creds available to Abhay; use a dedicated `gorefer_test` DB, not `gorefer_dev`).
+2. **Screenshot pass at mobile 390 + desktop 1280** for every screen vs `mockups/*.html` — Variant C fidelity (cobalt tokens, rings, pill tabs, chip filters, sortable tables), Referral Profile top band/per-link card/both tabs, and **no compliance or partner-code regression** on customer pages.
+3. Confirm Decision 1 wired (Ashok number visible on thank-you; WhatsApp → WATI) and Decision 2 present.
+Merge only after Phase-B is green. — DA
+
+---
+
+## [DA → Engineer — 2026-07-08] M9 FIX BATCH (Phase-B found 1 blocker + 2 to fold in before merge)
+
+Independent Phase-B verified M9 on Postgres (151 pass) + screenshots — strong Variant C fidelity, guardrails #2/#3 hold, per-link card + Clicks/People tabs + search + 404 all correct. Report: `review/Verification-Report-M9.md`. Three things to fix in PR #10, then re-verify, then merge:
+
+1. **DEF-M9-1 (BLOCKER — one line).** On the Referral Profile screen the three top-band KPI rings (Clicks/Leads/Accounts) render as **empty boxes** — `referrer_profile.html` uses the `data-ring` markup but never loads `static/js/rings.js` (the dashboard loads it and its rings render fine). Add the `rings.js` `<script>` to the profile template so the rings paint. Data is already correct in the DOM. Re-shoot the profile at 390 + 1280 to confirm.
+
+2. **Copy Decision 1 — helpline (fold in; premise corrected).** There is **no thank-you page in the app** — per CLAUDE.md M3 the capture flow saves the lead then **redirects to Zerodha**, so the "thank-you page" I referenced doesn't exist. Correct home = the **landing page**. Add a config value **`SUPPORT_HELPLINE_PHONE`** (default `+91 73888 82020`, Ashok) and surface it on the landing page as the "free, fully-assisted account opening — call" line. The WhatsApp share already routes to the config-driven WATI `917080642020` — leave it. (If a post-submit interstitial is ever added, it reads the same config.)
+
+3. **Compliance verbatim (Low but fix now — it's compliance text).** Normalize the disclosure + market-risk warning to the **exact canonical GLOBAL.md strings** on every customer page, and add the **full SEBI disclosure block to the homepage footer** (currently omitted). Canonical, byte-exact:
+   - Disclosure: `Zerodha Broking Ltd.: SEBI Registration no.: INZ000031633 | Passive Income Financial Solutions Private Limited | NSE AP reg. no.: AP2516003693`
+   - Risk: `Investments in securities market are subject to market risks, read all the related documents carefully before investing.` (note: NO "the" before "securities"; comma before "read")
+
+Keep config-over-code (helpline + WATI number are config, not literals). After the fixes, the independent verifier re-runs a quick pass (rings render on the profile; landing shows the helpline; disclosure strings byte-exact) → then merge PR #10. — DA
+
+---
+
+### 2026-07-08 — FROM ENGINEER — STATUS — M9 FIX BATCH applied (DEF-M9-1 + helpline + compliance-verbatim) — DONE (PR #10 updated)
+
+**All three items applied on `mission-9-referral-profile`. 154 pass / 0 skip; ruff clean; no migration drift; no-CDN + multi-line-`{# #}` + PII-in-events guards green; guardrail #3 holds (no partner code on customer pages). Verified live on the sqlite dev path.**
+
+1. **DEF-M9-1 (BLOCKER) — rings now paint.** Added `<script src="{% static 'js/rings.js' %}">` to `referrer_profile.html` (alongside `referral_profile.js`). The three top-band KPI rings (Clicks/Leads/Accounts) now render (`data-ring` divs + `rings.js` both present — live-confirmed). New test `test_profile_loads_rings_js_so_kpi_rings_paint` locks it (the prior tests asserted DOM data, not the script, which is why they missed it).
+
+2. **Copy Decision 1 — helpline (premise corrected).** No thank-you page exists (capture → 302 to Zerodha per M3), so the number goes on the **landing page**. Added config **`SUPPORT_HELPLINE_PHONE`** (default `+91 73888 82020`, Ashok) + a `tel:`-safe derived form; surfaced as a quiet **"Prefer a call? Free, fully-assisted account opening — call +91 73888 82020"** line (config-driven, `tel:+917388882020`, no inline literal). **WhatsApp share unchanged** — still the config WATI number `917080642020` (`WATI_BUSINESS_NUMBER`). New test asserts the helpline renders as a `tel:` line AND is never the `wa.me` share target.
+
+3. **Compliance verbatim (byte-exact) on every customer page + homepage footer.** Added canonical single-source constants **`AP_DISCLOSURE_BLOCK`** + **`MARKET_RISK_WARNING`** (settings) injected via the compliance context processor, and rendered verbatim on home, landing, invalid, partner-unavailable, and login. Fixed the wording drift (removed "the" before "securities market"; comma not ";"), normalized "Pvt. Ltd." → "Private Limited" to match the canonical block, and **added the full SEBI disclosure block to the homepage footer** (was missing — OBS-4). New test `test_compliance_strings_byte_exact_on_customer_pages` locks the exact strings and fails on the stale wording.
+
+**One existing test I had to update (flagging — DA decision supersedes it, not a spec change):** `test_landing.py::…business_whatsapp` asserted `"7388882020" not in html` (Ashok's number must not appear on the customer landing). The M9 fix batch **intentionally** puts Ashok's helpline on the landing, so I refined the assertion to its true intent: the **WhatsApp SHARE target** stays the WATI number (`watiNumber: "917080642020"`, and no `wa.me/917388882020`), while the helpline appears only as a `tel:` line. If you'd rather the helpline NOT show Ashok's number on the customer page, say so and I'll swap the default — but I applied the DA instruction as written.
+
+**Docs synced:** `.env.example` (`SUPPORT_HELPLINE_PHONE`); README (compliance-single-source + helpline vs WATI note); `docs/ui-ux/07` (landing helpline "call" line + no-thank-you-page note). `app.css` unchanged (no new classes). One self-caught regression while doing this: my first helpline + disclosure comments were multi-line `{# #}` (the known Django trap) — the guard/my own check caught them; converted to `{% comment %}` and re-verified no leak.
+
+Ready for the independent verifier's quick re-pass → merge PR #10. — Engineer
+
+---
+
+## [DA — 2026-07-08] Fix batch accepted · 1 confirmation · final SCOPED re-verify then merge
+
+**Both flags resolved:**
+- **Ashok's number on the landing page — KEEP it (approved).** GLOBAL.md designates `+91 73888 82020` as the account-opening helpline to include in ALL outbound/public referral & account-opening touchpoints ("free, fast, fully-assisted"), so a `tel:` helpline on the landing is on-policy. The Engineer's test refinement is correct: the **`wa.me` share target must stay the WATI number** (never Ashok's), and Ashok's number appears only as a `tel:` line. Good distinction — locked.
+- Multi-line `{# #}` self-catch → `{% comment %}`: fine.
+
+**Final gate — a SCOPED independent re-verify (not a full rerun). Do NOT trust the builder's self-confirm on the rings — that's the exact bug that just slipped a non-visual check.** The independent verifier (fresh session) must:
+1. **Screenshot the Referral Profile at 390 + 1280 and confirm the three top-band KPI rings actually PAINT** (SVG visible, not empty boxes). This is the one must-see item.
+2. **Landing:** confirm the `tel:` helpline `+91 73888 82020` renders AND the WhatsApp share target is still the WATI number `917080642020` (no `wa.me/917388882020` anywhere).
+3. **Compliance:** `test_compliance_strings_byte_exact_on_customer_pages` green + eyeball the homepage footer now carries the full SEBI disclosure block.
+4. Full pytest (154) green — sqlite is acceptable here since the fixes are template/settings only (no models/migrations); a Postgres rerun is optional, not required.
+Append the result to `review/Verification-Report-M9.md`. On green → **merge PR #10; M9 done.** — DA
+
+---
+
+## [DA — 2026-07-08] M9 verification PASSED → MERGE approved · then M10 (Postgres-only, drop SQLite)
+
+Independent re-verify: **all 4 PASS, READY TO MERGE = yes.** Rings proven to actually paint (3 `<svg>`/6 `<circle>` under `[data-ring]` via CDP + screenshots at 390/1280 — not just a script tag). Helpline `tel:` renders + share stays WATI (`wa.me` to Ashok = 0). Compliance byte-exact + full SEBI footer (OBS-4 resolved). 154 pass on Postgres. The `127.0.0.1/curl` rows were the verifier's own smoke curls — not a defect.
+
+**Evidence:** the verifier should commit its `review/Verification-Report-M9.md` + `review/screenshots-m9-reverify/*.png` (capture the proof). **Then merge PR #10 → M9 is DONE.**
+
+### MISSION M10 — Postgres-only hardening (remove SQLite entirely)
+Abhay's call (DA agrees): SQLite must not be in the loop — GoRefer targets Postgres and relies on Postgres-specific behaviour, so a green SQLite run is false confidence. Make Postgres the ONLY engine across dev/test/CI/prod so "SQLite is acceptable" can never be said again:
+1. **Settings:** `DATABASES` resolves to Postgres only — remove any SQLite branch/fallback. Add a **fail-fast guard**: raise `ImproperlyConfigured` if the resolved `ENGINE` isn't `django.db.backends.postgresql`.
+2. **`.env.example`:** Postgres keys only; delete SQLite defaults.
+3. **CI:** add a **Postgres service container**; run migrate + full pytest against it; delete the SQLite test path/job.
+4. **Tests:** test DB = Postgres `gorefer_test` (not sqlite, not `gorefer_dev`).
+5. **Docs:** remove every "sqlite dev/CI path" reference (CLAUDE.md, `implementation/10`, README); state Postgres is the sole supported engine.
+6. Full suite green on Postgres; keep all Sprint-1 guardrails green; open a PR; append STATUS. Raise a QUESTION + pause if anything depends on SQLite that isn't trivially removable.
+
+Sequence: **merge M9 first (don't hold the shipped feature), then do M10.** — DA
+
+**Standing rule (Abhay, 2026-07-08) — browser on THIS machine only:** any browser-driven work for GoRefer (Claude-in-Chrome, headless-Chrome screenshots, live-render UI verification) must run on **this machine** (the box where the repo + app run), never on another host. Verifier/Engineer sessions: use this machine's Chrome for all screenshot/render checks. — DA
