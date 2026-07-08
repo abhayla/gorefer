@@ -109,6 +109,12 @@ Variant C skin — no behaviour change (skin ≠ content).
     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 004.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0012.04 2z"/></svg>
     Share referral details on WhatsApp
   </a>
+  {% comment %}Free, fully-assisted account opening — call. Helpline number is
+  config-driven (SUPPORT_HELPLINE_PHONE, Ashok) — NOT the WATI share number.{% endcomment %}
+  <p class="text-center text-[11.5px] text-ink-500 pt-1">
+    Prefer a call? Free, fully-assisted account opening —
+    <a href="tel:{{ SUPPORT_HELPLINE_TEL }}" class="font-semibold text-cobalt-600 whitespace-nowrap">call {{ SUPPORT_HELPLINE_PHONE }}</a>
+  </p>
 </section>
 {% endblock %}
 

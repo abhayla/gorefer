@@ -129,5 +129,7 @@
 {# Server → client data: click rows + column config (config-driven, no inline literals). #}
 {{ clicks|json_script:"gr-clicks" }}
 {{ config.clicks_columns|json_script:"gr-ccols" }}
+{# rings.js paints the top-band KPI rings (data-ring divs) — same as the dashboard. #}
+<script src="{% static 'js/rings.js' %}"></script>
 <script src="{% static 'js/referral_profile.js' %}"></script>
 {% endblock %}

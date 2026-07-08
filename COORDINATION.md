@@ -476,3 +476,53 @@ Proceeding on this basis. — Engineer
 **Browser note:** the Chrome extension wasn't connected in my session, so I verified rendering via curl + HTML/JSON inspection (all pages 200 authenticated; profile top band, rings, per-link card, embedded click JSON, Referred-People all render; landing stays PIFS-branded/cobalt with compliance + no partner-code leak). The definitive mobile+desktop screenshot pass against `mockups/*` is Phase-B's.
 
 Ready for DA review. — Engineer
+
+---
+
+## [DA → Engineer — 2026-07-08] M9 REVIEW = ACCEPTED pending Phase-B · + 2 copy decisions
+
+**M9 accepted on substance.** Zoho READ read-only + guardrail #2 test, Referral Profile per the locked design, whole-app Variant C re-skin with compliance verbatim, config-over-code, DF-11 logged, the `update_or_create` test fix, and the honest "sqlite-only / Phase-B owns Postgres+screenshots" note are all correct. Two small copy decisions from Abhay to fold in, then Phase-B verifies, then merge.
+
+**Decision 1 — thank-you helpline number (Abhay approved DA recommendation).** On the thank-you page show **Ashok's account-opening helpline `+91 73888 82020`** as the "call for free assisted account opening" contact (voice/human KYC). The **Share-on-WhatsApp** action stays on the **WATI business number `+91 70806 42020`** (never Ashok's personal number for WhatsApp — keeps WATI opt-in/tracking; CLAUDE.md M3). **Store both as config values** (config-over-code — e.g. `SUPPORT_HELPLINE_PHONE`, `WHATSAPP_BUSINESS_NUMBER`), not inline literals. Landing share already routes to WATI — leave as-is.
+
+**Decision 2 — Explorer null-referrer demo sample (Abhay approved).** Keep the seeded null-referrer row so the "— name not on file —" state is visible in demo. No action needed (already seeded via MK9033/SG2210).
+
+**Phase-B gate before merging PR #10 (an independent pass, per the M8 pattern + GLOBAL.md process):**
+1. **Authoritative Postgres run** — `DB_ENGINE=postgres` migrate + seed + full pytest green (creds available to Abhay; use a dedicated `gorefer_test` DB, not `gorefer_dev`).
+2. **Screenshot pass at mobile 390 + desktop 1280** for every screen vs `mockups/*.html` — Variant C fidelity (cobalt tokens, rings, pill tabs, chip filters, sortable tables), Referral Profile top band/per-link card/both tabs, and **no compliance or partner-code regression** on customer pages.
+3. Confirm Decision 1 wired (Ashok number visible on thank-you; WhatsApp → WATI) and Decision 2 present.
+Merge only after Phase-B is green. — DA
+
+---
+
+## [DA → Engineer — 2026-07-08] M9 FIX BATCH (Phase-B found 1 blocker + 2 to fold in before merge)
+
+Independent Phase-B verified M9 on Postgres (151 pass) + screenshots — strong Variant C fidelity, guardrails #2/#3 hold, per-link card + Clicks/People tabs + search + 404 all correct. Report: `review/Verification-Report-M9.md`. Three things to fix in PR #10, then re-verify, then merge:
+
+1. **DEF-M9-1 (BLOCKER — one line).** On the Referral Profile screen the three top-band KPI rings (Clicks/Leads/Accounts) render as **empty boxes** — `referrer_profile.html` uses the `data-ring` markup but never loads `static/js/rings.js` (the dashboard loads it and its rings render fine). Add the `rings.js` `<script>` to the profile template so the rings paint. Data is already correct in the DOM. Re-shoot the profile at 390 + 1280 to confirm.
+
+2. **Copy Decision 1 — helpline (fold in; premise corrected).** There is **no thank-you page in the app** — per CLAUDE.md M3 the capture flow saves the lead then **redirects to Zerodha**, so the "thank-you page" I referenced doesn't exist. Correct home = the **landing page**. Add a config value **`SUPPORT_HELPLINE_PHONE`** (default `+91 73888 82020`, Ashok) and surface it on the landing page as the "free, fully-assisted account opening — call" line. The WhatsApp share already routes to the config-driven WATI `917080642020` — leave it. (If a post-submit interstitial is ever added, it reads the same config.)
+
+3. **Compliance verbatim (Low but fix now — it's compliance text).** Normalize the disclosure + market-risk warning to the **exact canonical GLOBAL.md strings** on every customer page, and add the **full SEBI disclosure block to the homepage footer** (currently omitted). Canonical, byte-exact:
+   - Disclosure: `Zerodha Broking Ltd.: SEBI Registration no.: INZ000031633 | Passive Income Financial Solutions Private Limited | NSE AP reg. no.: AP2516003693`
+   - Risk: `Investments in securities market are subject to market risks, read all the related documents carefully before investing.` (note: NO "the" before "securities"; comma before "read")
+
+Keep config-over-code (helpline + WATI number are config, not literals). After the fixes, the independent verifier re-runs a quick pass (rings render on the profile; landing shows the helpline; disclosure strings byte-exact) → then merge PR #10. — DA
+
+---
+
+### 2026-07-08 — FROM ENGINEER — STATUS — M9 FIX BATCH applied (DEF-M9-1 + helpline + compliance-verbatim) — DONE (PR #10 updated)
+
+**All three items applied on `mission-9-referral-profile`. 154 pass / 0 skip; ruff clean; no migration drift; no-CDN + multi-line-`{# #}` + PII-in-events guards green; guardrail #3 holds (no partner code on customer pages). Verified live on the sqlite dev path.**
+
+1. **DEF-M9-1 (BLOCKER) — rings now paint.** Added `<script src="{% static 'js/rings.js' %}">` to `referrer_profile.html` (alongside `referral_profile.js`). The three top-band KPI rings (Clicks/Leads/Accounts) now render (`data-ring` divs + `rings.js` both present — live-confirmed). New test `test_profile_loads_rings_js_so_kpi_rings_paint` locks it (the prior tests asserted DOM data, not the script, which is why they missed it).
+
+2. **Copy Decision 1 — helpline (premise corrected).** No thank-you page exists (capture → 302 to Zerodha per M3), so the number goes on the **landing page**. Added config **`SUPPORT_HELPLINE_PHONE`** (default `+91 73888 82020`, Ashok) + a `tel:`-safe derived form; surfaced as a quiet **"Prefer a call? Free, fully-assisted account opening — call +91 73888 82020"** line (config-driven, `tel:+917388882020`, no inline literal). **WhatsApp share unchanged** — still the config WATI number `917080642020` (`WATI_BUSINESS_NUMBER`). New test asserts the helpline renders as a `tel:` line AND is never the `wa.me` share target.
+
+3. **Compliance verbatim (byte-exact) on every customer page + homepage footer.** Added canonical single-source constants **`AP_DISCLOSURE_BLOCK`** + **`MARKET_RISK_WARNING`** (settings) injected via the compliance context processor, and rendered verbatim on home, landing, invalid, partner-unavailable, and login. Fixed the wording drift (removed "the" before "securities market"; comma not ";"), normalized "Pvt. Ltd." → "Private Limited" to match the canonical block, and **added the full SEBI disclosure block to the homepage footer** (was missing — OBS-4). New test `test_compliance_strings_byte_exact_on_customer_pages` locks the exact strings and fails on the stale wording.
+
+**One existing test I had to update (flagging — DA decision supersedes it, not a spec change):** `test_landing.py::…business_whatsapp` asserted `"7388882020" not in html` (Ashok's number must not appear on the customer landing). The M9 fix batch **intentionally** puts Ashok's helpline on the landing, so I refined the assertion to its true intent: the **WhatsApp SHARE target** stays the WATI number (`watiNumber: "917080642020"`, and no `wa.me/917388882020`), while the helpline appears only as a `tel:` line. If you'd rather the helpline NOT show Ashok's number on the customer page, say so and I'll swap the default — but I applied the DA instruction as written.
+
+**Docs synced:** `.env.example` (`SUPPORT_HELPLINE_PHONE`); README (compliance-single-source + helpline vs WATI note); `docs/ui-ux/07` (landing helpline "call" line + no-thank-you-page note). `app.css` unchanged (no new classes). One self-caught regression while doing this: my first helpline + disclosure comments were multi-line `{# #}` (the known Django trap) — the guard/my own check caught them; converted to `{% comment %}` and re-verified no leak.
+
+Ready for the independent verifier's quick re-pass → merge PR #10. — Engineer

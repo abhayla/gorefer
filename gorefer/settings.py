@@ -184,6 +184,23 @@ NSE_AP_NO = os.environ.get("NSE_AP_NO", "AP2516003693")
 WATI_BUSINESS_NUMBER = os.environ.get("WATI_BUSINESS_NUMBER", "917080642020")
 # Office/Ashok alert recipient for the "new lead" notification (config, not secret).
 OFFICE_ALERT_NUMBER = os.environ.get("OFFICE_ALERT_NUMBER", "917388882020")
+# Human-facing support helpline (config, not a secret) — the "free, fully-assisted
+# account opening — call" line on the landing page (Ashok). Display format (with +91).
+SUPPORT_HELPLINE_PHONE = os.environ.get("SUPPORT_HELPLINE_PHONE", "+91 73888 82020")
+
+# --- Compliance strings — canonical, byte-exact, single source (ADR-014) ---------
+# Rendered verbatim on every customer-facing page via the shared compliance partial.
+# NOTE the exact wording: NO "the" before "securities market"; a COMMA (not ";")
+# before "read"; the disclosure block is the full SEBI/PIFS/NSE-AP line.
+AP_DISCLOSURE_BLOCK = (
+    "Zerodha Broking Ltd.: SEBI Registration no.: INZ000031633 | "
+    "Passive Income Financial Solutions Private Limited | "
+    f"NSE AP reg. no.: {NSE_AP_NO}"
+)
+MARKET_RISK_WARNING = (
+    "Investments in securities market are subject to market risks, "
+    "read all the related documents carefully before investing."
+)
 
 # --- PII masking policy (M9) -----------------------------------------------
 # The admin view shows FULL IP + phone. This config drives masking for the FUTURE

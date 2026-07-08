@@ -10,9 +10,8 @@
   </main>
   {% block compliance %}
   <footer class="mx-auto max-w-xl px-4 pb-10 text-[11px] text-ink-500">
-    <p>PIFS — Passive Income Financial Solutions. NSE AP Reg. No. {{ NSE_AP_NO }}.</p>
-    <p class="mt-1">Investments in the securities market are subject to market risks. Read all the
-      related documents carefully before investing.</p>
+    <p>{{ AP_DISCLOSURE_BLOCK }}</p>
+    <p class="mt-1">{{ MARKET_RISK_WARNING }}</p>
   </footer>
   {% endblock %}
 </body>
