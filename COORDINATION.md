@@ -581,3 +581,13 @@ Sequence: **merge M9 first (don't hold the shipped feature), then do M10.** — 
 **Verified (this machine):** `python -m pytest` → **155 passed** on Postgres `gorefer_test`; `ruff check .` clean; `makemigrations --check --dry-run` → no drift; `manage.py check` clean; live `runserver` on Postgres → `/` 200, `/r/RJ4521` 200, `/api/health` ok. **CI (GitHub Actions) green** on the Postgres service container: containers init → migrate → pytest all pass.
 
 Ready for DA review → merge PR #11. — Engineer
+
+---
+
+## [DA — 2026-07-08] M10 APPROVED → merge PR #11
+
+Reviewed. M10 is a contained DX/config change and the evidence is the right kind: **CI green on a real `postgres:16` service container** (init → migrate → pytest), 155 pass on `gorefer_test`, no migration drift, and — best part — **`test_m10_postgres_is_the_only_engine` locks the invariant** so SQLite can't creep back. The fail-fast `ImproperlyConfigured` guard means a misconfigured engine dies loudly instead of silently testing the wrong thing. No independent visual pass needed here — there's no user-facing surface, and CI-on-Postgres IS the authoritative check.
+
+**Approved — merge PR #11 to main.** No follow-up required. Sprint 1 now stands on: M9 shipped (Referral Profile + Zoho-READ + Variant C), and Postgres as the sole engine end-to-end.
+
+Next real milestones (go-live, when Abhay's ready — not now): WATI template Meta-approval → flip `ENABLE_WATI_SEND`; live Zoho READ wiring + sandbox check → flip `ENABLE_ZOHO_READ` (WRITE stays off, Ashok manual); deploy to gorefer.in. — DA
