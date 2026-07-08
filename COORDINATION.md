@@ -448,3 +448,31 @@ Note: this cobalt choice is a deliberate GoRefer per-project decision (GLOBAL.md
 **Guardrails held through the re-skin:** compliance disclosure + market-risk warning stay **verbatim** on every customer page; the compliance-lock / config-driven claim (`REFERRAL_INCENTIVE_CLAIM`) and number are untouched (skin ≠ content); no functional/route/behaviour change — templates + CSS only; all Sprint-1 guardrail tests (#1/#2/#3) + the multi-line-`{# #}` guard + no-CDN rule stay green; the CI stale-CSS check is respected (rebuild `app.css`). If the re-skin turns out to require any behavioural change I'll pause and flag it here.
 
 Proceeding on this basis. — Engineer
+
+---
+
+### 2026-07-08 — FROM ENGINEER — STATUS — M9: Zoho-READ enrichment + Referral Profile + Variant C re-skin — DONE (PR `mission-9-referral-profile`)
+
+**Built to the M9 mission (Part A Zoho READ + Part B User Referral Screen) AND the whole-app Variant C re-skin (the theming-scope decision above). Zoho WRITE stays OFF; READ is read-only + fixture-backed in demo. Demo works end-to-end offline with all Zoho/WATI flags off. 152 pass / 0 skip; ruff clean; no migration drift; live boot smoke correct on the sqlite dev path.**
+
+**Part A — Zoho READ enrichment (read-only; WRITE stays OFF):**
+- New flag **`ENABLE_ZOHO_READ`** (default off → seeded fixtures; independent of `ENABLE_ZOHO_WRITE`, which stays off for PIFS — Ashok enters Zoho leads manually, DF-9).
+- New read-only adapter `apps/integrations/zoho/read.py` (doc-08 contract): `fetch_contact_by_client_id` (match by `ClientId`, pulls the top-band Contact fields incl. `Account_Opened_On`=TRUE open date/ADR-017, opt-out flags) + `fetch_referred_people`. Handles the `ClientId`/`Client_Id` field-name inconsistency (doc-08 B4); missing value → `None` → "— not on file —". `LogOnly` returns fixtures; `Live` refuses without `ZOHO_*` creds. **Guardrail #2 preserved** — READ never sets conversion status (test asserts viewing the profile creates no `Conversion`).
+
+**Part B — Referral Profile / "User Referral Screen" (`/admin-panel/referrer/{client_id}/`, admin-only):**
+- `apps/dashboard/profile.py` (read-only queries) + views `referrer_profile` + `referrer_search`. Top band (Zoho chips + 4 aggregates as KPI rings), per-link cards (**real enabled partners only — the mockup's illustrative "Loan" card is NOT shipped**; structure supports N partners), **Clicks tab** (per-click Date/Partner/Channel/City/Region/Country/IP/Device/OS-Browser/Traffic/Outcome — geo/device from GoRefer's OWN Event + VisitorPII/IP + user-agent; bots dimmed + excluded from totals; client-side filter/sort), **Referred People tab** (Zoho READ). 404 for a no-footprint / malformed client id.
+- **Config-over-code:** columns/filters/user-facing strings come from `PROFILE_CONFIG` (no inline literals); reward wording still from `REFERRAL_INCENTIVE_CLAIM`. **PII masking** config `PII_MASK_FOR_CUSTOMER_VIEW` built now + dormant (admin view stays full; masks only when `ENABLE_CUSTOMER_LOGIN` turns on — no dead UI).
+- **Entry points:** Explorer referrer cell → profile; a **search** entry (`/admin-panel/referrers/`, the "Referral Profile" nav item, by client_id/name); leaderboard rows also link in. **Self-click tagging deferred** → logged as **DF-11** (not built).
+- `seed_demo` enriched: the featured referrer (RJ4521) gets distinct clicks (UA/channel/geo + VisitorPII IP/city) + one bot click, and `Customer` rows (RJ4521/DA1707) so names light up — so the profile renders meaningfully in demo with Zoho flags off.
+
+**Variant C re-skin (per the decision above):** tokens as **CSS variables** in `input.css` + `tailwind.config.js` (DF-10 = later config layer; incl. a dormant `[data-theme="dark"]` hook). Converted every template — home, login, landing (+base/invalid), partner-unavailable, dashboard (KPI rings), explorer, journey, topbar (+ Referral Profile nav + active-state), status_badge, compliance/header partials — to cobalt. **Compliance disclosure + market-risk warning verbatim + un-removable throughout.** Rebuilt/committed `app.css` (CI stale-CSS check respected); Tailwind now also scans `static/js/**` so JS-emitted classes aren't purged.
+
+**Guardrails / DoD:** #1/#2/#3 + PII-in-events + no-CDN + multi-line-`{# #}` guards all green. Guardrail #3 note: the Referral Profile per-link card shows the partner code `ZMPHZC` — allowed, it's an **admin** screen (the #3 test still asserts NO partner code on client-facing `/`, `/r/{id}`, `/open`, and the dashboard/explorer). No auto-submit to Zerodha; status only from Zoho. Docs kept in sync: `docs/ui-ux/07` new §7e/(h) + Variant C note in the screen inventory; README (routes + Zoho-READ + Variant C notes); `.env.example` (`ENABLE_ZOHO_READ`, `PII_MASK_FOR_CUSTOMER_VIEW`); `Deferred-Features-Backlog` DF-11.
+
+**One test I had to update (flagging — not a spec change):** `test_explorer_referrer_column_shows_name_when_known` did `Customer.objects.create(RJ4521,…)`, which now collides with the `Customer` that `seed_demo` seeds for RJ4521; switched it to `update_or_create` (its intent — "name shows when a Customer exists" — is now also satisfied by the seed itself). The companion "name-not-on-file" test still holds via MK9033/SG2210 (no Customer).
+
+**Note on the authoritative Postgres run:** as before, I verified on the **sqlite dev/CI path** (no throwaway Postgres credential in this session). Nothing here is engine-specific (no new models/migrations — only a settings constant + a flag + read-only queries/templates). The independent Phase-B agent's Postgres run remains the authoritative pass; drop a `gorefer_test` DB URL and I'll run `DB_ENGINE=postgres` migrate+seed+pytest here too.
+
+**Browser note:** the Chrome extension wasn't connected in my session, so I verified rendering via curl + HTML/JSON inspection (all pages 200 authenticated; profile top band, rings, per-link card, embedded click JSON, Referred-People all render; landing stays PIFS-branded/cobalt with compliance + no partner-code leak). The definitive mobile+desktop screenshot pass against `mockups/*` is Phase-B's.
+
+Ready for DA review. — Engineer

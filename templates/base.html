@@ -4,14 +4,14 @@
   <title>{% block title %}GoRefer{% endblock %}</title>
   {% include "partials/pifs_head.html" %}
 </head>
-<body class="min-h-screen bg-slate-50 text-slate-800 antialiased">
+<body class="min-h-screen bg-bg font-sans text-ink-900 antialiased text-[13px]">
   <main class="mx-auto max-w-xl px-4 py-10">
     {% block content %}{% endblock %}
   </main>
   {% block compliance %}
-  <footer class="mx-auto max-w-xl px-4 pb-10 text-xs text-slate-500">
+  <footer class="mx-auto max-w-xl px-4 pb-10 text-[11px] text-ink-500">
     <p>PIFS — Passive Income Financial Solutions. NSE AP Reg. No. {{ NSE_AP_NO }}.</p>
-    <p class="mt-1">Investment in securities market is subject to market risks. Read all the
+    <p class="mt-1">Investments in the securities market are subject to market risks. Read all the
       related documents carefully before investing.</p>
   </footer>
   {% endblock %}

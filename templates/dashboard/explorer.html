@@ -1,74 +1,75 @@
 {% extends "dashboard/base.html" %}
 {% block title %}GoRefer Admin — Referral Explorer{% endblock %}
 {% block content %}
-<section class="rounded-xl bg-white border border-pifs-100 p-5 shadow-sm">
+<section class="rounded-2xl bg-white border border-line card p-5">
   <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-    <h2 class="text-sm font-bold text-pifs-900">Referral explorer</h2>
+    <h2 class="text-[13px] font-bold text-ink-900">Referral explorer</h2>
     {# Filters: source / status / search #}
     <form method="get" class="flex flex-wrap items-center gap-2 text-[12px]">
       <input type="text" name="q" value="{{ search }}" placeholder="Search referral id…"
-        class="rounded-lg border border-pifs-100 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-pifs-500/40" />
-      <select name="source" class="rounded-lg border border-pifs-100 px-2 py-1.5 bg-white">
+        class="rounded-full border border-line px-3.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-cobalt-500/30 focus:border-cobalt-500" />
+      <select name="source" class="rounded-full border border-line px-3 py-1.5 bg-white">
         <option value="">All sources</option>
         {% for s in sources %}
           <option value="{{ s }}" {% if s == filter_source %}selected{% endif %}>{{ s }}</option>
         {% endfor %}
       </select>
       <input type="text" name="status" value="{{ filter_status }}" placeholder="Status…"
-        class="rounded-lg border border-pifs-100 px-3 py-1.5 w-28 focus:outline-none focus:ring-2 focus:ring-pifs-500/40" />
-      <button class="rounded-lg bg-pifs-700 text-white px-3 py-1.5 font-semibold hover:bg-pifs-800">Filter</button>
+        class="rounded-full border border-line px-3.5 py-1.5 w-28 focus:outline-none focus:ring-2 focus:ring-cobalt-500/30 focus:border-cobalt-500" />
+      <button class="rounded-full bg-cobalt-600 text-white px-4 py-1.5 font-semibold hover:bg-cobalt-500">Filter</button>
     </form>
   </div>
   <div class="overflow-x-auto">
-    <table class="w-full text-[12.5px] min-w-[720px]">
+    <table class="w-full text-[12px] min-w-[720px]">
       <thead>
-        <tr class="text-left text-[10px] uppercase tracking-wide text-pifs-800/45 border-b border-pifs-100">
-          <th class="py-2.5 font-semibold">Referral ID</th>
-          <th class="py-2.5 font-semibold">Referrer</th>
-          <th class="py-2.5 font-semibold">Source</th>
-          <th class="py-2.5 font-semibold text-right">Clicks</th>
-          <th class="py-2.5 font-semibold text-right">Landing</th>
-          <th class="py-2.5 font-semibold">Status</th>
-          <th class="py-2.5 font-semibold text-right">Last activity</th>
+        <tr class="text-left text-[10px] uppercase tracking-wide text-ink-300 border-b border-line bg-cobalt-50/40">
+          <th class="py-2.5 px-3 font-semibold">Referral ID</th>
+          <th class="py-2.5 px-3 font-semibold">Referrer</th>
+          <th class="py-2.5 px-3 font-semibold">Source</th>
+          <th class="py-2.5 px-3 font-semibold text-right">Clicks</th>
+          <th class="py-2.5 px-3 font-semibold text-right">Landing</th>
+          <th class="py-2.5 px-3 font-semibold">Status</th>
+          <th class="py-2.5 px-3 font-semibold text-right">Last activity</th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-pifs-50">
+      <tbody class="divide-y divide-line">
         {% for row in rows %}
-          <tr class="hover:bg-pifs-50/60 transition-colors">
-            <td class="py-2.5 font-mono text-pifs-700">
-              <a href="{% url 'dashboard_journey' row.id %}" class="hover:underline">{{ row.client_id|default:"—" }}</a>
+          <tr class="hover:bg-cobalt-50/40 transition-colors">
+            <td class="py-2.5 px-3 font-mono text-ink-700">
+              {% if row.client_id %}
+                <a href="{% url 'dashboard_referrer' row.client_id %}" class="text-cobalt-600 hover:underline">{{ row.client_id }}</a>
+              {% else %}—{% endif %}
             </td>
             {% comment %}Referrer column: NAME when known, else "name not on file" —
                never a duplicate of the client id. Partner-direct has no referrer.
-               Links to the journey now; will point at the Referrer Profile once
-               that screen ships (DA #4, pending mockup sign-off).{% endcomment %}
-            <td class="py-2.5 text-pifs-800/70">
+               Links to the Referral Profile (User Referral Screen, M9).{% endcomment %}
+            <td class="py-2.5 px-3 text-ink-500">
               {% if row.is_partner_direct %}
-                <span class="text-pifs-800/40">— NONE —</span>
+                <span class="text-ink-300">— NONE —</span>
               {% elif row.referrer_name %}
-                <a href="{% url 'dashboard_journey' row.id %}" class="text-pifs-700 hover:underline">{{ row.referrer_name }}</a>
+                <a href="{% url 'dashboard_referrer' row.client_id %}" class="text-cobalt-600 hover:underline">{{ row.referrer_name }}</a>
               {% else %}
-                <span class="text-pifs-800/40 italic">— name not on file —</span>
+                <a href="{% url 'dashboard_referrer' row.client_id %}" class="text-ink-300 italic hover:underline">— name not on file —</a>
               {% endif %}
             </td>
-            <td class="py-2.5">
+            <td class="py-2.5 px-3">
               {% if row.source == 'referral_link' %}
-                <span class="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold bg-pifs-100 text-pifs-700">Referral link</span>
+                <span class="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold bg-cobalt-50 text-cobalt-600">Referral link</span>
               {% elif row.source == 'partner_direct' %}
-                <span class="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold bg-gold/15 text-gold">Partner-direct</span>
+                <span class="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700">Partner-direct</span>
               {% else %}
-                <span class="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold bg-blue-100 text-blue-700">Off-platform</span>
+                <span class="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold bg-sky-100 text-sky-700">Off-platform</span>
               {% endif %}
             </td>
-            <td class="py-2.5 text-right tabular-nums text-pifs-800/70">{{ row.clicks }}</td>
-            <td class="py-2.5 text-right tabular-nums text-pifs-800/70">{{ row.landing_views }}</td>
-            <td class="py-2.5">{% include "dashboard/partials/status_badge.html" with status=row.status %}</td>
-            <td class="py-2.5 text-right text-[11px] text-pifs-800/50 whitespace-nowrap">
+            <td class="py-2.5 px-3 text-right tabular-nums text-ink-500">{{ row.clicks }}</td>
+            <td class="py-2.5 px-3 text-right tabular-nums text-ink-500">{{ row.landing_views }}</td>
+            <td class="py-2.5 px-3">{% include "dashboard/partials/status_badge.html" with status=row.status %}</td>
+            <td class="py-2.5 px-3 text-right text-[11px] text-ink-300 whitespace-nowrap">
               {% if row.last_activity %}{{ row.last_activity|date:"d M, g:i A" }}{% else %}—{% endif %}
             </td>
           </tr>
         {% empty %}
-          <tr><td colspan="7" class="py-6 text-center text-[11px] text-pifs-800/40">No referrals match these filters.</td></tr>
+          <tr><td colspan="7" class="py-6 text-center text-[11px] text-ink-300">No referrals match these filters.</td></tr>
         {% endfor %}
       </tbody>
     </table>

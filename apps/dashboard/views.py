@@ -10,14 +10,15 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.views import LoginView
 from django.http import Http404
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET
 
 from apps.events.models import SyncHealth
 from apps.referrals.models import Referral
+from apps.referrals.validators import InvalidClientId, validate_client_id
 from apps.tenants.resolve import get_current_tenant
 
-from . import queries
+from . import profile, queries
 
 
 def _staff_required(view):
@@ -59,6 +60,7 @@ def dashboard(request):
         "sync_health": _sync_health(tenant),
         "confirmed_clicks": queries.confirmed_clicks(tenant),
         "counts_as_of": counts_as_of,
+        "nav_active": "dashboard",
     }
     return render(request, "dashboard/dashboard.html", ctx)
 
@@ -77,6 +79,7 @@ def explorer(request):
         "search": search,
         "sync_health": _sync_health(tenant),
         "sources": ["referral_link", "partner_direct", "zoho_import"],
+        "nav_active": "explorer",
     }
     return render(request, "dashboard/explorer.html", ctx)
 
@@ -99,8 +102,73 @@ def journey(request, referral_id: int):
         "timeline": detail["timeline"],
         "conversion": detail["conversion"],
         "sync_health": _sync_health(tenant),
+        "nav_active": "explorer",
     }
     return render(request, "dashboard/journey.html", ctx)
+
+
+@_staff_required
+@require_GET
+def referrer_search(request):
+    """Referral Profile entry: search a referrer by client_id / name → profile.
+
+    An exact client_id match jumps straight to the profile; otherwise show matching
+    referrers (by client_id prefix or known Zoho/Customer name) to pick from.
+    """
+    tenant = get_current_tenant(request)
+    q = (request.GET.get("q") or "").strip()
+    result = None
+    matches = []
+    if q:
+        # Exact, valid client_id with a footprint → go straight in.
+        try:
+            cid = validate_client_id(q)
+        except InvalidClientId:
+            cid = None
+        if cid and profile.profile_exists(tenant, cid):
+            return redirect("dashboard_referrer", client_id=cid)
+        matches = profile.search_referrers(tenant, q)
+        result = "empty" if not matches else "matches"
+    ctx = {
+        "q": q,
+        "result": result,
+        "matches": matches,
+        "sync_health": _sync_health(tenant),
+        "nav_active": "referrer",
+    }
+    return render(request, "dashboard/referrer_search.html", ctx)
+
+
+@_staff_required
+@require_GET
+def referrer_profile(request, client_id: str):
+    """User Referral Screen / "Referral Profile" (M9). Admin-only.
+
+    Everything referred by one Zerodha client id: Zoho-enriched top band + KPI rings,
+    per-partner link cards (real enabled partners only), a Clicks tab (GoRefer's own
+    captured signals), and a Referred-People tab (Zoho READ).
+    """
+    tenant = get_current_tenant(request)
+    try:
+        cid = validate_client_id(client_id)
+    except InvalidClientId:
+        raise Http404("invalid client id")
+    if not profile.profile_exists(tenant, cid):
+        raise Http404("no referral profile for this client id")
+
+    band = profile.top_band(tenant, cid)
+    ctx = {
+        "client_id": cid,
+        "band": band,
+        "ring_fractions": profile.ring_fractions(band["aggregates"]),
+        "cards": profile.per_link_cards(tenant, cid),
+        "clicks": profile.clicks_rows(tenant, cid),
+        "people": profile.referred_people(tenant, cid),
+        "config": profile.PROFILE_CONFIG,
+        "sync_health": _sync_health(tenant),
+        "nav_active": "referrer",
+    }
+    return render(request, "dashboard/referrer_profile.html", ctx)
 
 
 # Expose whether the dashboard is enabled (feature flag) to urls.

@@ -76,11 +76,17 @@ python manage.py runserver
 #    /api/analytics/funnel      -> read-only funnel (bots excluded; unique = approximate)
 #    /api/zoho/status-webhook   -> Zoho conversion webhook (the ONLY writer of account status)
 #    /admin-panel/              -> M7 admin dashboard (login-gated; dashboard / explorer / journey)
+#    /admin-panel/referrers/    -> M9 Referral Profile search (client_id / name)
+#    /admin-panel/referrer/{id}/-> M9 Referral Profile (one referrer's 360: Zoho enrichment + clicks + referred people)
 #    /django-admin/             -> Django admin base
 #    (both admin surfaces are behind ENABLE_ADMIN_DASHBOARD; sign in with the bootstrap admin)
 ```
 
 > **Conversions come ONLY from Zoho** (`/api/zoho/status-webhook`, behind `ENABLE_ZOHO_WRITE` for the outbound lead write; the inbound status webhook is the sole writer of account/reward status — never fabricated internally). `seed_demo` seeds demo conversions **through** that ingest path so the funnel's "Account opened" reflects real Zoho-sourced data, dated to the true open date.
+
+> **Zoho READ enrichment (M9)** is separate and read-only: behind `ENABLE_ZOHO_READ` (default off → seeded fixtures), it enriches the **Referral Profile** by matching a referrer to their Zoho Contact by `ClientId`. **Zoho WRITE stays OFF** (`ENABLE_ZOHO_WRITE=false`) — PIFS enters Zoho leads manually (DF-9); READ never sets conversion status (guardrail #2 holds).
+
+> **Visual language — "Variant C · Cobalt Clean-Fintech"** (DA DESIGN LOCKED 2026-07-08): all screens use the cobalt theme in `mockups/*.html`. Tokens are **CSS variables** (`static/css/input.css`) wired into `tailwind.config.js`, so DF-10 runtime theming is a later config layer, not a rewrite. Rebuild `app.css` after template/CSS changes.
 
 **Frontend assets** (compiled Tailwind — NO CDN runtime; light + offline for mobile-first, ADR-003):
 

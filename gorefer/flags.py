@@ -43,6 +43,11 @@ class FeatureFlags:
     # When OFF, adapters log the intended call instead of sending (demo-safe).
     ENABLE_WATI_SEND: bool = False
     ENABLE_ZOHO_WRITE: bool = False
+    # Zoho READ enrichment (M9): read-only Contact/Lead enrichment for the Referral
+    # Profile. Independent of ZOHO_WRITE, which stays OFF for PIFS (Ashok enters Zoho
+    # leads manually — DF-9). OFF in CI/demo (adapter returns seeded fixtures); ON only
+    # where ZOHO_* read creds are present.
+    ENABLE_ZOHO_READ: bool = False
 
     # Sprint-1 surfaces that ARE built.
     ENABLE_ADMIN_DASHBOARD: bool = True
@@ -59,6 +64,7 @@ class FeatureFlags:
             ENABLE_ASSET_GENERATOR=_bool("ENABLE_ASSET_GENERATOR", cls.ENABLE_ASSET_GENERATOR),
             ENABLE_WATI_SEND=_bool("ENABLE_WATI_SEND", cls.ENABLE_WATI_SEND),
             ENABLE_ZOHO_WRITE=_bool("ENABLE_ZOHO_WRITE", cls.ENABLE_ZOHO_WRITE),
+            ENABLE_ZOHO_READ=_bool("ENABLE_ZOHO_READ", cls.ENABLE_ZOHO_READ),
             ENABLE_ADMIN_DASHBOARD=_bool("ENABLE_ADMIN_DASHBOARD", cls.ENABLE_ADMIN_DASHBOARD),
             ENABLE_DEMO_MODE=_bool("ENABLE_DEMO_MODE", cls.ENABLE_DEMO_MODE),
             REFERRAL_INCENTIVE_CLAIM=_str("REFERRAL_INCENTIVE_CLAIM", cls.REFERRAL_INCENTIVE_CLAIM),

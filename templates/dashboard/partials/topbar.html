@@ -1,42 +1,44 @@
-{# Reusable admin top-bar + sync-freshness indicator (#19). #}
-<header class="bg-pifs-700 text-white sticky top-0 z-20 shadow-sm">
-  <div class="mx-auto max-w-[1120px] px-4 md:px-6">
-    <div class="flex items-center justify-between h-14">
-      <div class="flex items-center gap-3">
-        <div class="h-8 w-8 rounded-lg bg-white/10 ring-1 ring-white/20 flex items-center justify-center">
-          <span class="text-sm font-extrabold text-gold">P</span>
-        </div>
-        <div class="leading-tight">
-          <div class="text-sm font-bold tracking-tight">GoRefer <span class="text-pifs-100/70 font-medium">Admin</span></div>
-          <div class="text-[10px] text-pifs-100/70 hidden sm:block">Passive Income Financial Solutions</div>
-        </div>
-      </div>
-      <nav class="flex items-center gap-4 text-[12px] font-medium">
-        <a href="{% url 'dashboard' %}" class="hover:text-gold">Dashboard</a>
-        <a href="{% url 'dashboard_explorer' %}" class="hover:text-gold">Explorer</a>
-        <a href="{% url 'dashboard_logout' %}" class="text-pifs-100/70 hover:text-white">Sign out</a>
-      </nav>
+{% comment %}
+Reusable admin top-bar — Variant C (white/blur sticky header, cobalt logo tile, pill
+nav, avatar) + a sync-freshness bar (#19). `nav_active` (set per view) drives the
+active pill; a missing value just leaves all inactive (no dead UI).
+{% endcomment %}
+<header class="bg-white/90 backdrop-blur border-b border-line sticky top-0 z-20">
+  <div class="mx-auto max-w-[1140px] px-5 flex items-center justify-between h-14">
+    <div class="flex items-center gap-2.5">
+      <div class="h-8 w-8 rounded-xl bg-cobalt-600 flex items-center justify-center text-white text-[13px] font-extrabold card">G</div>
+      <div class="text-[13px] font-bold">GoRefer <span class="text-ink-300 font-medium">Admin</span></div>
     </div>
+    <nav class="flex items-center gap-1 text-[12px] font-medium">
+      <a href="{% url 'dashboard' %}"
+         class="px-3 py-1.5 rounded-full {% if nav_active == 'dashboard' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Dashboard</a>
+      <a href="{% url 'dashboard_explorer' %}"
+         class="px-3 py-1.5 rounded-full {% if nav_active == 'explorer' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Explorer</a>
+      <a href="{% url 'dashboard_referrer_search' %}"
+         class="px-3 py-1.5 rounded-full {% if nav_active == 'referrer' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Referral Profile</a>
+      <a href="{% url 'dashboard_logout' %}" class="px-3 py-1.5 rounded-full text-ink-300 hover:bg-cobalt-50">Sign out</a>
+      <span class="ml-2 h-7 w-7 rounded-full bg-cobalt-600 text-white flex items-center justify-center text-[11px] font-bold">AK</span>
+    </nav>
   </div>
-  {# Sync-freshness bar #}
-  <div class="bg-pifs-800/60 border-t border-white/5">
-    <div class="mx-auto max-w-[1120px] px-4 md:px-6 py-1.5 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-pifs-100/90">
+  {# Sync-freshness bar (#19) #}
+  <div class="bg-white border-t border-line">
+    <div class="mx-auto max-w-[1140px] px-5 py-1.5 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-ink-500">
       <span class="inline-flex items-center gap-1.5">
         {% if sync_health.zoho_state == "healthy" %}
-          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
-          Zoho: synced {{ sync_health.zoho_last_sync|timesince }} ago <span class="text-emerald-300">✓</span>
+          <span class="h-1.5 w-1.5 rounded-full bg-positive"></span>
+          Zoho: synced {{ sync_health.zoho_last_sync|timesince }} ago <span class="text-positive">✓</span>
         {% else %}
-          <span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>
-          Zoho: no sync yet <span class="text-amber-300">⚠</span>
+          <span class="h-1.5 w-1.5 rounded-full bg-pending"></span>
+          Zoho: no sync yet <span class="text-pending">⚠</span>
         {% endif %}
       </span>
-      <span class="text-white/20">·</span>
+      <span class="text-line">·</span>
       <span class="inline-flex items-center gap-1.5">
         {% if sync_health.wati_state == "healthy" %}
-          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
-          WATI: healthy <span class="text-emerald-300">✓</span>
+          <span class="h-1.5 w-1.5 rounded-full bg-positive"></span>
+          WATI: healthy <span class="text-positive">✓</span>
         {% else %}
-          <span class="h-1.5 w-1.5 rounded-full bg-slate-300"></span>
+          <span class="h-1.5 w-1.5 rounded-full bg-ink-300"></span>
           WATI: no sends yet
         {% endif %}
       </span>

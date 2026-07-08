@@ -1,9 +1,9 @@
-{# Reusable status badge. `status` is a GoRefer stage/status string. #}
+{# Reusable status badge. `status` is a GoRefer stage/status string. Variant C. #}
 {% with s=status %}
 <span class="inline-block rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold
-  {% if s == 'account_opened' or s == 'confirmed' %}bg-emerald-100 text-emerald-700
+  {% if s == 'account_opened' or s == 'confirmed' %}bg-positive/10 text-positive
   {% elif s == 'kyc_started' %}bg-amber-100 text-amber-700
-  {% elif s == 'contacted' or s == 'interested' %}bg-blue-100 text-blue-700
-  {% elif s == 'rejected' %}bg-red-100 text-red-700
+  {% elif s == 'contacted' or s == 'interested' %}bg-sky-100 text-sky-700
+  {% elif s == 'rejected' %}bg-rose-100 text-rose-600
   {% else %}bg-slate-100 text-slate-700{% endif %}">{{ s|default:'—' }}</span>
 {% endwith %}

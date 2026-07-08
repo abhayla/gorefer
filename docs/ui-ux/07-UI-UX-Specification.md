@@ -43,8 +43,11 @@ These follow the GoRefer Constitution and the Foundation Spec's product philosop
 | c | Admin Dashboard | `/admin` | Admin | JWT | Yes |
 | d | Referral Explorer | `/admin/referrals` | Admin | JWT | Yes |
 | e | Referral Journey detail | `/admin/referrals/{client_id}` | Admin | JWT | Yes |
+| h | Referral Profile (User Referral Screen) | `/admin-panel/referrer/{client_id}/` | Admin | JWT | **Yes (M9)** |
 | f | "My Referrals" (customer) | `/me` | Customer | (future) | **No — feature-flag disabled** |
 | g | Referral Landing Experience | `/landing/{client_id}` | Referral visitor | none | Yes |
+
+> **Visual language (2026-07-08, DA DESIGN LOCKED).** All screens are built in **"Variant C · Cobalt Clean-Fintech"** — Inter; background `#f4f6fb`; cobalt-600 `#2F5BFF` primary accent; ink ramp `#0f1729/#334155/#64748b/#94a3b8`; thin `#e9edf3` lines; `rounded-2xl` cards with a soft shadow; pill buttons/tabs; rounded-full filter chips; circular SVG KPI rings; sortable table headers. Tokens are CSS variables (so DF-10 theming is a later config layer). The `mockups/*.html` are the visual truth. The compliance disclosure + market-risk warning stay verbatim on every customer page regardless of skin.
 
 ---
 
@@ -329,6 +332,47 @@ On mobile, the filter bar collapses into a **Filters** sheet (tap to expand, app
 - **Error** — inline retry.
 
 **API.** `GET /api/admin/referrals/{client_id}` (06-API §6.4).
+
+---
+
+## 7e. (h) Referral Profile — "User Referral Screen" — `/admin-panel/referrer/{client_id}/` (M9)
+
+**Purpose.** The single-referrer 360 view: **everything referred by one Zerodha client id** — the referrer's Zoho-enriched identity, per-partner referral links, every click they generated (with geo/device/traffic), and the people they referred. Admin-only in Sprint 1; the same layout supports the future customer "My Referrals" (§8) with PII masked. **Visual truth:** `mockups/referral-profile-mockup.html` (Variant C).
+
+**Primary action.** None mutating — this screen **reads**. Its dominant elements are the identity band + the two data tabs.
+
+### Data sources
+- **Zoho READ enrichment (read-only; WRITE stays OFF — `ENABLE_ZOHO_READ`).** A referrer is matched to their Zoho **Contact by `ClientId`**; the top band + Referred-People tab read Zoho. In demo/CI (flag off) a **fixture-backed** adapter returns seeded data — the whole screen works offline. Zoho WRITE is **not** enabled (PIFS enters Zoho leads manually — DF-9); this is enrichment only, never a status write (guardrail #2 preserved). Missing Zoho value → **"— not on file —"**.
+- **GoRefer's own captured data.** Clicks/leads/accounts aggregates, and the **Clicks tab** per-row detail (geo from the click Event's country/state, **city + raw IP from the erasable `VisitorPII`**, device/OS/browser parsed from the user-agent, channel from the click), come from GoRefer's event stream — never Zoho.
+
+### Layout (Variant C; matches the mockup)
+1. **Breadcrumb** back to the Referral Explorer + the client_id.
+2. **Identity band** — avatar/initials, name (Zoho `Full_Name`, else "— name not on file —"), client_id chip, **Active-Investor** chip; enrichment chips: City/State, Profession, Account Status, Opened date (TRUE Zoho open date, ADR-017), Reward wording (from `REFERRAL_INCENTIVE_CLAIM`). Plus **4 headline aggregates** — **Clicks, Unique visitors** (approx, bot-filtered, labelled `*`), **Leads, Accounts** — the first three rendered as circular SVG KPI rings.
+3. **Per-link summary strip** — one card per **real, enabled** partner link (partner name, partner code, `gorefer.in/r/{client_id}`, per-link clicks/leads/accounts). Today: **Zerodha only** — the illustrative "Loan" card in the mockup is **NOT shipped** (it only demonstrates the multi-partner layout). The structure is config/data-driven, so N partners render with no redesign (ties to DF-5/DF-9).
+4. **Two tabs on one screen:**
+   - **Clicks** — one row per click: **Date/time · Partner/Link · Channel · City · Region · Country · IP · Device · OS/Browser · Traffic (Human/Bot) · Outcome**. Filters above the table: **All / Human / Bot / Mobile / Desktop / WhatsApp** + a free-text **city/IP** search; sortable headers. **Bot/preview rows are dimmed and excluded** from the click & visitor totals (logged, not counted — ADR-019).
+   - **Referred People** — one row per identified person (from Zoho): **Name · City · Profession · Partner · Account Status · Opened · Reward**. A person appears only after they submit the form or Zoho records them.
+
+### Config-over-code
+- **No hardcoded copy or columns.** The Clicks/People **column sets**, the filter set, and user-facing strings (the "approx / bot-filtered" note, the "— not on file —" marker) come from a **config constant** (`PROFILE_CONFIG`), not inline literals — per-partner column tuning is a config change (DF-5 pattern). Reward wording continues to come from the single `REFERRAL_INCENTIVE_CLAIM` field.
+
+### PII masking (built now, applied later)
+- The **admin** view shows **full IP + phone**. A config rule **`PII_MASK_FOR_CUSTOMER_VIEW`** (built now, dormant) masks IP → city-only and phone → partial in the **future** customer/referrer view; it activates only when `ENABLE_CUSTOMER_LOGIN` turns on. No dead UI now.
+
+### Entry points
+1. The **Referrer cell in the Referral Explorer** (§6/(d)) links here.
+2. A **search** entry (`/admin-panel/referrers/`, the "Referral Profile" nav item) — search by client_id or name; an exact client_id jumps straight in.
+3. Future: the top-referrers leaderboard rows (dashboard) link here.
+
+### States
+- **Valid referrer** — full screen as above (Zoho-enriched where a Contact matches; GoRefer aggregates always).
+- **No footprint** — a well-formed client_id with **no** GoRefer referral and **no** Zoho conversion → **404** (not a fabricated empty profile). A malformed client_id → 404 (validator).
+- **Zoho unmatched** — the screen still renders from GoRefer's own data; Zoho fields show "— not on file —".
+
+### Self-click note (deferred — NOT built)
+- A later polish: if a click's mobile later matches the referrer's known Zoho mobile, tag it **"self-click"** and exclude from conversion counts. Logged as a backlog note; **not** in this mission.
+
+**API / implementation.** Server-rendered (Django, HTMX/Variant C), route `/admin-panel/referrer/{client_id}/`. The Clicks table filters/sorts client-side from a server-rendered JSON payload; column config is passed as JSON (config-over-code). Zoho READ adapter behind the doc-08 contract (`apps/integrations/zoho/read.py`).
 
 ---
 

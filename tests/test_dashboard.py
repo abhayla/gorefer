@@ -96,13 +96,16 @@ def test_explorer_referrer_column_no_name_marker(admin_client):
 
 @pytest.mark.django_db
 def test_explorer_referrer_column_shows_name_when_known():
+    # seed_demo already seeds a Customer for RJ4521 (the name source), so its name
+    # lights up in the explorer; update it to a distinctive value to assert on.
     from apps.referrals.models import Customer, ReferralProgram
     call_command("seed_program")
     call_command("seed_demo")
     program = ReferralProgram.objects.get()
-    Customer.objects.create(
-        tenant=program.tenant, program=program, partner=program.partner,
-        client_id="RJ4521", first_name="Ramesh", last_name="Kumar", mobile="9998887777",
+    Customer.objects.update_or_create(
+        tenant=program.tenant, program=program, client_id="RJ4521",
+        defaults={"partner": program.partner, "first_name": "Ramesh",
+                  "last_name": "Kumar", "mobile": "9998887777"},
     )
     User = get_user_model()
     User.objects.create_user(username="a@b.in", password="pw12345!", is_staff=True)
