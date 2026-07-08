@@ -562,3 +562,22 @@ Abhay's call (DA agrees): SQLite must not be in the loop — GoRefer targets Pos
 Sequence: **merge M9 first (don't hold the shipped feature), then do M10.** — DA
 
 **Standing rule (Abhay, 2026-07-08) — browser on THIS machine only:** any browser-driven work for GoRefer (Claude-in-Chrome, headless-Chrome screenshots, live-render UI verification) must run on **this machine** (the box where the repo + app run), never on another host. Verifier/Engineer sessions: use this machine's Chrome for all screenshot/render checks. — DA
+
+---
+
+### 2026-07-08 — FROM ENGINEER — STATUS — M9 MERGED + M10: Postgres-only hardening — DONE (PR #11)
+
+**M9 merged first (per your sequence).** PR #10 → `main` (merge commit `81c96df`), CI green (154 pass), branch retained. The verifier's evidence is committed in-repo: `review/Verification-Report-M9.md` (both re-verify addenda) + `review/screenshots-m9-reverify/*.png` (6 PNGs incl. the `reverify-*` proof shots). **M9 is DONE.**
+
+**Then M10 — SQLite removed entirely; PostgreSQL is now the sole supported engine across dev/test/CI/prod.** All 6 mission items done. **155 pass on Postgres `gorefer_test`; ruff clean; no migration drift; CI green on a Postgres service container; live boot smoke (home/landing/health) correct.** No QUESTION needed — nothing non-trivial depended on SQLite (no test used sqlite-specific behaviour; no `DB_ENGINE`/`sqlite3` reference remained in any `.py`), so it was trivially removable.
+
+1. **Settings — Postgres only + fail-fast.** `DATABASES` resolves to Postgres unconditionally (removed the `DB_ENGINE` branch + the whole SQLite path). Added the **fail-fast guard**: `raise ImproperlyConfigured` if the resolved `ENGINE` isn't `django.db.backends.postgresql`. Added `TEST.NAME` = `gorefer_test` (override `TEST_DB_NAME`).
+2. **`.env.example` — Postgres keys only.** Deleted `DB_ENGINE` + every SQLite default; added `TEST_DB_NAME=gorefer_test`; kept the create-role/create-db + `ALTER ROLE … CREATEDB` guidance.
+3. **CI — Postgres service container.** Added a `postgres:16` service (health-checked) + a `Migrate (Postgres)` step; pytest runs against it. Removed the `DB_ENGINE: sqlite` env and the SQLite path — there is no SQLite job to keep green anymore.
+4. **Tests — Postgres `gorefer_test`.** `conftest.py` no longer sets a sqlite default (the runner creates/tears down `gorefer_test` from settings' `TEST.NAME`). New **`test_m10_postgres_is_the_only_engine`** locks the invariant: suite runs on Postgres, no `backends.sqlite` wired in settings source, and the guard raises on a non-Postgres engine.
+5. **Docs — sqlite path wording gone.** README ("sole supported engine (M10)", provisioning + tests notes, the PostgreSQL-only callout) + the `requirements.txt` psycopg2 comment. GoRefer `CLAUDE.md` and `implementation/10` had **no** sqlite references to remove (already Postgres-only). *(`COORDINATION.md` + `review/Verification-Report*.md` keep their sqlite mentions **by design** — append-only historical audit trails, not active config.)*
+6. **Guardrails all green:** #1 redirect-never-submits, #2 status-only-from-Zoho, #3 no-partner-code-on-client-pages, PII-in-events, no-CDN, multi-line-`{# #}` — plus the new M10 engine guard.
+
+**Verified (this machine):** `python -m pytest` → **155 passed** on Postgres `gorefer_test`; `ruff check .` clean; `makemigrations --check --dry-run` → no drift; `manage.py check` clean; live `runserver` on Postgres → `/` 200, `/r/RJ4521` 200, `/api/health` ok. **CI (GitHub Actions) green** on the Postgres service container: containers init → migrate → pytest all pass.
+
+Ready for DA review → merge PR #11. — Engineer
