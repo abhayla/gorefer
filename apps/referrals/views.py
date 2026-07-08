@@ -21,12 +21,20 @@ from apps.config.cascade import resolve
 from apps.tenants.resolve import get_current_tenant
 from gorefer.flags import flags
 
-from .models import ReferralIdentity
+from .models import ProgramRedirectRule, ReferralIdentity, ReferralProgram
 from .redirect_service import build_continue_redirect, handle_landing_view, handle_partner_direct
 from .validators import InvalidClientId, validate_client_id
 
 VISITOR_COOKIE = "gr_vid"
 VISITOR_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
+
+# Config-resolution failures that mean "destination can't be built" (06-API §4.1).
+PartnerUnavailable = (ReferralProgram.DoesNotExist, ProgramRedirectRule.DoesNotExist)
+
+
+def _partner_unavailable(request):
+    """Branded 503 PARTNER_UNAVAILABLE — never a raw 500 (06-API §4.1)."""
+    return render(request, "partner_unavailable.html", status=503)
 
 
 def _client_ip(request) -> str | None:
@@ -51,15 +59,18 @@ def _set_visitor_cookie(response, visitor_id: str, is_new: bool):
 
 
 def _landing_context(request, tenant, client_id: str, nonce: str | None):
-    """Config-driven landing context (no referrer NAME in initial HTML — #1/#3)."""
+    """Config-driven landing context (no referrer NAME in initial HTML — #1/#3).
+
+    The WhatsApp deep link is built client-side (landing.js) at click time from the
+    config-driven WATI business number + the referral id + whatever the prospect
+    typed into the form (name/phone/email), so only the number is passed here.
+    """
     tenant_id = tenant.id if tenant is not None else None
     wa_number = resolve("wati_business_number", tenant_id=tenant_id, default="")
-    wa_text = f"Hi, I'd like to refer someone for a Zerodha account. Referral ID: {client_id}"
     return {
         "client_id": client_id,
         "nonce": nonce or "",
         "wati_business_number": wa_number,
-        "whatsapp_share_url": f"https://wa.me/{wa_number}?text={wa_text}",
         "privacy_policy_url": resolve("privacy_policy_url", tenant_id=tenant_id, default="#"),
         "REFERRAL_INCENTIVE_CLAIM": flags.REFERRAL_INCENTIVE_CLAIM,
         "show_incentive": True,  # a valid referrer -> show the referral-benefit panel
@@ -77,13 +88,16 @@ def referral_redirect(request, client_id: str):
 
     tenant = get_current_tenant(request)
     visitor_id, is_new = _ensure_visitor_id(request)
-    _referral, _event, nonce = handle_landing_view(
-        tenant=tenant,
-        client_id=normalized,
-        visitor_id=visitor_id,
-        user_agent=request.META.get("HTTP_USER_AGENT", ""),
-        raw_ip=_client_ip(request),
-    )
+    try:
+        _referral, _event, nonce = handle_landing_view(
+            tenant=tenant,
+            client_id=normalized,
+            visitor_id=visitor_id,
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            raw_ip=_client_ip(request),
+        )
+    except PartnerUnavailable:
+        return _partner_unavailable(request)
     context = _landing_context(request, tenant, normalized, nonce)
     response = render(request, "landing.html", context)
     _set_visitor_cookie(response, visitor_id, is_new)
@@ -103,7 +117,10 @@ def referral_continue(request, client_id: str):
         tenant=tenant, client_id=normalized, id_source="native"
     ).first()
     referral = identity.referrals.filter(source="referral_link").order_by("id").first() if identity else None
-    destination = build_continue_redirect(tenant=tenant, client_id=normalized, referral=referral)
+    try:
+        destination = build_continue_redirect(tenant=tenant, client_id=normalized, referral=referral)
+    except PartnerUnavailable:
+        return _partner_unavailable(request)
     return HttpResponseRedirect(destination)
 
 
@@ -112,12 +129,15 @@ def partner_direct_redirect(request):
     """GET /open — partner-direct 302 (no r=); stays a direct redirect (no landing)."""
     tenant = get_current_tenant(request)
     visitor_id, is_new = _ensure_visitor_id(request)
-    destination, _is_human = handle_partner_direct(
-        tenant=tenant,
-        visitor_id=visitor_id,
-        user_agent=request.META.get("HTTP_USER_AGENT", ""),
-        raw_ip=_client_ip(request),
-    )
+    try:
+        destination, _is_human = handle_partner_direct(
+            tenant=tenant,
+            visitor_id=visitor_id,
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            raw_ip=_client_ip(request),
+        )
+    except PartnerUnavailable:
+        return _partner_unavailable(request)
     response = HttpResponseRedirect(destination)
     _set_visitor_cookie(response, visitor_id, is_new)
     return response

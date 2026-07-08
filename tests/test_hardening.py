@@ -60,6 +60,49 @@ def test_no_source_multiline_hash_comments_in_templates():
     assert not offenders, f"multi-line {{# #}} comments (use {{% comment %}}): {offenders}"
 
 
+# --- compliance strings are byte-exact + verbatim on every customer page ----
+
+# Canonical strings (must match GLOBAL.md / the spec exactly). NOTE: no "the" before
+# "securities market"; a COMMA (not ";") before "read".
+_CANON_DISCLOSURE = (
+    "Zerodha Broking Ltd.: SEBI Registration no.: INZ000031633 | "
+    "Passive Income Financial Solutions Private Limited | "
+    "NSE AP reg. no.: AP2516003693"
+)
+_CANON_RISK = (
+    "Investments in securities market are subject to market risks, "
+    "read all the related documents carefully before investing."
+)
+
+
+@pytest.mark.django_db
+def test_compliance_strings_byte_exact_on_customer_pages():
+    """The disclosure block + market-risk warning render VERBATIM (byte-exact) on
+    every customer-facing page — homepage footer included (DA M9 fix batch)."""
+    call_command("seed_program")
+    c = Client()
+    c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0")  # prime a journey
+    for path in ("/", "/r/RJ4521", "/r/bad--id", "/admin-panel/login/"):
+        html = c.get(path, HTTP_USER_AGENT="Mozilla/5.0").content.decode()
+        assert _CANON_DISCLOSURE in html, f"disclosure not byte-exact on {path}"
+        assert _CANON_RISK in html, f"risk warning not byte-exact on {path}"
+        # The wrong (pre-fix) wording must NOT appear.
+        assert "the securities market" not in html, f"stale 'the securities market' on {path}"
+        assert "market risks;" not in html, f"stale ';' risk wording on {path}"
+
+
+@pytest.mark.django_db
+def test_landing_shows_config_helpline_distinct_from_wati_share():
+    """Landing shows the config helpline (SUPPORT_HELPLINE_PHONE) as a call line, and
+    the WhatsApp share stays on the config WATI number — both config-driven."""
+    call_command("seed_program")
+    c = Client()
+    html = c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0").content.decode()
+    assert "73888 82020" in html            # helpline (Ashok) on the call line
+    assert "tel:+917388882020" in html      # config-driven tel: link
+    assert "917080642020" in html           # WhatsApp share still on the WATI number
+
+
 # --- §G: config cascade + compliance lock ---------------------------------
 
 @pytest.fixture
@@ -94,9 +137,11 @@ def test_g3_incentive_and_whatsapp_number_config_driven():
     # WhatsApp number is seeded to central config and rendered into the wa.me link.
     assert ConfigCentral.objects.filter(key="wati_business_number").exists()
     html = Client().get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0").content.decode()
-    assert "wa.me/917080642020" in html
+    # The config-driven WATI business number is exposed to the page (JS builds the
+    # wa.me deep link from it at click time — see tweak #1).
+    assert "917080642020" in html
     # The single incentive claim renders from flags.REFERRAL_INCENTIVE_CLAIM.
-    assert "300 reward points + 10% brokerage share" in html
+    assert "10% brokerage share + 300 reward points" in html
 
 
 # --- §H2: tenant isolation with a 2nd tenant ------------------------------
@@ -148,6 +193,63 @@ def test_k5_zoho_webhook_rejects_when_no_key_configured(settings):
         HTTP_X_ZOHO_WEBHOOK_KEY="anything",
     )
     assert resp.status_code == 401  # no key configured => reject
+
+
+# --- DEF-1: missing/inactive redirect config -> branded 503, never a 500 ---
+
+@pytest.mark.django_db
+def test_def1_missing_redirect_rule_renders_branded_503():
+    """No active ProgramRedirectRule (or ReferralProgram) => branded 503
+    PARTNER_UNAVAILABLE HTML, NOT an uncaught 500 (06-API §4.1)."""
+    from apps.referrals.models import ProgramRedirectRule
+    call_command("seed_program")
+    c = Client()
+    # Prime a journey while config is healthy, then break the redirect config.
+    c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0")
+    ProgramRedirectRule.objects.update(is_active=False)  # no active rule
+    # The DESTINATION-building steps (Continue / partner-direct) must 503, never 500.
+    for path in ("/r/RJ4521/continue", "/open"):
+        resp = c.get(path, HTTP_USER_AGENT="Mozilla/5.0")
+        assert resp.status_code == 503, f"{path} should be 503, got {resp.status_code}"
+        body = resp.content.decode()
+        assert "temporarily unavailable" in body.lower()
+        assert "Traceback" not in body and "DoesNotExist" not in body  # never a raw error
+        assert "AP2516003693" in body  # compliance still injected on the branded 503
+    # The landing render itself doesn't build the destination, so it still renders
+    # (the 503 is specifically for the "destination cannot be built" step, §4.1).
+    assert c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0").status_code == 200
+
+
+@pytest.mark.django_db
+def test_def1_no_active_program_renders_branded_503():
+    from apps.referrals.models import ReferralProgram
+    call_command("seed_program")
+    c = Client()
+    c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0")
+    ReferralProgram.objects.update(status="inactive")  # no active program
+    resp = c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0")
+    assert resp.status_code == 503
+
+
+# --- OBS-1: dashboard KPI accounts_opened == funnel account_opened ----------
+
+@pytest.mark.django_db(transaction=True)
+def test_obs1_dashboard_counts_internally_consistent():
+    """KPI accounts_opened, funnel account_opened, and the true Conversion count
+    all agree (one source, one freshness) — no stale KPI beside a fresher funnel."""
+    from apps.dashboard import queries
+    from apps.integrations.models import Conversion
+    from apps.tenants.resolve import get_bootstrap_tenant
+    call_command("seed_program")
+    call_command("seed_demo")
+    t = get_bootstrap_tenant()
+    queries.refresh_and_freshness(t)  # recompute-on-view
+    k = queries.kpis(t)
+    funnel = {s["stage"]: s["count"] for s in queries.funnel(t)}
+    live_conv = Conversion.objects.filter(is_reversed=False).count()
+    assert k["accounts_opened"] == funnel["account_opened"] == live_conv
+    # Clicks agree between KPI and funnel too.
+    assert k["total_clicks"] == funnel["click"]
 
 
 # --- §I3: erasure path exists ---------------------------------------------

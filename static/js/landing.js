@@ -88,10 +88,29 @@
     });
   }
 
-  // ---- WhatsApp share: record the event, then the wa.me link opens normally ----
+  // ---- WhatsApp share: build the wa.me deep link from the form inputs + referral
+  //      id at click time, record the share event, then open WhatsApp. Target = the
+  //      config-driven WATI business number (never Ashok's personal number). ----
+  function buildWhatsappShareUrl() {
+    var name = (document.getElementById("nameInput").value || "").trim();
+    var email = (document.getElementById("emailInput").value || "").trim();
+    var phone = (input.value || "").replace(/\D/g, "");
+    // Exact message (DA polish round); empty fields leave the label blank so the
+    // prospect can type it in WhatsApp.
+    var msg =
+      "Hi, I'd like to refer for a Zerodha account. My Referral ID: " + GR.clientId + "\n" +
+      "*Here are referral details*\n" +
+      "Name: " + name + "\n" +
+      "Phone Number: " + phone + "\n" +
+      "Email: " + email;
+    return "https://wa.me/" + GR.watiNumber + "?text=" + encodeURIComponent(msg);
+  }
+
   var whatsappBtn = document.getElementById("whatsappBtn");
   if (whatsappBtn) {
     whatsappBtn.addEventListener("click", function () {
+      // Set the freshest href from the current form state, then let the <a> open it.
+      whatsappBtn.setAttribute("href", buildWhatsappShareUrl());
       fetch("/api/share/", {
         method: "POST", headers: jsonHeaders(),
         body: JSON.stringify({ client_id: GR.clientId, channel: "whatsapp" }),

@@ -35,12 +35,24 @@ python -m venv .venv
 .venv/Scripts/activate          # Windows (Git Bash);  source .venv/bin/activate on macOS/Linux
 pip install -r requirements.txt
 
-# 2. Configure env (copy the template, fill values)
-cp .env.example .env
-#   - For a zero-dependency run keep DB_ENGINE=sqlite (no Postgres needed).
-#   - For a production-shaped run set DB_ENGINE=postgres + the DB_* vars (enables django-tenants).
+# 2. Provision the database. Postgres is the DEFAULT (ADR-021); it matches
+#    production and exercises Postgres-only behaviour (JSONB, partial-unique
+#    constraints, case-sensitivity). Create a dedicated least-privilege role + db
+#    (run as a Postgres superuser; substitute your own role password):
+#      CREATE ROLE gorefer LOGIN PASSWORD '<choose-one>';
+#      CREATE DATABASE gorefer_dev OWNER gorefer;
+#      \c gorefer_dev
+#      GRANT ALL ON SCHEMA public TO gorefer;
+#      ALTER ROLE gorefer CREATEDB;   -- lets the test runner create test_gorefer_dev
+#    (SQLite is an optional fallback: set DB_ENGINE=sqlite for a zero-dependency run.)
 
-# 3. Apply migrations (forward-only) and seed the single ReferralProgram (Zerodha)
+# 3. Configure env (copy the template; fill values in the gitignored .env — NEVER commit).
+cp .env.example .env
+#    .env.example lists KEY NAMES only. Set the Postgres DB_* vars:
+#      DB_ENGINE=postgres  DB_NAME=gorefer_dev  DB_HOST=127.0.0.1  DB_PORT=5432
+#      DB_USER=gorefer     DB_PASSWORD=<the gorefer role password>
+
+# 4. Apply migrations (forward-only) and seed the single ReferralProgram (Zerodha)
 python manage.py migrate
 python manage.py seed_program          # idempotent: tenant + central config + partner + program + redirect rule
 python manage.py seed_demo             # optional: demo journeys/events so the funnel + dashboard render (no conversions)
@@ -51,12 +63,12 @@ python manage.py recompute_rollups     # recompute daily/monthly rollups for any
 #   python manage.py setup_schedules    # register the recurring rollup recompute (idempotent)
 #   python manage.py qcluster           # the worker: WATI sends + terminal-status polling + schedules
 
-# 4. (Optional) create the admin from env vars — no plaintext password, hash only
+# 5. (Optional) create the admin from env vars — no plaintext password, hash only
 #    Generate a hash:  python -c "from django.contrib.auth.hashers import make_password; print(make_password('your-pw'))"
 #    Put ADMIN_EMAIL + ADMIN_PASSWORD_HASH in .env, then:
 python manage.py bootstrap_admin       # idempotent
 
-# 5. Run
+# 6. Run
 python manage.py runserver
 #    /                          -> PIFS-branded home (compliance footer auto-injected)
 #    /r/{client_id}             -> branded landing (renders; Continue -> 302 to Zerodha)
@@ -64,11 +76,19 @@ python manage.py runserver
 #    /api/analytics/funnel      -> read-only funnel (bots excluded; unique = approximate)
 #    /api/zoho/status-webhook   -> Zoho conversion webhook (the ONLY writer of account status)
 #    /admin-panel/              -> M7 admin dashboard (login-gated; dashboard / explorer / journey)
+#    /admin-panel/referrers/    -> M9 Referral Profile search (client_id / name)
+#    /admin-panel/referrer/{id}/-> M9 Referral Profile (one referrer's 360: Zoho enrichment + clicks + referred people)
 #    /django-admin/             -> Django admin base
 #    (both admin surfaces are behind ENABLE_ADMIN_DASHBOARD; sign in with the bootstrap admin)
 ```
 
 > **Conversions come ONLY from Zoho** (`/api/zoho/status-webhook`, behind `ENABLE_ZOHO_WRITE` for the outbound lead write; the inbound status webhook is the sole writer of account/reward status — never fabricated internally). `seed_demo` seeds demo conversions **through** that ingest path so the funnel's "Account opened" reflects real Zoho-sourced data, dated to the true open date.
+
+> **Zoho READ enrichment (M9)** is separate and read-only: behind `ENABLE_ZOHO_READ` (default off → seeded fixtures), it enriches the **Referral Profile** by matching a referrer to their Zoho Contact by `ClientId`. **Zoho WRITE stays OFF** (`ENABLE_ZOHO_WRITE=false`) — PIFS enters Zoho leads manually (DF-9); READ never sets conversion status (guardrail #2 holds).
+
+> **Visual language — "Variant C · Cobalt Clean-Fintech"** (DA DESIGN LOCKED 2026-07-08): all screens use the cobalt theme in `mockups/*.html`. Tokens are **CSS variables** (`static/css/input.css`) wired into `tailwind.config.js`, so DF-10 runtime theming is a later config layer, not a rewrite. Rebuild `app.css` after template/CSS changes.
+
+> **Compliance + helpline config.** The AP disclosure block + market-risk warning are canonical, **byte-exact** strings from a single source (`AP_DISCLOSURE_BLOCK` / `MARKET_RISK_WARNING` in settings, injected into every page) so wording can never drift. The landing page's "free, fully-assisted account opening — call" line uses **`SUPPORT_HELPLINE_PHONE`** (default `+91 73888 82020`, Ashok); the WhatsApp-share button uses the config-driven WATI number `WATI_BUSINESS_NUMBER` (`917080642020`) — the two are distinct and both config-driven.
 
 **Frontend assets** (compiled Tailwind — NO CDN runtime; light + offline for mobile-first, ADR-003):
 

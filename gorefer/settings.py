@@ -31,9 +31,12 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "true").strip().lower() in {"1", "true", 
 ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h]
 
 # --- Database engine selection ---------------------------------------------
-# DB_ENGINE=postgres  -> real deploy: PostgreSQL + django-tenants schema routing.
-# DB_ENGINE=sqlite    -> dev/CI convenience: single SQLite file, no tenant router.
-DB_ENGINE = os.environ.get("DB_ENGINE", "sqlite").strip().lower()
+# DB_ENGINE=postgres  -> DEFAULT: PostgreSQL (ADR-021), single-schema tenant_id.
+# DB_ENGINE=sqlite    -> optional zero-dependency fallback (CI/quick local); CI and
+#                        the test suite set this explicitly. Postgres is the default
+#                        so dev matches production and Postgres-only behaviour
+#                        (JSONB, constraints, case-sensitivity) is exercised locally.
+DB_ENGINE = os.environ.get("DB_ENGINE", "postgres").strip().lower()
 
 # --- Applications ----------------------------------------------------------
 # Multi-tenancy is SINGLE-SCHEMA tenant_id discriminator (COORDINATION Q-M1-1
@@ -120,10 +123,20 @@ if DB_ENGINE == "postgres":
         }
     }
 else:
+    # SQLite dev/CI path. Resolve DB_NAME robustly + cross-platform: a bare name
+    # (no path separator) becomes BASE_DIR/<name>[.sqlite3] so a shared
+    # `.env.example` boots identically on Windows/macOS/Linux (DEF-2).
+    _sqlite_name = os.environ.get("DB_NAME") or "gorefer_dev.sqlite3"
+    if os.sep not in _sqlite_name and "/" not in _sqlite_name:
+        if not _sqlite_name.endswith(".sqlite3"):
+            _sqlite_name += ".sqlite3"
+        _sqlite_path = str(BASE_DIR / _sqlite_name)
+    else:
+        _sqlite_path = _sqlite_name
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": os.environ.get("DB_NAME", str(BASE_DIR / "gorefer_dev.sqlite3")),
+            "NAME": _sqlite_path,
         }
     }
 
@@ -171,6 +184,31 @@ NSE_AP_NO = os.environ.get("NSE_AP_NO", "AP2516003693")
 WATI_BUSINESS_NUMBER = os.environ.get("WATI_BUSINESS_NUMBER", "917080642020")
 # Office/Ashok alert recipient for the "new lead" notification (config, not secret).
 OFFICE_ALERT_NUMBER = os.environ.get("OFFICE_ALERT_NUMBER", "917388882020")
+# Human-facing support helpline (config, not a secret) — the "free, fully-assisted
+# account opening — call" line on the landing page (Ashok). Display format (with +91).
+SUPPORT_HELPLINE_PHONE = os.environ.get("SUPPORT_HELPLINE_PHONE", "+91 73888 82020")
+
+# --- Compliance strings — canonical, byte-exact, single source (ADR-014) ---------
+# Rendered verbatim on every customer-facing page via the shared compliance partial.
+# NOTE the exact wording: NO "the" before "securities market"; a COMMA (not ";")
+# before "read"; the disclosure block is the full SEBI/PIFS/NSE-AP line.
+AP_DISCLOSURE_BLOCK = (
+    "Zerodha Broking Ltd.: SEBI Registration no.: INZ000031633 | "
+    "Passive Income Financial Solutions Private Limited | "
+    f"NSE AP reg. no.: {NSE_AP_NO}"
+)
+MARKET_RISK_WARNING = (
+    "Investments in securities market are subject to market risks, "
+    "read all the related documents carefully before investing."
+)
+
+# --- PII masking policy (M9) -----------------------------------------------
+# The admin view shows FULL IP + phone. This config drives masking for the FUTURE
+# customer/referrer view (IP -> city-only, phone -> partial). Built now, dormant: it
+# only takes effect once ENABLE_CUSTOMER_LOGIN turns on (no dead UI in Sprint 1).
+PII_MASK_FOR_CUSTOMER_VIEW = os.environ.get(
+    "PII_MASK_FOR_CUSTOMER_VIEW", "true"
+).strip().lower() in {"1", "true", "yes", "on"}
 
 # --- Zoho webhook auth (M6, interim R2): static key + IP allowlist ---------
 # HMAC wax-seal is deferred (DF-2). The key is a SECRET (from env, never inline).

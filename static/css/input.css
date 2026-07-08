@@ -1,3 +1,85 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Variant C · Cobalt Clean-Fintech — design tokens (DA DESIGN LOCKED 2026-07-08).
+   Implemented as CSS variables so DF-10 runtime theming is a later CONFIG layer:
+   a theme swap only re-points these variables (or a [data-theme] block below),
+   never a template/CSS rewrite. tailwind.config.js reads each token via var().
+   ───────────────────────────────────────────────────────────────────────── */
+:root {
+  --c-bg: #f4f6fb;
+  --c-line: #e9edf3;
+  --c-ink-900: #0f1729;
+  --c-ink-700: #334155;
+  --c-ink-500: #64748b;
+  --c-ink-300: #94a3b8;
+  --c-cobalt-600: #2f5bff;
+  --c-cobalt-500: #4b70ff;
+  --c-cobalt-50: #eef2ff;
+  --c-positive: #16a34a; /* accounts / positive */
+  --c-pending: #f59e0b;  /* leads / pending */
+  --c-danger: #f43f5e;   /* bot / error */
+}
+
+/* DF-10 hook: a future theme layer flips these by stamping data-theme on <html>.
+   Present now (dormant) so theming is config-only later. Dark tokens are a starting
+   point, tuned when theming actually ships. */
+:root[data-theme="dark"] {
+  --c-bg: #0b1120;
+  --c-line: #1e293b;
+  --c-ink-900: #f1f5f9;
+  --c-ink-700: #cbd5e1;
+  --c-ink-500: #94a3b8;
+  --c-ink-300: #64748b;
+  --c-cobalt-50: #172554;
+}
+
+@layer components {
+  /* Card soft shadow token (mirrors mockups' .card). */
+  .card {
+    box-shadow: 0 1px 2px rgba(16, 23, 41, 0.04), 0 8px 24px -12px rgba(16, 23, 41, 0.12);
+  }
+  /* Sortable table header affordance. */
+  .sortable {
+    cursor: pointer;
+    user-select: none;
+  }
+  .sortable:hover {
+    color: var(--c-cobalt-600);
+  }
+  /* Filter chip (rounded-full, visible active state). */
+  .chip {
+    border: 1px solid var(--c-line);
+    border-radius: 999px;
+    padding: 0.2rem 0.8rem;
+    color: var(--c-ink-500);
+    background: #fff;
+    font-weight: 500;
+  }
+  .chip-on {
+    background: var(--c-cobalt-600);
+    border-color: var(--c-cobalt-600);
+    color: #fff;
+    font-weight: 600;
+  }
+  /* Pagination pill control. */
+  .pg {
+    border: 1px solid var(--c-line);
+    border-radius: 999px;
+    padding: 0.1rem 0.6rem;
+    color: var(--c-ink-500);
+  }
+  /* KPI ring stat card. */
+  .ring-card {
+    background: #fff;
+    border: 1px solid var(--c-line);
+    border-radius: 16px;
+    padding: 0.5rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 84px;
+  }
+}
