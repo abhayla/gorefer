@@ -27,7 +27,7 @@ GoRefer is a **referral management & referral intelligence platform**: users man
 
 ## Running locally (Sprint 1 skeleton — M1)
 
-The app is **Django + Django Ninja + HTMX + Tailwind + PostgreSQL** (stack LOCKED, ADR-024), with `django-tenants` for the multi-tenant boundary (ADR-023). Requires Python 3.11+.
+The app is **Django + Django Ninja + HTMX + Tailwind + PostgreSQL** (stack LOCKED, ADR-024). **PostgreSQL is the sole supported engine** (M10) across dev/test/CI/prod — there is no SQLite fallback. Multi-tenancy is single-schema `tenant_id` discriminator isolation (ADR-023, Q-M1-1). Requires Python 3.11+.
 
 ```bash
 # 1. Create + activate a virtualenv, install deps
@@ -35,22 +35,23 @@ python -m venv .venv
 .venv/Scripts/activate          # Windows (Git Bash);  source .venv/bin/activate on macOS/Linux
 pip install -r requirements.txt
 
-# 2. Provision the database. Postgres is the DEFAULT (ADR-021); it matches
-#    production and exercises Postgres-only behaviour (JSONB, partial-unique
-#    constraints, case-sensitivity). Create a dedicated least-privilege role + db
-#    (run as a Postgres superuser; substitute your own role password):
+# 2. Provision the database. PostgreSQL is the ONLY supported engine (M10) — it
+#    matches production and GoRefer relies on Postgres-only behaviour (JSONB,
+#    partial-unique constraints, case-sensitivity). There is NO SQLite fallback;
+#    settings fail-fast if the engine isn't Postgres. Create a dedicated
+#    least-privilege role + db (run as a Postgres superuser; pick your own password):
 #      CREATE ROLE gorefer LOGIN PASSWORD '<choose-one>';
 #      CREATE DATABASE gorefer_dev OWNER gorefer;
 #      \c gorefer_dev
 #      GRANT ALL ON SCHEMA public TO gorefer;
-#      ALTER ROLE gorefer CREATEDB;   -- lets the test runner create test_gorefer_dev
-#    (SQLite is an optional fallback: set DB_ENGINE=sqlite for a zero-dependency run.)
+#      ALTER ROLE gorefer CREATEDB;   -- lets the test runner create gorefer_test
 
 # 3. Configure env (copy the template; fill values in the gitignored .env — NEVER commit).
 cp .env.example .env
 #    .env.example lists KEY NAMES only. Set the Postgres DB_* vars:
-#      DB_ENGINE=postgres  DB_NAME=gorefer_dev  DB_HOST=127.0.0.1  DB_PORT=5432
-#      DB_USER=gorefer     DB_PASSWORD=<the gorefer role password>
+#      DB_NAME=gorefer_dev  DB_HOST=127.0.0.1  DB_PORT=5432
+#      DB_USER=gorefer      DB_PASSWORD=<the gorefer role password>
+#      TEST_DB_NAME=gorefer_test
 
 # 4. Apply migrations (forward-only) and seed the single ReferralProgram (Zerodha)
 python manage.py migrate
@@ -100,7 +101,7 @@ npm run build:css      # compile static/css/app.css (purged from templates/); re
 
 HTMX is vendored at `static/js/htmx.min.js`; the compiled CSS is `static/css/app.css`. Both are committed so the app runs without Node at runtime; rebuild the CSS whenever templates change (a test asserts the asset exists).
 
-**Tests + lint** (CI runs the same on the SQLite path):
+**Tests + lint** (run against Postgres `gorefer_test`; CI runs the same against a Postgres service container):
 
 ```bash
 ruff check .
@@ -110,7 +111,7 @@ python -m pytest -q
 
 **Feature flags** live in one place — `gorefer/flags.py`, resolved from env at startup (`ENABLE_*`, plus the single swappable `REFERRAL_INCENTIVE_CLAIM`). Defaults keep every not-yet-built capability and every external adapter **off** (adapters log their intended call instead of sending), so demo mode runs end-to-end with no external systems.
 
-> **SQLite vs PostgreSQL / django-tenants.** `django-tenants` is PostgreSQL-only (schema-per-tenant). To keep the skeleton bootable and CI green with no external DB, tenant schema-routing activates **only** when `DB_ENGINE=postgres`; on SQLite the same apps load without the router and the `tenant_id` discriminator columns still exist. The physical multi-tenant isolation strategy is a deferred decision — see the M1 QUESTION in [`COORDINATION.md`](./COORDINATION.md).
+> **PostgreSQL only (M10).** PostgreSQL is the sole supported engine across dev/test/CI/prod — there is no SQLite fallback, and settings raise `ImproperlyConfigured` if the resolved DB engine isn't Postgres (a green run on any other engine would be false confidence, since GoRefer relies on JSONB / partial-unique constraints / case-sensitivity). Multi-tenancy is **single-schema `tenant_id` discriminator** isolation (not django-tenants schema-per-tenant); `apps.tenants` keeps a plain Tenant/Domain registry and isolation is enforced by tenant-scoped managers + `TenantResolutionMiddleware` + composite unique constraints. Schema-per-tenant physical isolation is deferred (backlog DF-7). See the M1 QUESTION (Q-M1-1) in [`COORDINATION.md`](./COORDINATION.md).
 
 ## How to use for external LLM review
 

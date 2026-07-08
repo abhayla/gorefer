@@ -8,11 +8,32 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # PostgreSQL is the ONLY supported engine (M10) — CI runs against a Postgres
+    # service container, not SQLite. The fail-fast guard in settings rejects any
+    # other engine, so there is no SQLite job/path to keep green.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: gorefer
+          POSTGRES_PASSWORD: gorefer
+          POSTGRES_DB: gorefer
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gorefer"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
-      # CI runs the SQLite path (no external Postgres needed) — see COORDINATION Q-M1-1.
-      DB_ENGINE: sqlite
       DJANGO_SECRET_KEY: ci-not-a-real-secret
       DJANGO_DEBUG: "false"
+      DB_NAME: gorefer
+      DB_USER: gorefer
+      DB_PASSWORD: gorefer
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      TEST_DB_NAME: gorefer_test
     steps:
       - uses: actions/checkout@v4
 
@@ -45,6 +66,9 @@ jobs:
 
       - name: Migration drift check
         run: python manage.py makemigrations --check --dry-run
+
+      - name: Migrate (Postgres)
+        run: python manage.py migrate --noinput
 
       - name: Tests (pytest)
         run: python -m pytest -q
