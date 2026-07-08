@@ -50,17 +50,24 @@ def kpis(tenant=None) -> dict:
     """KPI cards — ALL from the rollup snapshot (same source/freshness as the funnel).
     accounts_opened is Zoho-sourced (true open date); unique visitors approximate."""
     totals = _rollup_totals(tenant)
+    clicks = totals["clicks"]
     leads = totals["leads"]
     accounts = totals["accounts"]
     conv_rate = round((accounts / leads) * 100, 1) if leads else 0.0
     return {
-        "total_clicks": totals["clicks"],
+        "total_clicks": clicks,
         "unique_visitors": approximate_unique_visitors(tenant=tenant),
         "unique_approx": True,
         "leads_captured": leads,
         "accounts_opened": accounts,
         "accounts_from_zoho": True,
         "conversion_rate": conv_rate,
+        # Pre-computed ring fractions (0..1) for the Variant C KPI rings, so the
+        # template carries no fragile arithmetic. Clicks ring is always full (it is
+        # the base of the funnel); leads/conv are ratios of their prior stage.
+        "clicks_frac": 1.0,
+        "leads_frac": round(leads / clicks, 3) if clicks else 0.0,
+        "conversion_frac": round(conv_rate / 100, 3),
     }
 
 

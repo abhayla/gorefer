@@ -185,6 +185,14 @@ WATI_BUSINESS_NUMBER = os.environ.get("WATI_BUSINESS_NUMBER", "917080642020")
 # Office/Ashok alert recipient for the "new lead" notification (config, not secret).
 OFFICE_ALERT_NUMBER = os.environ.get("OFFICE_ALERT_NUMBER", "917388882020")
 
+# --- PII masking policy (M9) -----------------------------------------------
+# The admin view shows FULL IP + phone. This config drives masking for the FUTURE
+# customer/referrer view (IP -> city-only, phone -> partial). Built now, dormant: it
+# only takes effect once ENABLE_CUSTOMER_LOGIN turns on (no dead UI in Sprint 1).
+PII_MASK_FOR_CUSTOMER_VIEW = os.environ.get(
+    "PII_MASK_FOR_CUSTOMER_VIEW", "true"
+).strip().lower() in {"1", "true", "yes", "on"}
+
 # --- Zoho webhook auth (M6, interim R2): static key + IP allowlist ---------
 # HMAC wax-seal is deferred (DF-2). The key is a SECRET (from env, never inline).
 ZOHO_WEBHOOK_KEY = os.environ.get("ZOHO_WEBHOOK_KEY", "")

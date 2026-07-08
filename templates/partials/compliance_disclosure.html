@@ -3,29 +3,30 @@ COMPLIANCE LOCK (ADR-014 / ADR-022): AP disclosure + market-risk warning + rewar
 wording. Auto-injected on EVERY landing state; NON-removable at any config tier. The
 incentive claim comes from the single REFERRAL_INCENTIVE_CLAIM field. `show_incentive`
 is false on partner-direct / invalid fallback (no referral benefit).
+Variant C skin — content is verbatim and unchanged (skin ≠ content).
 {% endcomment %}
 <section class="px-5 pt-4 pb-6">
-  <div class="rounded-xl bg-pifs-100/70 border border-pifs-100 p-4">
+  <div class="rounded-2xl bg-cobalt-50 border border-line p-4">
     {% if show_incentive %}
       <div class="flex items-center gap-2 mb-2">
-        <span class="h-2 w-2 rounded-full bg-gold"></span>
-        <span class="text-[11px] font-bold uppercase tracking-wider text-pifs-800/70">Referral benefit</span>
+        <span class="h-2 w-2 rounded-full bg-pending"></span>
+        <span class="text-[11px] font-bold uppercase tracking-wider text-ink-700">Referral benefit</span>
       </div>
-      <p class="text-xs font-semibold text-pifs-900 mb-3" data-gr="incentive">{{ REFERRAL_INCENTIVE_CLAIM }}.</p>
-      <div class="border-t border-pifs-200/60 pt-3 space-y-1.5">
+      <p class="text-xs font-semibold text-ink-900 mb-3" data-gr="incentive">{{ REFERRAL_INCENTIVE_CLAIM }}.</p>
+      <div class="border-t border-line pt-3 space-y-1.5">
     {% else %}
       <div class="space-y-1.5">
     {% endif %}
-        <p class="text-[10.5px] leading-relaxed text-pifs-800/70">
+        <p class="text-[10.5px] leading-relaxed text-ink-500">
           Zerodha Broking Ltd.: SEBI Registration no.: <span class="font-semibold">INZ000031633</span> |
           Passive Income Financial Solutions Pvt. Ltd. | NSE AP reg. no.:
           <span class="font-semibold">{{ NSE_AP_NO }}</span>.
         </p>
-        <p class="text-[10.5px] leading-relaxed text-pifs-800/70">
+        <p class="text-[10.5px] leading-relaxed text-ink-500">
           Investments in the securities market are subject to market risks; read all the related
           documents carefully before investing.
         </p>
       </div>
   </div>
-  <p class="text-center text-[10px] text-pifs-800/40 mt-4">© Passive Income Financial Solutions Pvt. Ltd.</p>
+  <p class="text-center text-[10px] text-ink-300 mt-4">© Passive Income Financial Solutions Pvt. Ltd.</p>
 </section>
