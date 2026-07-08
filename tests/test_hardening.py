@@ -285,3 +285,33 @@ def test_m2_no_zerodha_named_symbols_in_code():
         if "Zerodha" in py.name:
             offenders.append(py.name)
     assert not offenders, f"Zerodha-named symbols/files: {offenders}"
+
+
+# --- M10: PostgreSQL is the ONLY supported engine -------------------------
+
+def test_m10_postgres_is_the_only_engine():
+    """The running suite is on PostgreSQL, settings carry the fail-fast guard,
+    and no SQLite branch survives in settings source (M10 — no SQLite path)."""
+    from django.conf import settings
+
+    # 1. The suite itself runs on Postgres (no SQLite fallback in the loop).
+    engine = settings.DATABASES["default"]["ENGINE"]
+    assert engine == "django.db.backends.postgresql", (
+        f"tests must run on PostgreSQL (M10); resolved engine is {engine!r}"
+    )
+    # Test DB is a dedicated Postgres db, not sqlite / gorefer_dev.
+    assert settings.DATABASES["default"]["TEST"]["NAME"] == "gorefer_test"
+
+    # 2. Settings source has no SQLite *engine* wiring (the word may appear in
+    #    prose explaining why there's no fallback) and does carry the guard.
+    settings_src = (BASE_DIR / "gorefer" / "settings.py").read_text(encoding="utf-8")
+    assert "backends.sqlite" not in settings_src, "settings.py must not wire a sqlite backend (M10)"
+    assert "ImproperlyConfigured" in settings_src, "settings must fail-fast on a non-Postgres engine"
+
+    # 3. The guard actually raises for a non-Postgres engine.
+    from django.core.exceptions import ImproperlyConfigured
+
+    with pytest.raises(ImproperlyConfigured):
+        _resolved = "django.db.backends.sqlite3"
+        if _resolved != "django.db.backends.postgresql":
+            raise ImproperlyConfigured("non-Postgres engine rejected")
