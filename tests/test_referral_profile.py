@@ -60,6 +60,14 @@ def test_profile_renders_top_band_and_zoho_enrichment(admin_client):
     assert "Referral Profile" in html
 
 
+def test_profile_loads_rings_js_so_kpi_rings_paint(admin_client):
+    """DEF-M9-1: the top-band KPI rings are drawn by rings.js — it MUST be loaded on
+    the profile (data-ring divs are inert without it)."""
+    html = admin_client.get("/admin-panel/referrer/RJ4521/").content.decode()
+    assert "data-ring" in html                 # ring placeholders present
+    assert "js/rings.js" in html               # and the script that paints them
+
+
 def test_profile_missing_zoho_value_shows_not_on_file(admin_client):
     """DA1707 has no Reward/Referral_Bonus in the fixture → '— not on file —'."""
     html = admin_client.get("/admin-panel/referrer/DA1707/").content.decode()

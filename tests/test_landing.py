@@ -39,9 +39,13 @@ def test_landing_has_compliance_referral_echo_and_business_whatsapp(seeded, clie
     # Single swappable incentive claim (reordered — DA polish #2)
     assert "10% brokerage share + 300 reward points" in html
     # The WATI BUSINESS number is exposed to the page (JS builds the wa.me deep link
-    # from it at click time — DA polish #1); never Ashok's personal 73888.
+    # from it at click time — DA polish #1); it is the WhatsApp SHARE target.
     assert "917080642020" in html
-    assert "7388882020" not in html
+    assert 'watiNumber: "917080642020"' in html
+    # Ashok's helpline (73888…) now legitimately appears on the landing as the config
+    # "call" line (DA M9 fix batch) — but it is NEVER the wa.me SHARE target.
+    assert "wa.me/917388882020" not in html and "917388882020?text" not in html
+    assert "tel:+917388882020" in html   # helpline is a tel: link only
     # Consent + Privacy Policy present
     assert "Privacy Policy" in html
     assert "consentInput" in html

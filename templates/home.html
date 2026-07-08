@@ -20,9 +20,10 @@
   </section>
 {% endblock %}
 {% block compliance %}
+  {% comment %}Full SEBI/NSE-AP disclosure block + canonical market-risk warning
+  (byte-exact, from the single config source) — required verbatim on every customer page.{% endcomment %}
   <footer class="mx-auto max-w-xl px-4 pb-10 pt-6 text-[10px] text-ink-300 text-center leading-relaxed">
-    <p>Passive Income Financial Solutions Pvt. Ltd. · Authorised Person NSE AP Reg. No. {{ NSE_AP_NO }}.</p>
-    <p class="mt-1">Investments in the securities market are subject to market risks; read all the
-      related documents carefully before investing.</p>
+    <p>{{ AP_DISCLOSURE_BLOCK }}</p>
+    <p class="mt-1">{{ MARKET_RISK_WARNING }}</p>
   </footer>
 {% endblock %}

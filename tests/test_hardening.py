@@ -60,6 +60,49 @@ def test_no_source_multiline_hash_comments_in_templates():
     assert not offenders, f"multi-line {{# #}} comments (use {{% comment %}}): {offenders}"
 
 
+# --- compliance strings are byte-exact + verbatim on every customer page ----
+
+# Canonical strings (must match GLOBAL.md / the spec exactly). NOTE: no "the" before
+# "securities market"; a COMMA (not ";") before "read".
+_CANON_DISCLOSURE = (
+    "Zerodha Broking Ltd.: SEBI Registration no.: INZ000031633 | "
+    "Passive Income Financial Solutions Private Limited | "
+    "NSE AP reg. no.: AP2516003693"
+)
+_CANON_RISK = (
+    "Investments in securities market are subject to market risks, "
+    "read all the related documents carefully before investing."
+)
+
+
+@pytest.mark.django_db
+def test_compliance_strings_byte_exact_on_customer_pages():
+    """The disclosure block + market-risk warning render VERBATIM (byte-exact) on
+    every customer-facing page — homepage footer included (DA M9 fix batch)."""
+    call_command("seed_program")
+    c = Client()
+    c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0")  # prime a journey
+    for path in ("/", "/r/RJ4521", "/r/bad--id", "/admin-panel/login/"):
+        html = c.get(path, HTTP_USER_AGENT="Mozilla/5.0").content.decode()
+        assert _CANON_DISCLOSURE in html, f"disclosure not byte-exact on {path}"
+        assert _CANON_RISK in html, f"risk warning not byte-exact on {path}"
+        # The wrong (pre-fix) wording must NOT appear.
+        assert "the securities market" not in html, f"stale 'the securities market' on {path}"
+        assert "market risks;" not in html, f"stale ';' risk wording on {path}"
+
+
+@pytest.mark.django_db
+def test_landing_shows_config_helpline_distinct_from_wati_share():
+    """Landing shows the config helpline (SUPPORT_HELPLINE_PHONE) as a call line, and
+    the WhatsApp share stays on the config WATI number — both config-driven."""
+    call_command("seed_program")
+    c = Client()
+    html = c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0").content.decode()
+    assert "73888 82020" in html            # helpline (Ashok) on the call line
+    assert "tel:+917388882020" in html      # config-driven tel: link
+    assert "917080642020" in html           # WhatsApp share still on the WATI number
+
+
 # --- §G: config cascade + compliance lock ---------------------------------
 
 @pytest.fixture

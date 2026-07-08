@@ -88,6 +88,8 @@ python manage.py runserver
 
 > **Visual language — "Variant C · Cobalt Clean-Fintech"** (DA DESIGN LOCKED 2026-07-08): all screens use the cobalt theme in `mockups/*.html`. Tokens are **CSS variables** (`static/css/input.css`) wired into `tailwind.config.js`, so DF-10 runtime theming is a later config layer, not a rewrite. Rebuild `app.css` after template/CSS changes.
 
+> **Compliance + helpline config.** The AP disclosure block + market-risk warning are canonical, **byte-exact** strings from a single source (`AP_DISCLOSURE_BLOCK` / `MARKET_RISK_WARNING` in settings, injected into every page) so wording can never drift. The landing page's "free, fully-assisted account opening — call" line uses **`SUPPORT_HELPLINE_PHONE`** (default `+91 73888 82020`, Ashok); the WhatsApp-share button uses the config-driven WATI number `WATI_BUSINESS_NUMBER` (`917080642020`) — the two are distinct and both config-driven.
+
 **Frontend assets** (compiled Tailwind — NO CDN runtime; light + offline for mobile-first, ADR-003):
 
 ```bash
