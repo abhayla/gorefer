@@ -126,3 +126,61 @@ Tests backing this (all green): `test_profile_renders_top_band_and_zoho_enrichme
 ## Final line
 
 **READY TO MERGE — NO.** Blocking item: **DEF-M9-1** (Referral Profile top-band KPI rings render empty; one-line fix: load `rings.js` in `referrer_profile.html`, then re-screenshot). After that fix re-verifies, this flips to **YES**. Copy **Decision 1 (thank-you helpline)** is **PENDING** — a separate small config follow-up, explicitly not a blocker per the mission; **Decision 2 (null-referrer row)** is done. OBS-3/OBS-4 (disclosure wording / homepage footer) are pre-existing, DA-accepted, Low — for an explicit DA call, not blockers.
+
+---
+
+# ADDENDUM — Scoped Re-verify (fix batch) — 2026-07-08
+
+> **Trigger.** DA entry "Fix batch accepted · final SCOPED re-verify then merge" (COORDINATION.md, 2026-07-08). The engineer's fix batch (commit **`38390fb`**, "M9 fix batch: rings.js on profile + helpline config + compliance verbatim") addresses the blocker + two fold-ins from the report above. Per the DA, this is a **scoped** re-pass (4 items), **not** a full rerun — and explicitly **do not trust the builder's self-confirm on the rings** (the exact bug that slipped a non-visual check).
+>
+> **Commit re-verified:** `38390fb` (HEAD of `mission-9-referral-profile`, == `origin/mission-9-referral-profile`). Independent verifier, fresh pass. Live checks on Postgres `gorefer_test`; suites on Postgres **and** SQLite.
+
+## Scoped items
+
+| # | DA re-verify item | Result | Evidence |
+|---|---|:--:|---|
+| 1 | **Referral Profile top-band KPI rings actually PAINT** (SVG visible, not empty boxes) at 390 + 1280 — the one must-see item. | **PASS** | Re-shot the profile at both widths. All **three** rings now render as painted SVG: **Clicks = 14** (full cobalt ring), **Leads = 1** (amber arc), **Accounts = 1** (green arc); 4th tile "Visitors 13*" plain-HTML as designed. Root cause fixed: `referrer_profile.html` now loads `<script src="…/rings.js">` (line 133) before `referral_profile.js`. Screenshots: `review/screenshots-m9-reverify/referral-profile-{mobile,desktop}.png`. |
+| 2 | **Landing:** `tel:` helpline `+91 73888 82020` renders **AND** WhatsApp share target still WATI `917080642020` (no `wa.me/917388882020` anywhere). | **PASS** | Live `/r/RJ4521`: helpline renders as `<a href="tel:+917388882020">call +91 73888 82020</a>` ("Prefer a call? Free, fully-assisted account opening — call +91 73888 82020"), config-driven via `SUPPORT_HELPLINE_PHONE`. Share button target = `watiNumber: "917080642020"`. **`wa.me/917388882020` count = 0** (and 0 for any `wa.me…7388882020` form) — Ashok's number is never the share target, only a `tel:` line. Screenshot: `landing-desktop.png`. |
+| 3 | **Compliance:** `test_compliance_strings_byte_exact_on_customer_pages` green + homepage footer now carries the full SEBI disclosure block. | **PASS** | `test_compliance_strings_byte_exact_on_customer_pages` → **1 passed**. Independent byte-exact grep on `/`, `/r/RJ4521`, `/r/AB`, `/admin-panel/login/`, and the 503 partner-unavailable page: canonical **disclosure** (`…Passive Income Financial Solutions Private Limited | NSE AP reg. no.: AP2516003693`) present on all; canonical **risk warning** (`Investments in securities market are subject to market risks, read all the related documents carefully before investing.` — no "the", comma) present on all; the **old drifted wording ("Investments in the securities market") is gone everywhere (count 0)**. Homepage now carries the full SEBI block (`Zerodha Broking Ltd.` + `INZ000031633` + `Private Limited` + `AP2516003693`) — OBS-4 fixed. |
+| 4 | **Full pytest green** (154); Postgres optional. | **PASS** | **154 passed / 0 failed / 0 skipped** on **Postgres** (`gorefer_test`, 154 collected) **and** on **SQLite** (parity). The 3 new fix-batch tests pass (`rings_js` load, `compliance_strings_byte_exact`, helpline-distinct-from-share). `makemigrations --check` → no drift. `ruff check .` → **All checks passed!** |
+
+## Disposition of the prior findings
+
+- **DEF-M9-1 (was the Medium blocker) → RESOLVED.** Rings paint, visually confirmed at 390 + 1280 (not a self-confirm — screenshotted by the independent verifier). New test `test_profile_loads_rings_js_so_kpi_rings_paint` locks it.
+- **OBS-1 (copy Decision 1 helpline) → RESOLVED.** Premise corrected by the DA (no thank-you page exists; capture → 302 to Zerodha per M3). Helpline now surfaced on the **landing** page as a config-driven `tel:` line; WhatsApp share unchanged (WATI). DA locked "keep Ashok's number as a `tel:` line; `wa.me` share target must stay WATI" — implemented exactly.
+- **OBS-2 (copy Decision 2 null-referrer row) → still PASS.**
+- **OBS-3 (disclosure/risk wording not byte-verbatim) → RESOLVED.** Canonical single-source `AP_DISCLOSURE_BLOCK` + `MARKET_RISK_WARNING` constants; byte-exact on every customer page; drift gone.
+- **OBS-4 (homepage omitted full SEBI block) → RESOLVED.** Full SEBI disclosure block now on the homepage footer.
+
+No source files were modified by this re-verify; `.env` restored to `gorefer_dev`; server + headless Chrome stopped. Added evidence only: `review/screenshots-m9-reverify/`.
+
+## Final line (scoped re-verify)
+
+**READY TO MERGE — YES.** All four scoped re-verify items pass: the Referral Profile KPI rings now paint (visually confirmed at 390 + 1280 by the independent verifier, not a self-check); the landing shows the `tel:` helpline `+91 73888 82020` while the WhatsApp share stays on the WATI number `917080642020` (Ashok's number never the `wa.me` target); compliance strings are byte-exact on every customer page with the full SEBI block now on the homepage; full pytest **154 passed / 0 failed** on Postgres and SQLite, ruff clean, no migration drift. The prior blocker (DEF-M9-1) and both fold-ins (OBS-1/OBS-3/OBS-4) are resolved. **PR #10 is clear to merge; M9 done.**
+
+---
+
+# ADDENDUM 2 — Fresh INDEPENDENT scoped re-verify (DA "final SCOPED re-verify") — 2026-07-08
+
+> **Trigger.** DA entry "Fix batch accepted · 1 confirmation · final SCOPED re-verify then merge" (COORDINATION.md, 2026-07-08), which explicitly says: *"Do NOT trust the builder's self-confirm on the rings — that's the exact bug that just slipped a non-visual check."* This addendum is a **fresh independent pass by the verifier session** that re-ran the four DA items itself and, for item 1, **regenerated the profile screenshots from a live running app and visually inspected the rendered SVG** rather than relying on any prior screenshot or the builder's word.
+>
+> **Commit re-verified:** `38390fb` (HEAD of `mission-9-referral-profile`; `git rev-parse HEAD == origin/mission-9-referral-profile == 38390fb`). **DB:** Postgres 16 (`gorefer_dev`, `DB_ENGINE=postgres`, role `gorefer`, `127.0.0.1:5432`) — same app connection from the gitignored `.env`; no credential printed/committed. **Mode:** demo (all WATI/Zoho send/read flags off → fixtures). **Method for item 1:** live `manage.py runserver` on `127.0.0.1:8009`; an admin session minted via `SessionStore` (staff user `admin@pifs.in`); headless Chrome 149 driven over the DevTools Protocol with that session cookie; screenshots captured **after** page JS executed.
+
+## Scoped items — independent results
+
+| # | DA re-verify item | Result | Independent evidence (this pass) |
+|---|---|:--:|---|
+| 1 | **Referral Profile top-band KPI rings actually PAINT** (SVG visible, not empty boxes) at 390 + 1280 — the one must-see item; do not trust a self-confirm. | **PASS** | I re-shot `/admin-panel/referrer/RJ4521/` myself at **1280** and **390** and looked at both PNGs: all **three** rings render as painted SVG arcs — **Clicks = 19** (full cobalt ring), **Leads = 1** (amber arc), **Accounts = 1** (green arc); the 4th tile "Visitors 16\*" is plain-HTML by design. No empty boxes at either width. Corroborated programmatically via CDP `Runtime.evaluate`: `document.querySelectorAll('[data-ring] svg').length` = **3** and `[data-ring] svg circle` = **6** (2 circles/ring = track + progress arc, exactly what `rings.js` draws) — proof the script executed, not merely that its `<script>` tag is present. Root cause confirmed fixed in-file: `templates/dashboard/referrer_profile.html:133` loads `<script src="{% static 'js/rings.js' %}">`. New screenshots: `review/screenshots-m9-reverify/reverify-profile-{desktop,mobile}.png`. |
+| 2 | **Landing:** `tel:` helpline `+91 73888 82020` renders **AND** WhatsApp share target still WATI `917080642020` (no `wa.me/917388882020` anywhere). | **PASS** | Live `/r/RJ4521` served HTML: helpline renders as `tel:+917388882020` ("Prefer a call? Free, fully-assisted account opening — call +91 73888 82020"), visually confirmed on `reverify-landing-desktop.png`. Share button config value `watiNumber: "917080642020"`. Independent grep of the served body: `wa.me/917388882020` (and `wa.me/…7388882020`) count = **0** — Ashok's number appears only as a `tel:` line, never as the `wa.me` share target. |
+| 3 | **Compliance:** `test_compliance_strings_byte_exact_on_customer_pages` green + homepage footer now carries the full SEBI disclosure block. | **PASS** | I ran the test directly → **1 passed**. Independent grep on the live homepage `/`: `Zerodha Broking Ltd.` = 1, `INZ000031633` = 1, `Passive Income Financial Solutions Private Limited` = 1, `AP2516003693` = 1 → the **full SEBI block is now on the homepage footer** (OBS-4 resolved). Canonical risk warning `Investments in securities market are subject to market risks, read all the related documents carefully before investing` present (no "the", comma). The old drifted wording `the securities market` count = **0** on `/`, `/r/RJ4521`, `/r/AB`, and `/admin-panel/login/`. |
+| 4 | **Full pytest (154) green**; sqlite acceptable, Postgres optional. | **PASS** | **154 passed / 0 failed / 0 skipped** on **Postgres** (`gorefer_dev`) *and* **154 passed** on **SQLite** (`DB_ENGINE=sqlite` parity) — I ran both myself this pass. `ruff check .` → **All checks passed!**; `makemigrations --check --dry-run` → **No changes detected** (no drift). The three fix-batch tests live in `tests/test_referral_profile.py` (rings-js load), `tests/test_hardening.py` (compliance byte-exact), `tests/test_landing.py` (helpline distinct from WATI share). |
+
+## Independent-verifier notes
+
+- The must-see item (rings) was verified **visually, from screenshots I generated in this session against a live app** — not from the pre-existing `reverify-*` PNGs and not from the builder's STATUS entry. This is exactly the non-visual-check gap the DA flagged; it is now closed with a first-hand visual pass at both widths.
+- One cosmetic artifact, **not a defect:** on this fresh environment the Clicks-tab rows show `Direct / 127.0.0.1 / curl` for a few rows — those are clicks generated by my own `curl` smoke-tests during setup (loopback IP, curl UA), overlaid on the seeded demo clicks. It does not affect the ring/compliance/helpline verification and is an artifact of the verifier's own probing.
+- No source files were modified by this pass. Added evidence only: `review/screenshots-m9-reverify/reverify-profile-desktop.png`, `reverify-profile-mobile.png`, `reverify-landing-desktop.png`. Server + headless Chrome stopped afterward.
+
+## Final line (Addendum 2 — fresh independent pass)
+
+**READY TO MERGE — YES.** All four DA scoped items independently re-verified on commit `38390fb`: (1) the three Referral Profile KPI rings **paint** as SVG at both 390 and 1280 — visually confirmed by the verifier's own live screenshots plus a CDP DOM count of 3 SVGs / 6 circles inside `[data-ring]`, not a self-confirm; (2) the landing shows the `tel:` helpline `+91 73888 82020` while the WhatsApp share stays on WATI `917080642020` (zero `wa.me` to Ashok's number); (3) `test_compliance_strings_byte_exact_on_customer_pages` passes, the full SEBI block is on the homepage footer, and the drifted wording is gone everywhere; (4) full pytest **154 passed / 0 failed** on both Postgres and SQLite, ruff clean, no migration drift. **PR #10 is clear to merge; M9 done.**

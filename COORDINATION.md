@@ -526,3 +526,39 @@ Keep config-over-code (helpline + WATI number are config, not literals). After t
 **Docs synced:** `.env.example` (`SUPPORT_HELPLINE_PHONE`); README (compliance-single-source + helpline vs WATI note); `docs/ui-ux/07` (landing helpline "call" line + no-thank-you-page note). `app.css` unchanged (no new classes). One self-caught regression while doing this: my first helpline + disclosure comments were multi-line `{# #}` (the known Django trap) — the guard/my own check caught them; converted to `{% comment %}` and re-verified no leak.
 
 Ready for the independent verifier's quick re-pass → merge PR #10. — Engineer
+
+---
+
+## [DA — 2026-07-08] Fix batch accepted · 1 confirmation · final SCOPED re-verify then merge
+
+**Both flags resolved:**
+- **Ashok's number on the landing page — KEEP it (approved).** GLOBAL.md designates `+91 73888 82020` as the account-opening helpline to include in ALL outbound/public referral & account-opening touchpoints ("free, fast, fully-assisted"), so a `tel:` helpline on the landing is on-policy. The Engineer's test refinement is correct: the **`wa.me` share target must stay the WATI number** (never Ashok's), and Ashok's number appears only as a `tel:` line. Good distinction — locked.
+- Multi-line `{# #}` self-catch → `{% comment %}`: fine.
+
+**Final gate — a SCOPED independent re-verify (not a full rerun). Do NOT trust the builder's self-confirm on the rings — that's the exact bug that just slipped a non-visual check.** The independent verifier (fresh session) must:
+1. **Screenshot the Referral Profile at 390 + 1280 and confirm the three top-band KPI rings actually PAINT** (SVG visible, not empty boxes). This is the one must-see item.
+2. **Landing:** confirm the `tel:` helpline `+91 73888 82020` renders AND the WhatsApp share target is still the WATI number `917080642020` (no `wa.me/917388882020` anywhere).
+3. **Compliance:** `test_compliance_strings_byte_exact_on_customer_pages` green + eyeball the homepage footer now carries the full SEBI disclosure block.
+4. Full pytest (154) green — sqlite is acceptable here since the fixes are template/settings only (no models/migrations); a Postgres rerun is optional, not required.
+Append the result to `review/Verification-Report-M9.md`. On green → **merge PR #10; M9 done.** — DA
+
+---
+
+## [DA — 2026-07-08] M9 verification PASSED → MERGE approved · then M10 (Postgres-only, drop SQLite)
+
+Independent re-verify: **all 4 PASS, READY TO MERGE = yes.** Rings proven to actually paint (3 `<svg>`/6 `<circle>` under `[data-ring]` via CDP + screenshots at 390/1280 — not just a script tag). Helpline `tel:` renders + share stays WATI (`wa.me` to Ashok = 0). Compliance byte-exact + full SEBI footer (OBS-4 resolved). 154 pass on Postgres. The `127.0.0.1/curl` rows were the verifier's own smoke curls — not a defect.
+
+**Evidence:** the verifier should commit its `review/Verification-Report-M9.md` + `review/screenshots-m9-reverify/*.png` (capture the proof). **Then merge PR #10 → M9 is DONE.**
+
+### MISSION M10 — Postgres-only hardening (remove SQLite entirely)
+Abhay's call (DA agrees): SQLite must not be in the loop — GoRefer targets Postgres and relies on Postgres-specific behaviour, so a green SQLite run is false confidence. Make Postgres the ONLY engine across dev/test/CI/prod so "SQLite is acceptable" can never be said again:
+1. **Settings:** `DATABASES` resolves to Postgres only — remove any SQLite branch/fallback. Add a **fail-fast guard**: raise `ImproperlyConfigured` if the resolved `ENGINE` isn't `django.db.backends.postgresql`.
+2. **`.env.example`:** Postgres keys only; delete SQLite defaults.
+3. **CI:** add a **Postgres service container**; run migrate + full pytest against it; delete the SQLite test path/job.
+4. **Tests:** test DB = Postgres `gorefer_test` (not sqlite, not `gorefer_dev`).
+5. **Docs:** remove every "sqlite dev/CI path" reference (CLAUDE.md, `implementation/10`, README); state Postgres is the sole supported engine.
+6. Full suite green on Postgres; keep all Sprint-1 guardrails green; open a PR; append STATUS. Raise a QUESTION + pause if anything depends on SQLite that isn't trivially removable.
+
+Sequence: **merge M9 first (don't hold the shipped feature), then do M10.** — DA
+
+**Standing rule (Abhay, 2026-07-08) — browser on THIS machine only:** any browser-driven work for GoRefer (Claude-in-Chrome, headless-Chrome screenshots, live-render UI verification) must run on **this machine** (the box where the repo + app run), never on another host. Verifier/Engineer sessions: use this machine's Chrome for all screenshot/render checks. — DA
