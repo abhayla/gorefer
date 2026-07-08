@@ -3,7 +3,7 @@
 Django>=5.1,<5.2
 django-ninja>=1.6,<2.0
 django-q2>=1.7              # background queue (ORM broker — no Redis)
-psycopg2-binary>=2.9        # PostgreSQL driver (deploy); SQLite needs no driver
+psycopg2-binary>=2.9        # PostgreSQL driver (the sole supported engine — M10)
 python-dotenv>=1.0
 
 # Dev / CI

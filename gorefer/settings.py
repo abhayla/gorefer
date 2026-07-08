@@ -1,21 +1,27 @@
 """Django settings for GoRefer (Sprint 1 — Foundation / M1 skeleton).
 
-Stack (LOCKED, ADR-024): Django + Django Ninja + HTMX + Tailwind + PostgreSQL,
-with django-tenants for the ADR-023 multi-tenant boundary.
+Stack (LOCKED, ADR-024): Django + Django Ninja + HTMX + Tailwind + PostgreSQL.
 
-Multi-tenancy note (see COORDINATION QUESTION Q-M1-1): django-tenants is
-PostgreSQL-only (schema-per-tenant). To keep the M1 skeleton bootable and CI green
-with **no external database**, tenant routing is enabled ONLY when the configured
-DB engine is PostgreSQL (`DB_ENGINE=postgres`, the deploy default). On SQLite
-(dev/CI convenience) the same apps load WITHOUT the django-tenants schema router,
-and the `tenant_id` discriminator columns (per 05-Database-Design §2) still exist.
-This lets M1 boot everywhere while the ADR-023 boundary is scaffolded now.
+Database engine (M10): **PostgreSQL is the ONLY supported engine** across
+dev/test/CI/prod. GoRefer relies on Postgres-specific behaviour (JSONB, partial-
+unique constraints, case-sensitivity), so there is no SQLite branch or fallback —
+a green run on any other engine would be false confidence. The `DATABASES` config
+below resolves to Postgres unconditionally and a fail-fast guard raises
+`ImproperlyConfigured` if the resolved ENGINE is anything but
+`django.db.backends.postgresql`.
+
+Multi-tenancy (see COORDINATION Q-M1-1) is SINGLE-SCHEMA `tenant_id` discriminator
+isolation (NOT django-tenants schema-per-tenant): `apps.tenants` keeps a plain
+Tenant/Domain registry and isolation is enforced by tenant-scoped model managers +
+TenantResolutionMiddleware + composite unique constraints (per 05-Database-Design).
+Schema-per-tenant physical isolation is deferred to backlog DF-7.
 """
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 from gorefer.flags import flags
@@ -29,14 +35,6 @@ load_dotenv(BASE_DIR / ".env")
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "insecure-dev-only-change-me")
 DEBUG = os.environ.get("DJANGO_DEBUG", "true").strip().lower() in {"1", "true", "yes", "on"}
 ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h]
-
-# --- Database engine selection ---------------------------------------------
-# DB_ENGINE=postgres  -> DEFAULT: PostgreSQL (ADR-021), single-schema tenant_id.
-# DB_ENGINE=sqlite    -> optional zero-dependency fallback (CI/quick local); CI and
-#                        the test suite set this explicitly. Postgres is the default
-#                        so dev matches production and Postgres-only behaviour
-#                        (JSONB, constraints, case-sensitivity) is exercised locally.
-DB_ENGINE = os.environ.get("DB_ENGINE", "postgres").strip().lower()
 
 # --- Applications ----------------------------------------------------------
 # Multi-tenancy is SINGLE-SCHEMA tenant_id discriminator (COORDINATION Q-M1-1
@@ -108,37 +106,33 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "gorefer.wsgi.application"
 
-# --- Database --------------------------------------------------------------
+# --- Database (PostgreSQL ONLY — M10) --------------------------------------
 # Single-schema isolation (Q-M1-1): plain Postgres backend, NO django-tenants
-# backend/router. SQLite is the zero-dependency dev/CI path.
-if DB_ENGINE == "postgres":
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.environ.get("DB_NAME", "gorefer"),
-            "USER": os.environ.get("DB_USER", "gorefer"),
-            "PASSWORD": os.environ.get("DB_PASSWORD", ""),
-            "HOST": os.environ.get("DB_HOST", "localhost"),
-            "PORT": os.environ.get("DB_PORT", "5432"),
-        }
+# router. There is NO SQLite/other-engine branch — Postgres is the sole supported
+# engine across dev/test/CI/prod (GoRefer relies on JSONB / partial-unique
+# constraints / case-sensitivity). The `test` DB name below is what the pytest
+# runner creates + tears down (default `gorefer_test`, override via TEST_DB_NAME).
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("DB_NAME", "gorefer"),
+        "USER": os.environ.get("DB_USER", "gorefer"),
+        "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+        "HOST": os.environ.get("DB_HOST", "localhost"),
+        "PORT": os.environ.get("DB_PORT", "5432"),
+        "TEST": {"NAME": os.environ.get("TEST_DB_NAME", "gorefer_test")},
     }
-else:
-    # SQLite dev/CI path. Resolve DB_NAME robustly + cross-platform: a bare name
-    # (no path separator) becomes BASE_DIR/<name>[.sqlite3] so a shared
-    # `.env.example` boots identically on Windows/macOS/Linux (DEF-2).
-    _sqlite_name = os.environ.get("DB_NAME") or "gorefer_dev.sqlite3"
-    if os.sep not in _sqlite_name and "/" not in _sqlite_name:
-        if not _sqlite_name.endswith(".sqlite3"):
-            _sqlite_name += ".sqlite3"
-        _sqlite_path = str(BASE_DIR / _sqlite_name)
-    else:
-        _sqlite_path = _sqlite_name
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": _sqlite_path,
-        }
-    }
+}
+
+# Fail-fast guard (M10): refuse to boot on anything but PostgreSQL, so a non-Postgres
+# engine can never silently pass tests or run in prod.
+_resolved_engine = DATABASES["default"]["ENGINE"]
+if _resolved_engine != "django.db.backends.postgresql":
+    raise ImproperlyConfigured(
+        "GoRefer supports PostgreSQL only (M10). Resolved DB ENGINE "
+        f"'{_resolved_engine}' is not 'django.db.backends.postgresql'. "
+        "Set the DB_* env vars to a Postgres database — there is no SQLite fallback."
+    )
 
 # --- Auth ------------------------------------------------------------------
 LOGIN_URL = "dashboard_login"
