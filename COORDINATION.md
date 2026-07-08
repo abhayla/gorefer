@@ -368,6 +368,83 @@ Handing to the independent agent for re-verification on Postgres → target `REA
 
 **Live-verify housekeeping:** while smoke-testing I'd accumulated ~30 orphaned `runserver` processes from earlier rounds (Windows doesn't reap the bash-launched children); cleaned them all up and confirmed the three tweaks on a single fresh server against Postgres `gorefer_dev`.
 
-**Referrer Profile / Referrer-360 (#4): NOT built** — awaiting your doc-07 §6(e) section + mockup after Abhay's sign-off. The data it needs already exists (referrals + events + rollups + VisitorPII), so it'll be a read-model + one page when you issue the mission.
+**Referrer Profile / Referrer-360 (#4): NOT built** — awaiting your doc-07 §6(e) section + mockup after Abhay's sign-off. The data it needs already exists (referrals + events + rollups + VisitorPII), so it'll b
+---
 
-Ready for the independent agent to re-verify the three tweaks (functionality + UI) on Postgres.
+## [DA note — 2026-07-07] Lead-write policy + Lead Destination requirement (from User Referral Screen design)
+
+Two decisions from Abhay, logged for when the Zoho + User Referral Screen mission is issued:
+
+1. **PIFS Zerodha tenant writes NO lead to Zoho.** Ashok enters Zoho leads **manually** today and that process stays. So `ENABLE_ZOHO_WRITE` remains **off** for PIFS. Zoho **READ** (enrichment: Mailing_City/State, Profession, Account_Status, Account_Opened_On, IsReferrer, Referrer_Client_Id, Is_Active_Investor, Referral_Bonus, opt-out flags — matched by `ClientId`) is what we wire. Consequence: no GoRefer journey-id stamp on the Zoho lead → journey↔Zoho-contact link is **match-based** (mobile/email/ClientId), accepted.
+
+2. **New tracked requirement → DF-9 (Deferred-Features-Backlog):** pluggable per-user **Lead Destination** adapter (none/manual, Zoho, Google Sheet, webhook, CSV, other), chosen from **central config**, no code change per user. Build later; do NOT implement in the upcoming screen mission — just don't hardcode Zoho as the only sink.
+
+No action required from the Engineer yet — this is context for the forthcoming "Zoho-read enrichment + User Referral Screen" mission (design still being finalized with Abhay). — DA
+
+---
+
+## [DA → Engineer — 2026-07-07] MISSION M9 — Zoho-READ enrichment + User Referral Screen ("Referral Profile")
+
+**Status: READY TO BUILD.** Design locked with Abhay via a 7-question grill-me. Visual truth = `mockups/referral-profile-mockup.html` (build to match it — **Variant C · Cobalt Clean-Fintech** theme; see the DESIGN LOCKED entry below for tokens). Author the spec into `docs/ui-ux/07` §6(e) as part of this mission and keep code-adjacent docs in sync.
+
+### Part A — Zoho READ enrichment (read-only; WRITE stays OFF)
+- Wire a **read-only** Zoho CRM adapter. **Do NOT enable Zoho WRITE** — PIFS enters leads into Zoho manually (Ashok). `ENABLE_ZOHO_WRITE` stays `false`. Add/keep `ENABLE_ZOHO_READ` flag (default off in CI/demo; on where creds present). In demo mode the adapter returns seeded fixtures, not live calls.
+- Match a referrer to their Zoho Contact by **`ClientId`** (the raw Zerodha client id in the link). Pull these Contact fields for the top band: `Full_Name`, `Mailing_City`, `Mailing_State`, `Mailing_Country`, `Profession`, `Account_Status`, `Account_Opened_On` (TRUE open date — analytics use this per ADR-017), `Is_Active_Investor`, `IsReferrer`, `Partner_Id`, `Referral_Bonus`, `Referral_Bonus_Amount`, `Email_Opt_Out`, `WhatsApp_Opt_Out`, `Do_not_contact`. Missing value → render "— not on file —".
+- The **Referred People** tab reads Zoho **Leads + Contacts** referred by this ClientId (via `Referrer_Client_Id`): Name, City, Profession, Partner, Account Status, Opened date, Reward flag.
+- Zoho creds live in the app's gitignored `.env` (never commit). Reference `.env.example` with placeholder keys only.
+
+### Part B — User Referral Screen (route `/admin-panel/referrer/{client_id}/`)
+- **Admin-only** (Sprint 1). Title: "{Name} — Referral Profile" (name if known via Zoho, else "— name not on file —"). Internal name: User Referral Screen.
+- **Top band:** avatar/initials, name, client_id, Active-Investor chip; Zoho enrichment chips (City/State, Profession, Account Status, Opened date, Reward); 4 headline aggregates — **Clicks, Unique visitors (approx, bot-filtered, label with `*`), Leads, Accounts**.
+- **Per-link summary strip:** one card per referral link (partner). Card = partner name, partner code, the `gorefer.in/r/{client_id}` link, and per-link clicks/leads/accounts. **Render only real enabled links** (today: Zerodha only — do NOT ship the illustrative "Loan" card from the mockup; that card exists in the mockup solely to show the multi-partner layout). Structure must support N partners with no redesign (config-driven; ties to DF-5/DF-9).
+- **Two tabs on one screen:**
+  - **Clicks** (one row per click): columns **Date/time · Partner/Link · Channel (share-channel: WhatsApp/Direct/QR/other) · City · Region · Country · IP · Device · OS/Browser · Traffic (Human/Bot) · Outcome**. Geo/device derived from GoRefer's own captured click + VisitorPII (IP) + user-agent. Bot/preview rows shown dimmed + excluded from click/visitor totals. Filters above table: **Date, Partner, City, IP, Device, Traffic(Human/Bot)**.
+  - **Referred People** (one row per identified person, from Zoho): Name · City · Profession · Partner · Account Status · Opened · Reward.
+- **PII masking (config, build now / apply later):** admin view = full IP + phone. Add a config-driven masking rule (e.g. `PII_MASK_FOR_CUSTOMER_VIEW`) that masks IP→city-only and phone→partial in the FUTURE customer/referrer view. It only activates when `ENABLE_CUSTOMER_LOGIN` turns on; admin view stays full. No dead UI now.
+- **Entry points:** (1) Referrer cell in the Explorer links here (already specced in doc 07 §6(d)); (2) a search box (client_id / name); (3) future top-referrers leaderboard.
+- **Self-click note (later polish, do NOT build now):** if a click's mobile later matches the referrer's known Zoho mobile, tag it "self-click" and exclude from conversion counts. Log as a backlog note; not in this mission.
+
+### Config-over-code (hard requirement)
+- No hardcoded copy/columns. Column sets per partner come from config (DF-5 pattern). Any user-facing string (labels, the "approx/bot-filtered" note, masking format, reward wording) is a config constant, not inline literal. Reward wording continues to come from the single `REFERRAL_INCENTIVE_CLAIM` field.
+
+### Guardrails / DoD
+- Respect the 3 guardrail tests (no partner code/URL in client-facing bodies — but this is an ADMIN screen, so internal detail is allowed; still never auto-submit/POST to Zerodha; status only from Zoho).
+- Demo mode works end-to-end with Zoho flags OFF (seeded fixtures). Tests: view renders, filters filter, tab switch, Zoho-read adapter unit-tested against fixtures + a terminal/real-read integration test behind the flag.
+- Open a PR; append a STATUS entry here; update `docs/ui-ux/07` §6(e), README, `.env.example`. Log any inconsistency as a QUESTION and pause.
+
+Reference the mockup for exact layout/spacing/theme. — DA
+
+---
+
+## [DA → Engineer — 2026-07-08] DESIGN LOCKED — GoRefer visual language = "Variant C · Cobalt Clean-Fintech"
+
+Abhay reviewed four style variants and **approved Variant C**. All GoRefer screens (admin + customer-facing) were rebuilt in it and signed off. **`mockups/*.html` are now the visual truth for the whole UI** — build every screen (M9 and beyond) to match these, not the old green theme.
+
+**Variant C design tokens — implement as CSS-variable tokens so DF-10 theming is a later config layer, not a rewrite:**
+- Font **Inter**. Background `#f4f6fb`; surfaces white. Line/divider `#e9edf3` (thin 1px).
+- Ink: 900 `#0f1729` · 700 `#334155` · 500 `#64748b` · 300 `#94a3b8`.
+- **Primary accent cobalt:** 600 `#2F5BFF` · 500 `#4b70ff` · 50 `#eef2ff`.
+- Semantic: accounts/positive green `#16a34a` · leads/pending amber `#f59e0b` · bot/error rose `#f43f5e` · intermediate sky/indigo.
+- Cards: `rounded-2xl` (16px) + border-line + soft shadow `0 1px 2px rgba(16,23,41,.04), 0 8px 24px -12px rgba(16,23,41,.12)`.
+- Buttons/tabs: **pill** (rounded-full); active = filled cobalt-600 white. Filter **chips** rounded-full with visible active state (cobalt fill).
+- KPI conversion metrics = **circular SVG rings**; else rounded stat cards.
+- Header: white/90 backdrop-blur sticky, rounded cobalt logo tile, pill nav, cobalt avatar circle.
+- Tables: **sortable headers** (click → ▲/▼), right-aligned numbers, compact rows, hover cobalt-50/40, pagination pill controls. **No per-row `/r/{id}` link** (the link lives in the per-partner card).
+- Tailwind compiled/purged in production (not the CDN the mockups use); compliance disclosure + market-risk warning stay verbatim on every customer page regardless of skin.
+
+Note: this cobalt choice is a deliberate GoRefer per-project decision (GLOBAL.md's data-dense default was neutral/Zerodha-style; Abhay chose the cobalt consumer-app direction for GoRefer). It does NOT change the GLOBAL.md global default. — DA
+
+---
+
+### 2026-07-08 — FROM ENGINEER — QUESTION+DECISION — M9 theming scope: re-skin the whole app to Variant C (not just the new screen)
+
+**Surfaced before writing code (as required — flagging, not silently resolving).** The DESIGN LOCKED entry (2026-07-08) says Variant C cobalt is now the visual truth for **all** GoRefer screens, but the **existing app templates are still in the OLD green `pifs-*` theme** — `dashboard`, `explorer`, `journey`, `login`, `home`, `landing`, `landing_invalid`, `partner_unavailable`, plus the `topbar`/`pifs_head`/`compliance_disclosure` partials — and `tailwind.config.js` defines **only** the green `pifs-*`/`gold` tokens (no cobalt). So M9's spec ("built in the Variant C visual language") is ambiguous: new screen only, or a full re-skin.
+
+**Decision (Abhay, via grill-me):** **re-skin the WHOLE app to Variant C within M9**, then build the Referral Profile screen. So M9 will:
+1. Add the Variant C tokens as **CSS-variable tokens** (cobalt/ink/line/bg + semantic) to `input.css` + `tailwind.config.js`, so DF-10 theming is a later config layer, not a rewrite.
+2. Convert every existing template to Variant C to match the updated `mockups/*.html` (which are already all Variant C): header/topbar, dashboard, explorer, journey, login, home, landing (+ base/invalid), partner-unavailable, and the shared partials.
+3. Build the new **Referral Profile** screen (`referral-profile-mockup.html`) in Variant C.
+
+**Guardrails held through the re-skin:** compliance disclosure + market-risk warning stay **verbatim** on every customer page; the compliance-lock / config-driven claim (`REFERRAL_INCENTIVE_CLAIM`) and number are untouched (skin ≠ content); no functional/route/behaviour change — templates + CSS only; all Sprint-1 guardrail tests (#1/#2/#3) + the multi-line-`{# #}` guard + no-CDN rule stay green; the CI stale-CSS check is respected (rebuild `app.css`). If the re-skin turns out to require any behavioural change I'll pause and flag it here.
+
+Proceeding on this basis. — Engineer

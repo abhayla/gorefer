@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>GoRefer — Variant B · Screener Sections</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = { theme: { extend: {
+  colors: { ink:{900:'#16181c',700:'#33383f',500:'#6b7280',300:'#9aa2ad'},
+            line:'#e7e9ec', bg:'#f6f7f8', green:{700:'#2f5136',600:'#3d6a45',500:'#4e8256',50:'#eef3ee'} },
+  fontFamily:{ sans:['Inter','system-ui','sans-serif'] } } } };
+</script>
+<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+ body{-webkit-font-smoothing:antialiased} html{scroll-behavior:smooth} .sortable{cursor:pointer;user-select:none} .sortable:hover{color:#2f5136}
+ section[id]{scroll-margin-top:96px}</style>
+</head>
+<body class="bg-bg font-sans text-ink-900 min-h-screen text-[13px]">
+
+<div class="bg-green-700 text-white text-[11px] text-center py-1 font-medium">VARIANT B — “Screener Sections”: neutral surfaces + green accent · NO tabs — sticky in-page ANCHOR NAV over flat stacked white sections (Screener.in pattern)</div>
+
+<header class="bg-white border-b border-line sticky top-0 z-20">
+  <div class="mx-auto max-w-[1140px] px-5 flex items-center justify-between h-13 py-2.5">
+    <div class="flex items-center gap-2.5">
+      <div class="h-7 w-7 rounded-md bg-green-700 flex items-center justify-center text-white text-[13px] font-extrabold">P</div>
+      <div class="text-[13px] font-bold">GoRefer <span class="text-ink-300 font-medium">Admin</span></div>
+    </div>
+    <nav class="flex items-center gap-1 text-[12px] font-medium">
+      <a href="#" class="px-2.5 py-1 rounded text-ink-500 hover:text-ink-900">Dashboard</a>
+      <a href="#" class="px-2.5 py-1 rounded text-ink-500 hover:text-ink-900">Explorer</a>
+      <a href="#" class="px-2.5 py-1 rounded text-green-700 font-semibold">Referral Profile</a>
+      <span class="ml-2 h-6 w-6 rounded-full bg-green-50 text-green-700 flex items-center justify-center text-[11px] font-bold">AK</span>
+    </nav>
+  </div>
+  <!-- sticky in-page anchor nav -->
+  <div class="border-t border-line bg-white">
+    <div class="mx-auto max-w-[1140px] px-5 flex items-center gap-4 text-[12px] font-medium h-10">
+      <a href="#overview" class="text-green-700 border-b-2 border-green-600 h-10 flex items-center">Overview</a>
+      <a href="#clicks" class="text-ink-500 hover:text-ink-900 h-10 flex items-center">Clicks</a>
+      <a href="#people" class="text-ink-500 hover:text-ink-900 h-10 flex items-center">Referred People</a>
+    </div>
+  </div>
+</header>
+
+<main class="mx-auto max-w-[1140px] px-5 py-5 space-y-4">
+
+  <!-- OVERVIEW -->
+  <section id="overview" class="bg-white border border-line rounded-lg">
+    <div class="px-5 py-4 flex flex-wrap items-start justify-between gap-4 border-b border-line">
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-[18px] font-extrabold tracking-tight">Rajesh Joshi</h1>
+          <span class="font-mono text-[11px] font-bold text-green-700 bg-green-50 rounded px-1.5 py-0.5">RJ4111</span>
+          <span class="text-[10px] font-bold text-green-700 border border-green-500/40 rounded px-1.5 py-0.5">ACTIVE INVESTOR</span>
+        </div>
+        <div class="text-[11px] text-ink-500 mt-0.5">Referral Profile · sourced from Zoho CRM (matched by Client Id)</div>
+      </div>
+      <div class="flex gap-6">
+        <div class="text-right"><div class="text-[19px] font-extrabold tabular-nums">27</div><div class="text-[10px] uppercase tracking-wide text-ink-300">Clicks</div></div>
+        <div class="text-right"><div class="text-[19px] font-extrabold tabular-nums">19<span class="text-ink-300 text-[12px]">*</span></div><div class="text-[10px] uppercase tracking-wide text-ink-300">Visitors</div></div>
+        <div class="text-right"><div class="text-[19px] font-extrabold tabular-nums text-green-700">6</div><div class="text-[10px] uppercase tracking-wide text-ink-300">Leads</div></div>
+        <div class="text-right"><div class="text-[19px] font-extrabold tabular-nums text-green-700">3</div><div class="text-[10px] uppercase tracking-wide text-ink-300">Accounts</div></div>
+      </div>
+    </div>
+    <div class="px-5 py-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-6 gap-y-2 text-[12px]">
+      <div><div class="text-[10px] uppercase tracking-wide text-ink-300">City</div><div class="font-semibold">Pune, MH</div></div>
+      <div><div class="text-[10px] uppercase tracking-wide text-ink-300">Profession</div><div class="font-semibold">Salaried — IT</div></div>
+      <div><div class="text-[10px] uppercase tracking-wide text-ink-300">Account status</div><div class="font-semibold text-green-700">Active</div></div>
+      <div><div class="text-[10px] uppercase tracking-wide text-ink-300">Opened</div><div class="font-semibold">12 Mar 2019</div></div>
+      <div><div class="text-[10px] uppercase tracking-wide text-ink-300">Reward</div><div class="font-semibold">10% + 300 pts</div></div>
+      <div><div class="text-[10px] uppercase tracking-wide text-ink-300">Partner link</div><div class="font-semibold">Zerodha · <span class="font-mono text-green-700">ZMPHZC</span></div></div>
+    </div>
+  </section>
+
+  <!-- CLICKS section -->
+  <section id="clicks" class="bg-white border border-line rounded-lg overflow-hidden">
+    <div class="px-5 py-3 border-b border-line flex items-center justify-between">
+      <h2 class="text-[13px] font-bold">Clicks <span class="text-ink-300 font-medium">27</span></h2>
+      <span class="text-[10px] text-ink-300">Admin view — full detail</span>
+    </div>
+    <div class="px-4 py-2.5 border-b border-line flex flex-wrap items-center gap-1.5 text-[11.5px]">
+      <span class="text-ink-300 mr-1">Filter:</span>
+      <button class="chip chip-on" data-k="all">All</button>
+      <button class="chip" data-k="human">Human</button>
+      <button class="chip" data-k="bot">Bot</button>
+      <button class="chip" data-k="Mobile">Mobile</button>
+      <button class="chip" data-k="Desktop">Desktop</button>
+      <button class="chip" data-k="WhatsApp">WhatsApp</button>
+      <input id="q" oninput="renderC()" placeholder="city / IP…" class="ml-auto border border-line rounded-md px-2.5 py-1.5 text-[12px] w-36 focus:outline-none focus:border-green-500"/>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-[12px] min-w-[940px]">
+        <thead><tr id="chead" class="text-left text-[10px] uppercase tracking-wide text-ink-300 border-b border-line bg-[#fafbfb]"></tr></thead>
+        <tbody id="cbody" class="divide-y divide-line"></tbody>
+      </table>
+      <div class="flex items-center justify-between px-4 py-2 text-[11px] text-ink-300 border-t border-line">
+        <span>* visitors approximate (bot-filtered) · bot hits excluded from totals</span>
+        <span class="flex items-center gap-1"><button class="pg">‹</button><span class="px-2 text-ink-700">1</span><button class="pg">›</button></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- PEOPLE section -->
+  <section id="people" class="bg-white border border-line rounded-lg overflow-hidden">
+    <div class="px-5 py-3 border-b border-line"><h2 class="text-[13px] font-bold">Referred People <span class="text-ink-300 font-medium">6</span></h2>
+      <div class="text-[11px] text-ink-500 mt-0.5">One row per identified person — from Zoho leads &amp; opened accounts.</div></div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-[12px] min-w-[760px]">
+        <thead><tr id="phead" class="text-left text-[10px] uppercase tracking-wide text-ink-300 border-b border-line bg-[#fafbfb]"></tr></thead>
+        <tbody id="pbody" class="divide-y divide-line"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="text-center text-[10px] text-ink-300 pt-1">PIFS Pvt. Ltd. · NSE AP Reg. AP2516003693 · Investments in the securities market are subject to market risks.</p>
+</main>
+
+<style>
+ .chip{border:1px solid #e7e9ec;border-radius:999px;padding:.2rem .7rem;color:#6b7280;background:#fff}
+ .chip-on{background:#2f5136;border-color:#2f5136;color:#fff;font-weight:600}
+ .pg{border:1px solid #e7e9ec;border-radius:6px;padding:.1rem .5rem;color:#6b7280}
+</style>
+<script>
+const clicks=[
+ {t:'07 Jul 10:22',partner:'Zerodha',ch:'WhatsApp',city:'Pune',region:'MH',country:'India',ip:'49.36.142.18',dev:'Mobile',ua:'Android·Chrome',bot:false,out:'Account opened'},
+ {t:'07 Jul 09:04',partner:'Zerodha',ch:'WhatsApp',city:'Mumbai',region:'MH',country:'India',ip:'103.21.58.9',dev:'Mobile',ua:'iOS·Safari',bot:false,out:'Lead captured'},
+ {t:'06 Jul 20:41',partner:'Zerodha',ch:'Direct',city:'Pune',region:'MH',country:'India',ip:'49.36.142.18',dev:'Desktop',ua:'Win·Chrome',bot:false,out:'Redirected'},
+ {t:'06 Jul 18:12',partner:'Zerodha',ch:'QR',city:'Nashik',region:'MH',country:'India',ip:'157.48.203.7',dev:'Mobile',ua:'Android·Chrome',bot:false,out:'Landing viewed'},
+ {t:'06 Jul 15:55',partner:'Zerodha',ch:'WhatsApp',city:'—',region:'—',country:'—',ip:'66.249.66.1',dev:'—',ua:'Googlebot',bot:true,out:'Bot — excluded'},
+ {t:'05 Jul 19:30',partner:'Zerodha',ch:'WhatsApp',city:'Delhi',region:'DL',country:'India',ip:'182.69.14.55',dev:'Mobile',ua:'Android·Chrome',bot:false,out:'Lead captured'},
+ {t:'05 Jul 14:18',partner:'Zerodha',ch:'Direct',city:'Pune',region:'MH',country:'India',ip:'49.36.190.4',dev:'Desktop',ua:'macOS·Safari',bot:false,out:'Clicked'},
+ {t:'04 Jul 11:47',partner:'Zerodha',ch:'WhatsApp',city:'Bengaluru',region:'KA',country:'India',ip:'103.5.132.20',dev:'Mobile',ua:'iOS·Safari',bot:false,out:'Account opened'}];
+const people=[
+ {name:'Sunil Kamble',city:'Mumbai',prof:'Salaried — Banking',partner:'Zerodha',status:'Account opened',opened:'07 Jul 2026',reward:'Eligible'},
+ {name:'Anita Rao',city:'Delhi',prof:'Self-employed',partner:'Zerodha',status:'Lead — in KYC',opened:'—',reward:'—'},
+ {name:'Ganesh Patil',city:'Bengaluru',prof:'Salaried — IT',partner:'Zerodha',status:'Account opened',opened:'04 Jul 2026',reward:'Eligible'},
+ {name:'Rohit Shah',city:'Nashik',prof:'Business',partner:'Zerodha',status:'Lead — new',opened:'—',reward:'—'},
+ {name:'Meena Iyer',city:'Pune',prof:'Salaried — IT',partner:'Zerodha',status:'Account opened',opened:'28 Jun 2026',reward:'Paid'},
+ {name:'— not on file —',city:'Mumbai',prof:'—',partner:'Zerodha',status:'Lead captured',opened:'—',reward:'—'}];
+const oc={'Clicked':'text-ink-500','Landing viewed':'text-blue-600','Redirected':'text-indigo-600','Lead captured':'text-amber-600','Account opened':'text-green-700 font-semibold','Bot — excluded':'text-rose-400'};
+const cCols=[['t','Date'],['partner','Partner'],['ch','Channel'],['city','City'],['region','Region'],['country','Country'],['ip','IP'],['dev','Device'],['ua','OS/Browser'],['bot','Traffic'],['out','Outcome']];
+const pCols=[['name','Name'],['city','City'],['prof','Profession'],['partner','Partner'],['status','Status'],['opened','Opened'],['reward','Reward']];
+let cSort={k:null,dir:1}, pSort={k:null,dir:1}, filt='all';
+function head(el,cols,s,re){el.innerHTML='';cols.forEach(([k,label])=>{const th=document.createElement('th');th.className='py-2 px-3 font-semibold sortable';const a=s.k===k?(s.dir>0?' ▲':' ▼'):'';th.innerHTML=label+'<span class="text-green-600">'+a+'</span>';th.onclick=()=>{if(s.k===k)s.dir*=-1;else{s.k=k;s.dir=1;}re();};el.appendChild(th);});}
+function sortRows(r,s){if(!s.k)return r;return[...r].sort((a,b)=>{let x=a[s.k],y=b[s.k];if(typeof x==='boolean'){x=x?1:0;y=y?1:0;}return(x>y?1:x<y?-1:0)*s.dir;});}
+function renderC(){const q=(document.getElementById('q').value||'').toLowerCase();head(document.getElementById('chead'),cCols,cSort,renderC);
+ let rows=clicks.filter(c=>{if(filt==='human'&&c.bot)return false;if(filt==='bot'&&!c.bot)return false;if(['Mobile','Desktop'].includes(filt)&&c.dev!==filt)return false;if(filt==='WhatsApp'&&c.ch!=='WhatsApp')return false;if(q&&!(c.city.toLowerCase().includes(q)||c.ip.toLowerCase().includes(q)))return false;return true;});
+ rows=sortRows(rows,cSort);const b=document.getElementById('cbody');b.innerHTML='';
+ rows.forEach(c=>{const tr=document.createElement('tr');tr.className='hover:bg-[#fafbfb] '+(c.bot?'opacity-50':'');const tf=c.bot?'<span class="text-rose-500">Bot</span>':'<span class="text-green-700">Human</span>';
+  tr.innerHTML=`<td class="py-1.5 px-3 whitespace-nowrap text-ink-700">${c.t}</td><td class="py-1.5 px-3">${c.partner}</td><td class="py-1.5 px-3">${c.ch}</td><td class="py-1.5 px-3">${c.city}</td><td class="py-1.5 px-3 text-ink-500">${c.region}</td><td class="py-1.5 px-3 text-ink-500">${c.country}</td><td class="py-1.5 px-3 font-mono text-[11px] text-ink-500">${c.ip}</td><td class="py-1.5 px-3">${c.dev}</td><td class="py-1.5 px-3 text-ink-500 whitespace-nowrap">${c.ua}</td><td class="py-1.5 px-3">${tf}</td><td class="py-1.5 px-3 ${oc[c.out]}">${c.out}</td>`;b.appendChild(tr);});}
+function renderP(){head(document.getElementById('phead'),pCols,pSort,renderP);let rows=sortRows(people,pSort);const b=document.getElementById('pbody');b.innerHTML='';
+ rows.forEach(p=>{const tr=document.createElement('tr');tr.className='hover:bg-[#fafbfb]';const nm=p.name.startsWith('—')?`<span class="italic text-ink-300">${p.name}</span>`:`<span class="font-semibold">${p.name}</span>`;const rw=p.reward==='—'?'<span class="text-ink-300">—</span>':`<span class="text-green-700 font-semibold">${p.reward}</span>`;
+  tr.innerHTML=`<td class="py-1.5 px-3">${nm}</td><td class="py-1.5 px-3">${p.city}</td><td class="py-1.5 px-3 text-ink-500">${p.prof}</td><td class="py-1.5 px-3">${p.partner}</td><td class="py-1.5 px-3">${p.status}</td><td class="py-1.5 px-3 text-ink-500">${p.opened}</td><td class="py-1.5 px-3">${rw}</td>`;b.appendChild(tr);});}
+document.querySelectorAll('.chip').forEach(ch=>ch.onclick=()=>{document.querySelectorAll('.chip').forEach(x=>x.classList.remove('chip-on'));ch.classList.add('chip-on');filt=ch.dataset.k;renderC();});
+renderC();renderP();
+</script>
+</body></html>

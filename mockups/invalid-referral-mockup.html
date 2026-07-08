@@ -6,49 +6,52 @@
 <title>PIFS — Referral Link Not Valid (Mockup)</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
-  tailwind.config = {
-    theme: {
-      extend: {
-        colors: {
-          pifs: {
-            900: '#1b2e1f', 800: '#233d29', 700: '#2f5136', 600: '#3d6a45',
-            500: '#4e8256', 400: '#6fa377', 100: '#eaf1ea', 50: '#f4f8f4',
-          },
-          gold: '#c8a24a',
-        },
-        fontFamily: { sans: ['Inter', 'system-ui', 'Segoe UI', 'sans-serif'] },
-      },
+  tailwind.config = { theme: { extend: {
+    colors: {
+      ink:    { 900: '#0f1729', 700: '#334155', 500: '#64748b', 300: '#94a3b8' },
+      line:   '#e9edf3',
+      bg:     '#f4f6fb',
+      cobalt: { 600: '#2F5BFF', 500: '#4b70ff', 50: '#eef2ff' },
+      amber:  { 500: '#f59e0b' },
     },
-  };
+    fontFamily: { sans: ['Inter', 'system-ui', 'Segoe UI', 'sans-serif'] },
+  } } };
 </script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
   body { -webkit-font-smoothing: antialiased; }
+  .card { box-shadow: 0 1px 2px rgba(16,23,41,.04), 0 8px 24px -12px rgba(16,23,41,.12); }
 </style>
 <!--
   This page carries NO referral benefit / incentive panel, because there is no
-  valid referrer to credit. shared.js hides the incentive block when
-  window.GR_CONFIG.showIncentive === false (partner-direct / fallback variant).
-  The SEBI/NSE AP disclosure + market-risk warning are STILL auto-injected.
+  valid referrer to credit (partner-direct / fallback variant).
+  The SEBI/NSE AP disclosure + market-risk warning are STILL present.
 -->
-<script>window.GR_CONFIG = { showIncentive: false };</script>
 </head>
-<body class="bg-pifs-50 font-sans text-pifs-900 min-h-screen">
+<body class="bg-bg font-sans text-ink-900 min-h-screen">
 
-<div class="mx-auto max-w-md md:max-w-lg bg-white min-h-screen md:my-6 md:rounded-2xl md:shadow-xl md:border md:border-pifs-100 overflow-hidden">
+<div class="mx-auto max-w-md md:max-w-lg bg-white min-h-screen md:my-6 md:rounded-2xl md:card md:border md:border-line overflow-hidden">
 
-  <!-- Shared PIFS header (injected by shared.js) -->
-  <div id="gr-header"></div>
+  <!-- PIFS header (branded, NOT Zerodha) -->
+  <header class="bg-white/90 backdrop-blur border-b border-line px-5 py-4">
+    <div class="flex items-center gap-3">
+      <div class="h-11 w-11 rounded-xl bg-cobalt-600 flex items-center justify-center text-white text-lg font-extrabold card">P</div>
+      <div class="leading-tight">
+        <div class="text-base font-bold tracking-tight text-ink-900">Passive Income Financial Solutions</div>
+        <div class="text-[11px] text-ink-500 font-medium">Authorised Person · NSE AP · Zerodha partner</div>
+      </div>
+    </div>
+  </header>
 
   <!-- Friendly not-valid message (never a raw error) -->
   <section class="px-5 pt-8 pb-2 text-center">
-    <div class="mx-auto h-16 w-16 rounded-full bg-gold/15 flex items-center justify-center mb-4">
-      <svg class="h-8 w-8 text-gold" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.1c.765-1.36 2.72-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.492-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+    <div class="mx-auto h-16 w-16 rounded-full bg-amber-500/15 flex items-center justify-center mb-4">
+      <svg class="h-8 w-8 text-amber-500" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.1c.765-1.36 2.72-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.492-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
     </div>
-    <h1 class="text-[22px] leading-snug font-extrabold tracking-tight text-pifs-900">
+    <h1 class="text-[22px] leading-snug font-extrabold tracking-tight text-ink-900">
       This referral link isn't valid anymore.
     </h1>
-    <p class="mt-2 text-sm text-pifs-800/70 leading-relaxed">
+    <p class="mt-2 text-sm text-ink-500 leading-relaxed">
       The link you followed may have expired, been mistyped, or is no longer active.
       No problem — you can still open your free Zerodha demat &amp; trading account with PIFS.
     </p>
@@ -56,25 +59,25 @@
 
   <!-- Value proposition (same benefits, no personalization) -->
   <section class="px-5 pt-5 pb-1">
-    <div class="rounded-2xl border border-pifs-100 bg-pifs-50/60 p-4">
-      <h2 class="text-[11px] font-bold uppercase tracking-wider text-pifs-800/70 mb-3">Open with PIFS</h2>
+    <div class="rounded-2xl border border-line bg-bg/60 p-4">
+      <h2 class="text-[11px] font-bold uppercase tracking-wider text-ink-700 mb-3">Open with PIFS</h2>
       <ul class="space-y-2.5">
         <li class="flex items-start gap-3">
-          <span class="mt-0.5 h-6 w-6 flex-none rounded-full bg-pifs-100 text-pifs-600 flex items-center justify-center">
+          <span class="mt-0.5 h-6 w-6 flex-none rounded-full bg-cobalt-50 text-cobalt-600 flex items-center justify-center">
             <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 111.4-1.4l3.8 3.8 6.8-6.8a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>
           </span>
           <div>
-            <div class="text-sm font-semibold">Free account opening</div>
-            <div class="text-xs text-pifs-800/60">No charges to open your demat &amp; trading account.</div>
+            <div class="text-sm font-semibold text-ink-900">Free account opening</div>
+            <div class="text-xs text-ink-500">No charges to open your demat &amp; trading account.</div>
           </div>
         </li>
         <li class="flex items-start gap-3">
-          <span class="mt-0.5 h-6 w-6 flex-none rounded-full bg-pifs-100 text-pifs-600 flex items-center justify-center">
+          <span class="mt-0.5 h-6 w-6 flex-none rounded-full bg-cobalt-50 text-cobalt-600 flex items-center justify-center">
             <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 111.4-1.4l3.8 3.8 6.8-6.8a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>
           </span>
           <div>
-            <div class="text-sm font-semibold">Trusted personal guidance from PIFS</div>
-            <div class="text-xs text-pifs-800/60">A real person helps you complete your KYC on a call.</div>
+            <div class="text-sm font-semibold text-ink-900">Trusted personal guidance from PIFS</div>
+            <div class="text-xs text-ink-500">A real person helps you complete your KYC on a call.</div>
           </div>
         </li>
       </ul>
@@ -86,20 +89,32 @@
   <!-- Fallback action -->
   <section class="px-5 pt-5 pb-2 space-y-3">
     <!-- Primary: generic partner-only open -->
-    <button class="w-full rounded-xl bg-pifs-700 hover:bg-pifs-800 active:bg-pifs-900 transition-colors text-white text-sm font-bold py-3.5 shadow-sm flex items-center justify-center gap-2">
+    <button class="w-full rounded-full bg-cobalt-600 hover:bg-cobalt-500 transition-colors text-white text-sm font-bold py-3.5 card flex items-center justify-center gap-2">
       Open a Zerodha account with PIFS
       <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.3 4.3a1 1 0 011.4 0l5 5a1 1 0 010 1.4l-5 5a1 1 0 01-1.4-1.4L11.6 10 7.3 5.7a1 1 0 010-1.4z" clip-rule="evenodd"/></svg>
     </button>
-    <p class="text-center text-[11px] text-pifs-800/50">
+    <p class="text-center text-[11px] text-ink-500">
       Have a valid referral link? Please re-open it from the message you received.
     </p>
   </section>
 
-  <!-- Shared compliance disclosure block (injected by shared.js; incentive panel hidden) -->
-  <div id="gr-disclosure"></div>
+  <!-- Compliance disclosure block (COMPLIANCE LOCK — incentive panel hidden; disclosure + risk STILL present) -->
+  <section class="px-5 pt-4 pb-6">
+    <div class="rounded-2xl bg-cobalt-50 border border-line p-4">
+      <div class="space-y-1.5">
+        <p class="text-[10.5px] leading-relaxed text-ink-500">
+          Zerodha Broking Ltd.: SEBI Registration no.: <span class="font-semibold text-ink-700">INZ000031633</span> |
+          Passive Income Financial Solutions Private Limited | NSE AP reg. no.: <span class="font-semibold text-ink-700">AP2516003693</span>
+        </p>
+        <p class="text-[10.5px] leading-relaxed text-ink-500">
+          Investments in securities market are subject to market risks, read all the related documents carefully before investing.
+        </p>
+      </div>
+    </div>
+    <p class="text-center text-[10px] text-ink-300 mt-4">© Passive Income Financial Solutions Pvt. Ltd.</p>
+  </section>
 
 </div>
 
-<script src="shared.js"></script>
 </body>
 </html>

@@ -78,7 +78,7 @@ You are the software **ENGINEER**, not the architect. Implement **exactly** what
 
 **Compliance (hard gate)**
 - The **SEBI/NSE AP disclosure block + market-risk warning + reward wording** are **per-partner CONFIG, AUTO-INJECTED into every page and baked into every generated asset** — they **cannot be omitted**. NSE AP reg. no. `AP2516003693`.
-- The **"10% brokerage" wording lives in ONE editable config field** (`REFERRAL_INCENTIVE_CLAIM`, e.g. `"300 reward points + 10% brokerage share"`).
+- The **"10% brokerage" wording lives in ONE editable config field** (`REFERRAL_INCENTIVE_CLAIM`, e.g. `"10% brokerage share + 300 reward points"`).
 - Run the **`zerodha-ap-social-media-compliance` review before publishing anything public.** **Never impersonate or clone Zerodha** (ADR-014, Gap 15).
 
 **Privacy / DPDP**

@@ -94,7 +94,7 @@ ENABLE_ZOHO_WRITE=false          # off until Zoho adapter verified against sandb
 ENABLE_ASSET_GENERATOR=false     # poster/PDF generator — later sprint
 ENABLE_ADMIN_DASHBOARD=true      # Sprint 1 Mission 7
 ENABLE_DEMO_MODE=true            # sample data, no external calls (see §10)
-REFERRAL_INCENTIVE_CLAIM="300 reward points + 10% brokerage share"  # single swappable place (compliance)
+REFERRAL_INCENTIVE_CLAIM="10% brokerage share + 300 reward points"  # single swappable place (compliance)
 ```
 
 - Flags are read from config at startup; no flag is checked by a string literal scattered across the code — one config module.
