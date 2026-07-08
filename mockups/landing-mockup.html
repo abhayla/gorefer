@@ -6,41 +6,40 @@
 <title>PIFS — Referral Landing (Mockup)</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
-  tailwind.config = {
-    theme: {
-      extend: {
-        colors: {
-          pifs: {
-            900: '#1b2e1f', // deepest green
-            800: '#233d29',
-            700: '#2f5136', // primary deep green
-            600: '#3d6a45',
-            500: '#4e8256', // olive-green accent
-            400: '#6fa377',
-            100: '#eaf1ea',
-            50:  '#f4f8f4',
-          },
-          gold: '#c8a24a', // muted premium accent
-        },
-        fontFamily: {
-          sans: ['Inter', 'system-ui', 'Segoe UI', 'sans-serif'],
-        },
-      },
+  tailwind.config = { theme: { extend: {
+    colors: {
+      ink:    { 900: '#0f1729', 700: '#334155', 500: '#64748b', 300: '#94a3b8' },
+      line:   '#e9edf3',
+      bg:     '#f4f6fb',
+      cobalt: { 600: '#2F5BFF', 500: '#4b70ff', 50: '#eef2ff' },
+      green:  { 600: '#16a34a' },
+      amber:  { 500: '#f59e0b' },
+      rose:   { 500: '#f43f5e' },
     },
-  };
+    fontFamily: { sans: ['Inter', 'system-ui', 'Segoe UI', 'sans-serif'] },
+  } } };
 </script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
   body { -webkit-font-smoothing: antialiased; }
+  .card { box-shadow: 0 1px 2px rgba(16,23,41,.04), 0 8px 24px -12px rgba(16,23,41,.12); }
 </style>
 </head>
-<body class="bg-pifs-50 font-sans text-pifs-900 min-h-screen">
+<body class="bg-bg font-sans text-ink-900 min-h-screen">
 
 <!-- Outer container: mobile-first single column, centered on larger screens -->
-<div class="mx-auto max-w-md md:max-w-lg bg-white min-h-screen md:my-6 md:rounded-2xl md:shadow-xl md:border md:border-pifs-100 overflow-hidden">
+<div class="mx-auto max-w-md md:max-w-lg bg-white min-h-screen md:my-6 md:rounded-2xl md:card md:border md:border-line overflow-hidden">
 
-  <!-- Shared PIFS header (injected by shared.js) -->
-  <div id="gr-header"></div>
+  <!-- PIFS header (branded, NOT Zerodha) -->
+  <header class="bg-white/90 backdrop-blur border-b border-line px-5 py-4">
+    <div class="flex items-center gap-3">
+      <div class="h-11 w-11 rounded-xl bg-cobalt-600 flex items-center justify-center text-white text-lg font-extrabold card">P</div>
+      <div class="leading-tight">
+        <div class="text-base font-bold tracking-tight text-ink-900">Passive Income Financial Solutions</div>
+        <div class="text-[11px] text-ink-500 font-medium">Authorised Person · NSE AP · Zerodha partner</div>
+      </div>
+    </div>
+  </header>
 
   <!--
     HERO / GREETING — PERSONALIZED referrer state.
@@ -52,15 +51,15 @@
     POST-BEACON, personalized state.
   -->
   <section class="px-5 pt-6 pb-2">
-    <div class="inline-flex items-center gap-1.5 rounded-full bg-pifs-100 text-pifs-700 text-[11px] font-semibold px-3 py-1 mb-3">
-      <span class="h-1.5 w-1.5 rounded-full bg-pifs-500"></span>
+    <div class="inline-flex items-center gap-1.5 rounded-full bg-cobalt-50 text-cobalt-600 text-[11px] font-semibold px-3 py-1 mb-3">
+      <span class="h-1.5 w-1.5 rounded-full bg-cobalt-600"></span>
       You've been personally referred
     </div>
-    <h1 class="text-[22px] leading-snug font-extrabold tracking-tight text-pifs-900">
-      <span class="text-pifs-600">Ramesh Kumar</span> has invited you to open a free
+    <h1 class="text-[22px] leading-snug font-extrabold tracking-tight text-ink-900">
+      <span class="text-cobalt-600">Ramesh Kumar</span> has invited you to open a free
       Zerodha demat &amp; trading account.
     </h1>
-    <p class="mt-2 text-sm text-pifs-800/70 leading-relaxed">
+    <p class="mt-2 text-sm text-ink-500 leading-relaxed">
       PIFS helps you open your account smoothly and gives you trusted guidance every step of the way.
     </p>
   </section>
@@ -69,30 +68,30 @@
   <section class="px-5 pt-4 pb-1">
     <ul class="space-y-2.5">
       <li class="flex items-start gap-3">
-        <span class="mt-0.5 h-6 w-6 flex-none rounded-full bg-pifs-100 text-pifs-600 flex items-center justify-center">
+        <span class="mt-0.5 h-6 w-6 flex-none rounded-full bg-cobalt-50 text-cobalt-600 flex items-center justify-center">
           <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 111.4-1.4l3.8 3.8 6.8-6.8a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>
         </span>
         <div>
-          <div class="text-sm font-semibold">Free account opening</div>
-          <div class="text-xs text-pifs-800/60">No charges to open your demat &amp; trading account.</div>
+          <div class="text-sm font-semibold text-ink-900">Free account opening</div>
+          <div class="text-xs text-ink-500">No charges to open your demat &amp; trading account.</div>
         </div>
       </li>
       <li class="flex items-start gap-3">
-        <span class="mt-0.5 h-6 w-6 flex-none rounded-full bg-pifs-100 text-pifs-600 flex items-center justify-center">
+        <span class="mt-0.5 h-6 w-6 flex-none rounded-full bg-cobalt-50 text-cobalt-600 flex items-center justify-center">
           <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 111.4-1.4l3.8 3.8 6.8-6.8a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>
         </span>
         <div>
-          <div class="text-sm font-semibold">Invest in stocks, mutual funds &amp; more</div>
-          <div class="text-xs text-pifs-800/60">Access India's markets from a single account.</div>
+          <div class="text-sm font-semibold text-ink-900">Invest in stocks, mutual funds &amp; more</div>
+          <div class="text-xs text-ink-500">Access India's markets from a single account.</div>
         </div>
       </li>
       <li class="flex items-start gap-3">
-        <span class="mt-0.5 h-6 w-6 flex-none rounded-full bg-pifs-100 text-pifs-600 flex items-center justify-center">
+        <span class="mt-0.5 h-6 w-6 flex-none rounded-full bg-cobalt-50 text-cobalt-600 flex items-center justify-center">
           <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 111.4-1.4l3.8 3.8 6.8-6.8a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>
         </span>
         <div>
-          <div class="text-sm font-semibold">Trusted personal guidance from PIFS</div>
-          <div class="text-xs text-pifs-800/60">A real person helps you complete your KYC on a call.</div>
+          <div class="text-sm font-semibold text-ink-900">Trusted personal guidance from PIFS</div>
+          <div class="text-xs text-ink-500">A real person helps you complete your KYC on a call.</div>
         </div>
       </li>
     </ul>
@@ -100,29 +99,29 @@
 
   <!-- Capture form -->
   <section class="px-5 pt-5">
-    <div class="rounded-2xl border border-pifs-100 bg-pifs-50/60 p-4">
-      <h2 class="text-sm font-bold text-pifs-900 mb-3">Enter your details to continue</h2>
+    <div class="rounded-2xl border border-line bg-bg/60 p-4">
+      <h2 class="text-sm font-bold text-ink-900 mb-3">Enter your details to continue</h2>
       <form id="leadForm" onsubmit="return false;" class="space-y-3" novalidate>
         <div>
-          <label class="block text-[11px] font-semibold text-pifs-800/70 mb-1">Full name</label>
+          <label class="block text-[11px] font-semibold text-ink-700 mb-1">Full name</label>
           <input type="text" placeholder="e.g. Rahul Sharma"
-            class="w-full rounded-xl border border-pifs-100 bg-white px-3.5 py-3 text-sm placeholder:text-pifs-800/30 focus:outline-none focus:ring-2 focus:ring-pifs-500/40 focus:border-pifs-500" />
+            class="w-full rounded-lg border border-line bg-white px-3.5 py-3 text-sm placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-cobalt-500/30 focus:border-cobalt-500" />
         </div>
         <div>
-          <label class="block text-[11px] font-semibold text-pifs-800/70 mb-1">Email</label>
+          <label class="block text-[11px] font-semibold text-ink-700 mb-1">Email</label>
           <input type="email" placeholder="you@example.com"
-            class="w-full rounded-xl border border-pifs-100 bg-white px-3.5 py-3 text-sm placeholder:text-pifs-800/30 focus:outline-none focus:ring-2 focus:ring-pifs-500/40 focus:border-pifs-500" />
+            class="w-full rounded-lg border border-line bg-white px-3.5 py-3 text-sm placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-cobalt-500/30 focus:border-cobalt-500" />
         </div>
 
         <!-- Mobile number with CLIENT-SIDE FORMAT VALIDATION (+91, 10 digits, starts 6-9) -->
         <div>
-          <label class="block text-[11px] font-semibold text-pifs-800/70 mb-1">Mobile number</label>
+          <label class="block text-[11px] font-semibold text-ink-700 mb-1">Mobile number</label>
           <div id="mobileWrap"
-            class="flex rounded-xl border border-pifs-100 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-pifs-500/40 focus-within:border-pifs-500 transition-colors">
-            <span class="flex items-center px-3.5 text-sm font-semibold text-pifs-800/70 bg-pifs-100/70 border-r border-pifs-100">+91</span>
+            class="flex rounded-lg border border-line bg-white overflow-hidden focus-within:ring-2 focus-within:ring-cobalt-500/30 focus-within:border-cobalt-500 transition-colors">
+            <span class="flex items-center px-3.5 text-sm font-semibold text-ink-700 bg-cobalt-50 border-r border-line">+91</span>
             <input id="mobileInput" type="tel" inputmode="numeric" maxlength="10" placeholder="98765 43210"
               aria-describedby="mobileMsg"
-              class="flex-1 px-3.5 py-3 text-sm placeholder:text-pifs-800/30 focus:outline-none bg-transparent" />
+              class="flex-1 px-3.5 py-3 text-sm placeholder:text-ink-300 focus:outline-none bg-transparent" />
             <!-- valid/invalid status icon -->
             <span id="mobileIcon" class="hidden items-center pr-3.5"></span>
           </div>
@@ -132,10 +131,10 @@
 
         <!-- Consent -->
         <label class="flex items-start gap-2.5 pt-1 cursor-pointer">
-          <input type="checkbox" class="mt-0.5 h-4 w-4 rounded border-pifs-300 text-pifs-600 focus:ring-pifs-500" />
-          <span class="text-[11px] leading-relaxed text-pifs-800/70">
+          <input type="checkbox" class="mt-0.5 h-4 w-4 rounded border-ink-300 text-cobalt-600 focus:ring-cobalt-500" />
+          <span class="text-[11px] leading-relaxed text-ink-500">
             I agree to be contacted about opening a Zerodha account and to PIFS processing my details.
-            <a href="#" class="text-pifs-600 font-semibold underline underline-offset-2">Privacy Policy</a>.
+            <a href="#" class="text-cobalt-600 font-semibold underline underline-offset-2">Privacy Policy</a>.
           </span>
         </label>
       </form>
@@ -144,33 +143,48 @@
 
   <!-- Referral ID echo -->
   <div class="px-5 pt-3">
-    <div class="flex items-center justify-center gap-2 text-[11px] text-pifs-800/50 font-medium">
+    <div class="flex items-center justify-center gap-2 text-[11px] text-ink-500 font-medium">
       <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M9 2a1 1 0 000 2h1v12H9a1 1 0 100 2h4a1 1 0 100-2h-1V4h1a1 1 0 100-2H9z"/></svg>
-      Referral ID: <span class="font-bold text-pifs-700 tracking-wide">RJ4521</span>
+      Referral ID: <span class="font-bold text-cobalt-600 tracking-wide">RJ4521</span>
     </div>
   </div>
 
   <!-- Actions -->
   <section class="px-5 pt-3 pb-2 space-y-3">
     <!-- Primary -->
-    <button class="w-full rounded-xl bg-pifs-700 hover:bg-pifs-800 active:bg-pifs-900 transition-colors text-white text-sm font-bold py-3.5 shadow-sm flex items-center justify-center gap-2">
+    <button class="w-full rounded-full bg-cobalt-600 hover:bg-cobalt-500 transition-colors text-white text-sm font-bold py-3.5 card flex items-center justify-center gap-2">
       Continue to Zerodha
       <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.3 4.3a1 1 0 011.4 0l5 5a1 1 0 010 1.4l-5 5a1 1 0 01-1.4-1.4L11.6 10 7.3 5.7a1 1 0 010-1.4z" clip-rule="evenodd"/></svg>
     </button>
     <!-- Secondary -->
-    <button class="w-full rounded-xl bg-white border-2 border-pifs-500 text-pifs-700 hover:bg-pifs-50 transition-colors text-sm font-bold py-3 flex items-center justify-center gap-2">
+    <button class="w-full rounded-full bg-white border border-cobalt-600 text-cobalt-600 hover:bg-cobalt-50 transition-colors text-sm font-bold py-3 flex items-center justify-center gap-2">
       <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 004.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0012.04 2zm5.8 14.17c-.25.7-1.44 1.33-1.98 1.37-.53.05-1.02.24-3.43-.72-2.89-1.14-4.73-4.11-4.87-4.3-.14-.19-1.16-1.54-1.16-2.94 0-1.4.73-2.09 1-2.38.24-.26.53-.33.71-.33.18 0 .36 0 .51.01.16.01.39-.06.6.46.25.6.83 2.09.9 2.24.07.15.12.32.02.51-.09.19-.14.31-.28.48-.14.16-.29.36-.42.48-.14.14-.28.29-.12.57.16.28.71 1.17 1.53 1.9 1.05.93 1.93 1.22 2.21 1.36.28.14.44.12.6-.07.16-.19.69-.8.87-1.08.18-.28.36-.23.6-.14.24.09 1.55.73 1.82.87.28.14.46.21.53.33.07.12.07.66-.18 1.36z"/></svg>
       Share referral details on WhatsApp
     </button>
   </section>
 
-  <!-- Shared compliance disclosure block (injected by shared.js) -->
-  <div id="gr-disclosure"></div>
+  <!-- Compliance disclosure block (COMPLIANCE LOCK — auto-present on every customer page) -->
+  <section class="px-5 pt-4 pb-6">
+    <div class="rounded-2xl bg-cobalt-50 border border-line p-4">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="h-2 w-2 rounded-full bg-cobalt-600"></span>
+        <span class="text-[11px] font-bold uppercase tracking-wider text-ink-700">Referral benefit</span>
+      </div>
+      <p class="text-xs font-semibold text-ink-900 mb-3" data-gr="incentive">10% brokerage share + 300 reward points.</p>
+      <div class="border-t border-line pt-3 space-y-1.5">
+        <p class="text-[10.5px] leading-relaxed text-ink-500">
+          Zerodha Broking Ltd.: SEBI Registration no.: <span class="font-semibold text-ink-700">INZ000031633</span> |
+          Passive Income Financial Solutions Private Limited | NSE AP reg. no.: <span class="font-semibold text-ink-700">AP2516003693</span>
+        </p>
+        <p class="text-[10.5px] leading-relaxed text-ink-500">
+          Investments in securities market are subject to market risks, read all the related documents carefully before investing.
+        </p>
+      </div>
+    </div>
+    <p class="text-center text-[10px] text-ink-300 mt-4">© Passive Income Financial Solutions Pvt. Ltd.</p>
+  </section>
 
 </div>
-
-<!-- Shared components + helpers -->
-<script src="shared.js"></script>
 
 <!-- Mobile format validation (pure client-side) -->
 <script>
@@ -180,14 +194,14 @@
     var msg   = document.getElementById('mobileMsg');
     var icon  = document.getElementById('mobileIcon');
 
-    var CHECK = '<svg class="h-4 w-4 text-emerald-600" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 111.4-1.4l3.8 3.8 6.8-6.8a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>';
-    var CROSS = '<svg class="h-4 w-4 text-red-500" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.3 4.3a1 1 0 011.4 0L10 8.6l4.3-4.3a1 1 0 111.4 1.4L11.4 10l4.3 4.3a1 1 0 01-1.4 1.4L10 11.4l-4.3 4.3a1 1 0 01-1.4-1.4L8.6 10 4.3 5.7a1 1 0 010-1.4z" clip-rule="evenodd"/></svg>';
+    var CHECK = '<svg class="h-4 w-4 text-green-600" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 111.4-1.4l3.8 3.8 6.8-6.8a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>';
+    var CROSS = '<svg class="h-4 w-4 text-rose-500" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.3 4.3a1 1 0 011.4 0L10 8.6l4.3-4.3a1 1 0 111.4 1.4L11.4 10l4.3 4.3a1 1 0 01-1.4 1.4L10 11.4l-4.3 4.3a1 1 0 01-1.4-1.4L8.6 10 4.3 5.7a1 1 0 010-1.4z" clip-rule="evenodd"/></svg>';
 
     // Base border classes to swap between neutral / error / valid states.
-    var BASE = 'flex rounded-xl border bg-white overflow-hidden transition-colors ';
-    var NEUTRAL = 'border-pifs-100 focus-within:ring-2 focus-within:ring-pifs-500/40 focus-within:border-pifs-500';
-    var VALID   = 'border-emerald-400 ring-2 ring-emerald-400/25';
-    var ERROR   = 'border-red-400 ring-2 ring-red-400/25';
+    var BASE = 'flex rounded-lg border bg-white overflow-hidden transition-colors ';
+    var NEUTRAL = 'border-line focus-within:ring-2 focus-within:ring-cobalt-500/30 focus-within:border-cobalt-500';
+    var VALID   = 'border-green-600 ring-2 ring-green-600/20';
+    var ERROR   = 'border-rose-500 ring-2 ring-rose-500/20';
 
     function setState(state) {
       if (state === 'valid') {
@@ -195,13 +209,13 @@
         icon.className = 'flex items-center pr-3.5';
         icon.innerHTML = CHECK;
         msg.textContent = 'Looks good — a valid Indian mobile number.';
-        msg.className = 'mt-1 text-[11px] font-medium min-h-[15px] text-emerald-600';
+        msg.className = 'mt-1 text-[11px] font-medium min-h-[15px] text-green-600';
       } else if (state === 'error') {
         wrap.className = BASE + ERROR;
         icon.className = 'flex items-center pr-3.5';
         icon.innerHTML = CROSS;
         msg.textContent = 'Enter a valid 10-digit mobile number starting with 6–9.';
-        msg.className = 'mt-1 text-[11px] font-medium min-h-[15px] text-red-500';
+        msg.className = 'mt-1 text-[11px] font-medium min-h-[15px] text-rose-500';
       } else { // neutral
         wrap.className = BASE + NEUTRAL;
         icon.className = 'hidden items-center pr-3.5';
@@ -211,16 +225,14 @@
       }
     }
 
-    function evaluate(showEmptyAsNeutral) {
+    function evaluate() {
       // keep digits only
       var digits = input.value.replace(/\D/g, '');
       if (digits !== input.value) input.value = digits;
 
       if (digits.length === 0) { setState('neutral'); return; }
-      // Valid = exactly 10 digits, first digit 6-9  (use shared helper if present)
-      var valid = (window.GoRefer && window.GoRefer.isValidIndianMobile)
-        ? window.GoRefer.isValidIndianMobile(digits)
-        : /^[6-9]\d{9}$/.test(digits);
+      // Valid = exactly 10 digits, first digit 6-9
+      var valid = /^[6-9]\d{9}$/.test(digits);
 
       if (valid) { setState('valid'); return; }
 
@@ -229,8 +241,8 @@
       setState('error');
     }
 
-    input.addEventListener('input', function () { evaluate(true); });
-    input.addEventListener('blur', function () { evaluate(false); });
+    input.addEventListener('input', evaluate);
+    input.addEventListener('blur', evaluate);
   })();
 </script>
 </body>

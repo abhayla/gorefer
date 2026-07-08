@@ -226,6 +226,8 @@ These follow the GoRefer Constitution and the Foundation Spec's product philosop
 
 **Primary action.** **Apply filters** (the search that produces the list). Each result row's tap-through to the Journey detail is the secondary action.
 
+**Columns / referrer display (updated 2026-07-07).** The **Referral ID** column = the referrer's raw Zerodha `client_id` (ADR-001). The **Referrer** column shows the referrer's **name when known** (from a `Customer` row or Zoho); when the name is not on file it shows **"— name not on file —"**, and **NOT** a duplicate of the client_id. (Sprint-1 reality: names light up only once Customer data is loaded or Zoho supplies them, so most Referrer cells read "— name not on file —" for now — this is why the two columns looked identical.) Each **Referrer** cell links to that referrer's **Referrer Profile** page (new screen — §6(e), pending Abhay's UI sign-off).
+
 **Layout — desktop**
 ```
 ┌───────────────────────────────────────────────────────────────┐
@@ -413,7 +415,17 @@ On mobile, the filter bar collapses into a **Filters** sheet (tap to expand, app
 
 **Continue-to-Zerodha flow.** Tapping **Continue to Zerodha** reveals the short form (Name, Email, Phone). Submitting posts to `POST /api/leads` with `source=landing_need_help`; GoRefer saves the lead **first** (referrer = `client_id`, partner = `ZMPHZC`), mirrors to Zoho, fires the Wati messages, then redirects the browser to `https://signup.zerodha.com/api/lead?c=ZMPHZC&r={client_id}`. GoRefer **never** auto-submits Zerodha's reCAPTCHA-gated form — a real human lands on Zerodha's page (locked decision #4); a human (Ashok) can also complete KYC on a call.
 
-**Share-on-WhatsApp flow.** Tapping **Share referral details on WhatsApp** emits `SharedOnWhatsApp` and opens the person's WhatsApp to `wa.me/{office}` with the referring-language message pre-filled.
+**Share-on-WhatsApp flow (message updated 2026-07-07).** Tapping **Share referral details on WhatsApp** emits `share_clicked` (`SharedOnWhatsApp`) and opens the person's WhatsApp to `wa.me/{WATI business number}` (config-driven) with the message below pre-filled (URL-encoded). `{name}` / `{phone}` / `{email}` are filled from the landing form inputs when the visitor has entered them, else left blank for them to type in WhatsApp; `{client_id}` is the referral id from the URL:
+
+```
+Hi, I'd like to refer for a Zerodha account. My Referral ID: {client_id}
+*Here are referral details*
+Name: {name}
+Phone Number: {phone}
+Email: {email}
+```
+
+(The partner-direct variant omits the `My Referral ID` line.)
 
 **States.**
 - **Loading** — branded skeleton (logo + spinner), no Zerodha branding ever.
