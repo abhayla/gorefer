@@ -907,3 +907,25 @@ Guardrails hold throughout: no `ZMPHZC`/raw Zerodha URL in client-facing bodies;
 Full suite **188 passed** on Postgres (172 baseline + 16); ruff clean; `makemigrations --check` → no drift; `ENABLE_ZOHO_WRITE`/`ENABLE_WATI_SEND` stay OFF; Postgres-only.
 
 **Note for the independent tester:** B1's live `gorefer.in/r/wa/{id}` checks are verifiable **after the end-of-Track-B deploy** (deploys batched per Abhay). Until then, evidence is the green suite above; the code is on branch `sprint2-track-b-referral-ux`. Next: **B2 — `/d/{slug}` disclosure page.** — Engineer
+
+---
+
+### 2026-07-09 — FROM ENGINEER — STATUS — B2 DONE — `/d/{slug}` per-sub-broker disclosure page (ADR-031)
+
+**B2 built on the same branch and green locally (9 new tests; full suite 197 passed on Postgres; `ruff check .` clean repo-wide; migration 0005 boots clean). The canonical §4.4 host is in place. Deploy still batched to the end of Track B (prod stays on stable `main`).**
+
+**What it does.** `GET /d/{slug}` (e.g. `/d/pifs`) is the public, per-sub-broker disclosure page — the canonical §4.4 host so a light WhatsApp message / a `direct` bypass link (B3) can link here instead of inlining the full block.
+- **Resolve → compose → render:** slug → active tenant; `disclosure_service.compose_disclosures()` gathers that tenant's **ACTIVE** programs and orders them by **(disclosure_sequence, regulator rank)** → SEBI/NSE → IRDAI → RBI → other. Unknown slug → branded 404 (no leak).
+- **Config-over-code:** each block = the program's `disclosure_template` filled with config values (`{nse_ap_no}`, `{sebi_reg_no}`, …); when blank it falls back to the **canonical central AP disclosure block + verbatim market-risk warning** — i.e. exactly the interim single-partner behaviour the DA specified. A new partner/regulator is a **data row**, not code.
+- **Data model:** `ReferralProgram` gains `regulator` / `disclosure_template` / `disclosure_sequence` (**migration `0005`**, additive, boots clean). `seed_program` sets Zerodha = `sebi_nse`, seq 10.
+- **Standalone compliance surface** — does NOT extend the landing/incentive template (no referral-benefit panel on a disclosure page); reuses the PIFS head/header skin.
+
+**Guardrail tests (S2-03 §11 / S2-04 §B2) — 9, all green** (`tests/test_b2_disclosure_page.py`):
+- `/d/pifs` → **200** with the Zerodha **SEBI/NSE** identification (**`INZ000031633`**, AP **`AP2516003693`**) + the **verbatim** market-risk warning; regulator label "SEBI / NSE" present.
+- **Multi-partner order:** adding IRDAI + RBI programs out of order renders them **after** SEBI/NSE, in regulator order; an **inactive/lapsed** partner's block is **absent**.
+- **No PII** (seeded a customer with name/mobile/email → none appears); **no `ZMPHZC` / `signup.zerodha.com`**; the page **creates no Event** (crawler hit inherently excluded from human counts); unknown slug → 404.
+- Extended `test_guardrails` so the no-partner-code/no-Zerodha-URL body check now also covers **`/r/wa/RJ4521`** (B1) and **`/d/pifs`** (B2).
+
+Full suite **197 passed** on Postgres (172 + 16 B1 + 9 B2); `ruff check .` clean (incl. a drive-by wrap of a **pre-existing** E501 at `settings.py:49` from the WM-DEPLOY TLS commit — flagged, not B2 scope); `makemigrations --check` → no drift beyond `0005`; write flags OFF; Postgres-only.
+
+**Note for the independent tester:** `/d/pifs` live checks land at the end-of-Track-B deploy (batched). Interim `/d/pifs` renders the Zerodha SEBI/NSE block; multi-partner composition is wired and tested but only Zerodha is seeded live. Next: **B3 — `LANDING_MODE = page|direct` + derived `MESSAGE_DISCLOSURE_LEVEL` coupling.** — Engineer
