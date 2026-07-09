@@ -21,7 +21,12 @@ from django.urls.converters import get_converters
 from django.views.generic import TemplateView
 
 from api.router import api
-from apps.referrals.views import partner_direct_redirect, referral_continue, referral_redirect
+from apps.referrals.views import (
+    disclosure_page,
+    partner_direct_redirect,
+    referral_continue,
+    referral_redirect,
+)
 from gorefer.converters import ChannelConverter
 
 # Register the {channel} path converter once. Guarded because this module can be
@@ -33,6 +38,8 @@ if "channel" not in get_converters():
 urlpatterns = [
     path("", TemplateView.as_view(template_name="home.html"), name="home"),
     path("open", partner_direct_redirect, name="partner_direct"),
+    # Per-sub-broker disclosure page (B2 / ADR-031) — the canonical §4.4 host.
+    path("d/<slug:slug>", disclosure_page, name="disclosure_page"),
     # Channel-path form (B1): /r/{channel}/{client_id}[/continue]. Listed first; the
     # narrow {channel} converter keeps these from ever matching a legacy single id.
     path("r/<channel:channel>/<str:client_id>/continue", referral_continue, name="referral_continue_channel"),

@@ -83,6 +83,15 @@ class ReferralProgram(AuditedModel, SoftDeleteModel, TenantScopedModel):
     """
 
     STATUS_CHOICES = [("active", "active"), ("inactive", "inactive")]
+    # Regulator whose mandated disclosure block this program carries — drives the
+    # ordering on the per-sub-broker disclosure page /d/{slug} (B2 / ADR-031):
+    # SEBI/NSE (securities) → IRDAI (insurance) → RBI (loans) → …
+    REGULATOR_CHOICES = [
+        ("sebi_nse", "SEBI / NSE"),
+        ("irdai", "IRDAI"),
+        ("rbi", "RBI"),
+        ("other", "Other"),
+    ]
 
     partner = models.ForeignKey(Partner, on_delete=models.PROTECT, related_name="programs")
     name = models.CharField(max_length=100)
@@ -92,6 +101,15 @@ class ReferralProgram(AuditedModel, SoftDeleteModel, TenantScopedModel):
     brand_color = models.CharField(max_length=20, blank=True, default="")
     reward_description = models.TextField(blank=True, default="")
     terms_url = models.URLField(blank=True, default="")
+
+    # --- Disclosure composition (B2 / ADR-031) — the /d/{slug} page renders each
+    # ACTIVE program's regulator block, ordered by (disclosure_sequence, regulator).
+    # `disclosure_template` is a config-driven text with {placeholders} filled from
+    # the partner/tenant's own values (AP code, SEBI reg, etc.). Blank = fall back to
+    # the canonical central AP disclosure block (interim single-partner behaviour).
+    regulator = models.CharField(max_length=16, choices=REGULATOR_CHOICES, default="sebi_nse")
+    disclosure_template = models.TextField(blank=True, default="")
+    disclosure_sequence = models.IntegerField(default=100)
 
     class Meta:
         db_table = "programs"

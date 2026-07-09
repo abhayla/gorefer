@@ -91,6 +91,11 @@ class Command(BaseCommand):
                 "reward_description": flags.REFERRAL_INCENTIVE_CLAIM,
                 "brand_color": "#387ED1",
                 "terms_url": "https://zerodha.com/open-account",
+                # Disclosure composition (B2/ADR-031): Zerodha carries the SEBI/NSE
+                # block, first in regulator order. Template blank => fall back to the
+                # canonical central AP disclosure block (interim single-partner).
+                "regulator": "sebi_nse",
+                "disclosure_sequence": 10,
             },
         )
         self.stdout.write(f"  program: {'created' if created else 'exists'} ({program.name})")

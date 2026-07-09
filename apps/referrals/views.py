@@ -185,6 +185,30 @@ def referral_continue(request, client_id: str, channel: str | None = None):
 
 
 @require_GET
+def disclosure_page(request, slug: str):
+    """GET /d/{slug} — the public per-sub-broker disclosure page (B2 / ADR-031).
+
+    Composes each active partner's regulator-mandated disclosure block for the tenant
+    identified by `slug` (e.g. /d/pifs), in regulator order (SEBI/NSE → IRDAI → RBI).
+    The canonical §4.4 host: a light WhatsApp message / `direct` bypass link points
+    here for the full disclosures. NO PII; NO partner code / raw Zerodha URL; creates
+    no event, so a crawler hit is inherently excluded from human counts.
+    """
+    from apps.referrals.disclosure_service import compose_disclosures, resolve_tenant_by_slug
+
+    tenant = resolve_tenant_by_slug(slug)
+    if tenant is None:
+        return render(request, "disclosure_unknown.html", {"slug": slug}, status=404)
+    blocks = compose_disclosures(tenant)
+    context = {
+        "slug": slug,
+        "sub_broker_name": tenant.name,
+        "disclosure_blocks": blocks,
+    }
+    return render(request, "disclosure.html", context)
+
+
+@require_GET
 def partner_direct_redirect(request):
     """GET /open — partner-direct 302 (no r=); stays a direct redirect (no landing)."""
     tenant = get_current_tenant(request)
