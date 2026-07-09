@@ -14,6 +14,7 @@ from .analytics import router as analytics_router
 from .click import router as click_router
 from .leads import router as leads_router
 from .share import router as share_router
+from .wati import router as wati_router
 from .zoho import router as zoho_router
 
 api = NinjaAPI(title="GoRefer API", version="0.1.0", description="GoRefer referral intelligence API")
@@ -22,6 +23,7 @@ api.add_router("/leads", leads_router)
 api.add_router("/share", share_router)
 api.add_router("/analytics", analytics_router)
 api.add_router("/zoho", zoho_router)
+api.add_router("/wati", wati_router)
 
 
 @api.get("/health")

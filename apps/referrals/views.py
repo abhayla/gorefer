@@ -22,8 +22,14 @@ from apps.tenants.resolve import get_current_tenant
 from gorefer import flags as flagmod
 from gorefer.flags import flags, normalize_share_channel
 
+from .landing_mode import LANDING_MODE_DIRECT, resolve_landing_mode
 from .models import ProgramRedirectRule, ReferralIdentity, ReferralProgram
-from .redirect_service import build_continue_redirect, handle_landing_view, handle_partner_direct
+from .redirect_service import (
+    build_continue_redirect,
+    handle_direct_redirect,
+    handle_landing_view,
+    handle_partner_direct,
+)
 from .validators import InvalidClientId, validate_client_id
 
 VISITOR_COOKIE = "gr_vid"
@@ -45,13 +51,22 @@ def _client_ip(request) -> str | None:
     return request.META.get("REMOTE_ADDR")
 
 
-def _share_channel(request) -> str | None:
-    """Read the config-named ?s= param and normalize it to a Channel label (M11).
+def _share_channel(request, path_channel: str | None = None) -> str | None:
+    """Resolve the visitor's share channel to a Channel label (M11 + B1/ADR-028).
 
-    The param NAME is config (SHARE_CHANNEL_PARAM, default "s"). The value is captured
-    for attribution then never propagated to the 302 (the destination is assembled
-    server-side from the program template, so `s` cannot leak into the Location).
+    Two carriers, both normalized the same way (config-driven codes -> labels):
+      - PATH PREFIX `/r/{channel}/{client_id}` (B1) — WhatsApp dynamic URL buttons
+        require the template variable LAST, so `?s=wa` can't follow `{{client_id}}`;
+        the channel therefore rides as a leading path segment. Takes precedence.
+      - `?s=` query param (M11 legacy) — the param NAME is config
+        (SHARE_CHANNEL_PARAM, default "s").
+
+    Either way the value is captured for attribution ONLY, then never propagated to
+    the 302 — the destination is assembled server-side from the program template, so
+    the channel/`s` cannot leak into the Location.
     """
+    if path_channel is not None:
+        return normalize_share_channel(path_channel)
     raw = request.GET.get(flagmod.SHARE_CHANNEL_PARAM)
     return normalize_share_channel(raw)
 
@@ -116,8 +131,13 @@ def _landing_context(request, tenant, client_id: str, nonce: str | None):
 
 
 @require_GET
-def referral_redirect(request, client_id: str):
-    """GET /r/{client_id} — render the branded landing (200), NOT an immediate 302."""
+def referral_redirect(request, client_id: str, channel: str | None = None):
+    """GET /r/{client_id} (or /r/{channel}/{client_id}) — render the branded landing.
+
+    `channel` (B1) is an optional path prefix carrying the share channel (e.g.
+    /r/wa/RJ4521) for WhatsApp URL buttons where `?s=` can't trail the id. Legacy
+    /r/{client_id}?s= still works — see _share_channel.
+    """
     try:
         normalized = validate_client_id(client_id)
     except InvalidClientId:
@@ -126,6 +146,25 @@ def referral_redirect(request, client_id: str):
 
     tenant = get_current_tenant(request)
     visitor_id, is_new = _ensure_visitor_id(request)
+
+    # LANDING_MODE=direct (B3): log the click on-commit, then 302 straight to
+    # Zerodha — skip the landing page. Channel/?s stripped, code server-side.
+    if resolve_landing_mode(tenant.id if tenant is not None else None) == LANDING_MODE_DIRECT:
+        try:
+            destination, _is_human = handle_direct_redirect(
+                tenant=tenant,
+                client_id=normalized,
+                visitor_id=visitor_id,
+                user_agent=request.META.get("HTTP_USER_AGENT", ""),
+                raw_ip=_client_ip(request),
+                share_channel=_share_channel(request, channel),
+            )
+        except PartnerUnavailable:
+            return _partner_unavailable(request)
+        response = HttpResponseRedirect(destination)
+        _set_visitor_cookie(response, visitor_id, is_new)
+        return response
+
     try:
         _referral, _event, nonce = handle_landing_view(
             tenant=tenant,
@@ -133,7 +172,7 @@ def referral_redirect(request, client_id: str):
             visitor_id=visitor_id,
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
             raw_ip=_client_ip(request),
-            share_channel=_share_channel(request),
+            share_channel=_share_channel(request, channel),
         )
     except PartnerUnavailable:
         return _partner_unavailable(request)
@@ -144,8 +183,10 @@ def referral_redirect(request, client_id: str):
 
 
 @require_GET
-def referral_continue(request, client_id: str):
-    """GET /r/{client_id}/continue — the Continue-to-Zerodha 302 (reuses M2 engine)."""
+def referral_continue(request, client_id: str, channel: str | None = None):
+    """GET /r/{client_id}/continue (or /r/{channel}/{client_id}/continue) — the
+    Continue-to-Zerodha 302 (reuses M2 engine). `channel` is the optional B1 path
+    prefix; captured for attribution, NEVER added to the Location."""
     try:
         normalized = validate_client_id(client_id)
     except InvalidClientId:
@@ -159,13 +200,37 @@ def referral_continue(request, client_id: str):
     try:
         destination = build_continue_redirect(
             tenant=tenant, client_id=normalized, referral=referral,
-            share_channel=_share_channel(request),
+            share_channel=_share_channel(request, channel),
         )
     except PartnerUnavailable:
         return _partner_unavailable(request)
     # Guardrail (M11): the destination is assembled server-side from the program
     # template — the inbound ?s= is captured for attribution but NEVER appears here.
     return HttpResponseRedirect(destination)
+
+
+@require_GET
+def disclosure_page(request, slug: str):
+    """GET /d/{slug} — the public per-sub-broker disclosure page (B2 / ADR-031).
+
+    Composes each active partner's regulator-mandated disclosure block for the tenant
+    identified by `slug` (e.g. /d/pifs), in regulator order (SEBI/NSE → IRDAI → RBI).
+    The canonical §4.4 host: a light WhatsApp message / `direct` bypass link points
+    here for the full disclosures. NO PII; NO partner code / raw Zerodha URL; creates
+    no event, so a crawler hit is inherently excluded from human counts.
+    """
+    from apps.referrals.disclosure_service import compose_disclosures, resolve_tenant_by_slug
+
+    tenant = resolve_tenant_by_slug(slug)
+    if tenant is None:
+        return render(request, "disclosure_unknown.html", {"slug": slug}, status=404)
+    blocks = compose_disclosures(tenant)
+    context = {
+        "slug": slug,
+        "sub_broker_name": tenant.name,
+        "disclosure_blocks": blocks,
+    }
+    return render(request, "disclosure.html", context)
 
 
 @require_GET

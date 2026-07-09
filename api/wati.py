@@ -1,0 +1,83 @@
+"""WATI assisted-referral webhook endpoint (B4 / ADR-033).
+
+POST /api/wati/webhook — AUTHENTICATE FIRST (static key + IP allowlist), THEN parse
++ validate the body and create ONE Zoho lead from an assisted capture
+{client_id (referrer), name, mobile, email?, consent?}.
+
+Security ordering (fixes the independent-verification finding): the shared-secret
+check runs BEFORE any schema validation or business logic, so an unauthenticated or
+wrong-key request is rejected with 401 regardless of the body — a malformed body can
+never surface a 422 to an unauthenticated caller. Auth FAILS CLOSED: if
+WATI_WEBHOOK_KEY is not configured, every request is rejected (never skip the check).
+
+401 unauthenticated; 422 on a malformed/forbidden payload (only reachable AFTER
+auth passes). Behind ENABLE_ZOHO_WRITE (log-only when off). Never stores a password;
+deduped.
+"""
+from __future__ import annotations
+
+import json
+
+from ninja import Router, Schema
+from ninja.errors import HttpError
+from pydantic import ValidationError
+
+from apps.integrations.wati.webhook import (
+    FORBIDDEN_KEYS,
+    AssistedCaptureError,
+    authenticate,
+    process_assisted_capture,
+)
+
+router = Router()
+
+
+class AssistedIn(Schema):
+    client_id: str          # the REFERRER's Zerodha client id
+    name: str               # prospect name
+    mobile: str             # prospect mobile
+    email: str | None = ""
+    consent: bool | None = True
+
+
+class AssistedOut(Schema):
+    status: str
+    lead_id: int
+    lead_source: str
+    consent: bool
+
+
+@router.post("/webhook", response=AssistedOut)
+def assisted_webhook(request):
+    # 1) AUTH FIRST — before any body read / schema validation / business logic.
+    #    authenticate() fails CLOSED when WATI_WEBHOOK_KEY is unset (never fail-open).
+    #    NB: the view takes NO schema parameter, so Django Ninja does not eagerly
+    #    validate the body ahead of this check (that ordering was the reported bug).
+    if not authenticate(request):
+        raise HttpError(401, "unauthenticated")
+
+    # 2) Only an authenticated caller reaches body parsing.
+    try:
+        raw = json.loads(request.body or b"{}")
+    except (ValueError, TypeError) as exc:
+        raise HttpError(422, "malformed JSON body") from exc
+    if not isinstance(raw, dict):
+        raise HttpError(422, "body must be a JSON object")
+
+    # Defense-in-depth: never accept a credential-shaped field (checked on the raw
+    # body because a schema would silently drop unknown keys). Never a password.
+    for key in raw:
+        if str(key).lower() in FORBIDDEN_KEYS:
+            raise HttpError(422, f"forbidden field in assisted capture: {key}")
+
+    # 3) Validate the payload shape (post-auth). Ninja's schema does the coercion.
+    try:
+        payload = AssistedIn(**raw)
+    except (ValidationError, TypeError) as exc:
+        raise HttpError(422, "invalid assisted-capture payload") from exc
+
+    try:
+        result = process_assisted_capture(request, payload.dict())
+    except AssistedCaptureError as exc:
+        raise HttpError(422, str(exc)) from exc
+    return result

@@ -83,6 +83,15 @@ class ReferralProgram(AuditedModel, SoftDeleteModel, TenantScopedModel):
     """
 
     STATUS_CHOICES = [("active", "active"), ("inactive", "inactive")]
+    # Regulator whose mandated disclosure block this program carries — drives the
+    # ordering on the per-sub-broker disclosure page /d/{slug} (B2 / ADR-031):
+    # SEBI/NSE (securities) → IRDAI (insurance) → RBI (loans) → …
+    REGULATOR_CHOICES = [
+        ("sebi_nse", "SEBI / NSE"),
+        ("irdai", "IRDAI"),
+        ("rbi", "RBI"),
+        ("other", "Other"),
+    ]
 
     partner = models.ForeignKey(Partner, on_delete=models.PROTECT, related_name="programs")
     name = models.CharField(max_length=100)
@@ -92,6 +101,15 @@ class ReferralProgram(AuditedModel, SoftDeleteModel, TenantScopedModel):
     brand_color = models.CharField(max_length=20, blank=True, default="")
     reward_description = models.TextField(blank=True, default="")
     terms_url = models.URLField(blank=True, default="")
+
+    # --- Disclosure composition (B2 / ADR-031) — the /d/{slug} page renders each
+    # ACTIVE program's regulator block, ordered by (disclosure_sequence, regulator).
+    # `disclosure_template` is a config-driven text with {placeholders} filled from
+    # the partner/tenant's own values (AP code, SEBI reg, etc.). Blank = fall back to
+    # the canonical central AP disclosure block (interim single-partner behaviour).
+    regulator = models.CharField(max_length=16, choices=REGULATOR_CHOICES, default="sebi_nse")
+    disclosure_template = models.TextField(blank=True, default="")
+    disclosure_sequence = models.IntegerField(default=100)
 
     class Meta:
         db_table = "programs"
@@ -275,7 +293,12 @@ class Lead(AuditedModel, SoftDeleteModel, TenantScopedModel):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="new")
     status_source = models.CharField(max_length=20, blank=True, default="")  # 'zoho' when imported (M6)
     submitted_by = models.CharField(max_length=12, choices=SUBMITTED_BY_CHOICES, default="friend")
+    # How this lead entered GoRefer — e.g. 'landing' (self-serve form) or
+    # 'whatsapp_assisted' (B4 / ADR-033: referrer asked us to reach their friend).
+    lead_source = models.CharField(max_length=32, blank=True, default="landing")
     consent = models.BooleanField(default=False)
+    # DPDP: when consent was captured (third-party PII in the assisted branch).
+    consent_captured_at = models.DateTimeField(null=True, blank=True)
     zoho_lead_id = models.CharField(max_length=64, null=True, blank=True, unique=True)
     account_opened_at = models.DateTimeField(null=True, blank=True)  # TRUE Zoho date (M6)
 
