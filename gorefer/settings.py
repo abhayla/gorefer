@@ -36,6 +36,20 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "insecure-dev-only-change-me")
 DEBUG = os.environ.get("DJANGO_DEBUG", "true").strip().lower() in {"1", "true", "yes", "on"}
 ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h]
 
+# --- Reverse-proxy / TLS hardening (prod behind nginx + Cloudflare) --------
+# All env-driven; defaults preserve dev/CI behaviour (no HTTPS assumptions). In
+# production (DEPLOY-TARGET Hostinger: nginx terminates TLS via certbot, sets
+# X-Forwarded-Proto), set these so Django knows the request is HTTPS, trusts the
+# origin for CSRF (admin login POST), and forces secure cookies.
+CSRF_TRUSTED_ORIGINS = [
+    o for o in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if o
+]
+if os.environ.get("DJANGO_BEHIND_TLS_PROXY", "false").strip().lower() in {"1", "true", "yes", "on"}:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "true").strip().lower() in {"1", "true", "yes", "on"}
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
 # --- Applications ----------------------------------------------------------
 # Multi-tenancy is SINGLE-SCHEMA tenant_id discriminator (COORDINATION Q-M1-1
 # answer): no django-tenants schema routing. `apps.tenants` keeps a plain
