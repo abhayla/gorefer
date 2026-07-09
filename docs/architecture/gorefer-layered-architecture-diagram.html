@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GoRefer — Layered Architecture (Discussion Draft)</title>
+<style>
+  :root{
+    --cobalt:#2F5BFF; --cobalt-dark:#1E3AAF;
+    --cobalt-050:#EEF3FF; --cobalt-100:#DDE6FF; --cobalt-200:#C2D2FF;
+    --ink:#0F1729; --muted:#5A6478; --line:#E6EAF2;
+    --surface:#FFFFFF; --bg:#F5F7FB;
+    --green:#1FA971; --green-050:#E7F7F0;
+    --amber:#C08A1E; --amber-050:#FBF3E0;
+    --violet:#6B4EFF; --violet-050:#F0EDFF;
+    --teal:#0E9DB0; --teal-050:#E3F6F8;
+    --future:#9AA5B8; --future-bg:#F0F2F7;
+    --radius:16px; --shadow:0 2px 10px rgba(20,35,80,.06),0 1px 3px rgba(20,35,80,.05);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    line-height:1.45;padding:28px 18px 60px}
+  .wrap{max-width:1180px;margin:0 auto}
+  h1{font-size:26px;margin:0 0 4px;letter-spacing:-.02em}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:6px}
+  .banner{background:var(--amber-050);border:1px solid #EAD9AE;color:#7A5A12;
+    border-radius:12px;padding:10px 14px;font-size:13px;margin:14px 0 22px;font-weight:500}
+  .legend{display:flex;flex-wrap:wrap;gap:10px 18px;margin:0 0 22px;font-size:12.5px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:7px}
+  .dot{width:13px;height:13px;border-radius:4px;display:inline-block}
+  .dot.built{background:var(--cobalt)}
+  .dot.future{background:var(--future-bg);border:1.5px dashed var(--future)}
+  .dot.reg{background:var(--green)}
+  .dot.tenant{background:#fff;border:2px solid var(--cobalt)}
+
+  .band{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:18px 20px;margin:0 0 18px;position:relative}
+  .band > .tag{position:absolute;top:-11px;left:18px;background:var(--cobalt);color:#fff;
+    font-size:11px;font-weight:600;letter-spacing:.03em;padding:3px 10px;border-radius:20px;text-transform:uppercase}
+  .band.core > .tag{background:var(--violet)}
+  .band.rules > .tag{background:var(--teal)}
+  .band.comms > .tag{background:#111827}
+  .band.infra > .tag{background:var(--muted)}
+  .band h3{margin:6px 0 4px;font-size:15px}
+  .band .hint{color:var(--muted);font-size:12.5px;margin:0 0 12px}
+
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .col{flex:1;min-width:180px}
+
+  .card{border:1.5px solid var(--cobalt-200);background:var(--cobalt-050);border-radius:12px;
+    padding:11px 13px;font-size:13px}
+  .card .t{font-weight:600;font-size:13px;color:var(--ink);display:flex;align-items:center;gap:7px}
+  .card .d{color:var(--muted);font-size:11.5px;margin-top:3px}
+  .card.future{border:1.5px dashed var(--future);background:var(--future-bg)}
+  .card.future .t{color:#65708A}
+  .pill{font-size:10px;font-weight:700;padding:1.5px 7px;border-radius:20px;letter-spacing:.02em}
+  .pill.now{background:var(--cobalt);color:#fff}
+  .pill.soon{background:#E4E8F0;color:#65708A}
+  .lock{font-size:11px;color:var(--cobalt);font-weight:600}
+
+  /* taxonomy tree */
+  .tier{margin:10px 0}
+  .tier .lbl{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+  .reg .card{border-color:#BEE6D3;background:var(--green-050)}
+  .reg .card .t{color:#0B6B47}
+  .flow-arrow{text-align:center;color:var(--cobalt);font-size:18px;line-height:1;margin:2px 0}
+
+  /* cascades */
+  .cascades{display:flex;gap:16px;flex-wrap:wrap}
+  .casc{flex:1;min-width:280px;border:1px solid var(--line);border-radius:12px;padding:14px;background:#fff}
+  .casc h4{margin:0 0 2px;font-size:14px;display:flex;align-items:center;gap:8px}
+  .casc .rule{font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:20px}
+  .casc.tighten .rule{background:#FDECEC;color:#B23838}
+  .casc.nearest .rule{background:var(--cobalt-050);color:var(--cobalt)}
+  .casc .desc{color:var(--muted);font-size:12px;margin:6px 0 12px}
+  .step{display:flex;align-items:center;gap:9px;margin:6px 0;font-size:13px}
+  .step .n{width:22px;height:22px;border-radius:7px;flex:none;display:flex;align-items:center;justify-content:center;
+    font-size:11px;font-weight:700;color:#fff}
+  .casc.tighten .n{background:linear-gradient(180deg,#E85D5D,#B23838)}
+  .casc.nearest .n{background:linear-gradient(180deg,#4E77FF,#1E3AAF)}
+  .step .arrow{color:var(--muted);font-size:12px}
+  .casc .win{margin-top:10px;font-size:11.5px;color:var(--muted);border-top:1px dashed var(--line);padding-top:8px}
+
+  /* ports/adapters */
+  .pa{display:flex;gap:14px;flex-wrap:wrap;align-items:stretch}
+  .pa .grp{flex:1;min-width:240px}
+  .pa .grp .lbl{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{border:1.5px solid var(--cobalt-200);background:#fff;border-radius:10px;padding:8px 11px;font-size:12.5px;font-weight:600;min-width:96px}
+  .chip .s{display:block;font-weight:400;color:var(--muted);font-size:10.5px;margin-top:2px}
+  .chip.active{background:var(--cobalt);color:#fff;border-color:var(--cobalt)}
+  .chip.active .s{color:var(--cobalt-100)}
+  .chip.future{border:1.5px dashed var(--future);color:#65708A}
+  .chip.ext{border-color:var(--teal);background:var(--teal-050);color:#0A6E7C}
+  .connect{display:flex;align-items:center;color:var(--muted);font-size:20px;padding:0 2px}
+
+  .foot{color:var(--muted);font-size:12px;margin-top:24px;border-top:1px solid var(--line);padding-top:14px}
+  code{background:var(--cobalt-050);color:var(--cobalt-dark);padding:1px 5px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>GoRefer — Layered Architecture</h1>
+  <div class="sub">Referral Management & Intelligence · provider-agnostic, multi-tenant · Variant C · Cobalt</div>
+  <div class="banner">⛔ DISCUSSION DRAFT — model only. Nothing here is built or scheduled yet. Core refactor happens later, on its own feature branch, only after the current sprint is fully implemented and production-deployed.</div>
+
+  <div class="legend">
+    <span><i class="dot built"></i> Built now (Zerodha / PIFS / Wati)</span>
+    <span><i class="dot future"></i> Designed, not built (future partners/channels)</span>
+    <span><i class="dot reg"></i> Regulator (per category)</span>
+    <span><i class="dot tenant"></i> Tenant = isolated login</span>
+  </div>
+
+  <!-- PARTNER TAXONOMY -->
+  <div class="band">
+    <span class="tag">1 · Partner Taxonomy</span>
+    <h3>Category → Partner → Sub-broker (tenant)</h3>
+    <p class="hint">A literal 3-level tree. GoRefer owns no program — it integrates partners' programs. Sprint 1 lights up exactly one path: Brokers → Zerodha → PIFS.</p>
+
+    <div class="tier reg">
+      <div class="lbl">Regulator — top of each category's compliance cascade</div>
+      <div class="row">
+        <div class="col card"><div class="t"><i class="dot reg"></i> NSE / SEBI</div><div class="d">Governs Brokers</div></div>
+        <div class="col card future"><div class="t">IRDAI</div><div class="d">Governs Insurance</div></div>
+        <div class="col card future"><div class="t">RBI</div><div class="d">Governs Loans</div></div>
+      </div>
+    </div>
+    <div class="flow-arrow">▼</div>
+    <div class="tier">
+      <div class="lbl">Category</div>
+      <div class="row">
+        <div class="col card"><div class="t">Brokers <span class="pill now">active</span></div><div class="d">Demat / trading account referrals</div></div>
+        <div class="col card future"><div class="t">Insurance <span class="pill soon">future</span></div><div class="d">Policy referrals</div></div>
+        <div class="col card future"><div class="t">Loans <span class="pill soon">future</span></div><div class="d">Credit referrals</div></div>
+      </div>
+    </div>
+    <div class="flow-arrow">▼</div>
+    <div class="tier">
+      <div class="lbl">Partner</div>
+      <div class="row">
+        <div class="col card"><div class="t">Zerodha <span class="pill now">now</span></div><div class="d">Partner code <code>ZMPHZC</code> · destination-URL template</div></div>
+        <div class="col card future"><div class="t">AngelOne</div><div class="d">Broker partner (future)</div></div>
+        <div class="col card future"><div class="t">LIC / HDFC Life…</div><div class="d">Insurance partners (future)</div></div>
+      </div>
+    </div>
+    <div class="flow-arrow">▼</div>
+    <div class="tier">
+      <div class="lbl">Sub-broker = Tenant = Isolated login <span style="font-weight:500;text-transform:none;color:var(--muted)">(NSE mandate — no cross-view)</span></div>
+      <div class="row">
+        <div class="col card"><div class="t">PIFS → Zerodha <span class="pill now">now</span></div><div class="d"><span class="lock">🔒 own login</span> · <code>tenant_id</code> isolated</div></div>
+        <div class="col card future"><div class="t">Madhu → AngelOne</div><div class="d"><span class="lock" style="color:var(--future)">🔒 separate login</span> — "two separate people"</div></div>
+      </div>
+      <p class="hint" style="margin-top:12px">One login = <b>exactly one NSE-broker</b> + <b>any number of non-NSE partners</b> (insurance, loans) side-by-side. A <b>second broker forces a new isolated login</b> — NSE bars one person across two brokers.</p>
+    </div>
+  </div>
+
+  <!-- DOMAIN CORE -->
+  <div class="band core">
+    <span class="tag">2 · Domain Core</span>
+    <h3>Referral lifecycle + immutable event stream</h3>
+    <p class="hint">Partner- and channel-agnostic. Knows nothing about Zerodha or Wati specifically — those are plugins around it. This is the part that never changes when you swap a partner or a messaging tool.</p>
+    <div class="row">
+      <div class="col card" style="border-color:var(--violet);background:var(--violet-050)"><div class="t" style="color:#3B2B9E">Lifecycle S0→S7</div><div class="d">create → share → click → landing → redirect → lead → account/reward</div></div>
+      <div class="col card" style="border-color:var(--violet);background:var(--violet-050)"><div class="t" style="color:#3B2B9E">Immutable event log</div><div class="d">Append-only; PII kept out; single source of observed truth</div></div>
+      <div class="col card" style="border-color:var(--violet);background:var(--violet-050)"><div class="t" style="color:#3B2B9E">Attribution</div><div class="d">Single-winner, mirrors Zoho; never fabricated</div></div>
+    </div>
+  </div>
+
+  <!-- RULE ENGINE -->
+  <div class="band rules">
+    <span class="tag">3 · Rule Engine — two separate cascades</span>
+    <h3>Compliance constraints vs configuration values</h3>
+    <p class="hint">These look alike but merge in <b>opposite</b> directions. Keeping them separate is the crux of the design. Rules also carry a <b>domain</b> (advertising-compliance · referral-behaviour · message-delivery) because they fire at different moments.</p>
+    <div class="cascades">
+      <div class="casc tighten">
+        <h4>🛡️ Compliance cascade <span class="rule">tighten-only · most-restrictive wins</span></h4>
+        <div class="desc">A lower layer may only <b>add</b> restrictions, never loosen a higher one.</div>
+        <div class="step"><span class="n">1</span> Regulator (NSE/SEBI, IRDAI, RBI) <span class="arrow">▾</span></div>
+        <div class="step"><span class="n">2</span> Category (Brokers…) <span class="arrow">▾</span></div>
+        <div class="step"><span class="n">3</span> Partner (Zerodha AP rules) <span class="arrow">▾</span></div>
+        <div class="step"><span class="n">4</span> Sub-broker (PIFS's own limits)</div>
+        <div class="win">Effective policy = union of all restrictions on the path.</div>
+      </div>
+      <div class="casc nearest">
+        <h4>⚙️ Config cascade <span class="rule">override · nearest wins</span></h4>
+        <div class="desc">Values (reward text, creative, channel). The closest layer's value wins. (ADR-022)</div>
+        <div class="step"><span class="n">1</span> Central defaults <span class="arrow">▾</span></div>
+        <div class="step"><span class="n">2</span> Global (admin) <span class="arrow">▾</span></div>
+        <div class="step"><span class="n">3</span> User / tenant</div>
+        <div class="win">Effective value = the most specific override set.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMMS + ADAPTERS -->
+  <div class="band comms">
+    <span class="tag">4 · Communication & Integration — ports & adapters</span>
+    <h3>Swap a tool by swapping its adapter — the core never moves</h3>
+    <p class="hint">Each channel is a stable <b>port</b>; each vendor is a replaceable <b>adapter</b> behind it. Change Wati → another WhatsApp API = swap one adapter, everything else keeps working.</p>
+    <div class="pa">
+      <div class="grp">
+        <div class="lbl">Ports (stable interfaces)</div>
+        <div class="chips">
+          <div class="chip active">WhatsApp<span class="s">MessageChannel</span></div>
+          <div class="chip future">Email<span class="s">MessageChannel</span></div>
+          <div class="chip future">Social<span class="s">MessageChannel</span></div>
+        </div>
+      </div>
+      <div class="connect">→</div>
+      <div class="grp">
+        <div class="lbl">Adapters (swappable vendors)</div>
+        <div class="chips">
+          <div class="chip active">Wati<span class="s">WhatsApp · active</span></div>
+          <div class="chip active">Zoho<span class="s">CRM read/write</span></div>
+          <div class="chip future">SMTP / other<span class="s">future</span></div>
+        </div>
+      </div>
+      <div class="connect">→</div>
+      <div class="grp">
+        <div class="lbl">External systems</div>
+        <div class="chips">
+          <div class="chip ext">WhatsApp / Meta</div>
+          <div class="chip ext">Zoho CRM<span class="s">source of truth</span></div>
+          <div class="chip ext">Zerodha signup</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INFRA -->
+  <div class="band infra">
+    <span class="tag">5 · Infrastructure</span>
+    <div class="row">
+      <div class="col card"><div class="t">Django + Ninja + HTMX + Tailwind</div><div class="d">ADR-024 stack, no SPA in Sprint 1</div></div>
+      <div class="col card"><div class="t">PostgreSQL (single-schema <code>tenant_id</code>)</div><div class="d">ADR-023 tenant isolation</div></div>
+      <div class="col card"><div class="t">Hostinger VPS <PROD-VPS></div><div class="d">nginx + certbot · Cloudflare Full(strict)</div></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    Reading order: a share/click enters the <b>Domain Core</b>, is scoped to a <b>Sub-broker tenant</b> under a <b>Partner</b> in the <b>Taxonomy</b>, is gated by the <b>Compliance cascade</b> (and shaped by the <b>Config cascade</b>), and is delivered/redirected through a <b>Port → Adapter → External system</b>. &nbsp;·&nbsp; Grounding: CLAUDE.md, ADR-022/023/024, memory <code>gorefer-architecture-layers</code>. Draft v1 — 2026-07-09.
+  </div>
+</div>
+</body>
+</html>

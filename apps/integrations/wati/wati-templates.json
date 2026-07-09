@@ -34,6 +34,24 @@
       "body": "Good news! Someone just used your PIFS referral link to start opening a Zerodha account. We'll keep you posted. Reward status is shown in your Zerodha Console.",
       "variables": [],
       "buttons": []
+    },
+    {
+      "_naming_convention": "gorefer_{partner}_{purpose}_{YYYY_MM_DD} (Abhay 2026-07-09). NAMED variables ({{name}}, {{client_id}}), not positional.",
+      "_status": "HOLD — do NOT submit to Meta until Abhay's review-go (his explicit rule). API create == submit, so this is registered but not yet created.",
+      "name": "gorefer_zerodha_referral_2026_07_09",
+      "category": "MARKETING",
+      "language": "en",
+      "recipient_role": "referrer",
+      "body": "Hi {{name}}, turn your Zerodha account into rewards 💰 Refer friends to open a free Zerodha account and earn 10% brokerage share + 300 reward points per referral. Choose how you'd like to refer 👇\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing. Disclosures: gorefer.in/d/pifs",
+      "footer": "Passive Income Financial Solutions",
+      "variables": [
+        {"name": "name", "meaning": "referrer_name", "sample": "Abhay"}
+      ],
+      "buttons": [
+        {"type": "url", "text": "Refer & earn", "url": "https://gorefer.in/r/wa/{{client_id}}", "url_variable": {"name": "client_id", "sample": "DA1707"}, "_note": "channel 'wa' as path prefix — WhatsApp requires the variable LAST, so ?s=wa can't follow it; needs ENG route /r/{channel}/{client_id} (Q-M-CHANNELPATH). No keyword routing (URL button)."},
+        {"type": "quick_reply", "text": "Share on WhatsApp", "_route": "keyword -> chatbot 'Zerodha Share on WhatsApp'"},
+        {"type": "quick_reply", "text": "Refer directly", "_route": "keyword -> chatbot 'Direct Zerodha Referral'; remove bare 'Refer' keyword from row 1 to avoid collision"}
+      ]
     }
   ]
 }

@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PIFS GoRefer — Share Creative Shortlist (final copy)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = { theme: { extend: {
+  colors: { ink:{900:'#0f1729',700:'#334155',500:'#64748b',300:'#94a3b8'},
+            line:'#e9edf3', bg:'#f4f6fb', cobalt:{600:'#2F5BFF',500:'#4b70ff',50:'#eef2ff'},
+            pifs:{600:'#0f7a4f',500:'#16a34a',50:'#e9f7ef'},
+            green:{600:'#16a34a',300:'#86efac'} },
+  fontFamily:{ sans:['Inter','system-ui','sans-serif'] } } } };
+</script>
+<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+ body{-webkit-font-smoothing:antialiased}
+ .card{box-shadow:0 1px 2px rgba(16,23,41,.04),0 8px 24px -12px rgba(16,23,41,.12)}
+ .card-lg{box-shadow:0 2px 6px rgba(16,23,41,.05),0 18px 40px -18px rgba(16,23,41,.28)}
+ .tag{display:inline-flex;align-items:center;gap:.25rem;border-radius:999px;padding:.1rem .5rem;font-size:10px;font-weight:700;line-height:1.4;white-space:nowrap}
+ .t-generic{background:#eef2ff;color:#2F5BFF}
+ .t-pers{background:#e9f7ef;color:#0f7a4f}
+ .t-fmt{background:#0f1729;color:#fff}
+ .disc{font-size:6.5px;line-height:1.35;letter-spacing:.01em}
+ .disc-sm{font-size:5.5px;line-height:1.3}
+ .qr{background-image:
+    linear-gradient(45deg,#0f1729 25%,transparent 25%,transparent 75%,#0f1729 75%),
+    linear-gradient(45deg,#0f1729 25%,transparent 25%,transparent 75%,#0f1729 75%);
+    background-size:8px 8px;background-position:0 0,4px 4px;background-color:#fff;}
+ .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+</style>
+</head>
+<body class="bg-bg font-sans text-ink-900 min-h-screen text-[13px]">
+
+<!-- ============ HEADER ============ -->
+<header class="bg-white/90 backdrop-blur border-b border-line sticky top-0 z-30">
+  <div class="mx-auto max-w-[1240px] px-5 flex items-center justify-between h-14">
+    <div class="flex items-center gap-2.5">
+      <div class="h-8 w-8 rounded-xl bg-cobalt-600 flex items-center justify-center text-white text-[13px] font-extrabold card">G</div>
+      <div class="text-[13px] font-bold">GoRefer <span class="text-ink-300 font-medium">Admin</span></div>
+      <span class="hidden sm:inline text-ink-300">/</span>
+      <span class="hidden sm:inline text-[12px] font-semibold text-ink-500">Share Creatives · Shortlist</span>
+    </div>
+    <nav class="flex items-center gap-1 text-[12px] font-medium">
+      <a href="admin-dashboard-mockup.html" class="px-3 py-1.5 rounded-full text-ink-500 hover:bg-cobalt-50">Dashboard</a>
+      <a href="referral-explorer-mockup.html" class="px-3 py-1.5 rounded-full text-ink-500 hover:bg-cobalt-50">Explorer</a>
+      <a href="share-creatives-gallery.html" class="px-3 py-1.5 rounded-full text-ink-500 hover:bg-cobalt-50">Gallery (14)</a>
+      <a href="#" class="px-3 py-1.5 rounded-full bg-cobalt-50 text-cobalt-600 font-semibold">Shortlist (8)</a>
+      <span class="ml-2 h-7 w-7 rounded-full bg-cobalt-600 text-white flex items-center justify-center text-[11px] font-bold">AK</span>
+    </nav>
+  </div>
+</header>
+
+<main class="mx-auto max-w-[1240px] px-5 py-5 space-y-5">
+
+  <!-- ============ INTRO STRIP ============ -->
+  <section class="bg-white border border-line rounded-2xl card p-5">
+    <div class="flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-8">
+      <div class="flex-1">
+        <h1 class="text-[20px] font-extrabold tracking-tight">Share Creative — Shortlist <span class="text-ink-300 font-semibold text-[15px]">(final copy)</span></h1>
+        <p class="text-[12.5px] text-ink-500 mt-1.5 max-w-2xl leading-relaxed">
+          Eight refined creatives — the shortlist from the earlier 14-concept gallery, now carrying the
+          <span class="font-semibold text-ink-700">finalized copy</span> for your final pick. Headline
+          <span class="font-semibold text-ink-700">&ldquo;Open a free Zerodha account&rdquo;</span>; every creative sells the
+          <span class="font-semibold text-ink-700">new user&rsquo;s benefits</span>; the referrer reward stays in
+          <span class="font-semibold text-ink-700">private referrer messaging</span> and appears on none of these public creatives.
+          Every creative is <span class="font-semibold text-pifs-600">compliance-locked</span> — the SEBI/AP disclosure line and
+          the market-risk warning are baked into each one and cannot be removed.
+        </p>
+      </div>
+      <!-- legend -->
+      <div class="lg:w-[420px] shrink-0 rounded-xl bg-bg border border-line p-3">
+        <div class="text-[10px] uppercase tracking-wide text-ink-300 font-semibold mb-2">The new-user benefit set (all five, on every benefit creative)</div>
+        <div class="grid grid-cols-1 gap-1 text-[11px] text-ink-700">
+          <div class="flex items-center gap-1.5"><span class="text-green-600 font-bold">✓</span> ₹0 account opening</div>
+          <div class="flex items-center gap-1.5"><span class="text-green-600 font-bold">✓</span> ₹0 equity-delivery brokerage</div>
+          <div class="flex items-center gap-1.5"><span class="text-green-600 font-bold">✓</span> 1st-year AMC free</div>
+          <div class="flex items-center gap-1.5"><span class="text-green-600 font-bold">✓</span> ₹20 flat intraday &amp; F&amp;O · free Kite app</div>
+          <div class="flex items-center gap-1.5"><span class="text-green-600 font-bold">✓</span> Direct mutual funds on Coin</div>
+        </div>
+        <div class="mt-2.5 pt-2 border-t border-line flex flex-wrap gap-1.5">
+          <span class="tag t-generic">Generic</span>
+          <span class="tag t-pers">Personalized</span>
+          <span class="tag t-fmt">Format label per card</span>
+        </div>
+      </div>
+    </div>
+    <div class="mt-4 flex flex-wrap items-center gap-2 text-[11px]">
+      <span class="inline-flex items-center gap-1.5 rounded-full bg-green-600/10 text-green-600 font-semibold px-2.5 py-1">
+        <span class="h-1.5 w-1.5 rounded-full bg-green-600"></span> Compliance-locked
+      </span>
+      <span class="text-ink-300">Disclosure + risk warning on all 8 (or the §4.4 link on the text caption) · no reward / no &ldquo;300 points&rdquo; · no &ldquo;with PIFS&rdquo; headline · no superlatives · no Zerodha / NSE mark · no assured returns · no real-person photo</span>
+    </div>
+  </section>
+
+  <!-- ============ SECTION A HEADER ============ -->
+  <div class="flex items-center gap-3 pt-1">
+    <div class="h-6 w-1 rounded-full bg-cobalt-600"></div>
+    <h2 class="text-[15px] font-extrabold tracking-tight">Section A — The 8 shortlisted creatives</h2>
+    <span class="text-[11px] text-ink-300">rendered at scaled size · each visually distinct · final copy throughout</span>
+  </div>
+
+  <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5" id="grid"></section>
+
+  <!-- ============ SECTION B HEADER ============ -->
+  <div class="flex items-center gap-3 pt-3">
+    <div class="h-6 w-1 rounded-full bg-cobalt-600"></div>
+    <h2 class="text-[15px] font-extrabold tracking-tight">Section B — How it looks on social</h2>
+    <span class="text-[11px] text-ink-300">concepts #2 (link-card) · #4 (benefit list) · #5 (story) inside real platform frames</span>
+  </div>
+
+  <section id="social" class="space-y-5"></section>
+
+  <!-- ============ FOOTER ============ -->
+  <footer class="pt-2 pb-8">
+    <p class="text-center text-[11px] text-ink-500 max-w-3xl mx-auto leading-relaxed">
+      Mockup — illustrative. Final creative must pass the
+      <span class="font-semibold text-ink-700">zerodha-ap-social-media-compliance</span> review +
+      Zerodha&rsquo;s <span class="font-semibold text-ink-700">written approval</span> before publishing;
+      no paid boosting (Zerodha T&amp;C cl.15).
+    </p>
+    <p class="text-center text-[10px] text-ink-300 mt-2">
+      Passive Income Financial Solutions Pvt. Ltd. · GoRefer · NSE AP Reg. No. AP2516003693
+    </p>
+  </footer>
+
+</main>
+
+<script>
+/* =====================================================================
+   Reusable compliance blocks (verbatim strings, injected everywhere)
+   PIFS is named ONLY inside DISC — nowhere else in any creative.
+   ===================================================================== */
+const DISC = 'Zerodha Broking Ltd.: SEBI Registration no.: INZ000031633 | Passive Income Financial Solutions Private Limited | NSE AP reg. no.: AP2516003693';
+const RISK = 'Investments in securities market are subject to market risks, read all the related documents carefully before investing.';
+const LINK = 'gorefer.in/r/RJ4111';
+const HELP = '+91 73888 82020';
+
+/* the finalized new-user benefit set */
+const BENEFITS = [
+  '₹0 account opening',
+  '₹0 equity-delivery brokerage',
+  '1st-year AMC free',
+  '₹20 flat intraday & F&O · free Kite app',
+  'Direct mutual funds on Coin'
+];
+function benefitList(dark,fs){
+  const col = dark ? 'text-white/90' : 'text-ink-700';
+  const chk = dark ? 'text-green-300' : 'text-green-600';
+  return `<div class="space-y-0.5">`+BENEFITS.map(b=>`
+    <div class="flex items-start gap-1 ${col}" style="font-size:${fs}px;line-height:1.35">
+      <svg viewBox="0 0 20 20" class="shrink-0 ${chk}" style="width:${fs+3}px;height:${fs+3}px;margin-top:1px" fill="currentColor"><path d="M8 13.2 4.6 9.8l1.4-1.4L8 10.4l6-6 1.4 1.4z"/></svg>
+      <span class="font-medium">${b}</span>
+    </div>`).join('')+`</div>`;
+}
+function ctaChip(dark){
+  return dark
+   ? `<div class="mono font-bold bg-white/15 inline-block rounded px-2 py-0.5" style="font-size:8.5px">Open your account &rarr; ${LINK}</div>`
+   : `<div class="mono font-bold text-cobalt-600 bg-cobalt-50 inline-block rounded px-2 py-0.5" style="font-size:8.5px">Open your account &rarr; ${LINK}</div>`;
+}
+
+/* small fake QR */
+function qr(s){return `<div class="qr rounded-md" style="width:${s}px;height:${s}px"></div>`;}
+
+/* GoRefer "G" wordmark (never a Zerodha mark; PIFS name stays in DISC only) */
+function mark(dark){const c=dark?'text-white':'text-ink-900';
+ return `<div class="flex items-center gap-1.5">
+   <div class="h-4 w-4 rounded-[5px] bg-cobalt-600 flex items-center justify-center text-white text-[8px] font-extrabold">G</div>
+   <div class="${c} text-[9px] font-extrabold leading-none">GoRefer</div>
+ </div>`;}
+
+/* compliance strips used INSIDE creatives */
+function discStrip(bg){
+ return `<div class="disc ${bg} rounded-md px-2 py-1 text-ink-500">
+   <div>${DISC}</div>
+   <div class="mt-0.5 font-medium text-ink-700">${RISK}</div>
+ </div>`;}
+function discStripDark(sm){
+ const s = sm?'disc-sm':'disc';
+ return `<div class="${s} rounded-md px-2 py-1 text-white/60 bg-black/25 border border-white/10">
+   <div>${DISC}</div>
+   <div class="mt-0.5 text-white/80">${RISK}</div>
+ </div>`;}
+
+/* =====================================================================
+   The 8 shortlisted creatives (final copy). Each returns INNER markup.
+   ===================================================================== */
+const creatives = [
+
+/* 1 — Bold Gradient Hero : generic · IG square 1080x1080 */
+{ n:1, title:'Bold Gradient Hero', fmt:'Instagram 1080×1080',
+  tags:[['Generic','t-generic']],
+  why:'High-impact headline poster with the full benefit set — grabs the scroll, no personalization needed.',
+  ratio:'aspect-square',
+  body:`
+  <div class="h-full w-full flex flex-col justify-between p-4 text-white" style="background:linear-gradient(140deg,#2F5BFF,#7c3aed)">
+    <div class="flex items-center justify-between">${mark(true)}<span class="text-[7px] font-semibold text-white/70">gorefer.in</span></div>
+    <div>
+      <div class="text-[17px] font-black leading-[1.05] tracking-tight">Open a free<br/>Zerodha account</div>
+      <div class="mt-2.5">${benefitList(true,7.5)}</div>
+    </div>
+    <div>
+      <div class="mb-2">${ctaChip(true)}</div>
+      ${discStripDark(false)}
+    </div>
+  </div>`},
+
+/* 2 — Assisted / Human-touch : personalized · link-card 1200x630 */
+{ n:2, title:'Assisted / Human-touch', fmt:'Link card 1200×630',
+  tags:[['Personalized','t-pers']],
+  why:'Leads with a real person and a helpline — reassuring for first-time investors who want a hand held through it.',
+  ratio:'aspect-[1200/630]',
+  body:`
+  <div class="h-full w-full flex flex-col bg-white p-4">
+    <div class="flex items-center justify-between">${mark(false)}
+      <span class="text-[7px] font-bold text-pifs-600 bg-pifs-50 rounded-full px-2 py-0.5">● Assisted</span></div>
+    <div class="flex-1 flex gap-3 py-2">
+      <div class="flex-1 flex flex-col justify-center">
+        <div class="flex items-center gap-1.5 mb-1">
+          <div class="h-6 w-6 rounded-full bg-cobalt-600 text-white flex items-center justify-center text-[9px] font-extrabold">RJ</div>
+          <div class="text-[8px] text-ink-500"><b class="text-ink-900">Rajesh</b> invites you to</div>
+        </div>
+        <div class="text-[14px] font-extrabold leading-tight text-ink-900">Open a free Zerodha account</div>
+        <div class="text-[8px] text-pifs-600 font-semibold mt-1 leading-snug">Free, fully-assisted onboarding — call ${HELP}</div>
+        <div class="mt-1.5">${ctaChip(false)}</div>
+      </div>
+      <div class="w-px self-stretch bg-line"></div>
+      <div class="w-[44%] shrink-0 flex flex-col justify-center">${benefitList(false,7.5)}</div>
+    </div>
+    ${discStrip('bg-bg')}
+  </div>`},
+
+/* 3 — 3-Step Explainer : generic · IG square 1080x1080 */
+{ n:3, title:'3-Step Explainer', fmt:'Instagram 1080×1080',
+  tags:[['Generic','t-generic']],
+  why:'Removes friction by showing how simple it is — 1 Click → 2 Quick KYC → 3 Start investing, then the benefits.',
+  ratio:'aspect-square',
+  body:`
+  <div class="h-full w-full flex flex-col bg-white p-4">
+    <div class="flex items-center justify-between">${mark(false)}<span class="text-[7px] text-ink-300 font-semibold">gorefer.in</span></div>
+    <div class="text-[14px] font-extrabold text-ink-900 mt-1.5 leading-tight">Open a free Zerodha account</div>
+    <div class="flex items-center gap-1.5 mt-2.5 flex-wrap">
+      ${[['1','Click'],['2','Quick KYC'],['3','Start investing']].map(([i,t],idx)=>`
+        ${idx>0?'<span class="text-ink-300 text-[9px]">&rarr;</span>':''}
+        <span class="flex items-center gap-1">
+          <span class="h-4 w-4 rounded-full bg-cobalt-600 text-white flex items-center justify-center text-[7px] font-extrabold">${i}</span>
+          <span class="text-[8.5px] font-bold text-ink-900">${t}</span>
+        </span>`).join('')}
+    </div>
+    <div class="mt-2.5 pt-2 border-t border-line flex-1">${benefitList(false,7.5)}</div>
+    <div class="mt-1 mb-2">${ctaChip(false)}</div>
+    ${discStrip('bg-bg')}
+  </div>`},
+
+/* 4 — Benefit List : generic · link-card 1200x630 (benefits are the star) */
+{ n:4, title:'Benefit List', fmt:'Link card 1200×630',
+  tags:[['Generic','t-generic']],
+  why:'A tidy checklist of exactly what the customer gets — the most factual, easiest-to-approve option, with a scannable QR.',
+  ratio:'aspect-[1200/630]',
+  body:`
+  <div class="h-full w-full flex flex-col bg-white p-4">
+    <div class="flex items-center justify-between">${mark(false)}<span class="text-[7px] text-ink-300 font-semibold">gorefer.in</span></div>
+    <div class="flex-1 flex gap-4 items-center py-1">
+      <div class="flex-1">
+        <div class="text-[14px] font-extrabold text-ink-900 mb-2 leading-tight">Open a free Zerodha account</div>
+        ${benefitList(false,9)}
+      </div>
+      <div class="w-px self-stretch bg-line"></div>
+      <div class="text-center shrink-0">
+        <div class="text-[8px] text-ink-500 mb-1">Scan to open</div>
+        <div class="bg-white p-1 rounded-lg border border-line">${qr(50)}</div>
+        <div class="mono text-[7px] text-cobalt-600 font-bold mt-1">gorefer.in</div>
+      </div>
+    </div>
+    <div class="mb-2">${ctaChip(false)}</div>
+    ${discStrip('bg-bg')}
+  </div>`},
+
+/* 5 — Story : personalized · Story 1080x1920 (replaces old with-reward story, NO reward) */
+{ n:5, title:'Story', fmt:'Story 1080×1920',
+  tags:[['Personalized','t-pers']],
+  why:'Mobile-native vertical for Instagram / WhatsApp Status — personal invite plus the full benefit set. No reward shown.',
+  ratio:'aspect-[1080/1920]', narrow:true,
+  body:`
+  <div class="h-full w-full flex flex-col p-4 text-white" style="background:linear-gradient(160deg,#2F5BFF 0%,#1e3a8a 60%,#0b1020 100%)">
+    <div class="flex items-center justify-between">${mark(true)}
+      <span class="mono text-[7px] font-bold text-white/75 bg-white/10 rounded-full px-1.5 py-0.5">RJ4111</span></div>
+    <div class="flex-1 flex flex-col justify-center">
+      <div class="h-8 w-8 rounded-full bg-white/15 border border-white/25 flex items-center justify-center text-[11px] font-extrabold mb-2">RJ</div>
+      <div class="text-[8px] text-white/70 mb-1">Rajesh invites you to</div>
+      <div class="text-[15px] font-black leading-tight mb-3">Open a free<br/>Zerodha account</div>
+      ${benefitList(true,8)}
+      <div class="mt-3">${ctaChip(true)}</div>
+    </div>
+    <div class="disc-sm rounded-md px-2 py-1.5 text-white/60 bg-black/25 w-full">
+      <div>${DISC}</div>
+      <div class="mt-0.5 text-white/80">${RISK}</div>
+    </div>
+  </div>`},
+
+/* 6 — WhatsApp-first : personalized · WhatsApp chat bubble + link preview */
+{ n:6, title:'WhatsApp-first', fmt:'WhatsApp',
+  tags:[['Personalized','t-pers']],
+  why:'Exactly what the recipient sees in chat — a pre-written caption plus the link-preview card beneath it.',
+  ratio:'aspect-square',
+  body:`
+  <div class="h-full w-full flex flex-col justify-center p-3" style="background:#e5ddd5">
+    <div class="max-w-[88%] self-end">
+      <div class="bg-[#dcf8c6] rounded-lg rounded-tr-sm p-2 shadow-sm">
+        <div class="text-[9px] text-ink-900 leading-snug">Rajesh here 👋 <b>Open a free Zerodha account</b> — ₹0 account opening, ₹0 equity-delivery brokerage, direct mutual funds on Coin. I&rsquo;ll help you set it up 👇</div>
+        <!-- link preview card -->
+        <div class="mt-1.5 bg-white rounded-md overflow-hidden border border-black/5">
+          <div class="h-14 flex items-center justify-between px-2" style="background:linear-gradient(120deg,#2F5BFF,#4b70ff)">
+            <span class="text-white text-[9px] font-extrabold leading-tight">Open a free<br/>Zerodha account</span>
+            ${mark(true)}
+          </div>
+          <div class="px-2 py-1">
+            <div class="text-[8px] font-bold text-ink-900">Rajesh invites you to open an account</div>
+            <div class="text-[7px] text-ink-500">₹0 opening · ₹0 delivery brokerage · Kite &amp; Coin</div>
+            <div class="mono text-[7px] text-ink-300 mt-0.5">gorefer.in</div>
+            <div class="disc-sm text-ink-500 mt-1 border-t border-line pt-1">
+              <div>${DISC}</div><div class="text-ink-700">${RISK}</div>
+            </div>
+          </div>
+        </div>
+        <div class="text-[7px] text-ink-500 mono mt-1">Open your account &rarr; ${LINK}</div>
+        <div class="text-right text-[7px] text-ink-400 mt-0.5">10:24 ✓✓</div>
+      </div>
+    </div>
+  </div>`},
+
+/* 7 — Ultra-minimal Text Caption : generic · text · NSE §4.4 tight-format link */
+{ n:7, title:'Ultra-minimal Text Caption', fmt:'Text caption',
+  tags:[['Generic','t-generic']],
+  why:'The NSE §4.4 tight-format example — plain text with disclosures behind a link. Ideal for X / bios / plain posts.',
+  ratio:'aspect-[1200/630]',
+  body:`
+  <div class="h-full w-full flex flex-col justify-center bg-white p-5">
+    ${mark(false)}
+    <div class="text-[15px] font-bold text-ink-900 mt-3 leading-snug">Open a free Zerodha account.</div>
+    <div class="text-[9px] text-ink-500 mt-1.5 leading-snug">₹0 account opening · ₹0 equity-delivery brokerage · 1st-year AMC free · ₹20 flat intraday &amp; F&amp;O · free Kite app · direct mutual funds on Coin.</div>
+    <div class="mono text-[11px] text-cobalt-600 font-bold mt-2.5">Open your account &rarr; ${LINK}</div>
+    <div class="mt-3 pt-2 border-t border-line">
+      <a class="inline-flex items-center gap-1 text-[9px] font-semibold text-ink-500 underline decoration-dotted">
+        Disclosures &amp; registration
+        <svg viewBox="0 0 16 16" class="h-2.5 w-2.5" fill="currentColor"><path d="M5 3h8v8h-2V6.4L4.7 12.7 3.3 11.3 9.6 5H5z"/></svg>
+      </a>
+      <div class="text-[7px] text-ink-300 mt-1 italic">Tight-format allowance (NSE §4.4): full disclosure + market-risk warning sit behind the link above.</div>
+    </div>
+  </div>`},
+
+/* 8 — App-style Teaser : generic · IG square · NON-Zerodha PIFS/GoRefer phone */
+{ n:8, title:'App-style Teaser', fmt:'Instagram 1080×1080',
+  tags:[['Generic','t-generic']],
+  why:'Product-y phone mockup (a neutral GoRefer-branded screen, never Zerodha&rsquo;s app) — modern, appeals to younger users.',
+  ratio:'aspect-square',
+  body:`
+  <div class="h-full w-full flex items-center p-4" style="background:linear-gradient(135deg,#eef2ff,#e9f7ef)">
+    <!-- phone (neutral GoRefer screen, NOT Zerodha's app) -->
+    <div class="w-[36%] shrink-0 rounded-[14px] bg-ink-900 p-1 card-lg">
+      <div class="rounded-[10px] bg-white overflow-hidden">
+        <div class="px-1.5 py-1 flex items-center justify-between" style="background:#2F5BFF">
+          <span class="text-white text-[7px] font-extrabold">GoRefer</span>
+          <span class="text-white/70 text-[6px]">Portfolio</span>
+        </div>
+        <div class="p-1.5">
+          <div class="text-[7px] text-ink-500">Total value</div>
+          <div class="text-[11px] font-extrabold text-ink-900">₹ 1,24,860</div>
+          <svg viewBox="0 0 100 34" class="w-full mt-1"><path d="M0 28 L20 22 L40 25 L60 12 L80 16 L100 5" fill="none" stroke="#16a34a" stroke-width="2"/></svg>
+          <div class="mt-1 space-y-0.5">
+            ${['Stocks','IPOs','Mutual funds'].map(t=>`<div class="flex items-center justify-between"><span class="text-[6px] text-ink-500">${t}</span><span class="text-[6px] font-bold text-green-600">▲</span></div>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="flex-1 pl-3">
+      ${mark(false)}
+      <div class="text-[13px] font-extrabold leading-tight text-ink-900 mt-1.5">Invest in one<br/>clean app.</div>
+      <div class="text-[8px] text-ink-500 mt-0.5">Open a free Zerodha account</div>
+      <div class="mt-1.5">${benefitList(false,6.5)}</div>
+      <div class="mt-1.5">${ctaChip(false)}</div>
+      <div class="disc bg-white/75 rounded-md px-2 py-1 text-ink-500 mt-2">
+        <div>${DISC}</div><div class="mt-0.5 font-medium text-ink-700">${RISK}</div>
+      </div>
+    </div>
+  </div>`}
+];
+
+/* =====================================================================
+   Render Section A cards
+   ===================================================================== */
+function tagHtml(tags){return tags.map(([t,c])=>`<span class="tag ${c}">${t}</span>`).join('');}
+const grid=document.getElementById('grid');
+creatives.forEach(c=>{
+  const width = c.narrow ? 'max-w-[190px]' : 'w-full';
+  grid.insertAdjacentHTML('beforeend',`
+  <div class="bg-white border border-line rounded-2xl card p-3.5 flex flex-col">
+    <div class="flex items-start justify-between gap-2">
+      <div class="flex items-center gap-2">
+        <span class="h-6 w-6 rounded-lg bg-cobalt-50 text-cobalt-600 flex items-center justify-center text-[11px] font-extrabold shrink-0">${c.n}</span>
+        <h3 class="text-[13px] font-extrabold tracking-tight leading-tight">${c.title}</h3>
+      </div>
+      <span class="tag t-fmt shrink-0">${c.fmt}</span>
+    </div>
+    <div class="flex flex-wrap gap-1 mt-2">${tagHtml(c.tags)}</div>
+    <div class="mt-3 flex justify-center">
+      <div class="${width} ${c.ratio} rounded-xl overflow-hidden border border-line card-lg">${c.body}</div>
+    </div>
+    <p class="text-[10.5px] text-ink-500 mt-3 leading-snug"><span class="font-semibold text-ink-700">Why pick this:</span> ${c.why}</p>
+  </div>`);
+});
+
+/* =====================================================================
+   Section B — social platform frames
+   Uses concepts #2 (Assisted link-card), #4 (Benefit List link-card), #5 (Story)
+   ===================================================================== */
+const C2 = creatives[1], C4 = creatives[3], C5 = creatives[4];
+
+function av(txt,cls){return `<div class="h-9 w-9 rounded-full ${cls} flex items-center justify-center text-white text-[11px] font-bold shrink-0">${txt}</div>`;}
+
+function ogCard(cbody,title,desc){
+ return `<div class="rounded-lg overflow-hidden border border-line">
+   <div class="aspect-[1200/630] w-full">${cbody}</div>
+   <div class="px-3 py-2 bg-bg">
+     <div class="text-[9px] text-ink-300 uppercase tracking-wide">gorefer.in</div>
+     <div class="text-[12px] font-bold text-ink-900 leading-tight mt-0.5">${title}</div>
+     <div class="text-[10px] text-ink-500 mt-0.5">${desc}</div>
+   </div>
+ </div>`;}
+
+const CAPTION_X = `Open a free Zerodha account — ₹0 account opening, ₹0 equity-delivery brokerage, ₹20 flat intraday & F&O, direct mutual funds on Coin. Open your account 👉 ${LINK}`;
+const CAPTION_WA = `Rajesh here 👋 Open a free Zerodha account — free, fully-assisted onboarding. Call ${HELP} or tap the link. Open your account 👉 ${LINK}`;
+
+const social = document.getElementById('social');
+
+social.innerHTML = `
+<!-- FACEBOOK + LINKEDIN (OG card does the talking) -->
+<div class="bg-white border border-line rounded-2xl card p-5">
+  <div class="flex items-center gap-2 mb-4 flex-wrap">
+    <span class="tag t-fmt">OG-card only</span>
+    <span class="text-[11px] text-ink-500">Facebook &amp; LinkedIn build the post from the link&rsquo;s Open-Graph image + title — the caption is short, the <b>card image</b> carries the message, benefits &amp; disclosures.</span>
+  </div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+    <!-- Facebook frame -->
+    <div class="rounded-xl border border-line overflow-hidden">
+      <div class="px-4 py-2.5 flex items-center justify-between" style="background:#1877f2">
+        <span class="text-white text-[13px] font-black tracking-tight">facebook</span>
+        <span class="text-white/80 text-[10px]">Concept #2 · Assisted</span>
+      </div>
+      <div class="p-4 bg-white">
+        <div class="flex items-center gap-2.5">
+          ${av('RJ','bg-cobalt-600')}
+          <div><div class="text-[12px] font-bold text-ink-900">Rajesh Joshi</div><div class="text-[10px] text-ink-500">Public · 2h · 🌐</div></div>
+          <span class="ml-auto text-ink-300">···</span>
+        </div>
+        <div class="text-[12px] text-ink-700 mt-2.5 leading-snug">Been asked how I invest — here&rsquo;s the easy way to get your own account opened 👇</div>
+        <div class="mt-2.5">${ogCard(C2.body,'Open a free Zerodha account','Rajesh invites you · free, fully-assisted onboarding · call '+HELP)}</div>
+        <div class="flex items-center gap-6 mt-2.5 text-[11px] text-ink-500 border-t border-line pt-2">
+          <span>👍 Like</span><span>💬 Comment</span><span>↗ Share</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- LinkedIn frame -->
+    <div class="rounded-xl border border-line overflow-hidden">
+      <div class="px-4 py-2.5 flex items-center justify-between" style="background:#0a66c2">
+        <span class="text-white text-[13px] font-black tracking-tight">Linked<span class="bg-white text-[#0a66c2] rounded px-0.5">in</span></span>
+        <span class="text-white/80 text-[10px]">Concept #4 · Benefit List</span>
+      </div>
+      <div class="p-4 bg-white">
+        <div class="flex items-center gap-2.5">
+          ${av('RJ','bg-pifs-600')}
+          <div><div class="text-[12px] font-bold text-ink-900">Rajesh Joshi</div><div class="text-[10px] text-ink-500">Investor · Pune · 2h</div></div>
+          <span class="ml-auto text-ink-300">···</span>
+        </div>
+        <div class="text-[12px] text-ink-700 mt-2.5 leading-snug">If you&rsquo;ve been meaning to start investing, here&rsquo;s exactly what you get on day one 👇</div>
+        <div class="mt-2.5">${ogCard(C4.body,'Open a free Zerodha account','₹0 opening · ₹0 delivery brokerage · 1st-year AMC free · Kite &amp; Coin')}</div>
+        <div class="flex items-center gap-6 mt-2.5 text-[11px] text-ink-500 border-t border-line pt-2">
+          <span>👍 Like</span><span>💬 Comment</span><span>🔁 Repost</span><span>➤ Send</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- X / TWITTER + WHATSAPP (caption prefilled) -->
+<div class="bg-white border border-line rounded-2xl card p-5">
+  <div class="flex items-center gap-2 mb-4 flex-wrap">
+    <span class="tag t-fmt">Caption prefilled</span>
+    <span class="text-[11px] text-ink-500">X, WhatsApp &amp; Telegram send a <b>pre-written caption</b> plus a summary / link-preview card.</span>
+  </div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+    <!-- X / Twitter frame -->
+    <div class="rounded-xl border border-line overflow-hidden">
+      <div class="px-4 py-2.5 flex items-center justify-between bg-black">
+        <span class="text-white text-[15px] font-black">𝕏</span>
+        <span class="text-white/70 text-[10px]">Concept #4 · summary_large_image</span>
+      </div>
+      <div class="p-4 bg-white">
+        <div class="flex items-center gap-2.5">
+          ${av('RJ','bg-ink-900')}
+          <div class="leading-tight"><div class="text-[12px] font-bold text-ink-900">Rajesh Joshi</div><div class="text-[10px] text-ink-500">@rajesh_invests</div></div>
+          <span class="ml-auto text-ink-300">···</span>
+        </div>
+        <div class="text-[12px] text-ink-700 mt-2 leading-snug">${CAPTION_X}</div>
+        <div class="mt-2.5 rounded-lg overflow-hidden border border-line">
+          <div class="aspect-[1200/630] w-full">${C4.body}</div>
+          <div class="px-3 py-1.5 bg-bg text-[10px] text-ink-500">gorefer.in · Open a free Zerodha account</div>
+        </div>
+        <div class="text-[9px] text-ink-300 mt-1.5">Full disclosure + market-risk warning are baked into the card image above.</div>
+        <div class="flex items-center gap-8 mt-2 text-[11px] text-ink-500 border-t border-line pt-2">
+          <span>💬</span><span>🔁</span><span>♡</span><span>↗</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- WhatsApp frame -->
+    <div class="rounded-xl border border-line overflow-hidden">
+      <div class="px-4 py-2.5 flex items-center justify-between" style="background:#075e54">
+        <span class="text-white text-[12px] font-extrabold">WhatsApp</span>
+        <span class="text-white/70 text-[10px]">Concept #2 · caption + preview</span>
+      </div>
+      <div class="p-4" style="background:#e5ddd5">
+        <div class="max-w-[88%] ml-auto">
+          <div class="bg-[#dcf8c6] rounded-lg rounded-tr-sm p-2.5 shadow-sm">
+            <div class="text-[11px] text-ink-900 leading-snug">${CAPTION_WA}</div>
+            <div class="mt-2 bg-white rounded-md overflow-hidden border border-black/5">
+              <div class="aspect-[1200/630] w-full">${C2.body}</div>
+              <div class="px-2.5 py-1.5">
+                <div class="text-[10px] font-bold text-ink-900 leading-tight">Open a free Zerodha account</div>
+                <div class="text-[9px] text-ink-500">Rajesh invites you · free, fully-assisted onboarding.</div>
+                <div class="mono text-[8px] text-ink-300 mt-0.5">gorefer.in</div>
+              </div>
+            </div>
+            <div class="text-right text-[8px] text-ink-400 mt-1">10:24 ✓✓</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- INSTAGRAM (image + manual caption, disclosure in caption too) -->
+<div class="bg-white border border-line rounded-2xl card p-5">
+  <div class="flex items-center gap-2 mb-4 flex-wrap">
+    <span class="tag t-fmt">Image + manual caption</span>
+    <span class="text-[11px] text-ink-500">Instagram shows the <b>image</b>; the disclosure + risk warning must live in <b>both</b> the image and the typed caption.</span>
+  </div>
+  <div class="max-w-[300px] mx-auto rounded-xl border border-line overflow-hidden">
+    <div class="px-3 py-2.5 flex items-center gap-2.5 bg-white border-b border-line">
+      ${av('RJ','bg-gradient-to-br from-pink-500 to-amber-400')}
+      <div class="text-[12px] font-bold text-ink-900">rajesh_invests</div>
+      <span class="ml-auto text-ink-300">···</span>
+    </div>
+    <div class="aspect-[1080/1920] w-full">${C5.body}</div>
+    <div class="px-3 py-2 bg-white">
+      <div class="flex items-center gap-4 text-[15px] text-ink-700 py-1"><span>♡</span><span>💬</span><span>➤</span><span class="ml-auto">🔖</span></div>
+      <div class="text-[11px] text-ink-700 leading-snug">
+        <span class="font-bold">rajesh_invests</span>
+        Open a free Zerodha account — ₹0 opening, ₹0 equity-delivery brokerage, 1st-year AMC free, direct mutual funds on Coin. Open your account 👉 ${LINK}
+      </div>
+      <div class="text-[8px] text-ink-500 mt-1.5 leading-tight border-t border-line pt-1.5">
+        <div>${DISC}</div>
+        <div class="mt-0.5 font-medium text-ink-700">${RISK}</div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+</script>
+</body></html>
