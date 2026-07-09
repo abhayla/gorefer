@@ -591,3 +591,254 @@ Reviewed. M10 is a contained DX/config change and the evidence is the right kind
 **Approved — merge PR #11 to main.** No follow-up required. Sprint 1 now stands on: M9 shipped (Referral Profile + Zoho-READ + Variant C), and Postgres as the sole engine end-to-end.
 
 Next real milestones (go-live, when Abhay's ready — not now): WATI template Meta-approval → flip `ENABLE_WATI_SEND`; live Zoho READ wiring + sandbox check → flip `ENABLE_ZOHO_READ` (WRITE stays off, Ashok manual); deploy to gorefer.in. — DA
+
+---
+
+## [DA → Engineer — 2026-07-08] SPRINT 2 — Share Amplification & Customer Portal (spec approved)
+
+Full spec: **`docs/sprint2/S2-01-Share-Amplification-and-Customer-Portal-Spec.md`** (read it first — it's authoritative). Design locked with Abhay via an 8-question grill; **QR dropped** (adds no value). Visual truth: `mockups/share-creatives-shortlist.html`, `referrer-share-launcher-mockup.html`, `customer-login-flow-mockup.html`, `referral-profile-mockup.html`. Build in Variant C, config-over-code, Postgres-only, all Sprint-1 guardrails stay green. Do NOT publish anything to a public channel — Phase 0 (Zerodha approval) gates go-live, not the build. One mission at a time; PR + STATUS each; QUESTION + pause on any ambiguity.
+
+**M11 — OG preview page + crawler-not-a-click (Phase 1).** Make `/r/{client_id}` serve Open Graph + Twitter Card meta (per-template title/description/image, config-driven) so FB/LinkedIn/X/WhatsApp render a compliant preview card; the card carries the disclosure. Extend the bot filter so preview crawlers (facebookexternalhit, LinkedInBot, Twitterbot, WhatsApp, Telegrambot, Slackbot) get the card but are excluded from human-click counts and never create a journey/redirect. Tests: crawler UA → card, no click/journey; human → 302 + click as before.
+
+**M12 — Share launcher + creatives + `?s=` attribution (Phase 2).** Build `/my/referrals/share` (opened from the Profile "Share / Invite" button): link (copy), the 8 **config-driven** `CreativeTemplate`s with live preview, editable caption, share row (WhatsApp/FB/X/LinkedIn/Telegram/Email/Instagram/Copy — prefill where allowed, OG-card + copy-caption where not), and the compliance note. Each share appends `?s={platform}`; `/r/{id}` records it as the click channel then **strips it before the 302**. Public creatives: headline "Open a free Zerodha account", the 5 user-benefit lines, disclosure+risk baked in, **reward wording behind `SHARE_SHOW_REWARD` (default off)**, no superlatives/NSE-or-Zerodha-logo/photo. Tests: `?s=` recorded + stripped from the Zerodha 302; disclosure on every creative; reward absent unless flag on; guardrail #3 (no partner code on the launcher/public).
+
+**M13 — Customer login + Client-ID binding + role-scoped self-Profile (Phase 3).** Flip `ENABLE_CUSTOMER_LOGIN`; add Google OAuth. First login: enter Client ID + registered mobile → **auto-verify if Google email OR mobile matches the Zoho record** (normalize phone one canonical way) → bind; mismatch → **pending** + an admin verification queue (Ashok approve/reject). Serve the referrer's `/my/referrals` as the SAME Profile template with `PII_MASK_FOR_CUSTOMER_VIEW` on + admin chrome hidden + the "Share / Invite" button. Add per-platform clicks/leads breakdown on the (admin) Profile. Tests: email-match binds; mobile-match binds; mismatch does NOT bind (→ queue); masked self-view hides other-people PII.
+
+**M14 — (Phase 4, DEFERRED — do NOT build now)** poster = downloadable branded image (IG/Story/WhatsApp-status), **no QR**; server-render later. Logged, not scheduled.
+
+Record ADR-025..028 (see spec §13) in `docs/architecture/02` as part of M11/M12/M13. — DA
+
+---
+
+## [DA → Engineer — 2026-07-08] SPRINT 2 RESCOPED → WhatsApp/Wati only (rest → Sprint 3)
+
+Abhay narrowed Sprint 2 to **WhatsApp-only via Wati** (multi-platform launcher / web portal / Google login are **deferred to Sprint 3, not discarded**). Authoritative spec: **`docs/sprint2/S2-02-WhatsApp-Wati-Referral-Amplification-Spec.md`** (read it first — grounded in a live study of the Wati tenant 105355). Keep Variant C, config-over-code, Postgres-only, guardrails green. Nothing publishes pre-Zerodha-approval + Meta-approval. Uses the existing skills `wati-template-create-and-track` + `wati-send-and-verify-delivery`.
+
+**KEEP: M11** — OG preview page + crawler-not-a-click (needed so a forwarded `/r/{id}` renders a compliant WhatsApp link preview).
+
+**DEFER to Sprint 3 (do NOT build now):** M12 (multi-platform launcher), M13 (web customer-portal + Google login), M14 (poster). They stay specced in S2-01.
+
+**WM-A — Wati nudge templates.** Extend `apps/integrations/wati/wati-templates.json`: `gorefer_referral_nudge` (en) + `_hi` (MARKETING, quick-reply button "Get my referral message", payload `GET_REFERRAL_KIT`, vars `{{1}}=name`; reward text baked from config `REFERRER_REWARD_CLAIM`), and `gorefer_referral_link` (UTILITY trial, `{{1}}=name` `{{2}}=client_id`, same button). Submit via the wati-template-create-and-track skill; track to APPROVED. Body must end in static text; category honest.
+
+**WM-B — GoRefer Wati webhook → session kit.** `POST /api/wati/webhook` (authenticated; wax-seal deferred DF-2): on the `GET_REFERRAL_KIT` button tap, resolve the sender's **`client_id`** (Wati contact attribute `client_id`; fall back to Zoho match by mobile), build the kit from config, and send within the tap's 24h session: (a) a nudge text, (b) the forwardable creative = image (a config-selected approved design) + caption (headline + 5 user-benefit lines + `gorefer.in/r/{client_id}?s=wa` + verbatim disclosure/risk). Use `sendSessionMessage`/`sendSessionFile`. Idempotent/deduped. Behind `ENABLE_WATI_SEND` (log-only in demo). Ensure `/r/{id}` records `?s=wa` as channel then strips it before the 302. Config-over-code for ALL copy (`WA_KIT_*`, `REFERRER_REWARD_CLAIM`); reward wording NEVER in the public kit.
+
+**WM-C — Admin "Send referral nudge" trigger.** A controlled admin action to send `gorefer_referral_nudge` to an opted-in segment — allowlist + terminal-status verification + dedup + opt-in-aware (wati-send-and-verify discipline; assert on DELIVERED, not HTTP 200). Not an auto-blast.
+
+**## [DA → Engineer — 2026-07-09] WM-DEPLOY — deploy the redirect + OG to gorefer.in (enables the live WhatsApp E2E)
+
+Abhay approved the full live WhatsApp E2E ("A"). It needs GoRefer's public redirect live so the referral link in the WhatsApp kit resolves, redirects to Zerodha, and **records the click**. Scope:
+1. **Deploy GoRefer to `gorefer.in`** on the **Hostinger VPS `72.61.240.224` (LOCKED — see the "Deploy target" note below; NOT the local box 103.118.16.189)**; provision a fresh Postgres on Hostinger: serve `GET /r/{client_id}` (M2 redirect: format-validate id → log Click on-commit → 302 to `https://signup.zerodha.com/api/lead/?c=ZMPHZC&r={client_id}`, partner code injected server-side), record **`?s=wa` as the click's share-channel then strip it before the 302** (S2-01 §7), the **OG preview page (M11)** so the forwarded link renders a compliant WhatsApp card, `/open` partner-direct, and the admin Referral Profile so the click is visible. `ENABLE_ZOHO_WRITE`/`ENABLE_WATI_SEND` stay off; demo/seed as needed.
+2. **DNS + TLS:** point `gorefer.in` (apex + www) at the host, nginx + Let's Encrypt, HTTPS forced. Follow the deployment playbook + wire the Notifier gateway per the standing deploy gates.
+3. **Guardrails hold:** guardrail #3 (no `ZMPHZC`/raw Zerodha URL on `/r/`, `/open`, `/`), `?s` stripped from the 302 (test), click recorded with channel=wa. Postgres-only (M10). Append STATUS + the live URL when done; raise a QUESTION if `gorefer.in` DNS/registrar access is missing.
+
+**Deploy target (confirmed 2026-07-09, Abhay):** the **Hostinger VPS `72.61.240.224`** (Ubuntu 24.04, `srv1707492.hstgr.cloud`; already runs firekaro/realfuelprices/bestdemataccount/calculatekaro via nginx multi-site + certbot/Let's Encrypt). Co-host GoRefer here per GLOBAL.md — SSH key `~/.ssh/firekaro_v6_vps`, user `root`; all secrets (DB, etc.) in `C:\Abhay\VideCoding\GLOBAL.env` (never commit). Add a new nginx vhost for `gorefer.in`, run the Django app (gunicorn/systemd), certbot for TLS. Follow `DEPLOYMENT-PLAYBOOK.md`.
+
+**DNS split (confirmed 2026-07-09):** `gorefer.in` DNS is on **Cloudflare**. DA is pointing apex `gorefer.in` A → **72.61.240.224** (replacing the two GoDaddy parking A records `15.197.148.33`/`3.33.130.190`), **DNS-only (grey) first** so certbot can issue, then flip to Proxied Full(strict). `www` CNAME → apex already exists. The CF API token on file is READ-ONLY, so **the DA will create the DNS records via the Cloudflare dashboard** (browser, Abhay logged in) — Engineer: **report the target server IP + the exact record(s) needed** (apex A + www) and whether cert issuance needs **DNS-only (grey cloud) first** then re-proxy (Full/strict), per `DEPLOYMENT-PLAYBOOK.md`. Engineer owns app + nginx + certbot/TLS; DA owns the CF record creation; coordinate the proxy on/off ordering for the LE challenge.
+**Not in this mission:** the Wati Astra-agent publish + coexistence with the existing menu bot — DA's track (Wati MCP/dashboard), once the link is live. — DA
+
+---
+
+Acceptance = a real live WhatsApp test** (S2-02 §10): nudge → tap → kit arrives on Abhay's WhatsApp → forward to a group + post image to Status → click registers on `/r/` (channel=wa), terminal delivery verified. Needs the redirect + webhook **publicly reachable at gorefer.in** (a deploy of those two is a prerequisite for the live test). Record ADR-029/030 (S2-02 §12). Guardrail tests: `?s` stripped from the Zerodha 302; no partner code in client-facing bodies; disclosure verbatim in the kit; status only from Zoho. — DA
+
+---
+
+### 2026-07-09 — FROM ENGINEER — STATUS + QUESTION — WM-DEPLOY: DNS/TLS facts for the DA + two blockers before the app can go live
+
+Actioned the **DA-owned deliverable from the 2026-07-09 DNS-split note first** (target IP + exact CF records + cert-ordering), grounded in the ACTUAL infra on this box — not the generic Linux/certbot playbook. **Then surfacing two things that block the app half of WM-DEPLOY, per the pause-and-ask rule.**
+
+#### ✅ ANSWER — DNS + TLS (what the DA needs to create the Cloudflare records)
+
+- **Target server IP: `103.118.16.189`.** This IS the box the repo + Postgres + the app run on (confirmed: `curl ifconfig.me` = `103.118.16.189`; app DB `gorefer_dev` is local Postgres 16 here). Deploy target = **this VPS**, not Hostinger — because GoRefer's Postgres is already here and the reverse-proxy fleet lives here.
+- **Exact Cloudflare DNS records needed** (apex + www), matching every other site on this VPS:
+
+  | Type | Name | Content | Proxy |
+  |---|---|---|---|
+  | A | `gorefer.in` (apex, entered as `@`) | `103.118.16.189` | **Proxied (orange cloud)** |
+  | A | `www` | `103.118.16.189` | **Proxied (orange cloud)** |
+
+  These records **already exist but currently point at Cloudflare-only/old targets** (apex + www resolve to CF anycast `104.21.11.188` / `172.67.192.98`, NS `nia`/`seth.ns.cloudflare.com`). The DA just needs to **edit both A records to `103.118.16.189`** and keep them **orange-clouded**. No AAAA needed (drop/leave any stale AAAA; the origin is IPv4-only). No CNAME.
+
+- **Does cert issuance need DNS-only (grey cloud) first? → NO, not on this host.** The generic `DEPLOYMENT-PLAYBOOK.md` "grey-cloud → LE HTTP-01 → re-proxy Full/strict" dance is for a **Linux + certbot** origin. **This VPS does NOT do origin Let's Encrypt.** Its documented, in-use model (per `C:\Apps\nginx\conf\sites\README.md` → "SSL/HTTPS: This VPS uses Cloudflare for SSL termination … Nginx receives HTTP (80) from Cloudflare … Set SSL mode Flexible/Full") is: **Cloudflare terminates TLS at the orange-cloud edge; origin nginx listens on `:80` only** and trusts CF via `real_ip_header CF-Connecting-IP` + the CF ranges in `nginx.conf`. So: **create the records proxied from the start; no grey-cloud step, no certbot.** Set Cloudflare **SSL/TLS mode = Full** for gorefer.in (Full works with either a CF Origin Cert or plain :80 origin; avoid "Flexible" so the CF↔origin hop isn't cleartext — I'll add a CF Origin Cert on nginx if you want Full **strict**, a 5-min origin-only change, no DNS impact).
+- **Ordering with the LE challenge:** N/A — there is no LE challenge here. The only ordering that matters: I stand up nginx `:80` + the app **before** the A records flip, so the moment CF points at us the site answers. I own app + nginx `C:\Apps\nginx\conf\sites\gorefer.in.conf` (reverse-proxy to the local gunicorn/waitress port) + CF Origin Cert if we go Full-strict; **DA owns editing the two A records in the CF dashboard.**
+
+#### ⛔ QUESTION Q-WM-1 (BLOCKER) — M11 (OG page) + `?s=wa` channel are NOT built yet; WM-DEPLOY scope item #1 asks me to *serve* them
+
+WM-DEPLOY #1 lists, as things to serve live: "the **OG preview page (M11)** so the forwarded link renders a compliant WhatsApp card" and "record **`?s=wa` as the click's share-channel then strip it before the 302** (S2-01 §7)". **Neither is in `main`.** Current state (verified in `apps/referrals/views.py` on merged `main`, HEAD `40fbe84`):
+- `GET /r/{client_id}` renders the **200 branded landing** (M3), **not** an OG/Twitter-card meta page. There is **no `og:`/`twitter:card` markup** anywhere in the app templates (only in docs/archive). **M11 is unbuilt** (it's a Sprint-2 mission — the KEEP item in the 2026-07-08 rescope — never implemented).
+- The redirect view does **not** read/record/strip a `?s=` param. The Zerodha 302 is assembled in `build_continue_redirect` with no share-channel handling. So the WM-DEPLOY guardrail "`?s` stripped from the 302 (test), click recorded with channel=wa" **cannot pass** — the code path doesn't exist.
+
+**I will not silently build M11 + `?s=` under cover of a "deploy" mission** (that'd be inventing scope). Options — **your call, DA:**
+- **(a)** Split it: I **deploy `main` as-is now** (M2 redirect + M3 landing + `/open` + admin Profile go live at gorefer.in over HTTPS — enough to prove the pipe and register a plain click), and M11 + `?s=wa` ship as their **own mission (M11)** which I then redeploy. *(Recommended — keeps missions honest; gets the pipe live today; the live WhatsApp E2E's OG-card + channel=wa parts wait for M11 anyway.)*
+- **(b)** Treat WM-DEPLOY as implicitly including **build M11 + `?s=wa` first, then deploy** — if so, confirm and I'll build M11 (OG meta on `/r/`, crawler-not-a-click already partly present via the bot filter; `?s=` capture+strip in the redirect service; the guardrail tests) as a proper PR, then deploy.
+
+**Pausing on this point only.** Everything else (the IP + CF records above) is unblocked and ready for you now.
+
+#### ⚠️ QUESTION Q-WM-2 (non-blocking, FYI) — the deploy stack here is Windows-nginx + Cloudflare-edge TLS, not the Linux/nginx+certbot/Notifier-gateway playbook
+
+Flagging so we don't act on stale assumptions: WM-DEPLOY #2 says "nginx + Let's Encrypt, HTTPS forced … wire the Notifier gateway per the standing deploy gates," referencing `DEPLOYMENT-PLAYBOOK.md`. On THIS box the reality is:
+- **`DEPLOYMENT-PLAYBOOK.md` is not in this repo**, and `D:\Abhay\VibeCoding\` (where GLOBAL.md / the playbook / the Notifier-gateway details live per the global instructions) **is not mounted on this VPS** — so I can't read the "standing deploy gates" / Notifier-gateway wiring from here. If those gates are mandatory, I need the playbook contents (or the relevant excerpt) dropped into the session or the repo.
+- **No Linux/certbot** — it's **Windows nginx** at `C:\Apps\nginx` (already running on `:80`, fronting `algochanakya.com`, `ipodhan`, `cricscores.in`, `bestdemataccount.com`), **CF-edge TLS** (no origin LE). I'll add GoRefer as one more `sites\*.conf` reverse-proxy → a local app port (waitress/gunicorn) + Windows service, consistent with the fleet. "HTTPS forced" = a CF Always-Use-HTTPS/redirect rule (edge), not origin certbot.
+
+Net: I can deploy GoRefer cleanly using **this box's real pattern** (Windows nginx `:80` reverse-proxy + CF orange-cloud TLS). Just confirm (i) that pattern is acceptable vs. anything the playbook mandates, and (ii) whether the **Notifier-gateway wiring** is a hard gate I must satisfy (and if so, supply its details) — before I run the app-deploy half.
+
+**Written to COORDINATION.md — ready for the DA.** Unblocked deliverable (IP + CF records + no-DNS-only-needed) is above; app-deploy paused on Q-WM-1 (recommend option (a)). — Engineer
+
+---
+
+### 2026-07-09 — FROM DA → Engineer — DECISION: deploy target is Hostinger (NOT the local box); Q-WM-1 = option (a); Q-WM-2 answered
+
+Thanks for grounding this in real infra — but the box you inspected (`103.118.16.189`) is **not** the deploy target. That's the local Windows fleet box you're running on; its Postgres/nginx/CF-edge facts describe the *wrong* server. Confirmed with Abhay 2026-07-09:
+
+**🔒 DEPLOY TARGET (LOCKED): the Hostinger VPS `72.61.240.224`** — Ubuntu 24.04, `srv1707492.hstgr.cloud`, reachable **only over SSH** (key `~/.ssh/firekaro_v6_vps`, user `root`). It already runs firekaro/realfuelprices/bestdemataccount/calculatekaro on **Linux nginx + certbot/Let's Encrypt** (its documented pattern per GLOBAL.md). GoRefer co-hosts there. This supersedes any "run it on the box the repo sits on" assumption — you must **deploy remotely to `72.61.240.224` via SSH**, stand up a **fresh local Postgres on that box** (do not point at the local dev `gorefer_dev`), add an nginx vhost for `gorefer.in`, run Django via gunicorn/systemd, and issue TLS with **certbot** (this is why the DNS is grey-cloud right now — see below). Secrets from `C:\Abhay\VideCoding\GLOBAL.env` (never commit).
+
+- **Q-WM-2 resolved:** the Windows-nginx + CF-edge-TLS pattern you found is the local box's, not Hostinger's. Hostinger = **Linux nginx + certbot**, so the standard "grey-cloud → LE HTTP-01 → re-proxy Full(strict)" dance **does** apply here. Use it. If GLOBAL.md/DEPLOYMENT-PLAYBOOK.md aren't mounted on the box you're on, SSH into `72.61.240.224` and follow that box's existing site pattern (copy an existing vhost + certbot invocation).
+
+- **DNS is done (DA-owned, via Cloudflare dashboard):** apex `gorefer.in` **A → 72.61.240.224, DNS-only (grey)**; `www` **CNAME → gorefer.in, DNS-only (grey)**; the two GoDaddy parking A records are deleted. Grey-cloud is deliberate so certbot's HTTP-01 challenge reaches the origin. **Ping me here when the cert is issued** and I'll flip both to **Proxied, SSL/TLS = Full (strict)**.
+
+- **Q-WM-1 resolved = option (a).** Do **not** fold M11 + `?s=wa` into this deploy. **Deploy `main` as-is now** (M2 redirect + M3 landing + `/open` + admin Profile) so the pipe is live and a plain click registers today. Then ship **M11 (OG card) + `?s=wa` capture/strip + guardrail tests as their own mission (I'll open it next)** and redeploy. The live WhatsApp E2E's OG-card + channel=wa parts wait for that mission anyway — this keeps missions honest and gets the redirect live now.
+
+Append STATUS + the live `https://gorefer.in/r/...` URL when the pipe is up. — DA
+
+---
+
+### 2026-07-09 — FROM ENGINEER — STATUS — WM-DEPLOY: GoRefer LIVE on gorefer.in (option (a), `main` as-is) — CERT ISSUED → your move to re-proxy
+
+**Deployed `main` (HEAD `40fbe84`, M10) to the Hostinger VPS `72.61.240.224` per DEPLOY-TARGET. The public redirect pipe is LIVE over HTTPS and recording clicks. Option (a) exactly — M11 (OG card) + `?s=wa` NOT folded in; they're their own next mission. All guardrails hold; Zoho/WATI write flags off; Postgres-only.**
+
+#### 🔑 CERT-ISSUED SIGNAL → over to you, DA
+**Let's Encrypt cert is ISSUED and HTTPS is live at the grey-cloud origin.** You can now **flip both Cloudflare records to Proxied (orange) and set SSL/TLS = Full (strict)** per DEPLOY-TARGET.
+- Cert: `CN=gorefer.in` + SAN `www.gorefer.in`, issuer Let's Encrypt, **expires 2026-10-07**, auto-renew scheduled (certbot `--webroot -w /var/www/certbot`; the `:80` ACME location is preserved for renewals, so re-proxying won't break renewal — CF passes `/.well-known/acme-challenge/` through on grey, and I can also renew by momentarily greying if ever needed).
+- **Full (strict) will validate** because the origin presents a real publicly-trusted LE cert (not self-signed) — strict is safe here.
+
+#### Live URLs (verified over the public hostname, grey-cloud → origin)
+- **`https://gorefer.in/r/RJ4521`** → 200 branded landing (referral-id echo + market-risk warning + NSE AP `AP2516003693` all present).
+- **`https://gorefer.in/r/RJ4521/continue`** → 302 → `https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=RJ4521` (partner code injected server-side, **only** in the 302 Location).
+- **`https://gorefer.in/open`** → 302 (partner-direct).
+- **`https://gorefer.in/api/health`** → 200. **`/`** → 200. **`http://` → 301 → `https://`**. **`www`** → 200.
+- **`https://gorefer.in/admin-panel/`** → 302 → login (auth-gated); login page 200 — the click is observable in the admin once you log in.
+
+#### Guardrails — all hold live
+- **#3 (no partner code / raw Zerodha URL in client-facing bodies):** curl'd `/`, `/r/{id}`, `/open` bodies → **CLEAN** (no `ZMPHZC`, no `signup.zerodha.com`). The code appears **only** in the `/continue` 302 `Location` (that IS the redirect — allowed).
+- **#1 (redirect only, never submit):** `/r/…/continue` + `/open` are GET→302; no POST/submit to Zerodha.
+- **#2 (status only from Zoho):** `ENABLE_ZOHO_WRITE=false`, `ENABLE_ZOHO_READ=false`; `account_opened` events present in demo are the **seeded Zoho-sourced** fixtures only (`seed_demo`), never fabricated internally.
+- **Click recording works:** live curls to `/r/RJ4521` + `/r/DA1707` wrote real `click` + `landing_viewed` rows to Postgres (counts moved; RJ4521 identity exists). Canonical event vocab confirmed (`click / landing_viewed / human_confirmed / lead_captured / redirect_completed / account_opened`).
+- **Postgres-only (M10):** app runs on a **fresh local Postgres 16.14** `gorefer_prod` (role `gorefer`, least-priv, own password) — NOT the local dev `gorefer_dev`. The M10 fail-fast guard is intact.
+- `DEBUG=false`; write flags off; secrets only in the box's gitignored `.env` (mode 640, www-data).
+
+#### How it's wired (Hostinger, matches the box's Linux pattern)
+- **App:** `/var/www/gorefer` (exact `git archive HEAD` of `main`), venv, **gunicorn** on `127.0.0.1:8010` via **systemd `gorefer.service`** (enabled, 3 workers) + **`gorefer-qcluster.service`** (django-q background queue, `Q_ASYNC=true`). Both `enabled` (survive reboot) + `active`.
+- **nginx** vhost `gorefer.in` (+ `www`): `:80` ACME + HTTP→HTTPS 301; `:443 ssl http2` → proxy to gunicorn, `/static/` served from `staticfiles/` (133 files collected). `X-Forwarded-Proto` set → Django `SECURE_PROXY_SSL_HEADER` trusts it.
+- **TLS:** certbot **webroot** (same pattern as bestdemataccount on this box), not the CF-origin-cert exception firekaro uses. `nginx -s reload` clean (the `protocol options redefined` warnings are the pre-existing multi-vhost http2 notices, not mine).
+- **Data:** `migrate` clean, `seed_program` (Zerodha/ZMPHZC), `seed_demo` (4 referrers incl. RJ4521 + 2 Zoho conversions + rollups), `bootstrap_admin` (`abhayinfosys@gmail.com`; password hash from env — plaintext handed to Abhay out-of-band on the box at `/root/.gorefer_adminpass`, not in git/this log).
+
+#### One small deploy-config change (flagging — infra wiring, NOT a feature/architecture change)
+Added **env-gated reverse-proxy/TLS hardening** to `gorefer/settings.py` (`CSRF_TRUSTED_ORIGINS` from `DJANGO_CSRF_TRUSTED_ORIGINS`; and under `DJANGO_BEHIND_TLS_PROXY=true`: `SECURE_PROXY_SSL_HEADER`, secure session/CSRF cookies, optional `SECURE_SSL_REDIRECT`). **Defaults preserve dev/CI behaviour exactly** (all off unless the prod env vars are set), so nothing changes for the test suite or local dev. Needed so the admin-login POST passes CSRF behind HTTPS. Committed on branch `wm-deploy-prod-hardening` (PR to follow) — no models/migrations touched.
+
+#### Notes / not-in-scope (as agreed)
+- **M11 (OG preview card) + `?s=wa` capture-and-strip are NOT deployed** (option (a)). Today `/r/{id}` serves the 200 landing (not an OG meta card) and the redirect has no `?s=` handling — those ship as the **M11 mission**, then I redeploy (same box, `git archive` + `migrate` + `collectstatic` + `systemctl restart gorefer`). The live WhatsApp E2E's OG-card + `channel=wa` parts wait for that anyway.
+- **`/open`** currently 302s to `…/api/lead/?c=ZMPHZC` (from the seeded redirect rule), not `…/?c=ZMPHZC` — that's the merged M2 seed behaviour, unchanged by this deploy; flagging only in case you want the partner-direct destination adjusted (separate from WM-DEPLOY).
+
+**Ready for you to re-proxy in Cloudflare (orange + Full strict).** Once you flip it I'll re-verify through the CF edge and confirm here. Then M11 is the next mission on my side. — Engineer
+
+---
+
+### 2026-07-09 — FROM ENGINEER (relayed via Abhay) — ACK + target verified; ready to deploy
+
+Read the DA DECISION. Target corrected + both questions resolved (Q-WM-1 = option (a); Q-WM-2 = Hostinger is Linux nginx + certbot, grey-cloud-first dance applies). **Verified `72.61.240.224` is real + reachable:** SSH works, nginx 1.24.0 + certbot 5.6.0 present, no gorefer dir yet (clean slate), DNS staged as described (apex A + www CNAME → origin, grey). Correcting my earlier report: the "no DNS-only / CF-edge TLS" conclusion was for the wrong box (103.118.16.189) and does not hold. Proceeding with the Hostinger deploy of `main` as-is (fresh local Postgres, gunicorn+systemd, nginx vhost, certbot). Will post STATUS + live URL + cert-issued signal here. — Engineer
+
+### 2026-07-09 — FROM DA → Engineer — GO (proceed)
+
+Confirmed — proceed with option (a) now; you're unblocked and authorized. Post a STATUS entry here with the live `https://gorefer.in/r/...` URL and the **cert-issued signal** the moment the pipe is up, and I'll flip both Cloudflare records to Proxied / SSL=Full(strict). Reminder on the guardrails that must hold in this deploy: no `ZMPHZC`/raw Zerodha URL in any client-facing response; `/r/{id}` 302s to `signup.zerodha.com/api/lead/?c=ZMPHZC&r={id}` with the code injected server-side; Postgres-only (no SQLite); `ENABLE_ZOHO_WRITE`/`ENABLE_WATI_SEND` stay off. — DA
+
+---
+
+### 2026-07-09 — FROM DA — DONE — Cloudflare re-proxied to Full (strict); edge-verified live
+
+Cert-issued signal received. **Flipped both Cloudflare records to Proxied (orange):** apex `gorefer.in` A → 72.61.240.224 and `www` CNAME → gorefer.in are now **Proxied**; **SSL/TLS encryption mode set to Full (strict)** (safe — origin presents the trusted LE cert you issued). **Edge-verified:** `https://gorefer.in/r/RJ4521` loads the branded PIFS landing through the CF edge (referral-ID `RJ4521` echoed, NSE AP `AP2516003693` + market-risk warning present), HTTPS clean. Origin IP now hidden behind the proxy. The `:80` ACME location you preserved means renewals survive the re-proxy.
+
+**Pipe is fully live end-to-end.** GoRefer's tracked redirect is publicly reachable at `gorefer.in` over Cloudflare. Next mission on your side when you get the word from Abhay: **M11 (OG preview card + `?s=wa` capture/strip + guardrail tests)**, then the quick redeploy — that unlocks the WhatsApp kit's link-preview card + `channel=wa` attribution for the full live E2E. — DA
+
+---
+
+### 2026-07-09 — FROM DA → Engineer — MISSION M11 — OG preview card + `?s=wa` share-channel (then redeploy)
+
+Abhay approved. This is the follow-on to WM-DEPLOY option (a). Scope, on top of the now-live `main`:
+
+**1. `?s=wa` share-channel capture + strip (redirect service).** On `GET /r/{client_id}` (and `/r/{client_id}/continue`), read an optional `?s=` query param (allowed values config-driven: `wa, fb, x, li, tg, ig, email, copy`; unknown → `other`; absent → null). **Record it as the click's share-channel** (reuse the Sprint-1 `Channel` column on the click/journey event). **Strip `s` before the 302** so it never appears in the Zerodha `Location` (guardrail: assert the outbound `Location` is exactly `…/api/lead/?c=ZMPHZC&r={id}` with no `s=`). Param name is config (`SHARE_CHANNEL_PARAM`, default `s`).
+
+**2. OG / Twitter-Card preview page.** `GET /r/{client_id}` must serve **Open Graph + Twitter Card** meta (`og:title`, `og:description`, `og:image`, `og:url`, `twitter:card=summary_large_image`) so WhatsApp/FB/LinkedIn/X render a compliant preview card for the forwarded link. Content is **config-driven** (per-partner `OG_TITLE`/`OG_DESCRIPTION`/`OG_IMAGE`), carries the verbatim disclosure spirit (no partner code, no raw Zerodha URL in the card), and must **not** resemble/clone Zerodha. Keep the existing 200 branded landing for human visitors; add the meta to its `<head>` (same page serves both).
+
+**3. Crawler-not-a-click.** Extend the Sprint-1 bot filter: preview crawlers (`facebookexternalhit`, `Twitterbot`, `LinkedInBot`, `WhatsApp`, `Telegrambot`, `Slackbot`) get the OG card but are **excluded from human-click counts** and never create a journey/redirect.
+
+**4. Guardrail tests (must pass):** `?s` stripped from the Zerodha 302 (never leaks); click recorded with `channel=wa` when `?s=wa`; no `ZMPHZC`/raw Zerodha URL in the OG card or landing body; crawler UA excluded from human counts. Then **redeploy** to the Hostinger box (same pattern: `git archive HEAD` → `migrate` → `collectstatic` → `systemctl restart gorefer`) and post STATUS here with a live `https://gorefer.in/r/RJ4521?s=wa` verification (click row shows `channel=wa`, 302 Location clean).
+
+Grounding: S2-02 §6 + S2-01 §5.3/§7 (ADR-028). Config-over-code; Postgres-only; write flags stay off. When done, the WhatsApp kit's tracked link renders a preview card AND attributes `channel=wa` — the last piece for the full live E2E. — DA
+
+---
+
+### 2026-07-09 — FROM ENGINEER — STATUS — M11: OG preview card + `?s=` share-channel — DONE + REDEPLOYED LIVE (branch `mission-11-og-share-channel`)
+
+**Built all 4 M11 items on top of the live `main`, and REDEPLOYED to `gorefer.in`. Verified live through the Cloudflare edge: `?s=wa` records `channel=WhatsApp`, the 302 Location is clean, the OG card renders, and preview crawlers get the card but no click. 172 pass on Postgres; ruff clean; no migration drift (no schema change); config-over-code; write flags stay off.**
+
+**1. `?s=` capture + strip (ADR-028).** `/r/{id}`, `/r/{id}/continue`, and `/open` read an optional `?s=` (param NAME is config `SHARE_CHANNEL_PARAM`, default `s`), normalize it via a config map (`wa→WhatsApp, fb→Facebook, x→X, li→LinkedIn, tg→Telegram, ig→Instagram, email→Email, copy→Copy`; unknown → `other`; absent → none), and record it as the click's **Channel** in `metadata["channel"]` — **reusing the Sprint-1 Referral-Profile "Channel" column** (no schema change, no migration). It's **stripped before the 302** by construction: the destination is assembled server-side from the program template, so `s` can never enter the Location. Live: `GET /r/RJ4521/continue?s=wa` → `Location: https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=RJ4521` (no `s=`).
+
+**2. OG / Twitter-Card preview.** `/r/{id}` head now carries `og:title/description/image/url` + `twitter:card=summary_large_image` (reusable `partials/og_meta.html`), all **config-driven** (`OG_TITLE/OG_DESCRIPTION/OG_IMAGE/OG_SITE_NAME` + `PUBLIC_BASE_URL` for absolute URLs). PIFS-branded, generic, **no partner code / no raw Zerodha URL, does not clone Zerodha**. Card image = a branded **1200×630 PNG** at `static/img/og-card.png` (swappable via `OG_IMAGE` with zero code change; a designed card can replace the solid-cobalt placeholder later). The human 200 landing is unchanged — same page serves both.
+
+**3. Crawler-not-a-click.** The existing bot filter already covers `facebookexternalhit / Twitterbot / LinkedInBot / WhatsApp / Telegrambot / Slackbot`; a preview UA now gets the **full OG card** (200) but creates **no identity/journey/click** and never 302s. Live: `facebookexternalhit` on `/r/DA1707?s=fb` → total clicks unchanged (27→27).
+
+**4. Guardrail tests (18 new, all green).** channel map (incl. unknown→other, absent→none, config param name); `?s` stripped from both the `/continue` and `/open` 302s; OG meta present + **no ZMPHZC/Zerodha URL** in card/body (#3); each crawler UA → card + zero journey/click. Plus the whole suite: **172 pass on Postgres**, ruff clean, `makemigrations --check` no drift, no-CDN + multi-line-`{# #}` guards green, `app.css` unchanged (OG partial adds no Tailwind classes).
+
+**Redeploy (same pattern as WM-DEPLOY).** `git archive HEAD` → box → `chown www-data` → `migrate` (no new migrations) → `collectstatic` (picked up `og-card.png`) → `systemctl restart gorefer` (active). The branch also carries the WM-DEPLOY env-gated TLS-proxy hardening (cherry-picked) so the deployed HEAD is self-consistent (admin CSRF behind HTTPS keeps working).
+
+**Live verification (through the CF edge):**
+- `https://gorefer.in/r/RJ4521?s=wa` → 200; a `click` event with `metadata.channel="WhatsApp"` recorded (before→after +1).
+- `https://gorefer.in/r/RJ4521/continue?s=wa` → 302 `Location: …/api/lead/?c=ZMPHZC&r=RJ4521` — **clean, no `s=`**.
+- OG block present; `og:image` → `https://gorefer.in/static/img/og-card.png` (serves 200 `image/png`); **no ZMPHZC / signup.zerodha.com in the card or body**.
+- `facebookexternalhit` → card served, **click count unchanged** (crawler excluded).
+
+**Config / docs synced:** `flags.py` (`SHARE_CHANNEL_PARAM`, `SHARE_CHANNEL_LABELS`, `normalize_share_channel`); `settings.py` (OG_* + PUBLIC_BASE_URL); `.env.example` (all new keys); `docs/ui-ux/07` §9 (link-preview card + share-channel paragraph). ADR-028 grounding noted; ZOHO/WATI write flags stay **off**; Postgres-only.
+
+**Ready for review → merge `mission-11-og-share-channel`.** With this live, the WhatsApp kit's forwarded `gorefer.in/r/{id}?s=wa` renders a compliant preview card AND attributes `channel=wa` — the redirect/OG half of the S2-02 live WhatsApp E2E is now in place. (Next on your track: the Wati webhook → kit + Astra-agent publish; that's DA/Wati-side.) — Engineer
+
+---
+
+### 2026-07-09 — FROM DA → Engineer — QUEUED MISSIONS (DO NOT START YET) — Referral UX + Disclosure architecture
+
+⛔ **Queued, not active.** Per Abhay's standing rule, these build **only after the current sprint (through M11) is merged + in production, on a NEW feature branch.** Logged now so nothing is lost; do not start until the DA marks them active. Full buildable spec (config keys, routes, data-model deltas, acceptance/guardrail tests, ADR-031/032/033): **`docs/sprint2/S2-03-Referral-UX-and-Disclosure-Architecture.md`.**
+
+- **Q-M-DISC** — Per-user **Disclosure Page** `GET /d/{client_id}`: composes each active partner's regulator-mandated disclosure block (per-partner template + per-tenant values), regulator-ordered (SEBI/NSE → IRDAI → RBI). The canonical **§4.4 host** — lets the WhatsApp message stay light and `direct` mode stay compliant. Crawler-safe, no PII. **Foundational — do first.** (ADR-031)
+- **Q-M-LAND** — Per-tenant **`LANDING_MODE = page|direct`** on `GET /r/{client_id}`: `direct` logs the click on-commit then 302s straight to Zerodha (strip `?s`, code server-side), skipping the landing page. `MESSAGE_DISCLOSURE_LEVEL` is **derived + coupled** — a `direct` link with no live `/d/{id}` must force a full-disclosure message (no bypass-without-disclosure gap). Depends on Q-M-DISC. (ADR-032)
+- **Q-M-MENU** — Referrer **3-branch WhatsApp menu** (Share on WhatsApp / Get my link / Refer directly). Buttons = 3 quick-replies (Meta forbids mixing quick-reply + URL). Branches 1–2 send-message; "Get my link" includes the personal-note nudge (Zerodha cl.8.viii). Mostly Wati-flow (DA/dashboard) + a webhook hook for branch 3. (ADR-033)
+- **Q-M-ASSIST** — **Assisted-referral** capture (Wati asks prospect Name + Mobile, email optional) → `POST /api/wati/webhook` → **Zoho lead** (behind `ENABLE_ZOHO_WRITE`) with a **DPDP consent flag**; never a password; deduped. Depends on Q-M-MENU. (ADR-033)
+
+Guardrails unchanged (no partner code in client-facing bodies; `?s` stripped from 302s; Postgres-only; config-over-code; demo works offline). **Await DA "activate" before building.** — DA
+
+---
+
+### 2026-07-09 — FROM DA — EXECUTION PLAN (owners · sequence · testing) — Referral menu + disclosure + bypass
+
+Abhay asked for the full orchestration. Split into three owners; GoRefer **code** waits for M11-in-prod + a new branch (standing rule); **Wati** work (dashboard/API, no repo code) can run in parallel now.
+
+**Owners:** **DA** = me (Wati template/API + flows + coordination + spec). **ENG** = Engineer session (all GoRefer code, new branch). **QA** = independent tester (a fresh verification subagent — never the builder — plus the live WhatsApp E2E).
+
+**GATE G0 (ENG executes; Abhay relays the prompt):** Engineer merges `mission-11-og-share-channel` → main, redeploys to prod, confirms prod-stable, posts STATUS. (Merge/deploy is a dev action — NOT Abhay's task; he only pastes the prompt.) Unblocks the ENG Track B.
+
+**TRACK A — Wati (DA, now; no repo code):**
+- **A1** Create template **`gorefer_zerodha_referral_2026_07_09`** (MARKETING; body `{{name}}` + verbatim risk line + `Disclosures: gorefer.in/d/pifs`; footer PIFS; buttons: **[URL] Refer & earn → `https://gorefer.in/r/wa/{{client_id}}`**, **[QR] Share on WhatsApp**, **[QR] Refer directly**). Register in `apps/integrations/wati/wati-templates.json`. ⚠ API create = submit-to-Meta; **hold submit for Abhay's review-go** (his explicit rule). Meta approval doesn't require the URLs to resolve yet, so this can run ahead of the ENG routes.
+- **A2** Fix the **keyword collision**: remove the bare **"Refer"** keyword from row 1 (the only greedy token catching "Refer directly"). Applies to the 2 quick-replies; the URL button needs none. (Dashboard edit — DA if automatable, else hand to Abhay with exact steps.)
+- **A3** Finalize the two branch chatbots: **"Zerodha Share on WhatsApp"** (= the kit, already live/tested) and **"Direct Zerodha Referral"** (build the assisted capture: ask Name → Mobile → post to the ENG webhook). A3-assist depends on **B4**.
+
+**TRACK B — GoRefer code (ENG, new branch AFTER G0):**
+- **B1 = Q-M-CHANNELPATH (NEW):** `GET /r/{channel}/{client_id}` (+ keep `/r/{client_id}?s=…`). WhatsApp dynamic URL buttons require the variable LAST, so the tag can't be `?s=wa` after `{{client_id}}` — carry it as a **path prefix** (`/r/wa/{client_id}`). Record channel from the path, then the usual click-log + 302 (strip channel, code server-side). Needed for A1's URL button to keep `wa` attribution. **Do first in Track B** (A1 depends on it live).
+- **B2 = Q-M-DISC:** `GET /d/{slug}` disclosure page (slug per sub-broker, e.g. **`/d/pifs`**), composing that sub-broker's active partner disclosures (Zerodha SEBI/NSE → IRDAI → RBI), regulator-ordered, config-driven, no PII, crawler-safe. Interim: `/d/pifs` may render the existing landing disclosure block until multi-partner composition lands. (ADR-031)
+- **B3 = Q-M-LAND:** per-tenant `LANDING_MODE = page|direct` + derived `MESSAGE_DISCLOSURE_LEVEL` coupling. (ADR-032)
+- **B4 = Q-M-ASSIST:** `POST /api/wati/webhook` assisted capture → Zoho lead (behind `ENABLE_ZOHO_WRITE`) + DPDP consent flag; never a password; deduped. (ADR-033)
+
+**TRACK C — Testing (QA, after each B):**
+- **C1** Independent verification of B1–B4 (a fresh subagent, not the Engineer): guardrail tests green + live checks — `/r/wa/{id}` records `channel=wa` & strips it from the 302; `/d/pifs` renders the disclosure block, no PII, crawler-excluded; `LANDING_MODE` both branches; assisted webhook creates one Zoho lead with consent flag.
+- **C2** Compliance re-audit of the final template + `/d/pifs` via the `zerodha-ap-social-media-compliance` skill.
+- **C3** Live WhatsApp E2E: send the template → menu → each branch (URL opens tracked link; Share sends the kit; Refer directly captures → Zoho lead) → verify in Wati + WhatsApp + GoRefer.
+
+**SEQUENCE:** G0 → (A1/A2 + B1) in parallel → B2 → B3 → B4 (+A3-assist) → C1/C2 per piece → C3 final E2E. A1 template can be created now (approval runs ahead); it only goes *live-correct* once B1+B2 deploy.
+
+**What DA does now, autonomously:** A1 manifest entry (this turn), A2 attempt, refine these missions, prep the QA subagent brief. **What DA needs from Abhay:** (i) merge M11 (G0); (ii) review-go to submit the template to Meta; (iii) the A2 keyword edit if the dashboard resists automation. **ENG:** do NOT start Track B until DA posts "ACTIVATE Track B" here (after G0). — DA

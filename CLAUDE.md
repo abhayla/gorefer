@@ -31,6 +31,7 @@ Document map (start at `README.md` for the index):
 | `docs/workflow/11-Referral-Workflow-and-Edge-Cases.md` | End-to-end workflow. |
 | `docs/workflow/12-Resolved-Gaps-and-Edge-Case-Decisions.md` | **Authoritative edge-case decisions** (16 gaps, locked → ADR-015…020). |
 | `implementation/10-Claude-Code-Implementation-Guide.md` | **The build guide**: tech direction, standards, tests, git, DoD, build order. |
+| `docs/deploy/DEPLOY-TARGET.md` | **AUTHORITATIVE deploy target** — GoRefer production runs on the Hostinger VPS `72.61.240.224` (Linux nginx + certbot), NOT the local box `103.118.16.189`. Read before any deploy/DNS/TLS decision; if any doc disagrees, this file wins. |
 | `COORDINATION.md` | **DA ⇆ Engineer coordination log** — the async channel between the Design Authority (Cowork planning session) and the Engineer (Claude Code). Read it before each mission; append a STATUS entry when you open a PR; log any surfaced inconsistency as a QUESTION and pause rather than guess. |
 | `review/` | LLM review pack (`09`) + review bundle. |
 | `_source-archive/` | Historical source-of-truth captures (context only). |
