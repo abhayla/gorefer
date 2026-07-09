@@ -871,3 +871,39 @@ Abhay asked for the full orchestration. Split into three owners; GoRefer **code*
 - `main` @ `1980d82`; app `/var/www/gorefer` (gunicorn+systemd, django-q cluster); **fresh local Postgres `gorefer_prod`** (role `gorefer`, least-priv) — NOT dev `gorefer_dev`; `DEBUG=false`; **`ENABLE_ZOHO_WRITE` / `ENABLE_ZOHO_READ` / `ENABLE_WATI_SEND` all OFF**; secrets only in the box's gitignored `.env`. Postgres-only guard intact.
 
 **Prod is stable and M11 is live: the forwarded `gorefer.in/r/{id}?s=wa` renders a compliant OG preview card AND attributes `channel=wa`, the 302 stays clean.** This closes G0 (Track B unblocked *procedurally*). **I am NOT starting Track B** (B1 `/r/{channel}/{client_id}` etc.) — per your standing rule I wait for the DA to post **"ACTIVATE Track B"** here before opening the new branch. — Engineer
+
+---
+
+### 2026-07-09 — FROM DA → Engineer — ✅ ACTIVATE TRACK B — open a new branch, build B1→B4 in order
+
+G0 confirmed (main merged + prod-stable, 172 green). **Track B is ACTIVATED.** Open a **new feature branch** off `main` and build the four missions **in sequence**, posting a STATUS to COORDINATION.md after each so the independent tester can verify that piece before you move on. Full buildable spec: **`docs/sprint2/S2-03`** (config keys, routes, data-model, ADR-031/032/033). Acceptance the independent tester will run: **`docs/sprint2/S2-04`** (build to pass it).
+
+Order + why:
+1. **B1 — `GET /r/{channel}/{client_id}`** (+ keep legacy `/r/{id}?s=`). WhatsApp dynamic URL buttons require the variable LAST, so the channel rides as a **path prefix** (`/r/wa/{client_id}`). Read channel from the path → click-log on-commit → 302 (strip channel, code server-side, clean Location). **Do first** — the pending template `gorefer_zerodha_referral_2026_07_09` URL button (`/r/wa/{{client_id}}`) depends on it. (ADR-028 extends.)
+2. **B2 — `GET /d/{slug}`** disclosure page (`/d/pifs`): compose the sub-broker's active partner disclosures (SEBI/NSE → IRDAI → RBI), regulator-ordered, config-driven, no PII, crawler-safe. Interim `/d/pifs` may render the existing landing disclosure block until multi-partner composition lands. (ADR-031)
+3. **B3 — `LANDING_MODE = page|direct`** per-tenant + derived `MESSAGE_DISCLOSURE_LEVEL` coupling (no bypass-without-disclosure gap). (ADR-032)
+4. **B4 — `POST /api/wati/webhook`** assisted capture → Zoho lead (behind `ENABLE_ZOHO_WRITE`, log-only in demo) + DPDP consent flag; never a password; deduped. (ADR-033)
+
+Guardrails hold throughout: no `ZMPHZC`/raw Zerodha URL in client-facing bodies; channel/`?s` stripped from the 302; Postgres-only; config-over-code; demo works offline; each mission ships the guardrail tests in S2-03 §11 green. Keep `ENABLE_ZOHO_WRITE`/`ENABLE_WATI_SEND` OFF. — DA
+
+---
+
+### 2026-07-09 — FROM ENGINEER — STATUS — B1 DONE — `/r/{channel}/{client_id}` channel-path route (branch `sprint2-track-b-referral-ux`)
+
+**B1 built on a new branch off `main` and green locally (16 new tests; full suite 188 passed on Postgres; ruff clean; no migration drift). Deploy is BATCHED to the end of Track B per Abhay's instruction — prod stays on stable `main` (`0c8c348`) during the build; the whole branch deploys once after B4. So the live `gorefer.in/r/wa/...` checks in S2-04 §B1 will pass at the end-of-Track-B deploy, not yet.**
+
+**What it does.** WhatsApp dynamic URL buttons require the template variable LAST, so `?s=wa` can't trail `{{client_id}}`. B1 carries the share channel as a **leading path segment** instead:
+- **New routes:** `GET /r/{channel}/{client_id}` and `GET /r/{channel}/{client_id}/continue` (e.g. `/r/wa/RJ4521`). Legacy `/r/{client_id}` + `/r/{client_id}/continue` + `?s=` are **unchanged** (back-compat).
+- **Channel read from the path**, normalized through the SAME config-driven map as `?s=` (`normalize_share_channel`: `wa→WhatsApp … unknown→other, absent→none`), recorded as the click's `metadata["channel"]` (reuses the Sprint-1 Referral-Profile "Channel" column — **no schema change, no migration**).
+- **Stripped before the 302 by construction:** the destination is assembled server-side from the program template, so neither the channel nor `s=` can enter the Zerodha `Location`. The `/continue` 302 stays exactly `…/api/lead/?c=ZMPHZC&r={id}`.
+- **New `{channel}` path converter** (`gorefer/converters.py`): matches only **1–8 lowercase letters**, so it can never shadow a client_id (4–16, uppercased) or the literal `continue`; the two-segment `/r/X/Y` shape is what selects the channel route. Registration guarded against the Django-5.x re-register deprecation warning.
+
+**Guardrail tests (S2-03 §11 / S2-04 §B1) — 16, all green** (`tests/test_b1_channel_path.py`):
+- `/r/wa/RJ4521` → click `channel=WhatsApp` sourced from the **path**; `fb/li/tg/ig` map correctly; **unknown code `/r/zzz/…` → `other`, never errors**.
+- `/r/wa/RJ4521/continue` → 302 `Location` is exactly `…/api/lead/?c=ZMPHZC&r=RJ4521` — **no channel, no `s=`, no partner-code leak** in any client-facing body; `redirect_completed` carries `channel=WhatsApp`.
+- Legacy `/r/RJ4521?s=wa` + `/r/RJ4521/continue?s=wa` still work; bare `/r/RJ4521` records no channel ("Direct").
+- Router: `/r/RJ4521/continue` still hits the legacy view (converter can't swallow it); crawler UA on `/r/wa/…` → OG card, **zero journey/click**.
+
+Full suite **188 passed** on Postgres (172 baseline + 16); ruff clean; `makemigrations --check` → no drift; `ENABLE_ZOHO_WRITE`/`ENABLE_WATI_SEND` stay OFF; Postgres-only.
+
+**Note for the independent tester:** B1's live `gorefer.in/r/wa/{id}` checks are verifiable **after the end-of-Track-B deploy** (deploys batched per Abhay). Until then, evidence is the green suite above; the code is on branch `sprint2-track-b-referral-ux`. Next: **B2 — `/d/{slug}` disclosure page.** — Engineer
