@@ -38,7 +38,7 @@ def _post(client, payload, **extra):
 ASSIST = {"client_id": "RJ4521", "name": "Ravi Kumar", "mobile": "9998887777", "email": "ravi@example.com"}
 
 
-# --- auth ------------------------------------------------------------------
+# --- auth: reject BEFORE schema validation, fail closed --------------------
 
 def test_webhook_rejects_without_key(seeded, client):
     assert _post(client, ASSIST).status_code == 401
@@ -46,6 +46,43 @@ def test_webhook_rejects_without_key(seeded, client):
 
 def test_webhook_rejects_wrong_key(seeded, client):
     assert _post(client, ASSIST, HTTP_X_WATI_WEBHOOK_KEY="wrong").status_code == 401
+
+
+def test_auth_runs_before_schema_validation_empty_body(seeded, client):
+    # An unauthenticated caller with a MALFORMED/EMPTY body must get 401 (auth), NOT
+    # 422 (schema). This is the reported bug: the secret check must precede parsing.
+    r = client.post(WEBHOOK, data="{}", content_type="application/json")
+    assert r.status_code == 401
+
+
+def test_auth_runs_before_schema_validation_garbage_body(seeded, client):
+    # Even non-JSON garbage from an unauthenticated caller is a 401, not a parse 422.
+    r = client.post(WEBHOOK, data="not-json-at-all", content_type="application/json")
+    assert r.status_code == 401
+
+
+def test_wrong_key_with_empty_body_is_401_not_422(seeded, client):
+    r = client.post(WEBHOOK, data="{}", content_type="application/json",
+                    HTTP_X_WATI_WEBHOOK_KEY="wrong")
+    assert r.status_code == 401
+
+
+def test_fail_closed_when_key_unset(db, settings, client):
+    # No WATI_WEBHOOK_KEY configured => EVERY request rejected (never fail-open),
+    # even one carrying a key header and a valid body.
+    settings.WATI_WEBHOOK_KEY = ""
+    call_command("seed_program")
+    r = _post(client, ASSIST, HTTP_X_WATI_WEBHOOK_KEY="anything")
+    assert r.status_code == 401
+    assert Lead.objects.count() == 0
+
+
+def test_correct_key_valid_body_accepted(seeded, client):
+    # The positive path: correct key + valid body => accepted (log-only while
+    # ENABLE_ZOHO_WRITE is off), one lead captured.
+    r = _post(client, ASSIST, **KEY_HEADER)
+    assert r.status_code == 200
+    assert Lead.objects.count() == 1
 
 
 # --- one Zoho lead, attributed to the referrer, with consent ---------------

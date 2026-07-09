@@ -19,6 +19,7 @@ mirroring the Zoho webhook.
 """
 from __future__ import annotations
 
+import hmac
 import logging
 
 from django.conf import settings
@@ -45,10 +46,21 @@ def _client_ip(request) -> str:
 
 
 def authenticate(request) -> bool:
-    """Static key + IP allowlist. Both must pass (allowlist empty = allow any — dev)."""
-    expected = getattr(settings, "WATI_WEBHOOK_KEY", "")
-    provided = request.headers.get("X-Wati-Webhook-Key", "")
-    if not expected or provided != expected:
+    """Static shared-key + IP allowlist. Both must pass.
+
+    FAILS CLOSED: if WATI_WEBHOOK_KEY is not configured (unset/blank), EVERY request
+    is rejected — the check is never skipped and never fails open. A constant-time
+    compare avoids leaking the key via timing. The allowlist (when set) further
+    restricts source IPs; an empty allowlist means "any IP" (dev only), but that
+    never relaxes the mandatory key requirement.
+    """
+    expected = (getattr(settings, "WATI_WEBHOOK_KEY", "") or "").strip()
+    if not expected:
+        # Fail closed: no key configured => reject all (do not process the webhook).
+        logger.warning("WATI webhook rejected: WATI_WEBHOOK_KEY not configured (fail-closed)")
+        return False
+    provided = (request.headers.get("X-Wati-Webhook-Key", "") or "").strip()
+    if not hmac.compare_digest(provided, expected):
         return False
     allowlist = [ip for ip in getattr(settings, "WATI_WEBHOOK_IP_ALLOWLIST", "").split(",") if ip]
     if allowlist and _client_ip(request) not in allowlist:
