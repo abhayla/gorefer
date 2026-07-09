@@ -995,3 +995,44 @@ B1–B4 are all committed on `sprint2-track-b-referral-ux` with the full guardra
 - `LANDING_MODE` defaults `page` live (no tenant override set), so `/r/{id}` still renders the landing; `direct` is available per-tenant when you want to test it. `/api/wati/webhook` is live and auth-gated (401 without `X-Wati-Webhook-Key`); it needs `WATI_WEBHOOK_KEY` set in the box `.env` to accept a real assisted-capture post — say the word and I'll set it for your E2E, or the tester can hit it with the key.
 
 **Over to the DA / independent tester for the S2-04 live pass** (B1 `/r/wa/{id}` channel + clean 302; B2 `/d/pifs` blocks + no PII/leak; B3 `LANDING_MODE` both branches; B4 `/api/wati/webhook` → one Zoho lead + consent, deduped, no password). **`main` is NOT merged — I'll merge only on your explicit go after verification passes.** Rollback if needed = redeploy `main` (`0c8c348`). — Engineer
+
+---
+
+### 2026-07-09 — FROM DA — INDEPENDENT VERIFICATION RESULT — **NO-GO to merge** (1 FAIL: webhook fail-open)
+
+Ran an independent black-box pass on the live branch deploy (fresh verifier agent, not the Engineer, not the DA — re-observed via web_fetch/browser; did not trust the deploy STATUS).
+
+**7 of 8 PASS:** B1 `/r/wa/RJ4521` → 200 (branded landing, no code leak); `/r/wa/RJ4521/continue` → final destination exactly `…/api/lead/?c=ZMPHZC&r=RJ4521` (no `wa`/`s=`); legacy `/r/RJ4521?s=wa` → 200; unknown channel `/r/zz/RJ4521` → 200 graceful (no 500); B2 `/d/pifs` → 200 with `INZ000031633` + `AP2516003693` + verbatim risk warning, no PII, no `ZMPHZC`/Zerodha-URL; unknown slug → 404; guardrail sweep clean on every client-facing body.
+
+**⛔ FAIL — B4 `/api/wati/webhook` is fail-OPEN as deployed.** An unauthenticated POST (and a wrong-token POST) returns **422 schema-validation**, NOT 401/403. The B4 unit tests assert 401 and pass — because the test env SETS `WATI_WEBHOOK_KEY`; on the box the key is **unset**, and the auth check is evidently **skipped when the key is unconfigured (fail-open)** → the handler's business schema is reachable unauthenticated. Current blast radius is limited (`ENABLE_ZOHO_WRITE=off` → log-only), but this must be fixed before that flag flips or before merge.
+
+**Required fix (relayed to Engineer):** reject unauthenticated/unsigned requests at **401/403 BEFORE schema validation**, and **fail CLOSED** when `WATI_WEBHOOK_KEY` is unconfigured (reject all — never skip). Add a guardrail test that runs with the **key UNSET** asserting 401 (the current test only covers key-set). Redeploy the branch, confirm `/api/wati/webhook` 401s without the key, post STATUS → DA re-runs the independent check, then merge.
+
+**Not verifiable black-box (fold into the live E2E):** the actual DB click-write; `LANDING_MODE=direct` (needs a per-tenant toggle). **Merge to `main` is HELD until the webhook fix passes re-verification.** — DA
+
+---
+
+### 2026-07-09 — FROM ENGINEER — STATUS — B4 webhook auth FIXED + REDEPLOYED — every unauth scenario now 401 live (re-verify please)
+
+**Confirmed the finding, fixed the root cause, redeployed the branch. On the live box (`WATI_WEBHOOK_KEY` still UNSET), every unauthenticated/wrong-key POST — including the exact 422 repro — now returns 401. Fix committed `b339caa`; branch redeployed (`DEPLOYED_SHA=b339caa`); `main` still `0c8c348` (NOT merged). Full suite 224 passed. Ready for your re-run.**
+
+#### Root cause (precise) + fix
+The observation was exactly right; the mechanism was **ordering**, not a skipped check. `/api/wati/webhook` declared `payload: AssistedIn`, so **Django Ninja validated the body against the schema BEFORE the view body ran** — a malformed/empty body from an unauthenticated caller hit schema validation and returned **422 before `authenticate()` was ever called**. (The auth function itself was already fail-closed — `not expected → return False` — which is why a *valid-body* unauth POST did return 401; but the 422-before-401 path is the reported hole.)
+- **Fix 1 — auth before everything:** the view now takes **no schema parameter** (that was what triggered eager validation). It calls `authenticate(request)` **first**; only an authenticated caller reaches body read → forbidden-key check → `AssistedIn` validation. Unauth ⇒ 401 regardless of body. 422 is now only reachable **after** auth passes.
+- **Fix 2 — explicit fail-closed + hardening:** `authenticate()` now explicitly rejects ALL requests when `WATI_WEBHOOK_KEY` is unset/blank (with a warning log), and uses `hmac.compare_digest` (constant-time) for the key compare. IP allowlist unchanged.
+
+#### Live re-verification through the CF edge (box key UNSET ⇒ fail-closed)
+```
+no key    + EMPTY body   -> 401   (was 422 — the reported bug)
+no key    + garbage body -> 401
+no key    + VALID body   -> 401
+WRONG key + EMPTY body   -> 401
+WRONG key + VALID body   -> 401
+key hdr set, WATI_WEBHOOK_KEY unset -> 401   (fail-closed)
+```
+Other Track B routes unaffected after redeploy: `/r/wa/RJ4521` 200, `/d/pifs` 200, `/r/RJ4521` 200.
+
+#### Tests (B4 now 15, +5)
+`no key + empty/garbage body → 401` (asserts auth precedes schema); `wrong key + empty → 401`; **`fail-closed when key UNSET → 401` + nothing persisted** (the case the prior tests missed); `correct key + valid body → 200` (log-only, `ENABLE_ZOHO_WRITE` off). Full suite **224 passed** on Postgres; `ruff check .` clean; no migration drift.
+
+**Note on the positive path:** to exercise a real accepted assisted-capture live (correct key → 200 → one log-only lead), `WATI_WEBHOOK_KEY` must be set in the box `.env`. I left it **unset** deliberately so the deploy is fail-closed by default; say the word and I'll set a key for your live-positive/E2E check. **`main` stays held at `0c8c348`** — merge only on your go after re-verification. — Engineer
