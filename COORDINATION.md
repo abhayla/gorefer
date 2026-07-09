@@ -950,3 +950,26 @@ Full suite **197 passed** on Postgres (172 + 16 B1 + 9 B2); `ruff check .` clean
 Config-over-code: keys resolve via the ADR-022 cascade (code defaults `page` / host-enabled; a `ConfigGlobal` row swings it per-tenant). Full suite **209 passed** (197 + 12); `ruff check .` clean; `makemigrations --check` → no new drift; write flags OFF; Postgres-only.
 
 **Note for the independent tester:** `LANDING_MODE` live behaviour is verifiable after the end-of-Track-B deploy; prod stays `page` (default) unless a tenant override is set. Next: **B4 — `POST /api/wati/webhook` assisted capture → Zoho lead (behind `ENABLE_ZOHO_WRITE`, log-only in demo) + DPDP consent flag.** — Engineer
+
+---
+
+### 2026-07-09 — FROM ENGINEER — STATUS — B4 DONE — `POST /api/wati/webhook` assisted capture → Zoho lead (ADR-033) — **TRACK B CODE COMPLETE**
+
+**B4 built and green locally (10 new tests; full suite 219 passed on Postgres; `ruff check .` clean; migrations 0005/0006 boot clean). This is the last of B1–B4 — Track B code is complete on `sprint2-track-b-referral-ux`. Deploy of the whole branch is batched per Abhay and is the next step (see the end-of-Track-B note below).**
+
+**What it does.** The referrer "Refer directly (we'll assist)" branch: the Wati flow POSTs `{client_id (referrer), name, mobile, email?, consent?}` → GoRefer creates **one Zoho lead** via the **same capture-first pipeline** as the landing form.
+- **Route** `POST /api/wati/webhook` (`api/wati.py` + `apps/integrations/wati/webhook.py`). **Auth:** static key `X-Wati-Webhook-Key` + IP allowlist (HMAC wax-seal deferred DF-2), mirroring the Zoho webhook. **401** unauthenticated; **422** on a malformed payload (never 500).
+- Lazily resolves/creates the **referrer** identity+referral (the referrer may never have clicked their own link), then `capture_lead(…, submitted_by="referrer", lead_source="whatsapp_assisted", consent=True)`.
+- **DPDP consent:** the lead carries `consent` + `consent_captured_at`. **Never a password** — credential-shaped fields (`password/pin/otp/pan/aadhaar…`) are rejected **at the API edge** (raw body — Django Ninja silently drops unknown keys, so the schema alone wouldn't catch it) **and** in the service. PII (name/mobile/email) lives on the erasable Prospect/Lead, **never in the immutable event log**.
+- **Deduped** on (referral, prospect mobile). Behind **`ENABLE_ZOHO_WRITE`** (log-only demo adapter when off — lead still captured locally). **Status is never set here** (Zoho only — guardrail #2).
+- **Model:** `Lead` gains `lead_source` + `consent_captured_at` (**migration `0006`**, additive).
+
+**Guardrail tests (S2-03 §11 / S2-04 §B4) — 10, all green** (`tests/test_b4_wati_webhook.py`):
+- auth **401** (no key / wrong key); one lead created, `lead_source=whatsapp_assisted`, `submitted_by=referrer`, `consent=True` + `consent_captured_at` set, attributed to the lazily-created referrer identity `RJ4521`.
+- prospect PII on the erasable record (mobile canonical-normalized `919998887777`); **repeat post does NOT double-create** (1 lead / 1 prospect).
+- **password field → 422 and nothing persisted**; PII **absent** from every Event's metadata; `ENABLE_ZOHO_WRITE=false` → still captures locally; invalid `client_id` → 422.
+
+Full suite **219 passed** on Postgres (172 + 16 B1 + 9 B2 + 12 B3 + 10 B4); `ruff check .` clean; `makemigrations --check` → no drift beyond `0005`/`0006`; `ENABLE_ZOHO_WRITE`/`ENABLE_WATI_SEND` stay **OFF**; Postgres-only. ADR-031/032/033 recorded in `docs/architecture/02` (also flagged there: the pre-existing truncated ADR-024 line + the not-yet-written-up ADR-025..030 from M11/deploy).
+
+#### ✅ Track B code complete — deploy is next (batched, per Abhay)
+B1–B4 are all committed on `sprint2-track-b-referral-ux` with the full guardrail suite green (219). Per Abhay's instruction the **prod deploy was batched to the end** (prod stayed on stable `main` `0c8c348` throughout the build — I rolled back the one interim B1 deploy). **The whole branch now deploys in one pass** (merge to main → `git archive` → `migrate` (0005+0006) → `collectstatic` → `systemctl restart gorefer`), after which the S2-04 **live `gorefer.in`** checks for B1 (`/r/wa/{id}`), B2 (`/d/pifs`), B3 (`LANDING_MODE`), B4 (`/api/wati/webhook`) become verifiable end-to-end. Ready to run that deploy on your go. — Engineer
