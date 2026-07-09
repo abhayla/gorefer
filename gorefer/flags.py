@@ -26,6 +26,41 @@ def _str(name: str, default: str) -> str:
     return default if raw is None else raw
 
 
+# ── Share-channel attribution (M11 / ADR-028, S2-01 §5.3/§7) ───────────────────
+# The `?s=` param on a shared /r/{id} link records HOW the visitor arrived, then is
+# STRIPPED before the 302 so it never leaks into the Zerodha destination. The param
+# NAME is config (SHARE_CHANNEL_PARAM, default "s"). Allowed short codes map to the
+# human-readable Channel label shown in the Referral-Profile Clicks tab (reusing the
+# existing metadata["channel"] column). An unknown/unlisted code normalizes to
+# "other"; an absent param means no channel key (renders as "Direct").
+SHARE_CHANNEL_PARAM = _str("SHARE_CHANNEL_PARAM", "s")
+SHARE_CHANNEL_LABELS = {
+    "wa": "WhatsApp",
+    "fb": "Facebook",
+    "x": "X",
+    "li": "LinkedIn",
+    "tg": "Telegram",
+    "ig": "Instagram",
+    "email": "Email",
+    "copy": "Copy",
+}
+SHARE_CHANNEL_OTHER = "other"
+
+
+def normalize_share_channel(raw: str | None) -> str | None:
+    """Map a raw ?s= value to its canonical Channel label (config-driven).
+
+    Returns None for an absent/blank param, the mapped label for a known code, or
+    "other" for an unknown non-blank code. Case-insensitive on the code.
+    """
+    if not raw:
+        return None
+    code = raw.strip().lower()
+    if not code:
+        return None
+    return SHARE_CHANNEL_LABELS.get(code, SHARE_CHANNEL_OTHER)
+
+
 @dataclass(frozen=True)
 class FeatureFlags:
     """Immutable snapshot of feature flags, resolved from env at startup.

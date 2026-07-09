@@ -95,17 +95,24 @@ def _get_or_create_partner_direct_referral(tenant, program) -> Referral:
     return referral
 
 
-def _record_event(*, tenant, referral, visitor_id, user_agent, raw_ip, event_type, source):
+def _record_event(
+    *, tenant, referral, visitor_id, user_agent, raw_ip, event_type, source, share_channel=None
+):
     """Write an immutable event + (if raw_ip) the SEPARATE erasable PII record.
 
     PII (raw IP) goes ONLY to VisitorPII; the event carries person_ref_id by id.
     Every event carries a source/origin tag (#18). Returns the created Event so
     callers (landing) can reference it (e.g. the beacon).
+
+    `share_channel` (M11) is the normalized channel LABEL (e.g. "WhatsApp") from the
+    `?s=` param — a non-PII attribution tag stored in metadata["channel"], reusing the
+    Referral-Profile Clicks "Channel" column. None -> no channel key (renders "Direct").
     """
     person_ref_id = None
     if raw_ip:
         pii = VisitorPII.objects.create(tenant=tenant, visitor_id=visitor_id or "", raw_ip=raw_ip)
         person_ref_id = pii.pk
+    metadata = {"channel": share_channel} if share_channel else {}  # NEVER PII (CI-enforced)
     return Event.objects.create(
         tenant=tenant,
         event_type=event_type,
@@ -117,18 +124,22 @@ def _record_event(*, tenant, referral, visitor_id, user_agent, raw_ip, event_typ
         is_bot=False,
         is_confirmed_human=False,  # promoted only by the JS confirmation beacon
         person_ref_id=person_ref_id,
-        metadata={},  # NEVER PII (CI-enforced)
+        metadata=metadata,
     )
 
 
-def handle_landing_view(*, tenant, client_id: str, visitor_id, user_agent, raw_ip):
+def handle_landing_view(*, tenant, client_id: str, visitor_id, user_agent, raw_ip, share_channel=None):
     """Resolve a /r/{client_id} landing view (M3: render page, NOT an immediate 302).
 
     On a human view: lazily create identity+referral, log a `landing_viewed` event
     (append-only, PII-free), record the raw IP on the erasable VisitorPII record,
     and MINT a one-time nonce for the beacon + name reveal. Returns
     (referral, event, nonce). On a bot/preview hit: create NOTHING and return
-    (None, None, None) — the caller renders a generic page with no journey/nonce.
+    (None, None, None) — the caller renders a generic page (with the OG card, M11)
+    with no journey/nonce.
+
+    `share_channel` (M11): the normalized channel label from `?s=`, stamped on the
+    click event only (attribution). A bot/preview hit records nothing regardless.
 
     Written synchronously (not on_commit) because the landing render needs the
     event + nonce; this is the page-render path, not the hot 302.
@@ -141,10 +152,11 @@ def handle_landing_view(*, tenant, client_id: str, visitor_id, user_agent, raw_i
 
     referral = _lazy_get_or_create_referral(tenant, program, client_id)
     # The /r/ hit IS the click; the branded page render is the landing view. Emit
-    # both funnel stages (click precedes landing_viewed). Raw IP recorded once.
+    # both funnel stages (click precedes landing_viewed). Raw IP recorded once. The
+    # share channel (M11) is attributed to the click event.
     _record_event(
         tenant=tenant, referral=referral, visitor_id=visitor_id, user_agent=user_agent,
-        raw_ip=raw_ip, event_type=vocab.CLICK, source=vocab.SRC_CLICK,
+        raw_ip=raw_ip, event_type=vocab.CLICK, source=vocab.SRC_CLICK, share_channel=share_channel,
     )
     event = _record_event(
         tenant=tenant, referral=referral, visitor_id=visitor_id, user_agent=user_agent,
@@ -154,12 +166,14 @@ def handle_landing_view(*, tenant, client_id: str, visitor_id, user_agent, raw_i
     return referral, event, nonce
 
 
-def build_continue_redirect(*, tenant, client_id: str, referral):
+def build_continue_redirect(*, tenant, client_id: str, referral, share_channel=None):
     """Assemble the destination for "Continue to Zerodha" and log redirect_completed.
 
     Returns the destination URL for a 302. The redirect_completed write goes on
     transaction.on_commit so it never blocks the 302. Reuses the M2 engine —
-    partner code injected server-side, raw URL never exposed.
+    partner code injected server-side, raw URL never exposed. The `?s=` share channel
+    (M11) is captured on the redirect_completed event but NEVER added to the
+    destination (assembled from the template, so `s` can't leak into the Location).
     """
     program = _active_program(tenant)
     destination = assemble_destination(program, client_id=client_id)
@@ -168,13 +182,19 @@ def build_continue_redirect(*, tenant, client_id: str, referral):
             lambda: _record_event(
                 tenant=tenant, referral=referral, visitor_id=None, user_agent="",
                 raw_ip=None, event_type=vocab.REDIRECT_COMPLETED, source=vocab.SRC_REDIRECT,
+                share_channel=share_channel,
             )
         )
     return destination
 
 
-def handle_partner_direct(*, tenant, visitor_id, user_agent, raw_ip):
-    """Resolve a /open hit. Returns (destination_url, is_human_click)."""
+def handle_partner_direct(*, tenant, visitor_id, user_agent, raw_ip, share_channel=None):
+    """Resolve a /open hit. Returns (destination_url, is_human_click).
+
+    The assembled destination is built from the program template (no request params),
+    so the `?s=` param is inherently absent from the 302 Location — it is captured for
+    attribution (metadata["channel"]) but never propagated downstream.
+    """
     program = _active_program(tenant)
     destination = assemble_destination(program, client_id=None)
 
@@ -186,7 +206,7 @@ def handle_partner_direct(*, tenant, visitor_id, user_agent, raw_ip):
     transaction.on_commit(
         lambda: _record_event(
             tenant=tenant, referral=referral, visitor_id=visitor_id, user_agent=user_agent,
-            raw_ip=raw_ip, event_type=vocab.CLICK, source=vocab.SRC_CLICK,
+            raw_ip=raw_ip, event_type=vocab.CLICK, source=vocab.SRC_CLICK, share_channel=share_channel,
         )
     )
     return destination, True
