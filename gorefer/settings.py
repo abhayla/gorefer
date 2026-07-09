@@ -46,7 +46,9 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 if os.environ.get("DJANGO_BEHIND_TLS_PROXY", "false").strip().lower() in {"1", "true", "yes", "on"}:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "true").strip().lower() in {"1", "true", "yes", "on"}
+    SECURE_SSL_REDIRECT = os.environ.get(
+        "DJANGO_SECURE_SSL_REDIRECT", "true"
+    ).strip().lower() in {"1", "true", "yes", "on"}
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 

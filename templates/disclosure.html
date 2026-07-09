@@ -1,0 +1,56 @@
+<!doctype html>
+{% comment %}
+Per-sub-broker disclosure page /d/{slug} (B2 / ADR-031) — the canonical §4.4 host.
+Renders each ACTIVE partner's regulator-mandated identification block + verbatim
+market-risk warning, in regulator order (SEBI/NSE → IRDAI → RBI). Config-driven
+(disclosure_service.compose_disclosures); NO PII; NO partner code / raw Zerodha URL.
+Standalone (does NOT extend landing_base) — this is compliance, not the landing/
+incentive surface. Reuses the PIFS head/header partials for a consistent skin.
+{% endcomment %}
+<html lang="en">
+<head>
+  <title>Disclosures — {{ sub_broker_name }}</title>
+  {% include "partials/pifs_head.html" %}
+  <meta name="robots" content="index,nofollow" />
+</head>
+<body class="bg-bg font-sans text-ink-900 min-h-screen text-[13px]">
+  <div class="mx-auto max-w-md md:max-w-lg bg-white min-h-screen md:my-6 md:rounded-2xl md:card md:border md:border-line overflow-hidden">
+    {% include "partials/pifs_header.html" %}
+
+    <section class="px-5 pt-6 pb-2">
+      <h1 class="text-[20px] leading-snug font-extrabold tracking-tight text-ink-900">
+        Regulatory disclosures
+      </h1>
+      <p class="mt-1.5 text-xs text-ink-500 leading-relaxed">
+        Mandatory disclosures for {{ sub_broker_name }} and its partner programs.
+      </p>
+    </section>
+
+    <section class="px-5 pt-2 pb-6 space-y-4">
+      {% for block in disclosure_blocks %}
+        <div class="rounded-2xl bg-cobalt-50 border border-line p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="h-2 w-2 rounded-full bg-cobalt-600"></span>
+            <span class="text-[11px] font-bold uppercase tracking-wider text-ink-700" data-gr="regulator">
+              {{ block.regulator_label }}
+            </span>
+          </div>
+          {% comment %}Identification + market-risk text, rendered VERBATIM from the
+          single config source (byte-exact — no wording drift).{% endcomment %}
+          <p class="text-[10.5px] leading-relaxed text-ink-500" data-gr="identification">{{ block.identification }}</p>
+          {% if block.risk %}
+            <p class="text-[10.5px] leading-relaxed text-ink-500 mt-1.5" data-gr="risk">{{ block.risk }}</p>
+          {% endif %}
+        </div>
+      {% empty %}
+        <div class="rounded-2xl bg-cobalt-50 border border-line p-4">
+          <p class="text-[10.5px] leading-relaxed text-ink-500">
+            No active partner programs are currently configured for this sub-broker.
+          </p>
+        </div>
+      {% endfor %}
+      <p class="text-center text-[10px] text-ink-300 mt-4">© {{ sub_broker_name }}</p>
+    </section>
+  </div>
+</body>
+</html>
