@@ -293,7 +293,12 @@ class Lead(AuditedModel, SoftDeleteModel, TenantScopedModel):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="new")
     status_source = models.CharField(max_length=20, blank=True, default="")  # 'zoho' when imported (M6)
     submitted_by = models.CharField(max_length=12, choices=SUBMITTED_BY_CHOICES, default="friend")
+    # How this lead entered GoRefer — e.g. 'landing' (self-serve form) or
+    # 'whatsapp_assisted' (B4 / ADR-033: referrer asked us to reach their friend).
+    lead_source = models.CharField(max_length=32, blank=True, default="landing")
     consent = models.BooleanField(default=False)
+    # DPDP: when consent was captured (third-party PII in the assisted branch).
+    consent_captured_at = models.DateTimeField(null=True, blank=True)
     zoho_lead_id = models.CharField(max_length=64, null=True, blank=True, unique=True)
     account_opened_at = models.DateTimeField(null=True, blank=True)  # TRUE Zoho date (M6)
 
