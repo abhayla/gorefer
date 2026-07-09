@@ -929,3 +929,24 @@ Full suite **188 passed** on Postgres (172 baseline + 16); ruff clean; `makemigr
 Full suite **197 passed** on Postgres (172 + 16 B1 + 9 B2); `ruff check .` clean (incl. a drive-by wrap of a **pre-existing** E501 at `settings.py:49` from the WM-DEPLOY TLS commit — flagged, not B2 scope); `makemigrations --check` → no drift beyond `0005`; write flags OFF; Postgres-only.
 
 **Note for the independent tester:** `/d/pifs` live checks land at the end-of-Track-B deploy (batched). Interim `/d/pifs` renders the Zerodha SEBI/NSE block; multi-partner composition is wired and tested but only Zerodha is seeded live. Next: **B3 — `LANDING_MODE = page|direct` + derived `MESSAGE_DISCLOSURE_LEVEL` coupling.** — Engineer
+
+---
+
+### 2026-07-09 — FROM ENGINEER — STATUS — B3 DONE — `LANDING_MODE = page|direct` + derived `MESSAGE_DISCLOSURE_LEVEL` (ADR-032)
+
+**B3 built on the same branch and green locally (12 new tests; full suite 209 passed on Postgres; `ruff check .` clean; no model/migration). The per-tenant landing bypass is in, and the §3(b) coupling is enforced so a bypass link can never ship without a disclosure host. Deploy still batched to end of Track B.**
+
+**What it does.** Per-tenant `LANDING_MODE` (config cascade, ADR-022):
+- **`page`** (default): `/r/{client_id}` renders the PIFS landing (today's behaviour).
+- **`direct`**: `/r/{client_id}` **logs the click on `transaction.on_commit` then 302s straight to Zerodha**, skipping the landing. Channel/`?s` captured for attribution but **stripped from the `Location` by construction** (destination assembled server-side from the program template); code server-side. Applies to both `/r/{id}` and the B1 `/r/{channel}/{id}` forms. A bot/preview hit creates no journey.
+- **`MESSAGE_DISCLOSURE_LEVEL` is DERIVED, not free-set** (`apps/referrals/landing_mode.py` is the single place it's computed): **`full` iff `direct` AND no live `/d/{slug}` host; else `light`**. `assert_disclosure_coupling()` **refuses** a stored `direct` + `light` + no-`/d/` override (`DisclosureCouplingError`) — the bypass-without-disclosure gap can't be configured open.
+
+**Guardrail tests (S2-03 §11 / S2-04 §B3) — 12, all green** (`tests/test_b3_landing_mode.py`):
+- `page` → `/r/RJ4521` = **200** landing + `landing_viewed`.
+- `direct` → `/r/RJ4521` = **302** `…/api/lead/?c=ZMPHZC&r=RJ4521`, **click logged on-commit, NO `landing_viewed`** (page skipped).
+- `direct` **strips channel from the 302** for both `/r/wa/RJ4521` (path) and `/r/RJ4521?s=fb` (query) — `Location` clean, yet the click carries `channel=WhatsApp`/`Facebook`; no `ZMPHZC` in the (empty) 302 body; a bot → 302 with **no click/journey**.
+- Derived level: `light` in page mode; `light` when `direct` + live `/d/` host; **`full` when `direct` + host off**; coupling **raises** on `direct`+`light`+no-`/d/`, and is a no-op when the host is live or in page mode.
+
+Config-over-code: keys resolve via the ADR-022 cascade (code defaults `page` / host-enabled; a `ConfigGlobal` row swings it per-tenant). Full suite **209 passed** (197 + 12); `ruff check .` clean; `makemigrations --check` → no new drift; write flags OFF; Postgres-only.
+
+**Note for the independent tester:** `LANDING_MODE` live behaviour is verifiable after the end-of-Track-B deploy; prod stays `page` (default) unless a tenant override is set. Next: **B4 — `POST /api/wati/webhook` assisted capture → Zoho lead (behind `ENABLE_ZOHO_WRITE`, log-only in demo) + DPDP consent flag.** — Engineer
