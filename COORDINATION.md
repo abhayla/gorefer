@@ -973,3 +973,25 @@ Full suite **219 passed** on Postgres (172 + 16 B1 + 9 B2 + 12 B3 + 10 B4); `ruf
 
 #### ✅ Track B code complete — deploy is next (batched, per Abhay)
 B1–B4 are all committed on `sprint2-track-b-referral-ux` with the full guardrail suite green (219). Per Abhay's instruction the **prod deploy was batched to the end** (prod stayed on stable `main` `0c8c348` throughout the build — I rolled back the one interim B1 deploy). **The whole branch now deploys in one pass** (merge to main → `git archive` → `migrate` (0005+0006) → `collectstatic` → `systemctl restart gorefer`), after which the S2-04 **live `gorefer.in`** checks for B1 (`/r/wa/{id}`), B2 (`/d/pifs`), B3 (`LANDING_MODE`), B4 (`/api/wati/webhook`) become verifiable end-to-end. Ready to run that deploy on your go. — Engineer
+
+---
+
+### 2026-07-09 — FROM ENGINEER — STATUS — TRACK B (B1–B4) IS LIVE ON PROD for verification — **`main` NOT merged (rollback point held)**
+
+**Deployed branch `sprint2-track-b-referral-ux` (HEAD `d4820ef`) to the Hostinger box `72.61.240.224` for your independent live verification. `main` stays at `0c8c348` — NOT merged — so rollback is simply "redeploy main." All three requested edge checks are green, plus behavioural confirmation. Write flags stay OFF; Postgres-only.**
+
+#### Deploy (branch, not a merge)
+- `git archive sprint2-track-b-referral-ux HEAD` → box → extracted over `/var/www/gorefer` (`.env`/`.venv`/`staticfiles` preserved) → `chown www-data`. `DEPLOYED_SHA = d4820ef` (branch); **`main` on GitHub + the local `main` ref remain `0c8c348`** — the rollback point is untouched.
+- **`migrate` applied `0005` (disclosure fields) + `0006` (Lead consent/lead_source)** cleanly. `collectstatic` OK. `gorefer.service` + `gorefer-qcluster.service` + nginx all **active**. `seed_program` re-run (idempotent); the live Zerodha program carries `regulator=sebi_nse` (migration default).
+
+#### Live verification through the Cloudflare edge (public DNS → `server: cloudflare`, `cf-ray`)
+- **`https://gorefer.in/r/RJ4521?s=wa` → 200** (legacy `?s=` form). ✓
+- **`https://gorefer.in/r/wa/RJ4521` → 200** (B1 new channel-path route). ✓ — and a live hit recorded a click with **`channel=WhatsApp`** (channel from the PATH).
+- **`https://gorefer.in/d/pifs` → 200** (B2 disclosure page). ✓ — body carries the **SEBI/NSE** identification (`INZ000031633`, AP `AP2516003693`) + the verbatim market-risk warning; **no `ZMPHZC` / `signup.zerodha.com`**.
+- Bonus: **`https://gorefer.in/r/wa/RJ4521/continue` → 302** → `…/api/lead/?c=ZMPHZC&r=RJ4521` — **channel stripped, clean Location**.
+
+#### Guardrails / flags on the live box
+- `ENABLE_ZOHO_WRITE=false`, `ENABLE_ZOHO_READ=false`, `ENABLE_WATI_SEND=false` (all OFF). Postgres-only; `DEBUG=false`. No partner-code/raw-Zerodha-URL leak on `/r/wa/…` or `/d/pifs` bodies.
+- `LANDING_MODE` defaults `page` live (no tenant override set), so `/r/{id}` still renders the landing; `direct` is available per-tenant when you want to test it. `/api/wati/webhook` is live and auth-gated (401 without `X-Wati-Webhook-Key`); it needs `WATI_WEBHOOK_KEY` set in the box `.env` to accept a real assisted-capture post — say the word and I'll set it for your E2E, or the tester can hit it with the key.
+
+**Over to the DA / independent tester for the S2-04 live pass** (B1 `/r/wa/{id}` channel + clean 302; B2 `/d/pifs` blocks + no PII/leak; B3 `LANDING_MODE` both branches; B4 `/api/wati/webhook` → one Zoho lead + consent, deduped, no password). **`main` is NOT merged — I'll merge only on your explicit go after verification passes.** Rollback if needed = redeploy `main` (`0c8c348`). — Engineer
