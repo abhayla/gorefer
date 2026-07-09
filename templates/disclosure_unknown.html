@@ -1,0 +1,25 @@
+<!doctype html>
+{% comment %}
+Branded 404 for /d/{slug} when the slug maps to no active sub-broker (never a raw
+error). No PII, no partner code / Zerodha URL.
+{% endcomment %}
+<html lang="en">
+<head>
+  <title>Disclosures not found — PIFS</title>
+  {% include "partials/pifs_head.html" %}
+  <meta name="robots" content="noindex,nofollow" />
+</head>
+<body class="bg-bg font-sans text-ink-900 min-h-screen text-[13px]">
+  <div class="mx-auto max-w-md md:max-w-lg bg-white min-h-screen md:my-6 md:rounded-2xl md:card md:border md:border-line overflow-hidden">
+    {% include "partials/pifs_header.html" %}
+    <section class="px-5 pt-8 pb-6 text-center">
+      <h1 class="text-[20px] leading-snug font-extrabold tracking-tight text-ink-900">
+        Disclosures not found
+      </h1>
+      <p class="mt-2 text-sm text-ink-500 leading-relaxed">
+        We couldn't find a disclosure page for this address. Please check the link.
+      </p>
+    </section>
+  </div>
+</body>
+</html>

@@ -267,4 +267,76 @@ COMPLIANCE LOCK: SEBI/NSE disclosure + market-risk warning are locked at CENTRAL
   - The `/r/{client_id}` **redirect is a sync Django view**: format-validate → 302, with the click/journey write handed to `transaction.on_commit()` (or the light queue) so it never blocks; idempotency via unique constraints (ADR-021, review #11).
   - The **admin dashboard** leverages a customized Django admin + HTMX (per ADR-022/ADR-014, the compliance block is injected via middleware + a template tag and is non-removable).
   - **Multi-tenancy = single-schema `tenant_id` discriminator (DECIDED; resolves Q-M1-1):** every tenant-scoped row carries `tenant_id` (matches ADR-023 + the 05-Database-Design composite keys). Isolation is enforced by **tenant-scoped model managers + a tenant-resolution middleware + composite unique constraints**, NOT by Postgres schema-per-tenant. `django-tenants` / schema routing is NOT the mechanism (a plain `Tenant`/`Domain` registry suffices). Schema-per-tenant or a per-tenant DB is DEFERRED (backlog **DF-7**), an option only if a future tenant demands physical isolation. Start with one bootstrap tenant (PIFS).
-  - **Revisit trigger:** if GoRefer ever pivots to an API-fir
+  - **Revisit trigger:** if GoRefer ever pivots to an API-first customer SPA, or hits scale/physical-isolation limits that single-schema `tenant_id` cannot serve, revisit FastAPI (the recorded, equally-safe close second) and/or schema-per-tenant (backlog DF-7). Until then, Django + Django Ninja + HTMX + Tailwind + Postgres with `tenant_id` isolation stands.
+
+---
+
+> **Note (DA, 2026-07-09):** the ADR-024 truncation is fixed above, and ADR-025–030 are now written up below (they were previously only grounded in the S2-01/S2-02 specs + COORDINATION/commit history). Track-B ADRs (028-ext, 031, 032, 033) follow.
+
+---
+
+## ADR-025 — A public referral share carrying `c=ZMPHZC` is a PIFS advertisement (hard gates)
+- **Status:** Locked (2026-07-08). Basis: `docs/sprint2/S2-01` §4/§13; NSE/COMP/55482 §3.2, §4.1/4.2, cl.15.
+- **Context:** A referral link/creative broadcast to a non-1:1 audience while carrying the AP partner code is advertising by an Authorised Person, which an AP cannot self-approve.
+- **Decision:** Treat every public share creative as a PIFS advertisement: (a) **Zerodha written pre-approval required before go-live** (external gate — build/demo behind it); (b) the SEBI/NSE **disclosure + market-risk block is baked into every creative and un-removable**; (c) **no paid/sponsored boosting** and no context-free link spam; (d) the reward wording lives behind a **single config toggle** (`SHARE_SHOW_REWARD`, default off) so it flips without code if Zerodha approves it. A genuine 1:1 client share is lighter (see the §4.4 determination in `Wati-Project/wati-automation-inventory.md` §5d).
+- **Consequences:** software ships fully but stays behind the approval gate; disclosures cannot be weakened by lower config tiers (ADR-022 compliance lock).
+
+## ADR-026 — One role-scoped Referral Profile template (admin/self via masking)
+- **Status:** Locked (2026-07-08). Basis: `S2-01` §5.1/§13.
+- **Context:** Both an admin (full PII, any referrer) and a self-service referrer (own record only) need a profile view; two separate screens would drift.
+- **Decision:** **One template**, role-scoped by config: admin role → full detail + admin chrome; referrer role → locked to own record, `PII_MASK_FOR_CUSTOMER_VIEW` on, admin chrome hidden, a prominent Share action. The Share **Launcher** is a **separate** share-only surface (customize + share, no stats). Difference is config (role → masking + action visibility), not code.
+- **Consequences:** self-service profile is Sprint-3-gated behind `ENABLE_CUSTOMER_LOGIN`; no divergent second screen to maintain.
+
+## ADR-027 — Customer identity: Google OAuth + Client-ID binding, Zoho-verified, admin fallback
+- **Status:** Locked (2026-07-08); **build deferred to Sprint 3** (S2-02 rescope). Basis: `S2-01` §8/§13.
+- **Context:** Referrers need self-serve login bound to their Zerodha Client ID, without any Zerodha API and without handling Zerodha passwords.
+- **Decision:** Google OAuth sign-in; on first login the referrer enters Client ID + registered mobile; **auto-bind if the Google email OR the entered mobile matches the Zoho record** for that Client ID (both normalized); mismatch → a **pending-verification** state routed to an admin queue (Ashok approves/rejects). No Zerodha API; no Zerodha password ever handled; mobile-OTP self-verify deferred (DF-6).
+- **Consequences:** flips `ENABLE_CUSTOMER_LOGIN`; anti-impersonation gate needs no external API; additional providers later.
+
+## ADR-028 (base) — Share attribution via `?s=` channel tag, recorded then stripped pre-redirect
+- **Status:** Locked (2026-07-08); implemented in M11. Basis: `S2-01` §7. **Extended by ADR-028 (B1)** for the path-prefix form.
+- **Context:** Each share surface must be attributable without leaking anything into the outbound Zerodha URL.
+- **Decision:** Each share appends `?s={platform}` (`wa, fb, x, li, tg, ig, email, copy`; param name config, `SHARE_CHANNEL_PARAM`). `/r/{client_id}` records `s` as the click's share-channel (reuses the Sprint-1 Channel column), then **strips it before the 302** to Zerodha. Preview crawlers get the OG card but are excluded from human-click counts.
+- **Consequences:** per-channel analytics per referrer; the Zerodha 302 Location stays clean; the WhatsApp-button limitation is handled by the path-prefix extension (ADR-028 B1).
+
+## ADR-029 — WhatsApp-native referral amplification (Wati quick-reply → GoRefer webhook → session kit)
+- **Status:** Locked (2026-07-08). Basis: `S2-02` §2/§12.
+- **Context:** For the WhatsApp sprint, a referrer should get a ready-to-forward kit inside WhatsApp rather than via a web launcher.
+- **Decision:** PIFS nudges opted-in clients with a Wati template; a **quick-reply button** opens the 24h session; the tap routes (Wati keyword/flow, or a webhook to GoRefer) to deliver the forwardable kit (image + caption + `gorefer.in/r/{client_id}?s=wa` + disclosures) via session messages. Chosen over the multi-platform web launcher (deferred to Sprint 3), which is not discarded.
+- **Consequences:** GoRefer's job shrinks to the tracked redirect (+ optional ingest); the delivered kit is a free session message (uncapped), avoiding the MARKETING 131049 cap on the kit itself.
+
+## ADR-030 — Wati template variable convention + route via `gorefer.in`, never direct-to-Zerodha
+- **Status:** Locked (2026-07-08). Basis: `S2-02` §3/§12; memory `wati-setup-reference`.
+- **Context:** The legacy Wati referral template exposed `c=ZMPHZC` in a button URL straight to `signup.zerodha.com` and bypassed click tracking; variable naming was inconsistent.
+- **Decision:** Named variable convention **`{{name}}`, `{{client_id}}`** (never "ID"); reward wording baked from config at submit time, not a runtime var. GoRefer **routes the referral button through `gorefer.in/r/{client_id}` (never direct-to-Zerodha)** so the partner code is injected server-side (hidden) and every click is tracked. A whole-template must use one variable format (named), enforced 2026-07-09.
+- **Consequences:** partner code never appears in a client-facing URL; per-referrer attribution + click tracking preserved; template naming convention `gorefer_{partner}_{purpose}_{YYYY_MM_DD}`.
+
+---
+
+## ADR-028 (extended, B1) — Share channel carried as a URL path prefix `/r/{channel}/{client_id}`
+
+- **Status:** Locked (2026-07-09), extends ADR-028 (the M11 `?s=` share-channel capture/strip).
+- **Context:** WhatsApp dynamic URL buttons require the template variable to be the LAST path/query token, so `?s=wa` cannot trail `{{client_id}}` in a button URL like `gorefer.in/r/{{client_id}}`. The `wa` attribution tag therefore cannot ride as a query param on that button.
+- **Decision:** Accept the share channel ALSO as a **leading path segment** — `GET /r/{channel}/{client_id}` (e.g. `/r/wa/RJ4521`) — in addition to the legacy `/r/{client_id}?s=`. The channel is read from the path, normalized through the same config-driven map (`wa→WhatsApp … unknown→other`), recorded as the click's `metadata["channel"]`, and **stripped before the 302** by construction (the destination is assembled server-side from the program template). A narrow `{channel}` path converter (1–8 lowercase letters) ensures the segment can never shadow a client_id or the `continue` route.
+- **Consequences:** the pending `gorefer_zerodha_referral_2026_07_09` template's URL button (`/r/wa/{{client_id}}`) keeps `wa` attribution; no schema change (reuses the Sprint-1 Channel column); legacy `?s=` form unchanged.
+
+## ADR-031 (B2) — Per-sub-broker Disclosure Page `/d/{slug}` as the canonical §4.4 host
+
+- **Status:** Locked (2026-07-09).
+- **Context:** A light WhatsApp message and a `direct`-bypass link (ADR-032) do not inline the full SEBI/NSE AP identification block; NSE §4.4 permits this only if a **linked page** carries the full prescribed disclosures. A single, durable host for those disclosures is needed — one that also composes multiple regulators for a sub-broker who does securities + insurance + loans.
+- **Decision:** A public per-sub-broker page **`GET /d/{slug}`** (e.g. `/d/pifs`) composes each **active** partner/program's regulator-mandated disclosure block for that tenant, in **regulator order** (SEBI/NSE → IRDAI → RBI → other), filled with the tenant's own values. Content is **config-driven** (each program carries a `disclosure_template` + `regulator` + `disclosure_sequence`; blank template → the canonical central AP block + market-risk warning). **No PII**; **no partner code / raw Zerodha URL**; the view writes no event, so a crawler hit is inherently excluded from human counts. It is **distinct** from the profile/preference surface.
+- **Consequences:** a new partner/regulator is a data row, not code; a lapsed partnership's block drops off; the message/`direct` link can point here and stay compliant.
+
+## ADR-032 (B3) — `LANDING_MODE` per-tenant bypass + DERIVED `MESSAGE_DISCLOSURE_LEVEL`
+
+- **Status:** Locked (2026-07-09).
+- **Context:** Some sub-brokers want a frictionless `/r/{id}` that redirects straight to Zerodha (no landing page); but the landing page is currently the disclosure host, so bypassing it risks a "light message + no disclosure host" compliance gap (§3b).
+- **Decision:** Per-tenant **`LANDING_MODE = page | direct`** (config cascade, default `page`). `direct` logs the click on `transaction.on_commit` then 302s straight to Zerodha (channel/`?s` stripped, code server-side, landing skipped). **`MESSAGE_DISCLOSURE_LEVEL` is DERIVED, never free-set**: `full` iff `direct` AND no live `/d/{slug}` host; else `light`. A hand-set `direct`+`light`+no-`/d/` combination is **refused** (`DisclosureCouplingError`) so the bypass-without-disclosure gap cannot be configured open. Depends on ADR-031.
+- **Consequences:** frictionless conversion for tenants that want it, with the disclosure coupling enforced in one place; guardrails (no partner code in body, clean 302) unchanged.
+
+## ADR-033 (B4) — Assisted-referral capture via `POST /api/wati/webhook` → Zoho lead
+
+- **Status:** Locked (2026-07-09).
+- **Context:** The referrer "Refer directly (we'll assist)" branch captures a prospect's Name + Mobile (Email optional) so Ashok can follow up — third-party PII with a DPDP consent obligation. The old multi-broker flow's version of this had a consent gap.
+- **Decision:** The Wati flow POSTs `{client_id (referrer), name, mobile, email?, consent?}` to **`POST /api/wati/webhook`** (auth: static key + IP allowlist, HMAC wax-seal deferred DF-2). GoRefer lazily resolves/creates the referrer identity+referral, then creates **one Zoho lead** through the **same capture-first pipeline** as the landing form (`capture_lead`, behind `ENABLE_ZOHO_WRITE` — log-only in demo), marked `lead_source=whatsapp_assisted`, `submitted_by=referrer`, with `consent` + `consent_captured_at` (DPDP). **Never a password** (credential-shaped fields rejected at the edge and in the service); **deduped** on (referral, prospect mobile); PII stays on the erasable Prospect/Lead, never in the immutable event log; status never set here (Zoho only, guardrail #2).
+- **Consequences:** one lead pipeline (not two); assisted referrals re-added with the consent guardrail; "forward the link" stays the primary CTA.

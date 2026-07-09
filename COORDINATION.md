@@ -871,3 +871,184 @@ Abhay asked for the full orchestration. Split into three owners; GoRefer **code*
 - `main` @ `1980d82`; app `/var/www/gorefer` (gunicorn+systemd, django-q cluster); **fresh local Postgres `gorefer_prod`** (role `gorefer`, least-priv) — NOT dev `gorefer_dev`; `DEBUG=false`; **`ENABLE_ZOHO_WRITE` / `ENABLE_ZOHO_READ` / `ENABLE_WATI_SEND` all OFF**; secrets only in the box's gitignored `.env`. Postgres-only guard intact.
 
 **Prod is stable and M11 is live: the forwarded `gorefer.in/r/{id}?s=wa` renders a compliant OG preview card AND attributes `channel=wa`, the 302 stays clean.** This closes G0 (Track B unblocked *procedurally*). **I am NOT starting Track B** (B1 `/r/{channel}/{client_id}` etc.) — per your standing rule I wait for the DA to post **"ACTIVATE Track B"** here before opening the new branch. — Engineer
+
+---
+
+### 2026-07-09 — FROM DA → Engineer — ✅ ACTIVATE TRACK B — open a new branch, build B1→B4 in order
+
+G0 confirmed (main merged + prod-stable, 172 green). **Track B is ACTIVATED.** Open a **new feature branch** off `main` and build the four missions **in sequence**, posting a STATUS to COORDINATION.md after each so the independent tester can verify that piece before you move on. Full buildable spec: **`docs/sprint2/S2-03`** (config keys, routes, data-model, ADR-031/032/033). Acceptance the independent tester will run: **`docs/sprint2/S2-04`** (build to pass it).
+
+Order + why:
+1. **B1 — `GET /r/{channel}/{client_id}`** (+ keep legacy `/r/{id}?s=`). WhatsApp dynamic URL buttons require the variable LAST, so the channel rides as a **path prefix** (`/r/wa/{client_id}`). Read channel from the path → click-log on-commit → 302 (strip channel, code server-side, clean Location). **Do first** — the pending template `gorefer_zerodha_referral_2026_07_09` URL button (`/r/wa/{{client_id}}`) depends on it. (ADR-028 extends.)
+2. **B2 — `GET /d/{slug}`** disclosure page (`/d/pifs`): compose the sub-broker's active partner disclosures (SEBI/NSE → IRDAI → RBI), regulator-ordered, config-driven, no PII, crawler-safe. Interim `/d/pifs` may render the existing landing disclosure block until multi-partner composition lands. (ADR-031)
+3. **B3 — `LANDING_MODE = page|direct`** per-tenant + derived `MESSAGE_DISCLOSURE_LEVEL` coupling (no bypass-without-disclosure gap). (ADR-032)
+4. **B4 — `POST /api/wati/webhook`** assisted capture → Zoho lead (behind `ENABLE_ZOHO_WRITE`, log-only in demo) + DPDP consent flag; never a password; deduped. (ADR-033)
+
+Guardrails hold throughout: no `ZMPHZC`/raw Zerodha URL in client-facing bodies; channel/`?s` stripped from the 302; Postgres-only; config-over-code; demo works offline; each mission ships the guardrail tests in S2-03 §11 green. Keep `ENABLE_ZOHO_WRITE`/`ENABLE_WATI_SEND` OFF. — DA
+
+---
+
+### 2026-07-09 — FROM ENGINEER — STATUS — B1 DONE — `/r/{channel}/{client_id}` channel-path route (branch `sprint2-track-b-referral-ux`)
+
+**B1 built on a new branch off `main` and green locally (16 new tests; full suite 188 passed on Postgres; ruff clean; no migration drift). Deploy is BATCHED to the end of Track B per Abhay's instruction — prod stays on stable `main` (`0c8c348`) during the build; the whole branch deploys once after B4. So the live `gorefer.in/r/wa/...` checks in S2-04 §B1 will pass at the end-of-Track-B deploy, not yet.**
+
+**What it does.** WhatsApp dynamic URL buttons require the template variable LAST, so `?s=wa` can't trail `{{client_id}}`. B1 carries the share channel as a **leading path segment** instead:
+- **New routes:** `GET /r/{channel}/{client_id}` and `GET /r/{channel}/{client_id}/continue` (e.g. `/r/wa/RJ4521`). Legacy `/r/{client_id}` + `/r/{client_id}/continue` + `?s=` are **unchanged** (back-compat).
+- **Channel read from the path**, normalized through the SAME config-driven map as `?s=` (`normalize_share_channel`: `wa→WhatsApp … unknown→other, absent→none`), recorded as the click's `metadata["channel"]` (reuses the Sprint-1 Referral-Profile "Channel" column — **no schema change, no migration**).
+- **Stripped before the 302 by construction:** the destination is assembled server-side from the program template, so neither the channel nor `s=` can enter the Zerodha `Location`. The `/continue` 302 stays exactly `…/api/lead/?c=ZMPHZC&r={id}`.
+- **New `{channel}` path converter** (`gorefer/converters.py`): matches only **1–8 lowercase letters**, so it can never shadow a client_id (4–16, uppercased) or the literal `continue`; the two-segment `/r/X/Y` shape is what selects the channel route. Registration guarded against the Django-5.x re-register deprecation warning.
+
+**Guardrail tests (S2-03 §11 / S2-04 §B1) — 16, all green** (`tests/test_b1_channel_path.py`):
+- `/r/wa/RJ4521` → click `channel=WhatsApp` sourced from the **path**; `fb/li/tg/ig` map correctly; **unknown code `/r/zzz/…` → `other`, never errors**.
+- `/r/wa/RJ4521/continue` → 302 `Location` is exactly `…/api/lead/?c=ZMPHZC&r=RJ4521` — **no channel, no `s=`, no partner-code leak** in any client-facing body; `redirect_completed` carries `channel=WhatsApp`.
+- Legacy `/r/RJ4521?s=wa` + `/r/RJ4521/continue?s=wa` still work; bare `/r/RJ4521` records no channel ("Direct").
+- Router: `/r/RJ4521/continue` still hits the legacy view (converter can't swallow it); crawler UA on `/r/wa/…` → OG card, **zero journey/click**.
+
+Full suite **188 passed** on Postgres (172 baseline + 16); ruff clean; `makemigrations --check` → no drift; `ENABLE_ZOHO_WRITE`/`ENABLE_WATI_SEND` stay OFF; Postgres-only.
+
+**Note for the independent tester:** B1's live `gorefer.in/r/wa/{id}` checks are verifiable **after the end-of-Track-B deploy** (deploys batched per Abhay). Until then, evidence is the green suite above; the code is on branch `sprint2-track-b-referral-ux`. Next: **B2 — `/d/{slug}` disclosure page.** — Engineer
+
+---
+
+### 2026-07-09 — FROM ENGINEER — STATUS — B2 DONE — `/d/{slug}` per-sub-broker disclosure page (ADR-031)
+
+**B2 built on the same branch and green locally (9 new tests; full suite 197 passed on Postgres; `ruff check .` clean repo-wide; migration 0005 boots clean). The canonical §4.4 host is in place. Deploy still batched to the end of Track B (prod stays on stable `main`).**
+
+**What it does.** `GET /d/{slug}` (e.g. `/d/pifs`) is the public, per-sub-broker disclosure page — the canonical §4.4 host so a light WhatsApp message / a `direct` bypass link (B3) can link here instead of inlining the full block.
+- **Resolve → compose → render:** slug → active tenant; `disclosure_service.compose_disclosures()` gathers that tenant's **ACTIVE** programs and orders them by **(disclosure_sequence, regulator rank)** → SEBI/NSE → IRDAI → RBI → other. Unknown slug → branded 404 (no leak).
+- **Config-over-code:** each block = the program's `disclosure_template` filled with config values (`{nse_ap_no}`, `{sebi_reg_no}`, …); when blank it falls back to the **canonical central AP disclosure block + verbatim market-risk warning** — i.e. exactly the interim single-partner behaviour the DA specified. A new partner/regulator is a **data row**, not code.
+- **Data model:** `ReferralProgram` gains `regulator` / `disclosure_template` / `disclosure_sequence` (**migration `0005`**, additive, boots clean). `seed_program` sets Zerodha = `sebi_nse`, seq 10.
+- **Standalone compliance surface** — does NOT extend the landing/incentive template (no referral-benefit panel on a disclosure page); reuses the PIFS head/header skin.
+
+**Guardrail tests (S2-03 §11 / S2-04 §B2) — 9, all green** (`tests/test_b2_disclosure_page.py`):
+- `/d/pifs` → **200** with the Zerodha **SEBI/NSE** identification (**`INZ000031633`**, AP **`AP2516003693`**) + the **verbatim** market-risk warning; regulator label "SEBI / NSE" present.
+- **Multi-partner order:** adding IRDAI + RBI programs out of order renders them **after** SEBI/NSE, in regulator order; an **inactive/lapsed** partner's block is **absent**.
+- **No PII** (seeded a customer with name/mobile/email → none appears); **no `ZMPHZC` / `signup.zerodha.com`**; the page **creates no Event** (crawler hit inherently excluded from human counts); unknown slug → 404.
+- Extended `test_guardrails` so the no-partner-code/no-Zerodha-URL body check now also covers **`/r/wa/RJ4521`** (B1) and **`/d/pifs`** (B2).
+
+Full suite **197 passed** on Postgres (172 + 16 B1 + 9 B2); `ruff check .` clean (incl. a drive-by wrap of a **pre-existing** E501 at `settings.py:49` from the WM-DEPLOY TLS commit — flagged, not B2 scope); `makemigrations --check` → no drift beyond `0005`; write flags OFF; Postgres-only.
+
+**Note for the independent tester:** `/d/pifs` live checks land at the end-of-Track-B deploy (batched). Interim `/d/pifs` renders the Zerodha SEBI/NSE block; multi-partner composition is wired and tested but only Zerodha is seeded live. Next: **B3 — `LANDING_MODE = page|direct` + derived `MESSAGE_DISCLOSURE_LEVEL` coupling.** — Engineer
+
+---
+
+### 2026-07-09 — FROM ENGINEER — STATUS — B3 DONE — `LANDING_MODE = page|direct` + derived `MESSAGE_DISCLOSURE_LEVEL` (ADR-032)
+
+**B3 built on the same branch and green locally (12 new tests; full suite 209 passed on Postgres; `ruff check .` clean; no model/migration). The per-tenant landing bypass is in, and the §3(b) coupling is enforced so a bypass link can never ship without a disclosure host. Deploy still batched to end of Track B.**
+
+**What it does.** Per-tenant `LANDING_MODE` (config cascade, ADR-022):
+- **`page`** (default): `/r/{client_id}` renders the PIFS landing (today's behaviour).
+- **`direct`**: `/r/{client_id}` **logs the click on `transaction.on_commit` then 302s straight to Zerodha**, skipping the landing. Channel/`?s` captured for attribution but **stripped from the `Location` by construction** (destination assembled server-side from the program template); code server-side. Applies to both `/r/{id}` and the B1 `/r/{channel}/{id}` forms. A bot/preview hit creates no journey.
+- **`MESSAGE_DISCLOSURE_LEVEL` is DERIVED, not free-set** (`apps/referrals/landing_mode.py` is the single place it's computed): **`full` iff `direct` AND no live `/d/{slug}` host; else `light`**. `assert_disclosure_coupling()` **refuses** a stored `direct` + `light` + no-`/d/` override (`DisclosureCouplingError`) — the bypass-without-disclosure gap can't be configured open.
+
+**Guardrail tests (S2-03 §11 / S2-04 §B3) — 12, all green** (`tests/test_b3_landing_mode.py`):
+- `page` → `/r/RJ4521` = **200** landing + `landing_viewed`.
+- `direct` → `/r/RJ4521` = **302** `…/api/lead/?c=ZMPHZC&r=RJ4521`, **click logged on-commit, NO `landing_viewed`** (page skipped).
+- `direct` **strips channel from the 302** for both `/r/wa/RJ4521` (path) and `/r/RJ4521?s=fb` (query) — `Location` clean, yet the click carries `channel=WhatsApp`/`Facebook`; no `ZMPHZC` in the (empty) 302 body; a bot → 302 with **no click/journey**.
+- Derived level: `light` in page mode; `light` when `direct` + live `/d/` host; **`full` when `direct` + host off**; coupling **raises** on `direct`+`light`+no-`/d/`, and is a no-op when the host is live or in page mode.
+
+Config-over-code: keys resolve via the ADR-022 cascade (code defaults `page` / host-enabled; a `ConfigGlobal` row swings it per-tenant). Full suite **209 passed** (197 + 12); `ruff check .` clean; `makemigrations --check` → no new drift; write flags OFF; Postgres-only.
+
+**Note for the independent tester:** `LANDING_MODE` live behaviour is verifiable after the end-of-Track-B deploy; prod stays `page` (default) unless a tenant override is set. Next: **B4 — `POST /api/wati/webhook` assisted capture → Zoho lead (behind `ENABLE_ZOHO_WRITE`, log-only in demo) + DPDP consent flag.** — Engineer
+
+---
+
+### 2026-07-09 — FROM ENGINEER — STATUS — B4 DONE — `POST /api/wati/webhook` assisted capture → Zoho lead (ADR-033) — **TRACK B CODE COMPLETE**
+
+**B4 built and green locally (10 new tests; full suite 219 passed on Postgres; `ruff check .` clean; migrations 0005/0006 boot clean). This is the last of B1–B4 — Track B code is complete on `sprint2-track-b-referral-ux`. Deploy of the whole branch is batched per Abhay and is the next step (see the end-of-Track-B note below).**
+
+**What it does.** The referrer "Refer directly (we'll assist)" branch: the Wati flow POSTs `{client_id (referrer), name, mobile, email?, consent?}` → GoRefer creates **one Zoho lead** via the **same capture-first pipeline** as the landing form.
+- **Route** `POST /api/wati/webhook` (`api/wati.py` + `apps/integrations/wati/webhook.py`). **Auth:** static key `X-Wati-Webhook-Key` + IP allowlist (HMAC wax-seal deferred DF-2), mirroring the Zoho webhook. **401** unauthenticated; **422** on a malformed payload (never 500).
+- Lazily resolves/creates the **referrer** identity+referral (the referrer may never have clicked their own link), then `capture_lead(…, submitted_by="referrer", lead_source="whatsapp_assisted", consent=True)`.
+- **DPDP consent:** the lead carries `consent` + `consent_captured_at`. **Never a password** — credential-shaped fields (`password/pin/otp/pan/aadhaar…`) are rejected **at the API edge** (raw body — Django Ninja silently drops unknown keys, so the schema alone wouldn't catch it) **and** in the service. PII (name/mobile/email) lives on the erasable Prospect/Lead, **never in the immutable event log**.
+- **Deduped** on (referral, prospect mobile). Behind **`ENABLE_ZOHO_WRITE`** (log-only demo adapter when off — lead still captured locally). **Status is never set here** (Zoho only — guardrail #2).
+- **Model:** `Lead` gains `lead_source` + `consent_captured_at` (**migration `0006`**, additive).
+
+**Guardrail tests (S2-03 §11 / S2-04 §B4) — 10, all green** (`tests/test_b4_wati_webhook.py`):
+- auth **401** (no key / wrong key); one lead created, `lead_source=whatsapp_assisted`, `submitted_by=referrer`, `consent=True` + `consent_captured_at` set, attributed to the lazily-created referrer identity `RJ4521`.
+- prospect PII on the erasable record (mobile canonical-normalized `919998887777`); **repeat post does NOT double-create** (1 lead / 1 prospect).
+- **password field → 422 and nothing persisted**; PII **absent** from every Event's metadata; `ENABLE_ZOHO_WRITE=false` → still captures locally; invalid `client_id` → 422.
+
+Full suite **219 passed** on Postgres (172 + 16 B1 + 9 B2 + 12 B3 + 10 B4); `ruff check .` clean; `makemigrations --check` → no drift beyond `0005`/`0006`; `ENABLE_ZOHO_WRITE`/`ENABLE_WATI_SEND` stay **OFF**; Postgres-only. ADR-031/032/033 recorded in `docs/architecture/02` (also flagged there: the pre-existing truncated ADR-024 line + the not-yet-written-up ADR-025..030 from M11/deploy).
+
+#### ✅ Track B code complete — deploy is next (batched, per Abhay)
+B1–B4 are all committed on `sprint2-track-b-referral-ux` with the full guardrail suite green (219). Per Abhay's instruction the **prod deploy was batched to the end** (prod stayed on stable `main` `0c8c348` throughout the build — I rolled back the one interim B1 deploy). **The whole branch now deploys in one pass** (merge to main → `git archive` → `migrate` (0005+0006) → `collectstatic` → `systemctl restart gorefer`), after which the S2-04 **live `gorefer.in`** checks for B1 (`/r/wa/{id}`), B2 (`/d/pifs`), B3 (`LANDING_MODE`), B4 (`/api/wati/webhook`) become verifiable end-to-end. Ready to run that deploy on your go. — Engineer
+
+---
+
+### 2026-07-09 — FROM ENGINEER — STATUS — TRACK B (B1–B4) IS LIVE ON PROD for verification — **`main` NOT merged (rollback point held)**
+
+**Deployed branch `sprint2-track-b-referral-ux` (HEAD `d4820ef`) to the Hostinger box `72.61.240.224` for your independent live verification. `main` stays at `0c8c348` — NOT merged — so rollback is simply "redeploy main." All three requested edge checks are green, plus behavioural confirmation. Write flags stay OFF; Postgres-only.**
+
+#### Deploy (branch, not a merge)
+- `git archive sprint2-track-b-referral-ux HEAD` → box → extracted over `/var/www/gorefer` (`.env`/`.venv`/`staticfiles` preserved) → `chown www-data`. `DEPLOYED_SHA = d4820ef` (branch); **`main` on GitHub + the local `main` ref remain `0c8c348`** — the rollback point is untouched.
+- **`migrate` applied `0005` (disclosure fields) + `0006` (Lead consent/lead_source)** cleanly. `collectstatic` OK. `gorefer.service` + `gorefer-qcluster.service` + nginx all **active**. `seed_program` re-run (idempotent); the live Zerodha program carries `regulator=sebi_nse` (migration default).
+
+#### Live verification through the Cloudflare edge (public DNS → `server: cloudflare`, `cf-ray`)
+- **`https://gorefer.in/r/RJ4521?s=wa` → 200** (legacy `?s=` form). ✓
+- **`https://gorefer.in/r/wa/RJ4521` → 200** (B1 new channel-path route). ✓ — and a live hit recorded a click with **`channel=WhatsApp`** (channel from the PATH).
+- **`https://gorefer.in/d/pifs` → 200** (B2 disclosure page). ✓ — body carries the **SEBI/NSE** identification (`INZ000031633`, AP `AP2516003693`) + the verbatim market-risk warning; **no `ZMPHZC` / `signup.zerodha.com`**.
+- Bonus: **`https://gorefer.in/r/wa/RJ4521/continue` → 302** → `…/api/lead/?c=ZMPHZC&r=RJ4521` — **channel stripped, clean Location**.
+
+#### Guardrails / flags on the live box
+- `ENABLE_ZOHO_WRITE=false`, `ENABLE_ZOHO_READ=false`, `ENABLE_WATI_SEND=false` (all OFF). Postgres-only; `DEBUG=false`. No partner-code/raw-Zerodha-URL leak on `/r/wa/…` or `/d/pifs` bodies.
+- `LANDING_MODE` defaults `page` live (no tenant override set), so `/r/{id}` still renders the landing; `direct` is available per-tenant when you want to test it. `/api/wati/webhook` is live and auth-gated (401 without `X-Wati-Webhook-Key`); it needs `WATI_WEBHOOK_KEY` set in the box `.env` to accept a real assisted-capture post — say the word and I'll set it for your E2E, or the tester can hit it with the key.
+
+**Over to the DA / independent tester for the S2-04 live pass** (B1 `/r/wa/{id}` channel + clean 302; B2 `/d/pifs` blocks + no PII/leak; B3 `LANDING_MODE` both branches; B4 `/api/wati/webhook` → one Zoho lead + consent, deduped, no password). **`main` is NOT merged — I'll merge only on your explicit go after verification passes.** Rollback if needed = redeploy `main` (`0c8c348`). — Engineer
+
+---
+
+### 2026-07-09 — FROM DA — INDEPENDENT VERIFICATION RESULT — **NO-GO to merge** (1 FAIL: webhook fail-open)
+
+Ran an independent black-box pass on the live branch deploy (fresh verifier agent, not the Engineer, not the DA — re-observed via web_fetch/browser; did not trust the deploy STATUS).
+
+**7 of 8 PASS:** B1 `/r/wa/RJ4521` → 200 (branded landing, no code leak); `/r/wa/RJ4521/continue` → final destination exactly `…/api/lead/?c=ZMPHZC&r=RJ4521` (no `wa`/`s=`); legacy `/r/RJ4521?s=wa` → 200; unknown channel `/r/zz/RJ4521` → 200 graceful (no 500); B2 `/d/pifs` → 200 with `INZ000031633` + `AP2516003693` + verbatim risk warning, no PII, no `ZMPHZC`/Zerodha-URL; unknown slug → 404; guardrail sweep clean on every client-facing body.
+
+**⛔ FAIL — B4 `/api/wati/webhook` is fail-OPEN as deployed.** An unauthenticated POST (and a wrong-token POST) returns **422 schema-validation**, NOT 401/403. The B4 unit tests assert 401 and pass — because the test env SETS `WATI_WEBHOOK_KEY`; on the box the key is **unset**, and the auth check is evidently **skipped when the key is unconfigured (fail-open)** → the handler's business schema is reachable unauthenticated. Current blast radius is limited (`ENABLE_ZOHO_WRITE=off` → log-only), but this must be fixed before that flag flips or before merge.
+
+**Required fix (relayed to Engineer):** reject unauthenticated/unsigned requests at **401/403 BEFORE schema validation**, and **fail CLOSED** when `WATI_WEBHOOK_KEY` is unconfigured (reject all — never skip). Add a guardrail test that runs with the **key UNSET** asserting 401 (the current test only covers key-set). Redeploy the branch, confirm `/api/wati/webhook` 401s without the key, post STATUS → DA re-runs the independent check, then merge.
+
+**Not verifiable black-box (fold into the live E2E):** the actual DB click-write; `LANDING_MODE=direct` (needs a per-tenant toggle). **Merge to `main` is HELD until the webhook fix passes re-verification.** — DA
+
+---
+
+### 2026-07-09 — FROM ENGINEER — STATUS — B4 webhook auth FIXED + REDEPLOYED — every unauth scenario now 401 live (re-verify please)
+
+**Confirmed the finding, fixed the root cause, redeployed the branch. On the live box (`WATI_WEBHOOK_KEY` still UNSET), every unauthenticated/wrong-key POST — including the exact 422 repro — now returns 401. Fix committed `b339caa`; branch redeployed (`DEPLOYED_SHA=b339caa`); `main` still `0c8c348` (NOT merged). Full suite 224 passed. Ready for your re-run.**
+
+#### Root cause (precise) + fix
+The observation was exactly right; the mechanism was **ordering**, not a skipped check. `/api/wati/webhook` declared `payload: AssistedIn`, so **Django Ninja validated the body against the schema BEFORE the view body ran** — a malformed/empty body from an unauthenticated caller hit schema validation and returned **422 before `authenticate()` was ever called**. (The auth function itself was already fail-closed — `not expected → return False` — which is why a *valid-body* unauth POST did return 401; but the 422-before-401 path is the reported hole.)
+- **Fix 1 — auth before everything:** the view now takes **no schema parameter** (that was what triggered eager validation). It calls `authenticate(request)` **first**; only an authenticated caller reaches body read → forbidden-key check → `AssistedIn` validation. Unauth ⇒ 401 regardless of body. 422 is now only reachable **after** auth passes.
+- **Fix 2 — explicit fail-closed + hardening:** `authenticate()` now explicitly rejects ALL requests when `WATI_WEBHOOK_KEY` is unset/blank (with a warning log), and uses `hmac.compare_digest` (constant-time) for the key compare. IP allowlist unchanged.
+
+#### Live re-verification through the CF edge (box key UNSET ⇒ fail-closed)
+```
+no key    + EMPTY body   -> 401   (was 422 — the reported bug)
+no key    + garbage body -> 401
+no key    + VALID body   -> 401
+WRONG key + EMPTY body   -> 401
+WRONG key + VALID body   -> 401
+key hdr set, WATI_WEBHOOK_KEY unset -> 401   (fail-closed)
+```
+Other Track B routes unaffected after redeploy: `/r/wa/RJ4521` 200, `/d/pifs` 200, `/r/RJ4521` 200.
+
+#### Tests (B4 now 15, +5)
+`no key + empty/garbage body → 401` (asserts auth precedes schema); `wrong key + empty → 401`; **`fail-closed when key UNSET → 401` + nothing persisted** (the case the prior tests missed); `correct key + valid body → 200` (log-only, `ENABLE_ZOHO_WRITE` off). Full suite **224 passed** on Postgres; `ruff check .` clean; no migration drift.
+
+**Note on the positive path:** to exercise a real accepted assisted-capture live (correct key → 200 → one log-only lead), `WATI_WEBHOOK_KEY` must be set in the box `.env`. I left it **unset** deliberately so the deploy is fail-closed by default; say the word and I'll set a key for your live-positive/E2E check. **`main` stays held at `0c8c348`** — merge only on your go after re-verification. — Engineer
+
+---
+
+### 2026-07-09 — FROM DA — RE-VERIFICATION PASSED — ✅ **GO to merge**
+
+Independent re-run (fresh verifier, live prod, same-origin POSTs — no authenticated/valid-key POST sent):
+```
+no key    + empty body   -> 401  (was 422 — fixed)
+no key    + valid body   -> 401
+wrong key + empty body   -> 401
+wrong key + valid body   -> 401
+GET /api/wati/webhook    -> 405
+```
+Liveness unaffected: `/r/wa/RJ4521` 200, `/d/pifs` 200, `/r/RJ4521` 200. No unauth/wrong-key POST returned 422 or 2xx. Auth now fires before schema validation, fail-closed. **VERDICT: GO.**
+
+**Engineer: merge `sprint2-track-b-referral-ux` → `main` and deploy `main` to prod, then post STATUS with the new `DEPLOYED_SHA`.** Keep `WATI_WEBHOOK_KEY` unset (fail-closed default) and `ENABLE_ZOHO_WRITE`/`ENABLE_WATI_SEND` OFF until the DA calls the live E2E. Remaining before the full live E2E: (a) the template `gorefer_zerodha_referral_2026_07_09` finishing Meta approval (PENDING); (b) a `WATI_WEBHOOK_KEY` set + a `LANDING_MODE=direct` tenant toggle for the positive-path/bypass parts of the E2E. — DA

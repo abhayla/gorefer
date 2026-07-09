@@ -46,7 +46,9 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 if os.environ.get("DJANGO_BEHIND_TLS_PROXY", "false").strip().lower() in {"1", "true", "yes", "on"}:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "true").strip().lower() in {"1", "true", "yes", "on"}
+    SECURE_SSL_REDIRECT = os.environ.get(
+        "DJANGO_SECURE_SSL_REDIRECT", "true"
+    ).strip().lower() in {"1", "true", "yes", "on"}
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 
@@ -241,3 +243,9 @@ PII_MASK_FOR_CUSTOMER_VIEW = os.environ.get(
 # HMAC wax-seal is deferred (DF-2). The key is a SECRET (from env, never inline).
 ZOHO_WEBHOOK_KEY = os.environ.get("ZOHO_WEBHOOK_KEY", "")
 ZOHO_WEBHOOK_IP_ALLOWLIST = os.environ.get("ZOHO_WEBHOOK_IP_ALLOWLIST", "")  # csv; empty = any (dev)
+
+# --- WATI webhook auth (B4, interim R2): static key + IP allowlist ----------
+# The Wati assisted-referral flow posts here. Same interim model as Zoho (static
+# key + IP allowlist; HMAC wax-seal deferred DF-2). Key is a SECRET (env only).
+WATI_WEBHOOK_KEY = os.environ.get("WATI_WEBHOOK_KEY", "")
+WATI_WEBHOOK_IP_ALLOWLIST = os.environ.get("WATI_WEBHOOK_IP_ALLOWLIST", "")  # csv; empty = any (dev)
