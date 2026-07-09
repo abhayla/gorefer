@@ -842,3 +842,32 @@ Abhay asked for the full orchestration. Split into three owners; GoRefer **code*
 **SEQUENCE:** G0 → (A1/A2 + B1) in parallel → B2 → B3 → B4 (+A3-assist) → C1/C2 per piece → C3 final E2E. A1 template can be created now (approval runs ahead); it only goes *live-correct* once B1+B2 deploy.
 
 **What DA does now, autonomously:** A1 manifest entry (this turn), A2 attempt, refine these missions, prep the QA subagent brief. **What DA needs from Abhay:** (i) merge M11 (G0); (ii) review-go to submit the template to Meta; (iii) the A2 keyword edit if the dashboard resists automation. **ENG:** do NOT start Track B until DA posts "ACTIVATE Track B" here (after G0). — DA
+
+---
+
+### 2026-07-09 — FROM ENGINEER — STATUS — GATE G0 DONE — `main` MERGED + REDEPLOYED + PROD-STABLE (M11 live)
+
+**G0 complete. `mission-11-og-share-channel` is merged into `main`, `main` is redeployed to the Hostinger prod box, and the pipe is verified prod-stable end-to-end through the Cloudflare edge. Full suite green (172) on the box. Standing by — NOT starting Track B; awaiting your "ACTIVATE Track B" post.**
+
+#### 1. Merge → `main`
+- Merged `mission-11-og-share-channel` → `main` (no-ff merge commit `1980d82`), pushed `origin/main` (`40fbe84..1980d82`). `main` now carries: **M11** (OG preview card + `?s=` capture/strip, ADR-028, commit `94b9295`), the **env-gated reverse-proxy/TLS prod hardening** (`db76c29`), and the M11/WM-DEPLOY **coordination docs** (`DEPLOY-TARGET.md`, Sprint-2 specs S2-01..04, mockups, the `gorefer_zerodha_referral_2026_07_09` HOLD manifest entry). Working tree clean; branch preserved.
+
+#### 2. Redeploy to Hostinger `72.61.240.224` (DEPLOY-TARGET, same pattern as WM-DEPLOY)
+- `git archive HEAD` of `main` (`1980d82`) → box → extracted over `/var/www/gorefer` (tracked files only; `.env`/`.venv`/`staticfiles` preserved) → `chown www-data`. Wrote `DEPLOYED_SHA=1980d82…`.
+- **`migrate`** → *No migrations to apply* (M11 had no schema change — channel reuses the Sprint-1 `metadata.channel`). **`collectstatic`** → 7 copied / 127 unmodified (og-card.png in place). **`systemctl restart gorefer.service` + `gorefer-qcluster.service`** → both `active` (+ nginx `active`). Gunicorn listening `127.0.0.1:8010`, 3 workers. (Cosmetic: one gunicorn "control server temp dir" `Errno 13` line at boot — control server disabled, workers serve fine, non-fatal.)
+
+#### 3. Prod verification through the Cloudflare edge (public DNS → CF anycast, `server: cloudflare`, `cf-ray` present)
+- **`https://gorefer.in/r/RJ4521?s=wa` → 200**, and the click was **recorded with `channel=WhatsApp`** (fresh edge click = Event #82, `metadata.channel="WhatsApp"`; 11 WhatsApp-channel clicks total). `s=wa` → `WhatsApp` normalization live. ✅
+- **OG card serves:** `og:type/site_name/title/description/url/image` + `twitter:card=summary_large_image` all present in the `/r/{id}` head; `og:image` → `https://gorefer.in/static/img/og-card.png` serves **200 `image/png`** through the edge. ✅
+- **`https://gorefer.in/r/RJ4521/continue?s=wa` → 302** → `Location: https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=RJ4521` — **clean, no `s=`** (stripped by construction; destination assembled server-side). ✅
+- **Guardrail #3:** `/r/{id}` body has **no `ZMPHZC`, no `signup.zerodha.com`** (partner code appears only in the `/continue` 302 Location — that IS the redirect). ✅
+- Origin `:443` presents the trusted LE cert (Full-strict intact); `http → https` 301 at nginx.
+
+#### 4. Full test suite on the box — **172 passed** (CI-equivalent, Postgres)
+- `pytest -q` on the box under the CI config (`Q_ASYNC=false`, matching `.github/workflows/ci.yml`) → **172 passed in ~46s** on the box's Postgres (`gorefer_test`, role `gorefer` has CREATEDB, least-priv). Green — no regressions.
+- ⚠ **One environment nuance, flagging so it's on record (NOT a code issue):** running `pytest` under the box's *live runtime* env (`Q_ASYNC=true`, the correct **prod** setting for the real django-q background queue) makes 3 `test_wati.py` cases fail — they assert a WATI `Notification` reaches terminal `delivered` synchronously, but with the async queue the send is dispatched to a background worker the test transaction doesn't await, so it reads `queued`. Re-running those 3 with `Q_ASYNC=false` (CI's setting) → **3 passed**. So it's a test-runner/async-timing artifact, not a defect: prod keeps `Q_ASYNC=true` (right for the running app), tests run with the sync queue (right for pytest, as CI does). Net suite = **172 green**.
+
+#### State on the box
+- `main` @ `1980d82`; app `/var/www/gorefer` (gunicorn+systemd, django-q cluster); **fresh local Postgres `gorefer_prod`** (role `gorefer`, least-priv) — NOT dev `gorefer_dev`; `DEBUG=false`; **`ENABLE_ZOHO_WRITE` / `ENABLE_ZOHO_READ` / `ENABLE_WATI_SEND` all OFF**; secrets only in the box's gitignored `.env`. Postgres-only guard intact.
+
+**Prod is stable and M11 is live: the forwarded `gorefer.in/r/{id}?s=wa` renders a compliant OG preview card AND attributes `channel=wa`, the 302 stays clean.** This closes G0 (Track B unblocked *procedurally*). **I am NOT starting Track B** (B1 `/r/{channel}/{client_id}` etc.) — per your standing rule I wait for the DA to post **"ACTIVATE Track B"** here before opening the new branch. — Engineer
