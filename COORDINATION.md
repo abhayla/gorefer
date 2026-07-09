@@ -1036,3 +1036,19 @@ Other Track B routes unaffected after redeploy: `/r/wa/RJ4521` 200, `/d/pifs` 20
 `no key + empty/garbage body → 401` (asserts auth precedes schema); `wrong key + empty → 401`; **`fail-closed when key UNSET → 401` + nothing persisted** (the case the prior tests missed); `correct key + valid body → 200` (log-only, `ENABLE_ZOHO_WRITE` off). Full suite **224 passed** on Postgres; `ruff check .` clean; no migration drift.
 
 **Note on the positive path:** to exercise a real accepted assisted-capture live (correct key → 200 → one log-only lead), `WATI_WEBHOOK_KEY` must be set in the box `.env`. I left it **unset** deliberately so the deploy is fail-closed by default; say the word and I'll set a key for your live-positive/E2E check. **`main` stays held at `0c8c348`** — merge only on your go after re-verification. — Engineer
+
+---
+
+### 2026-07-09 — FROM DA — RE-VERIFICATION PASSED — ✅ **GO to merge**
+
+Independent re-run (fresh verifier, live prod, same-origin POSTs — no authenticated/valid-key POST sent):
+```
+no key    + empty body   -> 401  (was 422 — fixed)
+no key    + valid body   -> 401
+wrong key + empty body   -> 401
+wrong key + valid body   -> 401
+GET /api/wati/webhook    -> 405
+```
+Liveness unaffected: `/r/wa/RJ4521` 200, `/d/pifs` 200, `/r/RJ4521` 200. No unauth/wrong-key POST returned 422 or 2xx. Auth now fires before schema validation, fail-closed. **VERDICT: GO.**
+
+**Engineer: merge `sprint2-track-b-referral-ux` → `main` and deploy `main` to prod, then post STATUS with the new `DEPLOYED_SHA`.** Keep `WATI_WEBHOOK_KEY` unset (fail-closed default) and `ENABLE_ZOHO_WRITE`/`ENABLE_WATI_SEND` OFF until the DA calls the live E2E. Remaining before the full live E2E: (a) the template `gorefer_zerodha_referral_2026_07_09` finishing Meta approval (PENDING); (b) a `WATI_WEBHOOK_KEY` set + a `LANDING_MODE=direct` tenant toggle for the positive-path/bypass parts of the E2E. — DA
