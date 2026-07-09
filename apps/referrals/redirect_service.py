@@ -166,6 +166,34 @@ def handle_landing_view(*, tenant, client_id: str, visitor_id, user_agent, raw_i
     return referral, event, nonce
 
 
+def handle_direct_redirect(*, tenant, client_id: str, visitor_id, user_agent, raw_ip, share_channel=None):
+    """Resolve a /r/{client_id} hit in LANDING_MODE=direct (B3). Returns
+    (destination_url, is_human_click).
+
+    Frictionless path: lazily create the referrer identity + referral, log the CLICK
+    on transaction.on_commit (never blocks the 302), then 302 straight to Zerodha —
+    the landing page is skipped. The channel/`?s` is captured on the click for
+    attribution but NEVER enters the Location (the destination is assembled
+    server-side from the program template). A bot/preview hit creates nothing and
+    still gets the destination (no human click).
+    """
+    program = _active_program(tenant)
+    destination = assemble_destination(program, client_id=client_id)
+
+    if is_bot_user_agent(user_agent):
+        logger.info("bot/preview hit on direct /r/%s — no journey created", client_id)
+        return destination, False
+
+    referral = _lazy_get_or_create_referral(tenant, program, client_id)
+    transaction.on_commit(
+        lambda: _record_event(
+            tenant=tenant, referral=referral, visitor_id=visitor_id, user_agent=user_agent,
+            raw_ip=raw_ip, event_type=vocab.CLICK, source=vocab.SRC_CLICK, share_channel=share_channel,
+        )
+    )
+    return destination, True
+
+
 def build_continue_redirect(*, tenant, client_id: str, referral, share_channel=None):
     """Assemble the destination for "Continue to Zerodha" and log redirect_completed.
 
