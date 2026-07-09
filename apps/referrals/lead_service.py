@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 
 from django.db import transaction
+from django.utils import timezone
 
 from apps.common.phone import normalize_phone
 from apps.events import vocab
@@ -29,18 +30,23 @@ logger = logging.getLogger("gorefer.leads")
 
 @transaction.atomic
 def capture_lead(*, tenant, referral: Referral, name: str, mobile: str, email: str, city: str,
-                 consent: bool, submitted_by: str = "friend") -> Lead:
+                 consent: bool, submitted_by: str = "friend", lead_source: str = "landing") -> Lead:
     """Persist the prospect + lead in GoRefer (capture-first), emit lead_captured.
 
     Idempotent-ish: an existing live lead for the same (referral, normalized mobile)
     is returned unchanged rather than duplicated.
+
+    `lead_source` marks how the lead entered — 'landing' (self-serve form) or
+    'whatsapp_assisted' (B4). For the assisted branch `consent=True` records the
+    referrer-obtained DPDP consent, stamped with consent_captured_at. NEVER a
+    password — name/mobile/email only.
     """
     canonical_mobile = normalize_phone(mobile)
 
     prospect, _ = Prospect.objects.get_or_create(
         tenant=tenant,
         mobile=canonical_mobile,
-        defaults={"name": name, "email": email, "city": city, "lead_source": "landing"},
+        defaults={"name": name, "email": email, "city": city, "lead_source": lead_source},
     )
 
     existing = Lead.objects.filter(
@@ -49,13 +55,16 @@ def capture_lead(*, tenant, referral: Referral, name: str, mobile: str, email: s
     if existing is not None:
         return existing
 
+    consent_at = timezone.now() if consent else None
     lead = Lead.objects.create(
         tenant=tenant,
         referral=referral,
         prospect=prospect,
         status="new",
         submitted_by=submitted_by,
+        lead_source=lead_source,
         consent=consent,
+        consent_captured_at=consent_at,
     )
 
     # Immutable event — NO PII (name/mobile/email live only on prospect/lead).
