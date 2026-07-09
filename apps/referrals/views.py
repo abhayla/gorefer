@@ -22,8 +22,14 @@ from apps.tenants.resolve import get_current_tenant
 from gorefer import flags as flagmod
 from gorefer.flags import flags, normalize_share_channel
 
+from .landing_mode import LANDING_MODE_DIRECT, resolve_landing_mode
 from .models import ProgramRedirectRule, ReferralIdentity, ReferralProgram
-from .redirect_service import build_continue_redirect, handle_landing_view, handle_partner_direct
+from .redirect_service import (
+    build_continue_redirect,
+    handle_direct_redirect,
+    handle_landing_view,
+    handle_partner_direct,
+)
 from .validators import InvalidClientId, validate_client_id
 
 VISITOR_COOKIE = "gr_vid"
@@ -140,6 +146,25 @@ def referral_redirect(request, client_id: str, channel: str | None = None):
 
     tenant = get_current_tenant(request)
     visitor_id, is_new = _ensure_visitor_id(request)
+
+    # LANDING_MODE=direct (B3): log the click on-commit, then 302 straight to
+    # Zerodha — skip the landing page. Channel/?s stripped, code server-side.
+    if resolve_landing_mode(tenant.id if tenant is not None else None) == LANDING_MODE_DIRECT:
+        try:
+            destination, _is_human = handle_direct_redirect(
+                tenant=tenant,
+                client_id=normalized,
+                visitor_id=visitor_id,
+                user_agent=request.META.get("HTTP_USER_AGENT", ""),
+                raw_ip=_client_ip(request),
+                share_channel=_share_channel(request, channel),
+            )
+        except PartnerUnavailable:
+            return _partner_unavailable(request)
+        response = HttpResponseRedirect(destination)
+        _set_visitor_cookie(response, visitor_id, is_new)
+        return response
+
     try:
         _referral, _event, nonce = handle_landing_view(
             tenant=tenant,
