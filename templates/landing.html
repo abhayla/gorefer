@@ -6,6 +6,7 @@ server nonce; only then does it fetch the referrer name via the nonce-gated endp
 Never resembles/clones Zerodha. Raw Zerodha URL / partner code never appear here.
 Variant C skin — no behaviour change (skin ≠ content).
 {% endcomment %}
+{% block og_meta %}{% include "partials/og_meta.html" %}{% endblock %}
 {% block body %}
 <section class="px-5 pt-6 pb-2">
   <div class="inline-flex items-center gap-1.5 rounded-full bg-cobalt-50 text-cobalt-600 text-[11px] font-semibold px-3 py-1 mb-3">

@@ -1,0 +1,19 @@
+{% comment %}
+Reusable Open Graph + Twitter-Card meta (M11 / ADR-028) for the forwarded
+/r/{client_id} link preview. Config-driven values (OG_TITLE / OG_DESCRIPTION /
+OG_IMAGE / OG_SITE_NAME + absolute og:url) come from the view context.
+
+GUARDRAIL: carries NO partner code and NO raw Zerodha URL, and must NOT
+resemble/clone Zerodha — the copy is PIFS-branded and generic. WhatsApp, Facebook,
+LinkedIn and X render a compliant card from these tags.
+{% endcomment %}
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="{{ og_site_name }}" />
+<meta property="og:title" content="{{ og_title }}" />
+<meta property="og:description" content="{{ og_description }}" />
+<meta property="og:url" content="{{ og_url }}" />
+<meta property="og:image" content="{{ og_image }}" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="{{ og_title }}" />
+<meta name="twitter:description" content="{{ og_description }}" />
+<meta name="twitter:image" content="{{ og_image }}" />

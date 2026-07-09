@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>GoRefer — My Referrals (Referrer Launcher)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = { theme: { extend: {
+  colors: { ink:{900:'#0f1729',700:'#334155',500:'#64748b',300:'#94a3b8'},
+            line:'#e9edf3', bg:'#f4f6fb', cobalt:{600:'#2F5BFF',500:'#4b70ff',50:'#eef2ff'}, green:{600:'#16a34a'} },
+  fontFamily:{ sans:['Inter','system-ui','sans-serif'] } } } };
+</script>
+<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+ body{-webkit-font-smoothing:antialiased}
+ .card{box-shadow:0 1px 2px rgba(16,23,41,.04),0 10px 30px -14px rgba(16,23,41,.14)}
+ .qr{background-image:conic-gradient(#0f1729 25%,#fff 0 50%,#0f1729 0 75%,#fff 0);background-size:8px 8px;border-radius:6px}
+ .shbtn{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;font-weight:600;color:#334155}
+ .shic{height:44px;width:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:15px}
+</style>
+</head>
+<body class="bg-bg font-sans text-ink-900">
+
+<!-- Mockup notice -->
+<div class="bg-cobalt-600 text-white text-[11px] text-center py-1 font-medium">MOCKUP — Referrer self-serve launcher ("My Referrals"). Mobile-first; shown in a phone frame. Illustrative data.</div>
+
+<!-- phone frame -->
+<div class="min-h-screen w-full flex justify-center py-6 px-4">
+<div class="w-full max-w-[430px] bg-white rounded-[28px] border border-line card overflow-hidden">
+
+  <!-- top bar -->
+  <div class="bg-white/90 backdrop-blur border-b border-line px-4 h-14 flex items-center justify-between sticky top-0 z-10">
+    <div class="flex items-center gap-2">
+      <div class="h-7 w-7 rounded-lg bg-cobalt-600 text-white flex items-center justify-center text-[12px] font-extrabold">G</div>
+      <div class="text-[13px] font-bold">GoRefer <span class="text-ink-300 font-medium">· My Referrals</span></div>
+    </div>
+    <div class="h-8 w-8 rounded-full bg-cobalt-600 text-white flex items-center justify-center text-[11px] font-bold">RJ</div>
+  </div>
+
+  <div class="p-4 space-y-4">
+
+    <!-- greeting (NO stats here — stats live on the Referral Profile / My Referrals page) -->
+    <div>
+      <div class="text-[15px] font-extrabold">Customize &amp; share 👋</div>
+      <div class="text-[11.5px] text-ink-500">Pick a design, tweak the message, and share. Your clicks &amp; results live on
+        <a href="referral-profile-mockup.html" class="text-cobalt-600 font-semibold">My Referrals ↗</a>.</div>
+    </div>
+
+    <!-- link + QR -->
+    <div class="rounded-2xl border border-line p-3.5">
+      <div class="text-[10px] uppercase tracking-wide text-ink-300 font-semibold mb-2">Your referral link</div>
+      <div>
+        <div class="flex items-center rounded-xl border border-line bg-bg overflow-hidden">
+          <span class="flex-1 px-3 py-2 font-mono text-[12px] text-ink-700 truncate">gorefer.in/r/RJ4111</span>
+          <button class="px-3 py-2 bg-cobalt-600 text-white text-[11.5px] font-semibold">Copy</button>
+        </div>
+        <div class="text-[10px] text-ink-300 mt-1.5">Opens the free-account page. You get credited automatically.</div>
+      </div>
+    </div>
+
+    <!-- creative picker -->
+    <div>
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-[10px] uppercase tracking-wide text-ink-300 font-semibold">Pick a design</div>
+        <span class="text-[10px] text-ink-300">8 templates</span>
+      </div>
+      <div class="flex gap-2 overflow-x-auto pb-1" id="thumbs"></div>
+
+      <!-- live preview of selected creative -->
+      <div class="mt-3 rounded-2xl border border-line overflow-hidden">
+        <div class="bg-gradient-to-br from-cobalt-600 to-cobalt-500 text-white p-4">
+          <div class="text-[9px] uppercase tracking-widest text-white/70">Referral invite</div>
+          <div class="text-[17px] font-extrabold leading-tight mt-1">Open a free Zerodha account</div>
+          <div class="text-[11px] text-white/85 mt-0.5" id="pvsub">Rajesh invites you to start investing</div>
+          <ul class="mt-3 space-y-1 text-[11.5px]">
+            <li>✓ ₹0 account opening</li>
+            <li>✓ ₹0 equity-delivery brokerage</li>
+            <li>✓ 1st-year AMC free</li>
+            <li>✓ ₹20 flat intraday &amp; F&amp;O · free Kite app</li>
+            <li>✓ Direct mutual funds on Coin</li>
+          </ul>
+          <div class="mt-3 inline-flex items-center gap-1 bg-white text-cobalt-600 rounded-full px-3 py-1 text-[11px] font-bold">Open your account →</div>
+        </div>
+        <div class="px-3 py-2 text-[8.5px] leading-snug text-ink-500 bg-white">
+          Zerodha Broking Ltd.: SEBI Registration no.: INZ000031633 | Passive Income Financial Solutions Private Limited | NSE AP reg. no.: AP2516003693<br>
+          Investments in securities market are subject to market risks, read all the related documents carefully before investing.
+        </div>
+      </div>
+    </div>
+
+    <!-- caption -->
+    <div class="rounded-2xl border border-line p-3.5">
+      <div class="flex items-center justify-between mb-1.5">
+        <div class="text-[10px] uppercase tracking-wide text-ink-300 font-semibold">Message (editable)</div>
+        <button class="text-[11px] font-semibold text-cobalt-600">Copy caption</button>
+      </div>
+      <textarea class="w-full text-[12px] text-ink-700 bg-bg rounded-xl border border-line p-2.5 h-24 resize-none focus:outline-none focus:border-cobalt-500">Thinking of starting to invest? Open a free Zerodha demat account — ₹0 account opening, ₹0 delivery brokerage, and 1st-year AMC free. I use it myself. Open here: gorefer.in/r/RJ4111</textarea>
+      <div class="text-[10px] text-ink-300 mt-1">Add your own words — a personal note works far better (and it's required: no bare-link posts).</div>
+    </div>
+
+    <!-- share row -->
+    <div>
+      <div class="text-[10px] uppercase tracking-wide text-ink-300 font-semibold mb-2.5">Share to</div>
+      <div class="grid grid-cols-4 gap-y-3.5">
+        <div class="shbtn"><div class="shic" style="background:#25D366">WA</div>WhatsApp</div>
+        <div class="shbtn"><div class="shic" style="background:#1877F2">f</div>Facebook</div>
+        <div class="shbtn"><div class="shic" style="background:#0f1729">X</div>X</div>
+        <div class="shbtn"><div class="shic" style="background:#0A66C2">in</div>LinkedIn</div>
+        <div class="shbtn"><div class="shic" style="background:#229ED9">TG</div>Telegram</div>
+        <div class="shbtn"><div class="shic" style="background:linear-gradient(45deg,#F58529,#DD2A7B,#8134AF)">IG</div>Instagram</div>
+        <div class="shbtn"><div class="shic" style="background:#64748b">@</div>Email</div>
+        <div class="shbtn"><div class="shic" style="background:#2F5BFF">⧉</div>Copy link</div>
+      </div>
+      <div class="text-[10px] text-ink-300 mt-3">Instagram: we copy the caption + save the image for you to paste (IG has no direct share).</div>
+    </div>
+
+    <!-- compliance note -->
+    <div class="rounded-2xl bg-amber-50 border border-amber-100 p-3.5">
+      <div class="text-[11px] font-bold text-yellow-900 mb-1">How to share (please read)</div>
+      <ul class="text-[10.5px] text-yellow-900/80 space-y-1 list-disc pl-4">
+        <li>Share <b>personally &amp; organically</b> — add your own words, never just the bare link.</li>
+        <li><b>No paid ads / boosting</b> of the link on any platform (Zerodha rule).</li>
+        <li>Use only these ready designs — they carry the required disclosures.</li>
+      </ul>
+    </div>
+
+  </div>
+  <div class="px-4 py-3 text-center text-[9px] text-ink-300 border-t border-line">PIFS Pvt. Ltd. · NSE AP Reg. AP2516003693 · Market risks apply. · Mockup for design sign-off.</div>
+</div>
+</div>
+
+<script>
+  const thumbs = ['Hero','Assisted','3-Step','Benefits','Story','WhatsApp','Text','App'];
+  const subs = {
+    'Hero':'Start investing — open your free account',
+    'Assisted':'Rajesh invites you — free, guided setup',
+    '3-Step':'1 Click → 2 KYC → 3 Invest',
+    'Benefits':'Everything you get, at a glance',
+    'Story':'Rajesh invites you to start investing',
+    'WhatsApp':'A quick personal note + your link',
+    'Text':'Simple text post + link',
+    'App':'Invest in one clean app'
+  };
+  const wrap = document.getElementById('thumbs');
+  thumbs.forEach((t,i)=>{
+    const b=document.createElement('button');
+    b.className='shrink-0 w-[92px] rounded-xl border p-2 text-left '+(i===1?'border-cobalt-600 bg-cobalt-50':'border-line bg-white');
+    b.innerHTML=`<div class="h-12 rounded-lg mb-1.5 ${i===1?'bg-gradient-to-br from-cobalt-600 to-cobalt-500':'bg-bg border border-line'}"></div><div class="text-[10.5px] font-semibold ${i===1?'text-cobalt-600':'text-ink-700'}">${t}</div>`;
+    b.onclick=()=>{ [...wrap.children].forEach(c=>c.className='shrink-0 w-[92px] rounded-xl border p-2 text-left border-line bg-white');
+      b.className='shrink-0 w-[92px] rounded-xl border p-2 text-left border-cobalt-600 bg-cobalt-50';
+      document.getElementById('pvsub').textContent=subs[t]; };
+    wrap.appendChild(b);
+  });
+</script>
+</body></html>

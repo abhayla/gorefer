@@ -19,7 +19,8 @@ from django.views.decorators.http import require_GET
 
 from apps.config.cascade import resolve
 from apps.tenants.resolve import get_current_tenant
-from gorefer.flags import flags
+from gorefer import flags as flagmod
+from gorefer.flags import flags, normalize_share_channel
 
 from .models import ProgramRedirectRule, ReferralIdentity, ReferralProgram
 from .redirect_service import build_continue_redirect, handle_landing_view, handle_partner_direct
@@ -44,6 +45,17 @@ def _client_ip(request) -> str | None:
     return request.META.get("REMOTE_ADDR")
 
 
+def _share_channel(request) -> str | None:
+    """Read the config-named ?s= param and normalize it to a Channel label (M11).
+
+    The param NAME is config (SHARE_CHANNEL_PARAM, default "s"). The value is captured
+    for attribution then never propagated to the 302 (the destination is assembled
+    server-side from the program template, so `s` cannot leak into the Location).
+    """
+    raw = request.GET.get(flagmod.SHARE_CHANNEL_PARAM)
+    return normalize_share_channel(raw)
+
+
 def _ensure_visitor_id(request) -> tuple[str, bool]:
     existing = request.COOKIES.get(VISITOR_COOKIE)
     if existing:
@@ -58,6 +70,30 @@ def _set_visitor_cookie(response, visitor_id: str, is_new: bool):
         )
 
 
+def _og_context(request, client_id: str) -> dict:
+    """Config-driven Open Graph / Twitter-Card meta for the forwarded /r/{id} card (M11).
+
+    Absolute og:url / og:image (Open Graph requires absolute URLs), built from
+    PUBLIC_BASE_URL. GUARDRAIL: carries NO partner code and NO raw Zerodha URL, and
+    must not resemble/clone Zerodha — the copy is PIFS-branded and generic.
+    """
+    from django.conf import settings
+    from django.templatetags.static import static
+
+    base = (settings.PUBLIC_BASE_URL or "").rstrip("/")
+    image = settings.OG_IMAGE
+    if not image.startswith(("http://", "https://")):
+        # Resolve a static path to an absolute URL for crawlers.
+        image = base + static(image)
+    return {
+        "og_title": settings.OG_TITLE,
+        "og_description": settings.OG_DESCRIPTION,
+        "og_image": image,
+        "og_url": f"{base}/r/{client_id}",
+        "og_site_name": settings.OG_SITE_NAME,
+    }
+
+
 def _landing_context(request, tenant, client_id: str, nonce: str | None):
     """Config-driven landing context (no referrer NAME in initial HTML — #1/#3).
 
@@ -67,7 +103,7 @@ def _landing_context(request, tenant, client_id: str, nonce: str | None):
     """
     tenant_id = tenant.id if tenant is not None else None
     wa_number = resolve("wati_business_number", tenant_id=tenant_id, default="")
-    return {
+    ctx = {
         "client_id": client_id,
         "nonce": nonce or "",
         "wati_business_number": wa_number,
@@ -75,6 +111,8 @@ def _landing_context(request, tenant, client_id: str, nonce: str | None):
         "REFERRAL_INCENTIVE_CLAIM": flags.REFERRAL_INCENTIVE_CLAIM,
         "show_incentive": True,  # a valid referrer -> show the referral-benefit panel
     }
+    ctx.update(_og_context(request, client_id))
+    return ctx
 
 
 @require_GET
@@ -95,6 +133,7 @@ def referral_redirect(request, client_id: str):
             visitor_id=visitor_id,
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
             raw_ip=_client_ip(request),
+            share_channel=_share_channel(request),
         )
     except PartnerUnavailable:
         return _partner_unavailable(request)
@@ -118,9 +157,14 @@ def referral_continue(request, client_id: str):
     ).first()
     referral = identity.referrals.filter(source="referral_link").order_by("id").first() if identity else None
     try:
-        destination = build_continue_redirect(tenant=tenant, client_id=normalized, referral=referral)
+        destination = build_continue_redirect(
+            tenant=tenant, client_id=normalized, referral=referral,
+            share_channel=_share_channel(request),
+        )
     except PartnerUnavailable:
         return _partner_unavailable(request)
+    # Guardrail (M11): the destination is assembled server-side from the program
+    # template — the inbound ?s= is captured for attribution but NEVER appears here.
     return HttpResponseRedirect(destination)
 
 
@@ -135,6 +179,7 @@ def partner_direct_redirect(request):
             visitor_id=visitor_id,
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
             raw_ip=_client_ip(request),
+            share_channel=_share_channel(request),
         )
     except PartnerUnavailable:
         return _partner_unavailable(request)

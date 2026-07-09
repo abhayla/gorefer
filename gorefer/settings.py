@@ -36,6 +36,20 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "insecure-dev-only-change-me")
 DEBUG = os.environ.get("DJANGO_DEBUG", "true").strip().lower() in {"1", "true", "yes", "on"}
 ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h]
 
+# --- Reverse-proxy / TLS hardening (prod behind nginx + Cloudflare) --------
+# All env-driven; defaults preserve dev/CI behaviour (no HTTPS assumptions). In
+# production (DEPLOY-TARGET Hostinger: nginx terminates TLS via certbot, sets
+# X-Forwarded-Proto), set these so Django knows the request is HTTPS, trusts the
+# origin for CSRF (admin login POST), and forces secure cookies.
+CSRF_TRUSTED_ORIGINS = [
+    o for o in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if o
+]
+if os.environ.get("DJANGO_BEHIND_TLS_PROXY", "false").strip().lower() in {"1", "true", "yes", "on"}:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "true").strip().lower() in {"1", "true", "yes", "on"}
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
 # --- Applications ----------------------------------------------------------
 # Multi-tenancy is SINGLE-SCHEMA tenant_id discriminator (COORDINATION Q-M1-1
 # answer): no django-tenants schema routing. `apps.tenants` keeps a plain
@@ -195,6 +209,25 @@ MARKET_RISK_WARNING = (
     "Investments in securities market are subject to market risks, "
     "read all the related documents carefully before investing."
 )
+
+# --- Open Graph / Twitter-Card preview (M11 / ADR-028) ---------------------
+# Per-partner, config-driven card content for a forwarded /r/{client_id} link so
+# WhatsApp/FB/LinkedIn/X render a compliant preview. Config-over-code: env overrides;
+# a per-tenant override can be added to the ADR-022 cascade later (keys mirror these).
+# GUARDRAIL: no partner code, no raw Zerodha URL, must NOT resemble/clone Zerodha.
+OG_TITLE = os.environ.get("OG_TITLE", "Open a free Zerodha demat & trading account")
+OG_DESCRIPTION = os.environ.get(
+    "OG_DESCRIPTION",
+    "You've been personally referred. PIFS helps you open your Zerodha account "
+    "smoothly with trusted guidance. Investments in securities market are subject to "
+    "market risks.",
+)
+# Card image: a PIFS-branded asset served from our own static (NOT a Zerodha asset).
+# Default is a relative static path; env can point at an absolute https URL.
+OG_IMAGE = os.environ.get("OG_IMAGE", "img/og-card.png")
+OG_SITE_NAME = os.environ.get("OG_SITE_NAME", "GoRefer · PIFS")
+# Public base used to build absolute og:url / og:image (Open Graph needs absolute URLs).
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "https://gorefer.in")
 
 # --- PII masking policy (M9) -----------------------------------------------
 # The admin view shows FULL IP + phone. This config drives masking for the FUTURE
