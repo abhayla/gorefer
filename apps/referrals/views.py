@@ -45,13 +45,22 @@ def _client_ip(request) -> str | None:
     return request.META.get("REMOTE_ADDR")
 
 
-def _share_channel(request) -> str | None:
-    """Read the config-named ?s= param and normalize it to a Channel label (M11).
+def _share_channel(request, path_channel: str | None = None) -> str | None:
+    """Resolve the visitor's share channel to a Channel label (M11 + B1/ADR-028).
 
-    The param NAME is config (SHARE_CHANNEL_PARAM, default "s"). The value is captured
-    for attribution then never propagated to the 302 (the destination is assembled
-    server-side from the program template, so `s` cannot leak into the Location).
+    Two carriers, both normalized the same way (config-driven codes -> labels):
+      - PATH PREFIX `/r/{channel}/{client_id}` (B1) — WhatsApp dynamic URL buttons
+        require the template variable LAST, so `?s=wa` can't follow `{{client_id}}`;
+        the channel therefore rides as a leading path segment. Takes precedence.
+      - `?s=` query param (M11 legacy) — the param NAME is config
+        (SHARE_CHANNEL_PARAM, default "s").
+
+    Either way the value is captured for attribution ONLY, then never propagated to
+    the 302 — the destination is assembled server-side from the program template, so
+    the channel/`s` cannot leak into the Location.
     """
+    if path_channel is not None:
+        return normalize_share_channel(path_channel)
     raw = request.GET.get(flagmod.SHARE_CHANNEL_PARAM)
     return normalize_share_channel(raw)
 
@@ -116,8 +125,13 @@ def _landing_context(request, tenant, client_id: str, nonce: str | None):
 
 
 @require_GET
-def referral_redirect(request, client_id: str):
-    """GET /r/{client_id} — render the branded landing (200), NOT an immediate 302."""
+def referral_redirect(request, client_id: str, channel: str | None = None):
+    """GET /r/{client_id} (or /r/{channel}/{client_id}) — render the branded landing.
+
+    `channel` (B1) is an optional path prefix carrying the share channel (e.g.
+    /r/wa/RJ4521) for WhatsApp URL buttons where `?s=` can't trail the id. Legacy
+    /r/{client_id}?s= still works — see _share_channel.
+    """
     try:
         normalized = validate_client_id(client_id)
     except InvalidClientId:
@@ -133,7 +147,7 @@ def referral_redirect(request, client_id: str):
             visitor_id=visitor_id,
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
             raw_ip=_client_ip(request),
-            share_channel=_share_channel(request),
+            share_channel=_share_channel(request, channel),
         )
     except PartnerUnavailable:
         return _partner_unavailable(request)
@@ -144,8 +158,10 @@ def referral_redirect(request, client_id: str):
 
 
 @require_GET
-def referral_continue(request, client_id: str):
-    """GET /r/{client_id}/continue — the Continue-to-Zerodha 302 (reuses M2 engine)."""
+def referral_continue(request, client_id: str, channel: str | None = None):
+    """GET /r/{client_id}/continue (or /r/{channel}/{client_id}/continue) — the
+    Continue-to-Zerodha 302 (reuses M2 engine). `channel` is the optional B1 path
+    prefix; captured for attribution, NEVER added to the Location."""
     try:
         normalized = validate_client_id(client_id)
     except InvalidClientId:
@@ -159,7 +175,7 @@ def referral_continue(request, client_id: str):
     try:
         destination = build_continue_redirect(
             tenant=tenant, client_id=normalized, referral=referral,
-            share_channel=_share_channel(request),
+            share_channel=_share_channel(request, channel),
         )
     except PartnerUnavailable:
         return _partner_unavailable(request)
