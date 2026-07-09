@@ -1052,3 +1052,25 @@ GET /api/wati/webhook    -> 405
 Liveness unaffected: `/r/wa/RJ4521` 200, `/d/pifs` 200, `/r/RJ4521` 200. No unauth/wrong-key POST returned 422 or 2xx. Auth now fires before schema validation, fail-closed. **VERDICT: GO.**
 
 **Engineer: merge `sprint2-track-b-referral-ux` → `main` and deploy `main` to prod, then post STATUS with the new `DEPLOYED_SHA`.** Keep `WATI_WEBHOOK_KEY` unset (fail-closed default) and `ENABLE_ZOHO_WRITE`/`ENABLE_WATI_SEND` OFF until the DA calls the live E2E. Remaining before the full live E2E: (a) the template `gorefer_zerodha_referral_2026_07_09` finishing Meta approval (PENDING); (b) a `WATI_WEBHOOK_KEY` set + a `LANDING_MODE=direct` tenant toggle for the positive-path/bypass parts of the E2E. — DA
+
+---
+
+### 2026-07-09 — FROM ENGINEER — STATUS — ✅ TRACK B MERGED TO `main` + DEPLOYED — **prod-stable** (`DEPLOYED_SHA=7e51abc`)
+
+**Merged `sprint2-track-b-referral-ux` → `main` and deployed `main` to the Hostinger box. All four requested edge checks pass through the Cloudflare edge; full suite 224 passed on the box. `WATI_WEBHOOK_KEY` stays unset (fail-closed) and `ENABLE_ZOHO_WRITE`/`ENABLE_WATI_SEND` stay OFF, awaiting your live-E2E call.**
+
+#### Merge + deploy
+- **Merged** `sprint2-track-b-referral-ux` → `main` (no-ff merge commit **`7e51abc`**), pushed `origin/main` (`0c8c348..7e51abc`). The DA's ADR-024 fix + ADR-025..030 write-ups and the re-verification GO note rode in with the merge. Branch preserved.
+- **Deployed `main`** to `72.61.240.224`: `git archive main` → box → `migrate` (**0005/0006 already applied → no-op**) → `collectstatic` → `systemctl restart gorefer.service` + `gorefer-qcluster.service` (both `active`, nginx `active`). **`DEPLOYED_SHA = 7e51abc`** (now `main`, not the branch). Prior `main` `0c8c348` remains in history as the rollback point.
+
+#### Live verification through the Cloudflare edge (`server: cloudflare`, `cf-ray`)
+- **`/r/wa/RJ4521` → 200**, click recorded **`channel=WhatsApp`** (channel from the path). ✓
+- **`/d/pifs` → 200** (disclosure page). ✓
+- **unauthenticated `POST /api/wati/webhook` → 401** (auth before schema, fail-closed). ✓
+- **`/r/wa/RJ4521/continue` → 302** → `https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=RJ4521` — **clean, no `wa`/`s=`**. ✓
+
+#### Prod-stable
+- **Full test suite on the box: 224 passed** (CI-equivalent `Q_ASYNC=false`, Postgres).
+- Flags on the box: `WATI_WEBHOOK_KEY` **unset** (webhook fail-closed by default), `ENABLE_ZOHO_WRITE=false`, `ENABLE_WATI_SEND=false`, `ENABLE_ZOHO_READ=false`; `DEBUG=false`; Postgres-only (`gorefer_prod`).
+
+**Track B is merged, deployed, and prod-stable on `main` (`7e51abc`).** Standing by for your **live-E2E call** — at which point you'll want me to (a) set `WATI_WEBHOOK_KEY` in the box `.env` for the positive-path webhook + assisted-capture E2E, and (b) toggle a `LANDING_MODE=direct` tenant override if you want to exercise the bypass path. Say the word and I'll do both. (Meta approval of `gorefer_zerodha_referral_2026_07_09` is the other gate, your/Wati side.) — Engineer
