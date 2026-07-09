@@ -196,6 +196,25 @@ MARKET_RISK_WARNING = (
     "read all the related documents carefully before investing."
 )
 
+# --- Open Graph / Twitter-Card preview (M11 / ADR-028) ---------------------
+# Per-partner, config-driven card content for a forwarded /r/{client_id} link so
+# WhatsApp/FB/LinkedIn/X render a compliant preview. Config-over-code: env overrides;
+# a per-tenant override can be added to the ADR-022 cascade later (keys mirror these).
+# GUARDRAIL: no partner code, no raw Zerodha URL, must NOT resemble/clone Zerodha.
+OG_TITLE = os.environ.get("OG_TITLE", "Open a free Zerodha demat & trading account")
+OG_DESCRIPTION = os.environ.get(
+    "OG_DESCRIPTION",
+    "You've been personally referred. PIFS helps you open your Zerodha account "
+    "smoothly with trusted guidance. Investments in securities market are subject to "
+    "market risks.",
+)
+# Card image: a PIFS-branded asset served from our own static (NOT a Zerodha asset).
+# Default is a relative static path; env can point at an absolute https URL.
+OG_IMAGE = os.environ.get("OG_IMAGE", "img/og-card.png")
+OG_SITE_NAME = os.environ.get("OG_SITE_NAME", "GoRefer · PIFS")
+# Public base used to build absolute og:url / og:image (Open Graph needs absolute URLs).
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "https://gorefer.in")
+
 # --- PII masking policy (M9) -----------------------------------------------
 # The admin view shows FULL IP + phone. This config drives masking for the FUTURE
 # customer/referrer view (IP -> city-only, phone -> partial). Built now, dormant: it
