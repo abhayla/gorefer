@@ -92,10 +92,26 @@ def test_preferences_renders_variant_c(admin_client):
     body = resp.content.decode()
     # Matches the approved mockup's sections.
     assert "Preferences" in body
-    assert "When someone taps your referral link" in body
-    assert "Show landing page" in body and "Direct to Zerodha" in body
+    # Landing mode is framed as a Yes/No question (Yes=page, No=direct).
+    assert "Show landing page when someone taps your referral link?" in body
+    # The two options are Yes (=page) and No (=direct), rendered as segmented buttons.
+    assert 'data-mode="page"' in body and 'data-mode="direct"' in body
+    seg = body.split('data-mode="page"', 1)[1]
+    assert "Yes" in seg.split("</button>", 1)[0]
+    assert "No" in seg.split('data-mode="direct"', 1)[1].split("</button>", 1)[0]
     assert "Enabled share channels" in body
     assert "gorefer.in/d/pifs" in body
+
+
+def test_top_save_button_submits_the_preferences_form(admin_client):
+    resp = admin_client.get(PREFS_URL)
+    body = resp.content.decode()
+    # The form carries an id, and there is a top (header) Save that targets it via form=…,
+    # in addition to the bottom submit — both post the same preferences form.
+    assert 'id="prefs_form"' in body
+    assert 'form="prefs_form"' in body
+    # Two "Save preferences" submit buttons (top + bottom).
+    assert body.count("Save preferences") >= 2
 
 
 # ---------------------------------------- ACCEPTANCE: flip to Direct THROUGH the screen

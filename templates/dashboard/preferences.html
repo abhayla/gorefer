@@ -8,11 +8,18 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
 
 <div class="max-w-[760px] mx-auto space-y-4">
 
-  <div>
-    <h1 class="text-[20px] font-extrabold tracking-tight">Preferences</h1>
-    <p class="text-[12.5px] text-ink-500 mt-0.5">
-      {{ sub_broker_name|default:"Your" }} · these settings apply to your referral links &amp; messages
-    </p>
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <h1 class="text-[20px] font-extrabold tracking-tight">Preferences</h1>
+      <p class="text-[12.5px] text-ink-500 mt-0.5">
+        {{ sub_broker_name|default:"Your" }} · these settings apply to your referral links &amp; messages
+      </p>
+    </div>
+    {# Top Save — submits the same preferences form as the bottom Save (form="prefs_form"). #}
+    <button type="submit" form="prefs_form"
+            class="flex-none rounded-xl bg-cobalt-600 text-white px-5 py-2.5 text-[13.5px] font-semibold card">
+      Save preferences
+    </button>
   </div>
 
   {% if saved %}
@@ -22,7 +29,7 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
     </div>
   {% endif %}
 
-  <form method="post" action="{% url 'dashboard_preferences' %}" class="space-y-4">
+  <form id="prefs_form" method="post" action="{% url 'dashboard_preferences' %}" class="space-y-4">
     {% csrf_token %}
 
     {# ---- Referral routing (LANDING_MODE) --------------------------------- #}
@@ -30,26 +37,26 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
     <div class="rounded-2xl bg-white border border-line card p-5">
       <div class="flex items-start justify-between gap-4">
         <div class="flex-1">
-          <div class="text-[13.5px] font-semibold">When someone taps your referral link</div>
+          <div class="text-[13.5px] font-semibold">Show landing page when someone taps your referral link?</div>
           <div class="text-[11.5px] text-ink-500 mt-0.5">
-            “Show landing page” captures the prospect’s name/email/phone as a lead first.
-            “Direct to Zerodha” sends them straight to signup — frictionless, but no lead
-            captured from the click.
+            <b>Yes</b> = show the landing page first (captures the prospect’s name/email/phone
+            as a lead). <b>No</b> = send them straight to Zerodha signup — frictionless, but no
+            lead captured from the click.
           </div>
         </div>
-        {# Segmented control → hidden landing_mode input. Direct disabled without a live /d/{slug}. #}
+        {# Yes/No control → hidden landing_mode input. Yes=page, No=direct. No disabled without a live /d/{slug}. #}
         <div class="inline-flex flex-none rounded-xl bg-cobalt-50 border border-cobalt-200 p-1">
           <button type="button" data-mode="page"
                   class="seg-btn text-[12.5px] font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap
                          {% if prefs.landing_mode != 'direct' %}bg-cobalt-600 text-white{% else %}text-cobalt-600{% endif %}">
-            Show landing page
+            Yes
           </button>
           <button type="button" data-mode="direct"
                   class="seg-btn text-[12.5px] font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap
                          {% if prefs.landing_mode == 'direct' %}bg-cobalt-600 text-white{% else %}text-cobalt-600{% endif %}
                          {% if not direct_allowed %}opacity-40 cursor-not-allowed{% endif %}"
                   {% if not direct_allowed %}disabled title="Needs a live disclosure page first"{% endif %}>
-            Direct to Zerodha
+            No
           </button>
         </div>
       </div>
