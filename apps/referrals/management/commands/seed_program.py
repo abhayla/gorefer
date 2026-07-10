@@ -52,6 +52,8 @@ class Command(BaseCommand):
         return tenant
 
     def _seed_central_config(self):
+        from apps.config.preferences import central_defaults
+
         baseline = {
             "referral_incentive_claim": flags.REFERRAL_INCENTIVE_CLAIM,
             "nse_ap_no": getattr(settings, "NSE_AP_NO", ""),
@@ -62,6 +64,9 @@ class Command(BaseCommand):
             "wati_business_number": settings.WATI_BUSINESS_NUMBER,
             "privacy_policy_url": "https://gorefer.in/privacy",
         }
+        # Preference-screen keys (Q-M-PREF / ADR-034): central baselines so behaviour
+        # is unchanged until a tenant overrides one through the Preferences screen.
+        baseline.update(central_defaults())
         for key, value in baseline.items():
             ConfigCentral.objects.get_or_create(key=key, defaults={"value": value})
         self.stdout.write("  central config: baseline ensured")

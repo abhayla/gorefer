@@ -15,4 +15,11 @@ urlpatterns = [
     # Referral Profile / User Referral Screen (M9).
     path("referrers/", views.referrer_search, name="dashboard_referrer_search"),
     path("referrer/<str:client_id>/", views.referrer_profile, name="dashboard_referrer"),
+    # Preferences / Settings screen (Q-M-PREF / ADR-034).
+    path("preferences", views.preferences, name="dashboard_preferences"),
+    path(
+        "preferences/partnership",
+        views.preferences_partnership,
+        name="dashboard_preferences_partnership",
+    ),
 ]

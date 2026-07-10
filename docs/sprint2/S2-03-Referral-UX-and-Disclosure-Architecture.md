@@ -99,6 +99,28 @@ Partner-level (taxonomy) config: each `ReferralProgram`/partner carries a `discl
 - **Q-M-MENU** — referrer 3-branch menu (Wati flow: menu node + 3 branches; branches 1–2 send-message; wiring for branch 3).
 - **Q-M-ASSIST** — assisted-referral capture (Wati capture steps) → `POST /api/wati/webhook` → Zoho lead + consent flag. Depends on Q-M-MENU + `ENABLE_ZOHO_WRITE`.
 
+## 14. Preferences / Settings screen (APPROVED 2026-07-09 → BUILD as Q-M-PREF)
+
+**Design APPROVED by Abhay 2026-07-09.** Visual truth: `mockups/preferences-screen-mockup.html` (Variant C · Cobalt). This is the UI home for per-tenant config — critically, `LANDING_MODE` is set HERE (through the screen), not via a backend override. Admin-only in Sprint 1; becomes the sub-broker's self-serve settings when `ENABLE_CUSTOMER_LOGIN` lands.
+
+**Route:** `GET/POST /admin-panel/preferences` (admin, tenant-scoped). Server-rendered Django + HTMX, matches the approved mockup.
+
+**Controls → config keys (all USER/tenant tier of the ADR-022 cascade; save persists to the tenant config):**
+- **Landing mode** (segmented: Show landing page ↔ Direct to Zerodha) → `LANDING_MODE = page|direct`. **Compliance guard:** selecting `direct` is only allowed when a live `/d/{slug}` exists for the tenant (else the UI blocks it / forces `page`) — the ADR-032 coupling, enforced at the screen, not just the backend.
+- **Show referrer reward** (toggle) → `SHARE_SHOW_REWARD`; **Reward claim text** (input) → `REFERRER_REWARD_CLAIM`.
+- **Helpline** (input) → helpline number; **WhatsApp Business number** (input) → the `wa.me` deep-link number.
+- **Enabled share channels** (chips) → the channel allow-list (`?s`/path channels).
+- **Allow "Refer directly" (assisted)** (toggle) → `ENABLE_ASSISTED_REFERRAL`.
+- **Disclosure:** read-only link to the tenant's `/d/{slug}`; **Active partnerships** list (Zerodha · SEBI/NSE now) with **+ Add partnership** → manages the `TenantPartnership` rows that drive `/d/{slug}` composition (add/activate/deactivate a partner).
+
+**Acceptance (guardrail tests):**
+- Flipping **Landing mode → Direct via the screen** persists `LANDING_MODE=direct` for the tenant AND live `/r/wa/{id}` then 302s straight to Zerodha (click still recorded, Location clean) — the exact "direct via the preference screen, not the backend" requirement.
+- `direct` is **refused in the UI** when the tenant has no live `/d/{slug}` (coupling enforced at the screen).
+- Each control persists + takes effect; admin-only (auth-gated); tenant-scoped (no cross-tenant leakage); config-over-code (no inline literals); Postgres-only; demo works offline.
+- Adding a partnership makes its block appear on `/d/{slug}`; deactivating removes it.
+
+**ADR-034** — Preferences screen as the UI surface for the user-tier config cascade; `LANDING_MODE` (and the ADR-032 disclosure coupling) is set here, admin-only in Sprint 1, self-serve post customer-login.
+
 ## 7. Related records (so nothing is siloed)
 - Architecture spine + tenancy + rule cascades: memory [[gorefer-architecture-layers]]; diagram `docs/architecture/gorefer-layered-architecture-diagram.html`.
 - Wati automation model + live inventory + the referral rebuild before/after: `Wati-Project/wati-automation-inventory.md`.

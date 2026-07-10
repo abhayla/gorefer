@@ -54,6 +54,26 @@ def has_live_disclosure_host(tenant) -> bool:
     return bool(enabled)
 
 
+def has_live_disclosure_page(tenant) -> bool:
+    """True only if the tenant has a LIVE, non-empty /d/{slug} disclosure page.
+
+    Stronger than has_live_disclosure_host: `direct` mode is a compliance-sensitive
+    bypass (ADR-032), so the disclosure host must not merely be *enabled* — it must
+    actually RENDER a block. That requires the page enabled AND at least one active
+    ReferralProgram for the tenant (compose_disclosures excludes inactive/soft-deleted
+    programs). This is the screen-level guard for "direct only when a live /d/{slug}
+    exists" (Q-M-PREF / ADR-034).
+    """
+    if tenant is None or not has_live_disclosure_host(tenant):
+        return False
+    # Local import avoids a cycle (models import is cheap at call time).
+    from .models import ReferralProgram
+
+    return ReferralProgram.objects.filter(
+        tenant=tenant, status="active", deleted_at__isnull=True
+    ).exists()
+
+
 def resolve_message_disclosure_level(tenant) -> str:
     """DERIVED §4.4 message-disclosure level for the tenant.
 
