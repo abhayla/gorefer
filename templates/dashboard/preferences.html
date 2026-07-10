@@ -1,0 +1,168 @@
+{% extends "dashboard/base.html" %}
+{% load static %}
+{% block title %}GoRefer Admin — Preferences{% endblock %}
+{% block content %}
+
+{% comment %}Preferences / Settings screen (Q-M-PREF · Variant C · ADR-034). The UI home
+for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backend override.{% endcomment %}
+
+<div class="max-w-[760px] mx-auto space-y-4">
+
+  <div>
+    <h1 class="text-[20px] font-extrabold tracking-tight">Preferences</h1>
+    <p class="text-[12.5px] text-ink-500 mt-0.5">
+      {{ sub_broker_name|default:"Your" }} · these settings apply to your referral links &amp; messages
+    </p>
+  </div>
+
+  {% if saved %}
+    <div class="rounded-xl bg-positive/10 border border-positive/40 px-3 py-2.5 text-[12px] text-ink-700">
+      ✓ Preferences saved.
+      {% for n in notices %}<div class="mt-1 text-ink-500">{{ n }}</div>{% endfor %}
+    </div>
+  {% endif %}
+
+  <form method="post" action="{% url 'dashboard_preferences' %}" class="space-y-4">
+    {% csrf_token %}
+
+    {# ---- Referral routing (LANDING_MODE) --------------------------------- #}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 mt-2 ml-1">Referral routing</div>
+    <div class="rounded-2xl bg-white border border-line card p-5">
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">When someone taps your referral link</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">
+            “Show landing page” captures the prospect’s name/email/phone as a lead first.
+            “Direct to Zerodha” sends them straight to signup — frictionless, but no lead
+            captured from the click.
+          </div>
+        </div>
+        {# Segmented control → hidden landing_mode input. Direct disabled without a live /d/{slug}. #}
+        <div class="inline-flex flex-none rounded-xl bg-cobalt-50 border border-cobalt-200 p-1">
+          <button type="button" data-mode="page"
+                  class="seg-btn text-[12.5px] font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap
+                         {% if prefs.landing_mode != 'direct' %}bg-cobalt-600 text-white{% else %}text-cobalt-600{% endif %}">
+            Show landing page
+          </button>
+          <button type="button" data-mode="direct"
+                  class="seg-btn text-[12.5px] font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap
+                         {% if prefs.landing_mode == 'direct' %}bg-cobalt-600 text-white{% else %}text-cobalt-600{% endif %}
+                         {% if not direct_allowed %}opacity-40 cursor-not-allowed{% endif %}"
+                  {% if not direct_allowed %}disabled title="Needs a live disclosure page first"{% endif %}>
+            Direct to Zerodha
+          </button>
+        </div>
+      </div>
+      <input type="hidden" name="landing_mode" id="landing_mode_input" value="{{ prefs.landing_mode }}">
+      {# Compliance callout — re-rendered by HTMX on segment change (ADR-032 coupling). #}
+      <div id="landing_mode_callout">
+        {% include "dashboard/partials/landing_mode_callout.html" %}
+      </div>
+    </div>
+
+    {# ---- Rewards --------------------------------------------------------- #}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Rewards</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">
+      <div class="flex items-start justify-between gap-4 py-1.5">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">Show the referrer reward in messages</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">Whether the reward wording appears. Off = service-only wording.</div>
+        </div>
+        {% include "dashboard/partials/pref_toggle.html" with name="share_show_reward" on=prefs.share_show_reward %}
+      </div>
+      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">Reward claim text</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">Shown to the referrer only (private). Flip the toggle above to hide it.</div>
+        </div>
+        <input name="referrer_reward_claim" value="{{ prefs.referrer_reward_claim }}"
+               class="flex-none w-[260px] max-w-[50vw] rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none">
+      </div>
+    </div>
+
+    {# ---- Contact -------------------------------------------------------- #}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Contact</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">
+      <div class="flex items-start justify-between gap-4 py-1.5">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">Assisted-opening helpline</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">The “Call or WhatsApp us” number in your messages.</div>
+        </div>
+        <input name="support_helpline_phone" value="{{ prefs.support_helpline_phone }}"
+               class="flex-none w-[260px] max-w-[50vw] rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none">
+      </div>
+      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">WhatsApp Business number</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">Where “Share on WhatsApp” deep-links.</div>
+        </div>
+        <input name="wati_business_number" value="{{ prefs.wati_business_number }}"
+               class="flex-none w-[260px] max-w-[50vw] rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none">
+      </div>
+    </div>
+
+    {# ---- Sharing & channels --------------------------------------------- #}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Sharing &amp; channels</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">
+      <div class="py-1.5">
+        <div class="text-[13.5px] font-semibold">Enabled share channels</div>
+        <div class="text-[11.5px] text-ink-500 mt-0.5">Which channels a share can be attributed to.</div>
+        <div class="flex flex-wrap gap-2 mt-2.5">
+          {% for code, label in channel_choices %}
+            {% include "dashboard/partials/pref_chip.html" with code=code label=label allowlist=prefs.share_channels_allowlist %}
+          {% endfor %}
+        </div>
+      </div>
+      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">Allow “Refer directly” (assisted)</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">Referrer hands you a prospect’s name &amp; mobile → creates a lead for follow-up (with consent).</div>
+        </div>
+        {% include "dashboard/partials/pref_toggle.html" with name="enable_assisted_referral" on=prefs.enable_assisted_referral %}
+      </div>
+    </div>
+
+    {# ---- Disclosure + partnerships (drive /d/{slug}) -------------------- #}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Disclosure</div>
+    <div class="rounded-2xl bg-white border border-line card p-5">
+      <div class="flex items-start justify-between gap-4 py-1.5">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">Your disclosure page</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">Auto-composed from your active partnerships below. Linked from every message (NSE §4.4).</div>
+        </div>
+        <a class="flex-none text-[12.5px] font-semibold text-cobalt-600 hover:text-cobalt-500" target="_blank"
+           href="{% url 'disclosure_page' slug %}">gorefer.in/d/{{ slug }} ↗</a>
+      </div>
+      <div class="border-t border-line pt-3 mt-1">
+        {% include "dashboard/partials/partnerships.html" %}
+      </div>
+    </div>
+
+    <div class="flex justify-end gap-2.5 pt-1">
+      <a href="{% url 'dashboard' %}" class="rounded-xl bg-white border border-line text-ink-900 px-5 py-2.5 text-[13.5px] font-semibold">Cancel</a>
+      <button type="submit" class="rounded-xl bg-cobalt-600 text-white px-5 py-2.5 text-[13.5px] font-semibold card">Save preferences</button>
+    </div>
+  </form>
+</div>
+
+{# Segmented landing-mode control: sync the hidden input + fetch the live callout on change. #}
+<script>
+(function () {
+  var input = document.getElementById("landing_mode_input");
+  var btns = document.querySelectorAll(".seg-btn");
+  btns.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (btn.disabled) return;
+      var mode = btn.getAttribute("data-mode");
+      input.value = mode;
+      btns.forEach(function (b) {
+        var on = b.getAttribute("data-mode") === mode;
+        b.classList.toggle("bg-cobalt-600", on);
+        b.classList.toggle("text-white", on);
+        b.classList.toggle("text-cobalt-600", !on);
+      });
+    });
+  });
+})();
+</script>
+{% endblock %}

@@ -11,14 +11,14 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.views import LoginView
 from django.http import Http404
 from django.shortcuts import redirect, render
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_http_methods
 
 from apps.events.models import SyncHealth
 from apps.referrals.models import Referral
 from apps.referrals.validators import InvalidClientId, validate_client_id
 from apps.tenants.resolve import get_current_tenant
 
-from . import profile, queries
+from . import preferences_service, profile, queries
 
 
 def _staff_required(view):
@@ -169,6 +169,72 @@ def referrer_profile(request, client_id: str):
         "nav_active": "referrer",
     }
     return render(request, "dashboard/referrer_profile.html", ctx)
+
+
+@_staff_required
+@require_http_methods(["GET", "POST"])
+def preferences(request):
+    """GET/POST /admin-panel/preferences — the per-tenant Preferences screen (Q-M-PREF).
+
+    Admin-only, tenant-scoped. GET renders the current tenant config; POST persists
+    each control to the USER/tenant tier of the cascade (ADR-022, ADR-034). LANDING_MODE
+    is set HERE, not via a backend override; the ADR-032 `direct`-needs-live-/d/{slug}
+    coupling is enforced at this screen.
+    """
+    tenant = get_current_tenant(request)
+    notices: list[str] = []
+    saved = False
+    if request.method == "POST":
+        notices = preferences_service.save_preferences(tenant, request.POST, user=request.user)
+        saved = True
+    ctx = preferences_service.current_view(tenant)
+    ctx.update(
+        {
+            "sync_health": _sync_health(tenant),
+            "nav_active": "preferences",
+            "notices": notices,
+            "saved": saved,
+        }
+    )
+    return render(request, "dashboard/preferences.html", ctx)
+
+
+@_staff_required
+@require_http_methods(["POST"])
+def preferences_partnership(request):
+    """HTMX: add / activate / deactivate a partnership, then re-render the list.
+
+    These rows drive /d/{slug} composition (ADR-031). After any change we re-render
+    the partnerships partial (which includes the disclosure-status callout) so the
+    screen reflects the new live-disclosure state immediately.
+    """
+    tenant = get_current_tenant(request)
+    action = request.POST.get("action", "")
+    error = None
+    try:
+        if action == "add":
+            preferences_service.add_partnership(
+                tenant,
+                name=request.POST.get("name", ""),
+                regulator=request.POST.get("regulator", ""),
+                user=request.user,
+            )
+        elif action in {"activate", "deactivate"}:
+            preferences_service.set_partnership_active(
+                tenant,
+                program_id=int(request.POST.get("program_id") or 0),
+                active=(action == "activate"),
+                user=request.user,
+            )
+        else:
+            error = "Unknown action."
+    except preferences_service.PreferencesError as exc:
+        error = str(exc)
+    except (TypeError, ValueError):
+        error = "Invalid partnership request."
+    ctx = preferences_service.current_view(tenant)
+    ctx["partnership_error"] = error
+    return render(request, "dashboard/partials/partnerships.html", ctx)
 
 
 # Expose whether the dashboard is enabled (feature flag) to urls.

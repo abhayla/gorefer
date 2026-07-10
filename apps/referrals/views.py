@@ -116,15 +116,27 @@ def _landing_context(request, tenant, client_id: str, nonce: str | None):
     config-driven WATI business number + the referral id + whatever the prospect
     typed into the form (name/phone/email), so only the number is passed here.
     """
+    from apps.config import preferences as prefkeys
+
     tenant_id = tenant.id if tenant is not None else None
-    wa_number = resolve("wati_business_number", tenant_id=tenant_id, default="")
+    prefs = prefkeys.get_preferences(tenant_id)
+    wa_number = prefs[prefkeys.WATI_BUSINESS_NUMBER]
+    # Reward wording is tenant-configurable via the Preferences screen (Q-M-PREF): the
+    # tenant's REFERRER_REWARD_CLAIM when "show referrer reward" is on, else hidden. The
+    # compliance-LOCKED incentive claim (flags) remains the central fallback / audit copy.
+    show_reward = prefs[prefkeys.SHARE_SHOW_REWARD]
+    reward_claim = prefs[prefkeys.REFERRER_REWARD_CLAIM] or flags.REFERRAL_INCENTIVE_CLAIM
     ctx = {
         "client_id": client_id,
         "nonce": nonce or "",
         "wati_business_number": wa_number,
+        # Override the context-processor globals with the tenant's configured helpline
+        # (Preferences screen wins over the settings default). tel: form strips spaces.
+        "SUPPORT_HELPLINE_PHONE": prefs[prefkeys.SUPPORT_HELPLINE_PHONE],
+        "SUPPORT_HELPLINE_TEL": (prefs[prefkeys.SUPPORT_HELPLINE_PHONE] or "").replace(" ", ""),
         "privacy_policy_url": resolve("privacy_policy_url", tenant_id=tenant_id, default="#"),
-        "REFERRAL_INCENTIVE_CLAIM": flags.REFERRAL_INCENTIVE_CLAIM,
-        "show_incentive": True,  # a valid referrer -> show the referral-benefit panel
+        "REFERRAL_INCENTIVE_CLAIM": reward_claim if show_reward else "",
+        "show_incentive": show_reward,  # tenant may hide the referral-benefit panel
     }
     ctx.update(_og_context(request, client_id))
     return ctx

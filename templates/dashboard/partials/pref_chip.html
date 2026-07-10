@@ -1,0 +1,22 @@
+{% comment %}
+Reusable share-channel chip. A checkbox styled as a pill (name=share_channels,
+value=code) so the enabled set submits natively as a multi-value field. WhatsApp +
+Copy are always-on (the primary CTAs) — shown checked and locked. Params: code, label,
+allowlist (the enabled codes). {% endcomment %}
+{% if code == "wa" or code == "copy" %}
+  <label class="inline-flex items-center rounded-lg border border-cobalt-200 bg-cobalt-50 text-cobalt-600 px-3 py-1.5 text-[12.5px] font-semibold cursor-default">
+    <input type="checkbox" name="share_channels" value="{{ code }}" class="sr-only" checked>
+    {{ label }}
+  </label>
+{% else %}
+  <label class="pref-chip inline-flex items-center rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold cursor-pointer select-none
+                {% if code in allowlist %}border-cobalt-200 bg-cobalt-50 text-cobalt-600{% else %}border-line text-ink-500{% endif %}">
+    <input type="checkbox" name="share_channels" value="{{ code }}" class="peer sr-only" {% if code in allowlist %}checked{% endif %}
+           onchange="this.closest('label').classList.toggle('border-cobalt-200', this.checked);
+                     this.closest('label').classList.toggle('bg-cobalt-50', this.checked);
+                     this.closest('label').classList.toggle('text-cobalt-600', this.checked);
+                     this.closest('label').classList.toggle('border-line', !this.checked);
+                     this.closest('label').classList.toggle('text-ink-500', !this.checked);">
+    {{ label }}
+  </label>
+{% endif %}

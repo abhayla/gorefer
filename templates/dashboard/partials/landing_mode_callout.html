@@ -1,0 +1,18 @@
+{% comment %}
+Landing-mode compliance callout (Q-M-PREF / ADR-032). Rendered inline on GET and
+re-rendered via HTMX when the segment toggles. `live_disclosure` = the tenant has a
+live /d/{slug}; `requested_mode` (HTMX only) = the segment the user just clicked.
+{% endcomment %}
+{% if live_disclosure %}
+  <div class="mt-3 rounded-xl bg-cobalt-50 border border-cobalt-200 px-3 py-2.5 text-[11.5px] text-cobalt-600">
+    ✓ Safe to use “Direct” — your disclosure page
+    <b>gorefer.in/d/{{ slug }}</b> is live, so the required SEBI/NSE disclosures are
+    still one tap away from every message.
+  </div>
+{% else %}
+  <div class="mt-3 rounded-xl bg-pending/10 border border-pending/40 px-3 py-2.5 text-[11.5px] text-ink-700">
+    ⚠ “Direct to Zerodha” is unavailable until you have a live disclosure page
+    (<b>/d/{{ slug }}</b>). Add an active partnership below, then you can switch to
+    Direct. Until then, links show the landing page (which hosts the disclosures).
+  </div>
+{% endif %}

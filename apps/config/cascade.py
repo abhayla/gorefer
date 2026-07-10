@@ -46,3 +46,29 @@ def resolve(
     if default is _UNSET:
         raise KeyError(f"config key not found and no default: {key!r}")
     return default
+
+
+class ComplianceLockedKeyError(ValueError):
+    """Raised when a write targets a compliance-locked key at a lower tier."""
+
+
+def set_tenant(key: str, value: Any, *, tenant_id: int, user=None) -> None:
+    """Persist a config value at the GLOBAL (tenant) tier — the user/tenant tier the
+    Preferences screen writes to (ADR-022, ADR-034).
+
+    Refuses a compliance-locked key: those resolve straight from central and can
+    never be weakened by a lower tier, so persisting one here would be a silent no-op
+    that misleads an operator — we fail loud instead. `user` (optional) stamps
+    updated_by for the audit trail.
+    """
+    if key in COMPLIANCE_LOCKED_KEYS:
+        raise ComplianceLockedKeyError(
+            f"{key!r} is compliance-locked and cannot be set at the tenant tier "
+            "(it resolves from central only)."
+        )
+    defaults: dict[str, Any] = {"value": value}
+    if user is not None and getattr(user, "pk", None):
+        defaults["updated_by"] = user.pk
+    ConfigGlobal.objects.update_or_create(
+        tenant_id=tenant_id, key=key, defaults=defaults
+    )
