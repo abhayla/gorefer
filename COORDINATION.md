@@ -1107,3 +1107,114 @@ Scope:
 The mission + `S2-03` §10/§14 name a **`TenantPartnership`** model as the thing driving `/d/{slug}` and the "Active partnerships" manager. **That table does not exist** — the built B2/ADR-031 disclosure page composes from the tenant's **active `ReferralProgram` rows** (`disclosure_service.compose_disclosures`; `regulator`/`disclosure_template`/`disclosure_sequence` are columns on `ReferralProgram`). Rather than introduce a parallel table that would duplicate the composition source, **I wired the "Active partnerships" controls to those existing `ReferralProgram` rows** (add = new Partner+Program row; activate/deactivate = `status`). This is config-over-code and matches exactly what `/d/{slug}` already reads. **Recommendation: treat `TenantPartnership` as the conceptual name for "a tenant's active `ReferralProgram` rows" for Sprint 2** — no new table needed now; a dedicated join table can be introduced later (with per-partnership values like ARN/DSA) as a data-model refactor without changing this screen's contract. Flagging so the naming is reconciled in the spec; **not blocking** — the acceptance criteria (incl. "adding/removing a partnership changes `/d/{slug}`") are all met against the real model. Recorded as ADR-034 alt #2.
 
 Written to COORDINATION.md — ready for the DA / independent tester.
+
+---
+
+### 2026-07-10 — FROM ENGINEER — STATUS — Q-M-PREF: pre-deploy review pack exported (HOLDING deploy)
+
+**Prod deploy is ON HOLD per Abhay's directive — NOT deployed.** Exported the branch changes + test evidence to the working tree for the DA's independent pre-deploy review (plain files, no commit needed):
+- **`review/q-m-pref.diff`** — full `git diff main...feature/q-m-pref-preferences-screen` (20 files, +1278/-7). NB: two files in that diff are **not** Engineer code — `docs/sprint2/S2-03…md` (DA-authored §14 edit) and `mockups/preferences-screen-mockup.html` (the approved design); both were pre-existing uncommitted files that carried into the branch. All other files are the mission implementation + tests.
+- **`review/q-m-pref-tests.txt`** — gate checks (ruff clean · no migration drift · write flags OFF) + `pytest -v tests/test_qmpref_preferences.py` (**17 passed**) + full-suite `pytest -q` summary (**241 passed**, solo run). Includes a note that an earlier 196-error run was a concurrent-shared-test-DB artifact, not a code defect (each flagged test passes in isolation).
+
+**Holding the prod deploy until the DA posts "pre-deploy review GO".** — Engineer
+
+---
+
+### 2026-07-10 — FROM DA — Q-M-PREF PRE-DEPLOY REVIEW — ✅ **GO** (code review; test-execution caveat noted)
+
+Independent pre-deploy review (fresh reviewer, not the builder/DA — read the full diff + the actual code in-tree + the test assertions; did not trust the pass count alone). **All 6 areas PASS, no FAILs. VERDICT: GO to deploy the branch to prod.**
+- **Admin-gating:** both views `@_staff_required` (login_required + is_staff); tenant only from `get_current_tenant` — no `tenant_id` from the POST body → no cross-tenant targeting.
+- **Config wiring:** every control persists via `set_tenant()` at the tenant tier; keys centralized in `apps/config/preferences.py` (no scattered literals); central baselines seeded so behaviour is unchanged until overridden; landing/redirect consumers read the same cascade key the screen writes.
+- **Compliance coupling (CRITICAL):** enforced SERVER-SIDE — `save_preferences` downgrades a `direct` POST to `page` when `has_live_disclosure_page(tenant)` is false; `set_partnership_active` refuses deactivating the last active partnership while direct. Not merely a disabled UI control.
+- **Save/POST security:** CSRF token present; inputs validated; `COMPLIANCE_LOCKED_KEYS` (incl. `referral_incentive_claim`, `ap_disclosure_block`, `nse_ap_no`) cannot be written here — the editable "reward claim text" is the separate unlocked `referrer_reward_claim`; no cross-tenant write; values auto-escaped (no `|safe`).
+- **Test coverage:** assertions genuinely exercise persistence + effect — flip-to-direct persists `landing_mode=direct` AND `/r/wa/{id}`→ clean 302 (no `s=`, click recorded, **no `landing_viewed`** = landing skipped); direct refused w/o live `/d/`; tenant isolation; add/remove partnership changes `/d/{slug}`; `landing_mode` is not a settings flag (locks out a backend override).
+- **Red flags:** none — no `ZMPHZC`/Zerodha URL in any admin template; **no `settings.LANDING_MODE` backend override anywhere** (grep-clean, test-locked); no migrations; DEBUG untouched; write flags OFF.
+
+**Caveat (honest):** the reviewer could NOT execute the suite (DA sandbox down) — the 17/241 pass is taken from the exported `q-m-pref-tests.txt`, and the test *assertions* were independently verified by reading them, but the *execution* was not reproduced. Non-blocking follow-ups for a later pass: (a) add an automated guardrail-#3 assertion on the preferences response + a CSRF-enforced-client test; (b) reconcile TenantPartnership↔ReferralProgram naming (Q-M-PREF-1); (c) a clean solo full-suite CI run before merge.
+
+**Pre-deploy review GO.** Next: deploy the branch to prod (branch, not merged) → Abhay flips PIFS to Direct through the screen → DA in-session subagent black-box confirms the effect → merge. — DA
+
+---
+
+### 2026-07-10 — FROM ENGINEER — STATUS — Q-M-PREF: branch LIVE on prod for final verification (main NOT merged)
+
+**Deployed `feature/q-m-pref-preferences-screen` to prod for final verification — branch only, `main` NOT merged (rollback point `7e51abc` intact).**
+
+- **DEPLOYED_SHA = `2c5c19d8f74438c31fe50ff9cfcda8c283132ea2`** (was `7e51abc…`). Target = Hostinger VPS `72.61.240.224` (per `docs/deploy/DEPLOY-TARGET.md`).
+- **Method:** `git archive` branch HEAD → scp (sha-verified) → extracted over `/var/www/gorefer` (tracked files only → `.env` / `.venv` / `staticfiles` **preserved**, md5/mtime fingerprints unchanged) → `chown www-data`. Pre-deploy safety backup at `/var/backups/gorefer-pre-qmpref-20260710-103619.tar.gz`.
+- **migrate:** *No migrations to apply* (none expected — config is data); `makemigrations --check` → no drift. **collectstatic:** 7 files copied (compiled `app.css` md5 `2be7b3cc…` matches source). **Restarted** `gorefer` + `gorefer-qcluster` — both **active**, gunicorn listening on `127.0.0.1:8010`. (One benign log line: gunicorn 26 control-server can't write `/var/www/.gunicorn` — optional socket, does not affect serving; workers booted and requests serve 200/302.)
+- **Verified through the CF edge:**
+  - `GET https://gorefer.in/admin-panel/preferences` (unauth) → **302 → `/admin-panel/login/?next=/admin-panel/preferences`** (admin gate).
+  - `GET https://gorefer.in/r/wa/RJ4521` → **200** (PIFS still **page** mode — not flipped; no `ZMPHZC` in body).
+  - `GET https://gorefer.in/d/pifs` → **200**.
+- **Guardrails held:** `ENABLE_ZOHO_WRITE=false`, `ENABLE_WATI_SEND=false` (unchanged in `.env`). **`LANDING_MODE` NOT set via backend** — not in `.env`; **0** `ConfigGlobal` landing_mode rows; `resolve(landing_mode, pifs)` = `page`. It is flipped only through the Preferences screen.
+
+**Ready for final verification:** the DA's tester can now flip **PIFS → Direct** through `/admin-panel/preferences` on live prod and black-box confirm `/r/wa/RJ4521` then 302s straight to Zerodha (clean Location, click recorded). **Not merging to `main` until that confirmation.** — Engineer
+
+### 2026-07-10 — FROM ENGINEER — STATUS — Q-M-PREF UI tweaks (top Save + Yes/No landing-mode) — DONE on branch, HOLDING for pre-deploy review GO
+
+Added a header **"Save preferences"** button (submits the same form via `form="prefs_form"`) and reframed the landing-mode segmented control as a Yes/No question ("Show landing page when someone taps your referral link?" — **Yes=page, No=direct**; underlying `LANDING_MODE` value + all server logic incl. the ADR-032 direct-needs-live-`/d/{slug}` coupling unchanged; PIFS's saved `direct`=No untouched). Commit `a349c6e`. Tests updated (intent preserved) + top-Save assertion added: **`tests/test_qmpref_preferences.py` 18/18 PASS, full suite 242/242 PASS**, `ENABLE_ZOHO_WRITE`/`ENABLE_WATI_SEND` OFF, no backend LANDING_MODE override. Review pack re-exported (`review/q-m-pref.diff`, `review/q-m-pref-tests.txt`). **NOT deployed, NOT merged — holding for the DA's "pre-deploy review GO".** — Engineer
+
+---
+
+### 2026-07-10 — FROM DA — Q-M-PREF DELTA PRE-DEPLOY REVIEW — ✅ **GO** (commit a349c6e)
+
+Independent pre-deploy review of the top-Save + Yes/No-rename delta (fresh reviewer; read the diff + exported tests + cross-checked server logic; did not execute the suite — sandbox down). **All 4 areas PASS, no FAILs.**
+- **Delta:** header Save binds the same form (`type=submit form="prefs_form"`, outside `<form>` but bound via HTML5 `form=`); landing-mode is the Yes/No question with `data-mode=page→Yes`, `data-mode=direct→No`, hidden `landing_mode` input synced by JS. Both Saves POST to the same view.
+- **No regression:** `save_preferences` still reads `page|direct` and `set_tenant(LANDING_MODE,…)`; the rename is template-only. Compliance coupling intact + server-enforced (`direct→page` when `not has_live_disclosure_page`; last-active-partnership-while-direct refused). Admin-gating (`@_staff_required`) + tenant isolation unchanged. `/r/wa` redirect not in this diff (unchanged).
+- **Tests assert the acceptance:** top-Save-submits-same-form; flip-to-No persists `landing_mode=direct` + `/r/wa/RJ4521` → clean 302, click recorded, **no `landing_viewed`**; No refused w/o live `/d/`. 18 mission + 242 full-suite per the exported pack.
+- **Red flags:** none — no `ZMPHZC`/Zerodha URL in admin templates; no backend LANDING_MODE override; no migrations; DEBUG/write-flags untouched. (Cosmetic: a stale COORDINATION line said "17 tests"; authoritative = 18 mission / 242 full-suite.)
+
+**Pre-deploy review GO.** Engineer: deploy the branch (a349c6e) to prod (branch, not merged) → Abhay confirms the screen (top Save + Yes/No) on live + PIFS stays Direct (config persists across redeploy) → DA black-box confirms `/r/wa/RJ4521` still 302s to Zerodha → merge. Caveat on record: tests were reviewed, not independently re-executed (sandbox down). — DA
+
+---
+
+### 2026-07-10 — FROM ENGINEER — STATUS — Q-M-PREF delta (a349c6e) LIVE on prod for final verification (main NOT merged)
+
+**Deployed `feature/q-m-pref-preferences-screen` HEAD to prod — branch only, `main` NOT merged (rollback point `7e51abc` intact).**
+
+- **DEPLOYED_SHA = `a349c6e44562def4fcd105d00cb37c8f4d526839`** (was `2c5c19d…`). Target = Hostinger VPS `72.61.240.224` (per `docs/deploy/DEPLOY-TARGET.md`).
+- **Method:** `git archive` branch HEAD → scp (sha256 verified: local == remote `1401245…`) → extracted over `/var/www/gorefer` (tracked files only → `.env` / `.venv` / `staticfiles` **preserved**; `.env` md5 `fbc0486a…` **unchanged** pre/post) → `chown www-data`. Pre-deploy safety backup at `/var/backups/gorefer-pre-qmpref-a349c6e-20260710-133041.tar.gz`.
+- **migrate:** `makemigrations --check` → *No changes detected*; `migrate` → *No migrations to apply* (config is data). **collectstatic:** 7 files copied. **Restarted** `gorefer` + `gorefer-qcluster` — both **active**, gunicorn listening on `127.0.0.1:8010` (3 workers). (Same benign log line as before: gunicorn control-server can't write `/var/www/.gunicorn` — optional socket, serving unaffected.)
+- **Verified through the CF edge:**
+  - `GET https://gorefer.in/admin-panel/preferences` (unauth) → **302 → `/admin-panel/login/?next=/admin-panel/preferences`** (admin gate).
+  - `GET https://gorefer.in/r/wa/RJ4521` → **302 → `https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=RJ4521`** — PIFS is on **Direct/"No"**, landing page **SKIPPED**, Location clean. The `landing_mode=direct` `ConfigGlobal` row **persisted across the code-only redeploy** (verified in-DB: `resolve(landing_mode, pifs)` = `direct`, 1 row).
+  - `GET https://gorefer.in/d/pifs` → **200**.
+- **Guardrails held:** `ENABLE_ZOHO_WRITE=false`, `ENABLE_WATI_SEND=false`, `WATI_WEBHOOK_KEY` **unset** (all unchanged in `.env`). **No backend `LANDING_MODE`** — `settings` has no `LANDING_MODE` attr; it is set only through the Preferences screen.
+
+**Ready for final verification:** the top Save + Yes/No landing-mode screen is live; PIFS stays Direct. **Not merging to `main` until the DA's black-box confirmation.** — Engineer
+
+---
+
+### 2026-07-10 — FROM DA — Q-M-PREF POST-DEPLOY BLACK-BOX — ✅ **GO to merge** (a349c6e)
+
+Independent black-box on live prod: `GET https://gorefer.in/r/wa/RJ4521` (cache-busted) returns **no landing HTML** — Direct mode is live, the PIFS landing is **skipped**. The exact redirect destination (`…/api/lead/?c=ZMPHZC&r=RJ4521`, clean) is covered by the pre-deploy code+test review (test asserts it), Track B's proven live 302, and the Engineer's edge check; the only piece not independently re-read live is the Location string itself — a tooling gap (browser blocks signup.zerodha.com; DA shell down), redundant with the passing test. Admin gate + `/d/pifs` 200 confirmed earlier.
+
+Verification complete for Q-M-PREF (pre-deploy code+test review GO + post-deploy black-box GO). **Engineer: merge `feature/q-m-pref-preferences-screen` (a349c6e) → `main` and deploy `main` to prod.** Keep write flags OFF and `WATI_WEBHOOK_KEY` unset. After merge, the Preferences screen + Direct mode are fully live; next thread is the WhatsApp E2E (template `gorefer_zerodha_referral_2026_07_10` APPROVED; webhook key set at E2E time). — DA
+
+---
+
+### 2026-07-10 — FROM INDEPENDENT TEST REVIEWER — Q-M-PREF EXECUTION VERIFICATION — ✅ **GO to merge** (a349c6e)
+
+Independent test-execution review (did NOT write this code; ran everything myself on Windows + local Postgres 16.8, Python 3.13.5, `.venv`, `Q_ASYNC=false` per ci.yml). This closes the DA's "tests reviewed, not re-executed (sandbox down)" caveat — the suite has now been **independently executed green**.
+
+- **Observed HEAD SHA = `a349c6e44562def4fcd105d00cb37c8f4d526839`** (matches expected a349c6e). Uncommitted files = review artifacts + COORDINATION.md only; no source drift.
+- **Full suite:** `python -m pytest -q` → **242 passed, 0 failed** (316.85s, exit 0).
+- **Mission suite:** `pytest -v tests/test_qmpref_preferences.py` → **18 passed, 0 failed** (94.13s, exit 0).
+- **ruff check .** → *All checks passed!* (clean). **`makemigrations --check --dry-run`** → *No changes detected* (no drift). **`manage.py check`** → *no issues*.
+- **Acceptance tests confirmed present AND passing in my run** (not trusting names — read the assertions + cross-checked `apps/referrals/views.py:150-164` that `/r/wa/{id}` is a real route consulting `resolve_landing_mode`):
+  - `test_flip_to_direct_via_screen_persists_and_takes_effect` — persists `landing_mode=direct` at tenant tier + `ConfigGlobal` row. **PASS**
+  - `test_direct_set_via_screen_makes_wa_redirect_clean` — `/r/wa/RJ4521` → 302 `https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=RJ4521`, asserts no `s=`/`wa` in Location, click Event recorded, **no `landing_viewed`**. **PASS**
+  - `test_direct_refused_when_no_live_disclosure_page` + `..._segment_disabled_in_ui...` — "No" refused server-side (forced back to page, not persisted) when no live `/d/{slug}`; UI disables the button. **PASS**
+  - `test_top_save_button_submits_the_preferences_form` — `id="prefs_form"` + header Save `form="prefs_form"`, ≥2 "Save preferences". **PASS**
+  - `test_preferences_requires_login` / `test_preferences_requires_staff` — admin-gating (302 → login). **PASS**
+  - `test_tenant_scoped_no_cross_tenant_write` — tenant isolation (no cross-tenant ConfigGlobal write). **PASS**
+- **No FAILs.** No code modified, nothing deployed or merged.
+
+**Final verdict: GO to merge** `feature/q-m-pref-preferences-screen` (a349c6e) → `main`, based on my own execution. Keep write flags OFF, `WATI_WEBHOOK_KEY` unset. — Independent Test Reviewer
+
+---
+
+### 2026-07-11 — FROM DA → Engineer — MISSION Q-M-OTP — pluggable OTP channel port (WhatsApp/Wati primary, admin-configurable)
+
+Full buildable spec: `docs/sprint2/S2-03` §15 → "Mission Q-M-OTP". Summary: build OTP delivery as ports-and-adapters, admin-switchable via the ADR-022 config cascade with NO code change. Primary adapter = `WatiWhatsAppOtpAdapter` (AUTHENTICATION-category template, copy-code button, asserts TERMINAL delivery not HTTP 200, cascades to fallback on non-delivery). `SmsOtpAdapter` = interface+stub. `ManualOtpAdapter` + `DemoOtpAdapter` (log-only offline). `OtpService.issue/verify` stores **hash+expiry only**, single-use, rate-limited. Config keys (per-tenant, editable on Preferences screen): `ENABLE_OTP_LOGIN`(false), `OTP_PRIMARY_CHANNEL`(whatsapp_wati), `OTP_FALLBACK_CHANNELS`(["manual"]), `OTP_WHATSAPP_TEMPLATE`, `OTP_CODE_LENGTH`(6), `OTP_CODE_TTL_SECONDS`(300), `OTP_MAX_VERIFY_ATTEMPTS`(5), `OTP_RESEND_COOLDOWN_SECONDS`(60), `OTP_RATE_LIMIT_PER_IDENTITY_PER_HOUR`(5). Guardrail tests per §15. **Build on a feature branch off `main`, behind `ENABLE_OTP_LOGIN=false`; do NOT merge to main until the Sprint-2 customer-login gate.** GO-LIVE preconditions (NOT build blockers): fix Wati ~60% delivery reliability; create+approve the auth template. Reuses M5 Wati adapter/contract. Open: SMS provider choice; `client_id→contact-channel` Zoho lookup location — surface as QUESTIONs if they block, else stub. Record the referrer-identity + OTP-port ADR.
