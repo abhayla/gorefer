@@ -59,6 +59,11 @@ Owner: Abhay/PIFS. Each entry: what, why deferred, trigger to revisit.
 - **Consequence to remember:** with no GoRefer→Zoho write, GoRefer cannot stamp its journey-id onto the Zoho lead, so the journey↔Zoho-contact link is **match-based** (mobile/email/ClientId), not exact stitching. Documented as an accepted limitation.
 - **Revisit when:** onboarding a second GoRefer user/tenant whose lead-capture destination differs from PIFS, or when auto-write to any sink is wanted. Relates to DF-1 (Zoho pull), DF-5 (per-partner fields), and the config cascade (A1).
 
+### DF-OTP-SMS — SMS OTP provider (fallback channel for referrer login)
+- **What:** choose + wire a real SMS provider (MSG91 / Twilio / Gupshup / Kaleyra / …) behind the existing `SmsOtpAdapter` interface so `sms` becomes a live OTP channel (primary or fallback), selectable per-tenant on the Preferences screen (Q-M-OTP / ADR-035).
+- **Why deferred (Engineer, Q-M-OTP, 2026-07-12):** Q-M-OTP built the SMS adapter as an **interface + log-only stub** (returns `failed` so a mis-set `sms` primary cascades cleanly). WhatsApp-via-Wati is the decided PRIMARY (auth template ≈ ₹0.115/msg, reportedly < half the cheapest SMS OTP), with `manual` as the shipped fallback — so no SMS provider is needed to ship the OTP layer.
+- **Revisit when:** referrers without WhatsApp become common enough that a machine SMS fallback beats the manual/assisted path, or a provider is chosen. Surfaced as COORDINATION Q-M-OTP-1. Relates to ADR-035, DF-6 (OTP), [[wati-setup-reference]].
+
 ### DF-11 — Self-click tagging on the Referral Profile
 - **What:** on the Referral Profile Clicks tab, if a click's mobile later matches the referrer's own known Zoho mobile, tag that click **"self-click"** and exclude it from conversion counts (a referrer opening their own link shouldn't inflate their conversions).
 - **Why deferred (DA, M9, 2026-07-08):** raised in the User Referral Screen mission as a later polish, explicitly **not** built in M9. Needs a reliable click→mobile link (mobile only appears on lead submit) and the referrer's own mobile from Zoho READ.

@@ -145,6 +145,90 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
       </div>
     </div>
 
+    {# ---- Login OTP channel (Q-M-OTP) — config-over-code channel switch ---- #}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Login OTP</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-4">
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">How login codes are sent</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">
+            When a referrer logs in to see their link’s clicks, GoRefer sends a one-time code to the
+            channel already on file for their Client&nbsp;ID. Pick the primary channel and the fallback order —
+            no deploy needed.
+          </div>
+        </div>
+        {% if not otp_enabled %}
+          <span class="flex-none text-[10.5px] font-semibold text-ink-400 border border-line rounded-lg px-2 py-1">
+            Referrer login is off — saved and ready for when it’s enabled
+          </span>
+        {% endif %}
+      </div>
+
+      {# Primary channel #}
+      <div class="flex items-center justify-between gap-4 py-1.5 border-t border-line">
+        <label for="otp_primary_channel" class="text-[13px] font-semibold flex-1">Primary channel</label>
+        <select id="otp_primary_channel" name="otp_primary_channel"
+                class="flex-none rounded-lg border border-line text-[13px] px-3 py-2 bg-white min-w-[180px]">
+          {% for code, label in otp_channel_choices %}
+            <option value="{{ code }}" {% if code == prefs.otp_primary_channel %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      {# Fallback order (checkboxes; the service ignores the one chosen as primary) #}
+      <div class="py-1.5 border-t border-line">
+        <div class="text-[13px] font-semibold">Fallback channels (used if the primary can’t deliver)</div>
+        <div class="text-[11.5px] text-ink-500 mt-0.5">Tried in order after the primary. The primary is skipped if also ticked.</div>
+        <div class="flex flex-wrap gap-3 mt-2">
+          {% for code, label in otp_channel_choices %}
+            <label class="inline-flex items-center gap-1.5 text-[12.5px]">
+              <input type="checkbox" name="otp_fallback_channels" value="{{ code }}"
+                     {% if code in otp_fallback_selected %}checked{% endif %}>
+              {{ label }}
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      {# WhatsApp AUTHENTICATION template name #}
+      <div class="flex items-center justify-between gap-4 py-1.5 border-t border-line">
+        <label for="otp_whatsapp_template" class="text-[13px] font-semibold flex-1">WhatsApp OTP template</label>
+        <input type="text" id="otp_whatsapp_template" name="otp_whatsapp_template"
+               value="{{ prefs.otp_whatsapp_template }}"
+               class="flex-none rounded-lg border border-line text-[13px] px-3 py-2 bg-white min-w-[220px]"
+               placeholder="gorefer_login_otp">
+      </div>
+
+      {# Numeric knobs #}
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 py-1.5 border-t border-line">
+        <div>
+          <label for="otp_code_length" class="block text-[11.5px] font-semibold text-ink-600">Code length</label>
+          <input type="number" id="otp_code_length" name="otp_code_length" min="4" max="8"
+                 value="{{ prefs.otp_code_length }}" class="mt-1 w-full rounded-lg border border-line text-[13px] px-2.5 py-1.5">
+        </div>
+        <div>
+          <label for="otp_code_ttl_seconds" class="block text-[11.5px] font-semibold text-ink-600">Valid for (sec)</label>
+          <input type="number" id="otp_code_ttl_seconds" name="otp_code_ttl_seconds" min="60" max="1800"
+                 value="{{ prefs.otp_code_ttl_seconds }}" class="mt-1 w-full rounded-lg border border-line text-[13px] px-2.5 py-1.5">
+        </div>
+        <div>
+          <label for="otp_max_verify_attempts" class="block text-[11.5px] font-semibold text-ink-600">Max attempts</label>
+          <input type="number" id="otp_max_verify_attempts" name="otp_max_verify_attempts" min="1" max="10"
+                 value="{{ prefs.otp_max_verify_attempts }}" class="mt-1 w-full rounded-lg border border-line text-[13px] px-2.5 py-1.5">
+        </div>
+        <div>
+          <label for="otp_resend_cooldown_seconds" class="block text-[11.5px] font-semibold text-ink-600">Resend cooldown (sec)</label>
+          <input type="number" id="otp_resend_cooldown_seconds" name="otp_resend_cooldown_seconds" min="0" max="600"
+                 value="{{ prefs.otp_resend_cooldown_seconds }}" class="mt-1 w-full rounded-lg border border-line text-[13px] px-2.5 py-1.5">
+        </div>
+        <div>
+          <label for="otp_rate_limit_per_identity_per_hour" class="block text-[11.5px] font-semibold text-ink-600">Max codes / hour</label>
+          <input type="number" id="otp_rate_limit_per_identity_per_hour" name="otp_rate_limit_per_identity_per_hour" min="1" max="50"
+                 value="{{ prefs.otp_rate_limit_per_identity_per_hour }}" class="mt-1 w-full rounded-lg border border-line text-[13px] px-2.5 py-1.5">
+        </div>
+      </div>
+    </div>
+
     <div class="flex justify-end gap-2.5 pt-1">
       <a href="{% url 'dashboard' %}" class="rounded-xl bg-white border border-line text-ink-900 px-5 py-2.5 text-[13.5px] font-semibold">Cancel</a>
       <button type="submit" class="rounded-xl bg-cobalt-600 text-white px-5 py-2.5 text-[13.5px] font-semibold card">Save preferences</button>

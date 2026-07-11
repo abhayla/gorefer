@@ -28,7 +28,7 @@ from apps.referrals.landing_mode import (
     has_live_disclosure_page,
 )
 from apps.referrals.models import Partner, ReferralProgram
-from gorefer.flags import SHARE_CHANNEL_LABELS
+from gorefer.flags import SHARE_CHANNEL_LABELS, flags
 
 # Regulators an operator may attach a partnership for (matches ReferralProgram).
 REGULATOR_CHOICES = ReferralProgram.REGULATOR_CHOICES
@@ -58,6 +58,10 @@ def current_view(tenant) -> dict:
         "channel_choices": SHARE_CHANNEL_CHOICES,
         "regulator_choices": REGULATOR_CHOICES,
         "partnerships": list_partnerships(tenant),
+        # OTP config surface (Q-M-OTP) — the admin picks channel/order/limits here.
+        "otp_enabled": flags.ENABLE_OTP_LOGIN,
+        "otp_channel_choices": prefkeys.OTP_CHANNEL_CHOICES,
+        "otp_fallback_selected": prefs[prefkeys.OTP_FALLBACK_CHANNELS],
     }
 
 
@@ -153,7 +157,57 @@ def save_preferences(tenant, data, *, user=None) -> list[str]:
         tenant_id=tenant_id,
         user=user,
     )
+
+    # --- OTP login channel (Q-M-OTP) — config-over-code: swap channel/order/limits
+    # here, no deploy. Persisted at the tenant tier of the same cascade the OtpService
+    # reads, so a change takes effect immediately.
+    _save_otp(tenant_id, data, user=user)
     return notices
+
+
+def _save_otp(tenant_id, data, *, user=None) -> None:
+    """Persist the OTP config block (validated) to the tenant tier."""
+    # Primary channel — must be a known channel code, else keep the default.
+    primary = (data.get("otp_primary_channel") or "").strip().lower()
+    if primary in prefkeys._VALID_OTP_CHANNELS:
+        set_tenant(prefkeys.OTP_PRIMARY_CHANNEL, primary, tenant_id=tenant_id, user=user)
+
+    # Fallback channels — ordered, de-duplicated, validated, and never the primary.
+    submitted = (
+        data.getlist("otp_fallback_channels")
+        if hasattr(data, "getlist")
+        else data.get("otp_fallback_channels", [])
+    )
+    fallback: list[str] = []
+    for c in submitted:
+        c = (c or "").strip().lower()
+        if c in prefkeys._VALID_OTP_CHANNELS and c != primary and c not in fallback:
+            fallback.append(c)
+    set_tenant(prefkeys.OTP_FALLBACK_CHANNELS, fallback, tenant_id=tenant_id, user=user)
+
+    # Auth template name (free text — the Meta-approved AUTHENTICATION template).
+    template = (data.get("otp_whatsapp_template") or "").strip()
+    if template:
+        set_tenant(prefkeys.OTP_WHATSAPP_TEMPLATE, template, tenant_id=tenant_id, user=user)
+
+    # Numeric knobs — clamped to sane bounds so a bad admin entry can't disable OTP
+    # security (e.g. TTL=0 or attempts=0).
+    for key, field, lo, hi in (
+        (prefkeys.OTP_CODE_LENGTH, "otp_code_length", 4, 8),
+        (prefkeys.OTP_CODE_TTL_SECONDS, "otp_code_ttl_seconds", 60, 1800),
+        (prefkeys.OTP_MAX_VERIFY_ATTEMPTS, "otp_max_verify_attempts", 1, 10),
+        (prefkeys.OTP_RESEND_COOLDOWN_SECONDS, "otp_resend_cooldown_seconds", 0, 600),
+        (prefkeys.OTP_RATE_LIMIT_PER_IDENTITY_PER_HOUR, "otp_rate_limit_per_identity_per_hour", 1, 50),
+    ):
+        raw = data.get(field)
+        if raw is None or str(raw).strip() == "":
+            continue
+        try:
+            val = int(str(raw).strip())
+        except ValueError:
+            continue
+        val = max(lo, min(val, hi))
+        set_tenant(key, val, tenant_id=tenant_id, user=user)
 
 
 # ---------------------------------------------------------------- partnerships

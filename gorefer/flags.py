@@ -73,6 +73,11 @@ class FeatureFlags:
     # Later-sprint capabilities — OFF by default (never rendered as dead UI).
     ENABLE_CUSTOMER_LOGIN: bool = False
     ENABLE_ASSET_GENERATOR: bool = False
+    # Referrer self-service OTP login (Q-M-OTP). Master flag for the pluggable OTP
+    # port. OFF until the Sprint-2 customer-login gate — when OFF, OtpService issues
+    # through the DemoOtpAdapter (log-only, sends nothing). Independent of
+    # ENABLE_WATI_SEND: even with OTP on, real WhatsApp sending still needs WATI on.
+    ENABLE_OTP_LOGIN: bool = False
 
     # External-system adapters — OFF until credentials/templates verified.
     # When OFF, adapters log the intended call instead of sending (demo-safe).
@@ -97,6 +102,7 @@ class FeatureFlags:
         return cls(
             ENABLE_CUSTOMER_LOGIN=_bool("ENABLE_CUSTOMER_LOGIN", cls.ENABLE_CUSTOMER_LOGIN),
             ENABLE_ASSET_GENERATOR=_bool("ENABLE_ASSET_GENERATOR", cls.ENABLE_ASSET_GENERATOR),
+            ENABLE_OTP_LOGIN=_bool("ENABLE_OTP_LOGIN", cls.ENABLE_OTP_LOGIN),
             ENABLE_WATI_SEND=_bool("ENABLE_WATI_SEND", cls.ENABLE_WATI_SEND),
             ENABLE_ZOHO_WRITE=_bool("ENABLE_ZOHO_WRITE", cls.ENABLE_ZOHO_WRITE),
             ENABLE_ZOHO_READ=_bool("ENABLE_ZOHO_READ", cls.ENABLE_ZOHO_READ),
