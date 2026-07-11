@@ -71,6 +71,7 @@ INSTALLED_APPS = [
     "apps.referrals",
     "apps.events",
     "apps.integrations",
+    "apps.otp",  # pluggable OTP delivery port (Q-M-OTP; behind ENABLE_OTP_LOGIN)
 ]
 
 # --- Background queue (django-q2, Postgres/ORM broker — NO Redis) -----------
@@ -249,3 +250,16 @@ ZOHO_WEBHOOK_IP_ALLOWLIST = os.environ.get("ZOHO_WEBHOOK_IP_ALLOWLIST", "")  # c
 # key + IP allowlist; HMAC wax-seal deferred DF-2). Key is a SECRET (env only).
 WATI_WEBHOOK_KEY = os.environ.get("WATI_WEBHOOK_KEY", "")
 WATI_WEBHOOK_IP_ALLOWLIST = os.environ.get("WATI_WEBHOOK_IP_ALLOWLIST", "")  # csv; empty = any (dev)
+
+# --- OTP login (Q-M-OTP, behind ENABLE_OTP_LOGIN) --------------------------
+# The pluggable OTP delivery port. The per-tenant behavioural knobs (primary
+# channel, fallback order, template, TTL, limits) live in the ADR-022 config
+# cascade and are edited on the Preferences screen (apps/config/preferences.py) —
+# NOT here. This block holds only the process-level SECRET used to hash codes.
+# OTP codes are stored HASHED (never plaintext); the pepper strengthens the hash
+# so a DB leak alone can't brute-force 6-digit codes. SECRET — env only, never
+# inline; falls back to SECRET_KEY in dev so the flow works offline.
+OTP_HASH_PEPPER = os.environ.get("OTP_HASH_PEPPER", "") or SECRET_KEY
+# Central default for the AUTHENTICATION template name (per-tenant override on the
+# Preferences screen wins). Config, not a secret.
+OTP_WHATSAPP_TEMPLATE = os.environ.get("OTP_WHATSAPP_TEMPLATE", "gorefer_login_otp")
