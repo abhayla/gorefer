@@ -4,6 +4,14 @@
 >
 > Compiled 2026-07-09 (DA). Ties to the EXECUTION PLAN in COORDINATION.md.
 
+## Verification ORDER (standard, set 2026-07-09 — pre-deploy gates prod)
+Independent verification **gates** the prod deploy; it does not follow it. For each mission:
+1. **Pre-deploy independent code+test review (the gate):** run by a **separate Claude Code session** — a third party, NOT the builder (Engineer) and NOT the DA. It has its own working shell on the real machine, so it **checks out the branch itself, reads the diff, and RUNS the full test suite**, then reviews correctness / compliance coupling / security / acceptance-coverage and posts GO/NO-GO to COORDINATION.md **before** anything hits prod. (This is why it's a session, not a DA in-session subagent: the DA's sandbox is down `HYPERVISOR_VIRT_DISABLED`, so a DA subagent cannot run tests or read a non-main branch.)
+2. **Deploy branch to prod** only on the pre-deploy GO (branch, not merged; main = rollback).
+3. **Post-deploy black-box** live confirmation — run by a **DA in-session subagent** (web-only: web_fetch/browser against gorefer.in). Good for live HTTP behaviour; cannot run tests or log in to admin screens (those parts are covered by step 1 + the human admin action).
+4. **Merge** on the post-deploy GO.
+> Split rationale: code/test review needs a real shell → separate session; live HTTP black-box needs only web → DA subagent. Don't use a DA subagent for code/test review while the DA sandbox is down.
+
 ## Ground rules
 - Verify on the **live prod host** (`gorefer.in` via the Cloudflare edge) and/or the box's test suite — state which for each item.
 - Do not trust HTTP 200 = done; check the actual body/row/status.

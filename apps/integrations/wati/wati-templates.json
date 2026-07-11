@@ -37,7 +37,55 @@
     },
     {
       "_naming_convention": "gorefer_{partner}_{purpose}_{YYYY_MM_DD} (Abhay 2026-07-09). NAMED variables ({{name}}, {{client_id}}), not positional.",
-      "_status": "HOLD — do NOT submit to Meta until Abhay's review-go (his explicit rule). API create == submit, so this is registered but not yet created.",
+      "_status": "SUPERSEDED 2026-07-10 — this 07_09 template is still PENDING at Meta and is ABANDONED. Abhay created + got APPROVED a successor `gorefer_zerodha_referral_2026_07_10` (some text tweaks; use that one live). Kept here for the record; the buttons/variables/routing below still describe the design.",
+      "_compliance_audit_2026_07_10": {
+        "audited": "gorefer_zerodha_referral_2026_07_10 (APPROVED, MARKETING), exact live body pulled from Wati API 2026-07-10",
+        "verdict": "PASS-WITH-NOTES — keep the template, do NOT re-submit to Meta.",
+        "live_body": "Hi {{name}}, \\n\\nStart referring and turn your Zerodha account into rewards \\n\\n💰 For every friend who opens an account through you and starts trading, you earn:\\n1. 10% brokerage share - earn 10% of the brokerage that every eligible referred account generates\\n2. 300 reward points per account opened. \\n\\nEligibility - at least 3 successful referrals in the past 12 months.\\n\\nChoose from options how you'd like to refer 👇\\n\\nDisclosures: gorefer.in/d/pifs",
+        "buttons_live": "url 'Refer & Earn' -> https://gorefer.in/r/wa/{{client_id}} (dynamic) ; quick_reply 'Share on WhatsApp' ; quick_reply 'Refer directly'",
+        "findings": [
+          "§4.2 — 07_10 DROPPED the inline market-risk warning that 07_09 carried; body now relies only on 'Disclosures: gorefer.in/d/pifs'. Survivable under §4.4 (short-form may relocate disclosures to a linked page, and gorefer.in/d/pifs carries the warning verbatim — confirmed live 2026-07-10) but §4.4 relief is for text that won't fit, and it fit in 07_09. RECOMMENDATION: restore the market-risk line in the NEXT template version; do not re-submit now.",
+          "§4.8 — message mentions '10% brokerage share'; gorefer.in/d/pifs is MISSING 'Brokerage will not exceed the SEBI prescribed limit.' ACTION: add that line to the /d/pifs disclosure page (editing the page does NOT trigger a Meta re-approval). ENG/DA task.",
+          "§3.2 — Meta approval ≠ NSE/Zerodha approval. PIFS-authored referral content with AP context needs Zerodha written sign-off (referral T&C cl.8.vii) BEFORE broadcast. Confirm before any real send.",
+          "§5.5 — '300 reward points + 10% brokerage share' mirrors Zerodha's referral program (ban in abeyance, currently allowed, revocable). Fine while live; this is why §3.2 sign-off matters (Zerodha confirms wording matches live terms)."
+        ],
+        "disclosure_page_verified": "gorefer.in/d/pifs live 2026-07-10 — carries §4.1 ID block (Zerodha SEBI INZ000031633 | PIFS | NSE AP AP2516003693) + §4.2 market-risk warning verbatim. §4.8 brokerage-limit line NOT required (Abhay 2026-07-10: '10% brokerage share' is a referral revenue-share to the referrer, not a client brokerage rate; §4.8 targets client rates). Page kept to registration + Zerodha association only."
+      },
+      "_e2e_test_2026_07_10": {
+        "method": "Read the live Wati conversation log on test line 919999900000 (wati_get_messages) — a real earlier walk-through of all 3 branches, plus Abhay's screenshot of the delivered message.",
+        "broadcast_template_actually_used": "gorefer_zerodha_eng_2026_07_10 (NOTE: NOT gorefer_zerodha_referral_2026_07_10). Delivered text differs slightly (intro 'Turn your Zerodha account into rewards'; bold on key phrases; Disclosures line BEFORE 'Choose from options'). Manifest 'live_template' pointer is STALE — reconcile: the broadcast template is the *_eng_* one. DA to re-pull & record the exact _eng_ template.",
+        "branch_results": {
+          "delivery": "PASS — delivered + READ.",
+          "branch1_refer_and_earn_button": "PASS (by design) — proper URL button https://gorefer.in/r/wa/{{client_id}} carries the scheme; opens fine. (Button taps not logged as inbound so not directly observed, but scheme-correct.)",
+          "branch2_share_on_whatsapp": "PASS — keyword-action chatbot 'Zerodha Share on WhatsApp' fires, replies with Zerodha pitch + forwardable referral message + gorefer.in/r/wa/DA1707 link.",
+          "branch3_refer_directly": "PARTIAL — keyword-action chatbot 'Direct Zerodha Referral' fires, collects Name->Phone->Email step-by-step, then ENDS. NO evidence of POST to /api/wati/webhook and NO lead created. Confirms the known gap (captures in chat, creates no lead). Also fragile: out-of-order input -> 'I'm afraid I didn't understand.' Needs dashboard to confirm/build the webhook->Zoho wiring."
+        },
+        "BUG_disclosure_link": {
+          "symptom": "Tapping the in-body 'Disclosures: gorefer.in/d/pifs' link on WhatsApp -> 'You may not have a proper app for viewing this content'; display mangled to 'gorefer.in/...pifs'.",
+          "root_cause": "URL written scheme-less (no https://). WhatsApp cannot build a proper openable link from a bare domain in BODY TEXT. The /d/pifs page itself is fine (loads over https, web_fetch 200).",
+          "also_affects": "The 'Open here: gorefer.in/r/wa/DA1707' link inside the Share-on-WhatsApp bot reply (same scheme-less pattern). Buttons are unaffected (their URLs carry https://).",
+          "compliance_impact": "NOT cosmetic — this link is the NSE §4.4 hyperlink to the mandated disclosures. Broken link = disclosures unreachable = §4.2/§4.4 basis collapses. MUST fix before any real broadcast.",
+          "fix": "Prepend https:// to every URL that appears as BODY TEXT (templates AND chatbot reply materials). Disclosure link lives in an approved template -> requires a NEW template version + Meta re-approval (bundle the §4.2 market-risk restoration into the same version). Bot-reply links are editable in the Wati dashboard, no Meta approval.",
+          "verification_pending": "Confirm scheme is the cause via a 2-link diagnostic (https vs bare) to the test line within the open 24h window, before spending the Meta re-approval."
+        }
+      },
+      "_live_template": "SUPERSEDED — see _live_family_2026_07_10_v2 below. gorefer_zerodha_referral_2026_07_10 is now DELETED.",
+      "_live_family_2026_07_10_v2": {
+        "note": "Abhay 2026-07-10: rebuilt the family to fix the scheme-less disclosure link (BUG_disclosure_link). ALL now use https://gorefer.in/d/pifs. Old scheme-less versions DELETED.",
+        "live_approved": {
+          "gorefer_zerodha_eng_2026_07_10_v2": "KNOWN referrer, English. 'Hi {{1}}'. Buttons: Refer & Earn = dynamic URL https://gorefer.in/r/wa/{{client_id}}; Refer directly = quick_reply; Share on WhatsApp = quick_reply. Disclosure https ✅.",
+          "gorefer_zerodha_hin_2026_07_10_v2": "KNOWN referrer, Hindi. 'नमस्कार {{1}} जी'. Buttons: 'Refer करें और कमाएँ' = dynamic URL https://gorefer.in/r/wa/{{client_id}}; 'सीधे Refer करें' = quick_reply; 'WhatsApp पर शेयर करें' = quick_reply. Disclosure https ✅.",
+          "gorefer_zerodha_eng_leads_2026_07_10": "UNKNOWN referrer (not in Zoho, no client_id), English. NO name var. ALL THREE buttons quick_reply: Refer & Earn / Refer directly / Share on WhatsApp. 'Refer & Earn' is quick_reply (not URL) -> routes to a chatbot that must ASK for the Zerodha Client ID and return https://gorefer.in/r/wa/<id>. Disclosure https ✅."
+        },
+        "chatbot_layer_OPEN_questions": [
+          "(1) Leads 'Refer & Earn' chatbot: does it actually ask for the Client ID and return the personal link? UNVERIFIED (dashboard-only).",
+          "(2) Leads 'Share on WhatsApp' MIS-ATTRIBUTION risk: if it reuses the Share chatbot that hands out gorefer.in/r/wa/DA1707 (Abhay's id), an unknown referrer's shares credit Abhay, not them. Leads Share must capture the referrer's id first.",
+          "(3) Hindi keyword routing: Wati keyword-actions match on reply TEXT; Hindi buttons send different text ('सीधे Refer करें','WhatsApp पर शेयर करें') -> need SEPARATE keyword-actions for the Hindi texts or they do nothing.",
+          "(4) 'Refer directly' webhook gap UNCHANGED: Direct Zerodha Referral chatbot collects Name/Phone/Email but no POST to /api/wati/webhook, no Zoho lead.",
+          "(5) Bot-reply link scheme: template disclosure link fixed to https, but chatbot reply materials (e.g. Share bot 'Open here: gorefer.in/r/wa/DA1707') may still be scheme-less; edited in dashboard, not template.",
+          "Resolve via Wati dashboard login (this browser) OR live test sends + reading the conversation via API (needs a human to tap quick-replies)."
+        ]
+      },
       "name": "gorefer_zerodha_referral_2026_07_09",
       "category": "MARKETING",
       "language": "en",

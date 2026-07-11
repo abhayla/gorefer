@@ -105,13 +105,15 @@ Partner-level (taxonomy) config: each `ReferralProgram`/partner carries a `discl
 
 **Route:** `GET/POST /admin-panel/preferences` (admin, tenant-scoped). Server-rendered Django + HTMX, matches the approved mockup.
 
+**UI addition (Abhay, 2026-07-10):** a **Save button at the TOP** of the screen (in the header, right-aligned) in addition to the one at the bottom — both submit the same form. The page is long; the user shouldn't have to scroll to save. Reflected in `mockups/preferences-screen-mockup.html`.
+
 **Controls → config keys (all USER/tenant tier of the ADR-022 cascade; save persists to the tenant config):**
-- **Landing mode** (segmented: Show landing page ↔ Direct to Zerodha) → `LANDING_MODE = page|direct`. **Compliance guard:** selecting `direct` is only allowed when a live `/d/{slug}` exists for the tenant (else the UI blocks it / forces `page`) — the ADR-032 coupling, enforced at the screen, not just the backend.
+- **Landing mode** — **reframed as a Yes/No question (Abhay 2026-07-10):** *"Show landing page when someone taps your referral link?"* → **Yes = `LANDING_MODE=page`** (show the landing/lead form first), **No = `LANDING_MODE=direct`** (straight to Zerodha, skip landing). Underlying value + all server logic unchanged — only the label + option text change from the old segmented "Show landing page / Direct to Zerodha". **Compliance guard (ADR-032):** selecting **No** (direct) is only allowed when a live `/d/{slug}` exists for the tenant (else the UI blocks it / forces **Yes**/page) — enforced server-side, not just in the UI.
 - **Show referrer reward** (toggle) → `SHARE_SHOW_REWARD`; **Reward claim text** (input) → `REFERRER_REWARD_CLAIM`.
 - **Helpline** (input) → helpline number; **WhatsApp Business number** (input) → the `wa.me` deep-link number.
 - **Enabled share channels** (chips) → the channel allow-list (`?s`/path channels).
-- **Allow "Refer directly" (assisted)** (toggle) → `ENABLE_ASSISTED_REFERRAL`.
-- **Disclosure:** read-only link to the tenant's `/d/{slug}`; **Active partnerships** list (Zerodha · SEBI/NSE now) with **+ Add partnership** → manages the `TenantPartnership` rows that drive `/d/{slug}` composition (add/activate/deactivate a partner).
+- **Allow "Refer directly" (assisted)** (toggle) → `ENABLE_ASSISTED_REFERRAL`. **Helper note (Abhay 2026-07-10):** the toggle's help text must state honestly that the prospect's name/mobile is captured in the WhatsApp chat, and that **automatic Zoho lead-creation requires the Wati "Direct Zerodha Referral" chatbot → GoRefer `/api/wati/webhook` wiring to be connected** (GoRefer's webhook exists + is fail-closed; the Wati-side webhook action is the missing link until built). Don't imply a lead is auto-created if that wiring isn't live.
+- **Disclosure:** read-only link to the tenant's `/d/{slug}`; **Active partnerships** list (Zerodha · SEBI/NSE now) with **+ Add partnership** → manages the tenant's active **`ReferralProgram`** rows that drive `/d/{slug}` composition (add/activate/deactivate a partner). **[Reconciled per Q-M-PREF-1, 2026-07-09:** the "TenantPartnership" name used elsewhere in this doc is INDICATIVE — the real model is `ReferralProgram`, which is what `/d/{slug}` composes from; there is no separate partnership table. Any "TenantPartnership" reference = the tenant's active `ReferralProgram` rows.**]**
 
 **Acceptance (guardrail tests):**
 - Flipping **Landing mode → Direct via the screen** persists `LANDING_MODE=direct` for the tenant AND live `/r/wa/{id}` then 302s straight to Zerodha (click still recorded, Location clean) — the exact "direct via the preference screen, not the backend" requirement.
@@ -120,6 +122,57 @@ Partner-level (taxonomy) config: each `ReferralProgram`/partner carries a `discl
 - Adding a partnership makes its block appear on `/d/{slug}`; deactivating removes it.
 
 **ADR-034** — Preferences screen as the UI surface for the user-tier config cascade; `LANDING_MODE` (and the ADR-032 disclosure coupling) is set here, admin-only in Sprint 1, self-serve post customer-login.
+
+## 15. Referrer self-service login & identity (DESIGN — Abhay 2026-07-11) (Sprint 2+, `ENABLE_CUSTOMER_LOGIN=false` today)
+
+Answers: *how does a referrer who already shared his link register/login and see his link's click details, and how does he "connect" his already-shared links?*
+
+**Core principle — there is NOTHING to "connect".** A GoRefer referral link **is** the referrer's raw Zerodha Client ID in the path (`gorefer.in/r/{client_id}`, ADR-001). Every click was attributed to that Client ID **from the first tap**, long before any login. So login does NOT create an association or claim links — it only **unlocks the retroactive view** of all journeys/clicks/conversions already keyed to that Client ID. This is a deliberate advantage of the raw-Client-ID design over per-share tokens (which WOULD need a claiming step). Lazy-journey creation (Constitution / ADR-008) already records everything under the Client ID; login just reveals it.
+
+**The hard problem = proving ownership of a PUBLIC Client ID, with NO Zerodha API.** The Client ID is public (it sits in the shared link), so login must NEVER just accept a typed Client ID — anyone could type `DA1707` and see that referrer's analytics. Ownership must be proven against a channel/evidence already on record.
+
+**Path A — known referrer (Client ID present in Zoho, has mobile/email on file):**
+1. Referrer enters his Zerodha Client ID.
+2. GoRefer resolves that Client ID in **Zoho** → reads the on-file mobile/email (verified live 2026-07-11: Zoho Contact carries `ClientId` + `Mobile`/`Phone`, e.g. QPJ023 → 9335138774).
+3. GoRefer sends an **OTP to that on-file channel** (Wati/WhatsApp or SMS) — NEVER to a number the user types.
+4. OTP verified → a login account is bound to **`(tenant_id, client_id)`** (ADR-023 boundary).
+5. Dashboard shows all journeys/clicks/Zoho-conversions already recorded under that Client ID — retroactively, including everything from before registration.
+
+**Path B — unknown referrer (NOT in Zoho, no OTP channel on file):** assisted / evidence verification (Abhay 2026-07-11). Ashok — or a WhatsApp auto-response — asks the referrer to **share a screenshot of his LOGGED-IN Zerodha console showing his Client ID together with his registered name** (ideally date-stamped). Ashok **human-reviews** and approves, which creates the referrer's identity + binds the login. **Caveats to bake in (advisor):** an image is spoofable and the Client ID alone is public, so the screenshot MUST show **Client ID + registered name together** (name is the ownership signal, not the ID); keep it **human-reviewed** in Sprint 2 (OCR auto-approval is Sprint 3+); capture **minimal PII**, and **purge the screenshot after verification** (DPDP / ADR-020, PII out of the immutable event log). On approval, the verified referrer is upserted into Zoho so future logins fall back to Path A (OTP).
+
+**Caveat that shapes the whole feature — click analytics exist ONLY for links routed through `gorefer.in`.** If a referrer shared the **raw** `signup.zerodha.com/...?r={client_id}` link instead of the `gorefer.in/r/...` link, those clicks bypassed GoRefer entirely → after login he'd see only **Zoho-sourced conversions** for his Client ID, **zero clicks**. This is exactly why the refer-&-earn assets hand out the `gorefer.in/r/wa/{{client_id}}` link, not the raw Zerodha one — reinforce in referrer education.
+
+**To lock now (identity model, even though build is Sprint 2+):** verify-by-OTP-to-on-file-channel (Path A) + human-reviewed screenshot evidence (Path B); bind login to `(tenant_id, client_id)`; **no link-claiming step** (links are self-identifying by Client ID).
+
+**OTP channel — DECIDED (Abhay 2026-07-11): WhatsApp via Wati is the PRIMARY OTP channel** (already the vendor in use; India WhatsApp **authentication**-category template ≈ ₹0.115/msg per the Jan-2026 rate card — reportedly < half the cheapest SMS OTP; re-confirm rate at build). Build the OTP sender as a **pluggable channel port** (WhatsApp primary → SMS/manual fallback), consistent with the ports-and-adapters architecture. Caveats to enforce: (a) **delivery reliability MUST be fixed first** — the account's historical ~60% send-failure is survivable for marketing but fatal for time-sensitive OTP; verify terminal delivery before OTP depends on it ([[wati-setup-reference]]); (b) it is **not free** — ~₹0.115/msg, billed per-message and charged even inside the service window; (c) needs a **dedicated AUTHENTICATION-category template** (OTP + copy-code button, no marketing/URLs), separate approval from the marketing templates; (d) reaches **only numbers on WhatsApp** → keep the SMS/manual (Ashok / Path-B) fallback for non-WhatsApp or failed delivery.
+
+### Mission Q-M-OTP — pluggable OTP channel port (BUILD, Abhay 2026-07-11: "make WhatsApp/Wati primary, pluggable port, very easily configurable for admin")
+
+Build the OTP delivery infrastructure as a **ports-and-adapters** unit, admin-switchable via the config cascade — NO code change to swap channels. **On a feature branch off `main`, behind `ENABLE_OTP_LOGIN=false`; NOT merged to main until the Sprint-2 customer-login gate.** Reuses the M5 Wati adapter/contract.
+
+**Port:** `OtpDeliveryChannel.send(recipient, code, ttl_seconds, context) -> DeliveryResult{status, provider_ref, error}` — terminal-status aware (assert real delivery, never HTTP 200).
+
+**Adapters:**
+- `WatiWhatsAppOtpAdapter` — PRIMARY. Sends the AUTHENTICATION-category template (copy-code button) via Wati; asserts terminal delivery; on non-delivery, the service cascades to the next configured fallback.
+- `SmsOtpAdapter` — interface + STUB only (real provider TBD; log-only until chosen).
+- `ManualOtpAdapter` — routes to assisted (Ashok / Path-B); log/queue.
+- `DemoOtpAdapter` — log-only when flags off (offline demo).
+
+**Service:** `OtpService.issue(identity)` → generate code, store **hash+expiry only**, call primary, auto-cascade to fallback on non-delivery; `OtpService.verify(identity, code)` → check hash+expiry+attempts, single-use.
+
+**Admin config (all per-tenant, ADR-022 cascade, editable on the Preferences screen — this is the "easily configurable" requirement, config-over-code):**
+- `ENABLE_OTP_LOGIN` (bool, default `false`) — master flag.
+- `OTP_PRIMARY_CHANNEL` (enum `whatsapp_wati|sms|manual`, default `whatsapp_wati`).
+- `OTP_FALLBACK_CHANNELS` (ordered list, default `["manual"]` until SMS chosen).
+- `OTP_WHATSAPP_TEMPLATE` (str — the auth template name, e.g. `gorefer_login_otp`).
+- `OTP_CODE_LENGTH` (6), `OTP_CODE_TTL_SECONDS` (300), `OTP_MAX_VERIFY_ATTEMPTS` (5), `OTP_RESEND_COOLDOWN_SECONDS` (60), `OTP_RATE_LIMIT_PER_IDENTITY_PER_HOUR` (5 — anti-abuse on the public-Client-ID surface).
+- Preferences screen: a dropdown to pick primary + fallback order + template + TTL/limits, no deploy needed to change.
+
+**Acceptance (guardrail tests):** (1) primary WhatsApp non-delivery **auto-cascades** to the configured fallback; (2) code stored **hashed**, never logged in plaintext, single-use; (3) demo mode (flags off) logs intended send + sends nothing; (4) admin switching `OTP_PRIMARY_CHANNEL` via config **takes effect with no code change**; (5) expired / used / over-attempt codes rejected; (6) per-tenant + rate-limited.
+
+**Build scope now:** port + WhatsApp adapter + service + config + admin surface + flag. SMS = interface+stub. **GO-LIVE preconditions (NOT build blockers):** fix Wati's ~60% delivery reliability ([[wati-setup-reference]]); create + Meta-approve the AUTHENTICATION template.
+
+**Still open for Engineer:** SMS fallback provider choice, and where the `client_id → contact-channel` Zoho lookup lives. **ADR to record:** referrer self-service identity & ownership-verification model (Path A OTP via Wati/WhatsApp / Path B evidence; no claiming; pluggable OTP port). Relates to [[zoho-crm-referral-schema]], [[gorefer-architecture-layers]], [[gorefer-config-hierarchy]], [[wati-setup-reference]].
 
 ## 7. Related records (so nothing is siloed)
 - Architecture spine + tenancy + rule cascades: memory [[gorefer-architecture-layers]]; diagram `docs/architecture/gorefer-layered-architecture-diagram.html`.
