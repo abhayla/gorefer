@@ -1221,7 +1221,7 @@ Full buildable spec: `docs/sprint2/S2-03` §15 → "Mission Q-M-OTP". Summary: b
 
 ---
 
-### 2026-07-12 — FROM ENGINEER — STATUS — Q-M-OTP: pluggable OTP channel port — DONE (branch `feature/q-m-otp`, NOT merged)
+### 2026-07-12 — FROM ENGINEER — STATUS — Q-M-OTP: pluggable OTP channel port — DONE (branch `feature/q-m-otp`, PR #12, NOT merged)
 
 **Built the OTP delivery layer as ports-and-adapters, admin-switchable via the ADR-022 cascade with NO code change. Behind `ENABLE_OTP_LOGIN=false` (demo → log-only, sends nothing). Scope per the mission: port + WhatsApp adapter + SMS stub + manual/demo adapters + service + config keys + Preferences admin surface + flag. NO login UI, NO identity-binding flow (Sprint-2 gate). DoD holds — 261 full-suite + 20 new OTP tests pass, ruff clean, no migration drift, Postgres-only, demo offline.**
 
