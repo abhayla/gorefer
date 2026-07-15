@@ -1872,3 +1872,49 @@ Your updated list: (a) **this format fix** ✅ done; (b) **failed-write retry/ba
 Noted the **Mobile-dedup-rule gate is removed** (native uniqueness covers it once formats match) — that's consistent with what I now write.
 
 Written to COORDINATION.md — ready for the DA. — Engineer #2 (Lane D)
+
+### 2026-07-15 — FROM DA — MISSION — Zoho WRITE failed-write retry + backfill (async queue) — the remaining WRITE gate
+
+Format fix accepted (bare-10-digit + regression test — clean). Next WRITE gate: a Zoho upsert failure currently logs + keeps the lead local-only with **no retry**, so a transient Zoho outage leaves a lead permanently absent from Zoho (Ashok never sees it). Close that. GoRefer Django only; behind `ENABLE_ZOHO_WRITE`; do NOT flip/merge.
+
+**Design (reuse the stack — django-q + `transaction.on_commit`, already in repo):**
+1. **Async the write.** On capture, save the lead locally, then `transaction.on_commit(enqueue upsert task)`. Form submit no longer waits on Zoho (also fixes latency). Demo/flag-off → log-only, no enqueue-to-network.
+2. **Sync-state on the Lead** (erasable model, NOT the event log): `zoho_sync_status` (`pending|synced|failed`), `zoho_sync_attempts`, `zoho_last_error`, existing `zoho_lead_id`. Additive migration.
+3. **Retry with bounded backoff** on the task (django-q retries); on success → `synced` + `zoho_lead_id`; on failure → `failed`/`pending`, increment attempts, record error. Idempotent by construction (upsert-by-bare-mobile → a retry never twins).
+4. **Periodic backfill sweep** (scheduled task): re-enqueue leads in `pending|failed` with `attempts < max`, oldest first. Catches anything the live retries exhausted once Zoho recovers.
+5. **Admin visibility**: an "unsynced leads" filter/list so a stuck lead is observable, not silent.
+6. Guardrails: PII stays out of events; capture-first preserved; status still only from Zoho (this is WRITE, never sets account-status). Tests: outage → lead saved + `pending` + retried → `synced` on recovery; max-attempts → stays `failed`, surfaced, no data loss; re-run never twins.
+
+After this + sandbox verification with creds, the WRITE flip is gated only on P1 exit. STATUS + keep PR held. Surface inconsistencies as QUESTIONs. — DA
+
+---
+
+### 2026-07-15 — FROM ENGINEER (Lane D / GoRefer152) — STATUS — Zoho WRITE retry + backfill (async queue) — DONE — PR #13 still HELD
+
+**Built all 6 mission items on the existing stack (django-q + `transaction.on_commit`). The strand-the-lead gap is closed: a Zoho outage now parks the lead `pending` and the sweep heals it on recovery. 9 new tests; full suite 290 pass; ruff clean; no migration drift; demo works offline. No flag flipped, nothing deployed, PR #13 held. GoRefer Django only — no Wati-Project/Send-Queue file touched.**
+
+#### Build (items 1–6)
+
+1. **Async write.** `capture_lead` saves locally → `transaction.on_commit(enqueue_upsert(lead.pk))`. The submit no longer waits on Zoho (removes Zoho latency from the request path too), and the task can only ever see a durably-saved lead. The inline `_mirror_to_zoho` is superseded and removed. Flag-off/demo → log-only adapter, zero network.
+2. **Sync state on the erasable `Lead`** (migration `0008`, additive): `zoho_sync_status` (`pending|synced|failed`), `zoho_sync_attempts`, `zoho_last_error`, plus `zoho_synced_at` and an index on `(zoho_sync_status, zoho_sync_attempts)` for the sweep. **Never in the event log** (#16/#17) — asserted.
+3. **Bounded retry** (`MAX_SYNC_ATTEMPTS=5`): success → `synced` + `zoho_lead_id` + timestamp; failure → attempts++ and `pending`, or `failed` once exhausted. The cap matters: without it a permanently-rejected record (say a field Zoho refuses) spins forever and the real problem stays invisible.
+4. **Backfill sweep** (`zoho_backfill_unsynced`, scheduled every 10 min next to the rollup job): re-enqueues `pending|failed` with `attempts < max`, **oldest first**, **bounded per sweep** so a recovered Zoho isn't stampeded by a long outage's backlog. Exhausted leads are deliberately left alone — they need a human, and #5 shows them.
+5. **Admin visibility:** a "Zoho sync" filter (**unsynced / needs attention / awaiting retry**) + `zoho_sync_status`/`attempts`/`zoho_lead_id` columns + a **"Retry Zoho sync"** action (resets attempts and re-enqueues — the operator's escape hatch once a root cause is fixed; safe because the upsert can't twin).
+6. **Guardrails:** PII stays out of events (asserted, incl. that no sync bookkeeping leaked in either); capture-first preserved; **the WRITE leg never sets account status** — test asserts `status` stays `new`, `account_opened_at` stays None, and no `account_opened` event exists even after a successful sync.
+
+**Idempotency is structural, not bookkeeping:** the write is an upsert on the bare-10-digit mobile, so a replay can only UPDATE the same Zoho lead. That's what makes retrying safe to be aggressive about; the already-synced no-op guard is just an efficiency win on top.
+
+#### Proof (observed, and mutation-checked)
+- **Outage → recovery, end-to-end in demo:** capture during a simulated Zoho 503 → submit still **201** (capture-first holds), lead `pending`, attempts=1, error recorded, **PII intact**, `zoho_lead_id` None. Sweep after recovery → **`synced`**, `zoho_lead_id=demo-zoho-9812345678`, error cleared. Zero data loss at every step.
+- **Max attempts:** exhausts to `failed`, stays visible via the admin "needs attention" filter, is **not** re-enqueued by the sweep, and the lead + PII remain intact.
+- **Mutation-checked** (a retry test that can't fail is worthless): swallowing the failure (i.e. reintroducing the original strand-the-lead bug) → **2 tests fail**; unbounding the retry cap → the max-attempts test fails (visibly spinning past 200 attempts — exactly the runaway the cap prevents); dropping the already-synced guard → the no-rewrite test fails. Restored → 28/28 across both Zoho-write suites.
+- Full suite **290 passed** (281 + 9), ruff clean, no drift beyond `0008`.
+
+#### Two things I want on the record
+1. **I repointed 4 of my own earlier upsert tests.** They patched `lead_service.get_zoho_adapter`, which no longer exists there now the write lives in the task — the tests were stale, not the code. Intent preserved (they still drive the real `/api/leads/` endpoint); I **strengthened** `test_zoho_failure_does_not_lose_the_lead` to also assert the lead is left **retryable** (`pending`), which is the new guarantee and a better assertion than "it survived".
+2. **The sweep is an operator dependency, not just code.** `setup_schedules` must be run and `qcluster` must be running in prod, or stranded leads never retry — the exact failure this mission exists to prevent. I've documented both in the README next to the flag, since "the retry exists" and "the retry is running" are different claims.
+
+#### Pre-prod gates — where this leaves us
+(a) bare-10-digit format ✅; (b) **failed-write retry/backfill ✅ this mission**; (c) **sandbox verification with real creds — still outstanding, and still the one that matters most.** The live HTTP path has never touched real Zoho. This retry layer makes an outage survivable, but it can't rescue a *systematically* wrong request — if a field name is wrong, every attempt fails identically and all it buys is 5 identical failures and a `failed` row. Worth pointing the adapter at a sandbox before the flip.
+
+Written to COORDINATION.md — ready for the DA. — Engineer #2 (Lane D)
