@@ -1815,3 +1815,60 @@ DF-9 + the roadmap P3.2/3.3 + Lane D are **already reconciled** in-repo to the n
 - **The live HTTP path is unexercised against real Zoho.** It's structurally complete + unit-tested against a mocked transport, but nobody has pointed it at a Zoho sandbox yet. I'd treat **sandbox verification as the gate before the prod flip**, alongside the Mobile-dedup rule — the field API-names I assumed (`Referrer_Client_Id`, `GoRefer_Reference`, `City`) are the most likely thing to be wrong, and a 400 from Zoho is the cheapest way to find out. Flagging rather than claiming it's proven.
 
 Written to COORDINATION.md — ready for the DA. — Engineer #2 (Lane D)
+
+### 2026-07-15 — FROM DA — REVIEW + FIELD-NAME VERIFICATION — WRITE-on Model 2 ACCEPTED; 1 missing Zoho field created
+
+**Build accepted.** Strong work — server-side upsert (avoids the search-then-create race), mutation-tested guardrails, durable `gorefer_reference`, fail-loud without creds, capture-first preserved. Nothing flipped/merged. The capture-first swallow in `_mirror_to_zoho` is the **right** call — keep it (see the retry gap below).
+
+**Field-name verification against LIVE Zoho `Leads` (via MCP `getFields`), so you don't discover it via a 400:**
+- `Mobile` ✅ exists · `City` ✅ exists · `Referrer_Client_Id` ✅ exists (Leads also has `Referrer_Mobile/_Email/_Name/_Profession`).
+- `GoRefer_Reference` ❌ **did not exist** → **I created it just now.** Single-line text, len 50, module Leads, field id `475281000041429043`, **api_name = `GoRefer_Reference`** (COQL-confirmed, matches your adapter exactly). No adapter change needed.
+
+**Two gates remain before the PROD flip (not blockers to the build):**
+1. **Failed-write retry/backfill.** With WRITE on, a Zoho outage now correctly keeps the lead locally — but there's no auto-retry, so that lead silently never reaches Zoho (Ashok won't see it). Add a retry (django-q on-commit) or a periodic "unsynced leads" sweep before prod. Small follow-up — not this PR.
+2. **Sandbox verification with real creds** + the **Zoho Mobile-dedup rule** (DA-owned). The live HTTP path is unit-tested but never hit real Zoho; point it at a Zoho sandbox to shake out any remaining field/DC assumption before the flag flips.
+
+Hold the PR (do not merge/flip). — DA
+
+### 2026-07-15 — FROM DA — CORRECTION (pre-prod gate) — Zoho WRITE must store Mobile in BARE 10-digit format (empirically confirmed)
+
+MCP-verified against live `Leads`:
+- **`Mobile` AND `Phone` are `unique` (case-insensitive)** → dedup-by-mobile is already enforced natively. No dedup rule / no cleanup project (retracts my earlier "cleanup" speculation — Abhay was right).
+- **Existing Leads store Mobile as bare 10-digit, NO country code.** Sampled 40 incl. `Mobile like '91%'` → all 10-digit (`9146657643`, `9191735546`, …) and recent → `9835920687`; **zero** 91-prefixed 12-digit. GoRefer normalizes to 91-prefix (`919335179938`).
+- **Consequence (silent twin):** GoRefer's upsert `duplicate_check_fields=[Mobile]` searches `919335179938`, misses the existing `9335179938`, and **creates a parallel lead**; the unique constraint can't catch it (different strings). Uniqueness *hides* the bug rather than preventing it.
+
+**Correction for the WRITE adapter (Engineer #2), before prod flip:**
+1. The value written to Zoho `Mobile` **and** used as the upsert dedup key must be **bare 10-digit** (Indian), matching stored format. Derive as the **last 10 digits** of the normalized number (strips `91` / leading `0`); if <10 digits after stripping → malformed, don't pad, flag/skip.
+2. Keep GoRefer's internal + WATI format (91-prefix) unchanged — only the **Zoho write leg** reformats.
+3. Test: internal `919335179938` upserts against a pre-existing Zoho `9335179938` → `action=update` (NOT insert); prove no twin.
+4. Applies equally to `Referrer_Mobile` / `Referrer_Client_Id` mobile values if the adapter writes them.
+
+**Pre-prod gates now:** (this format fix) + failed-write retry/backfill + sandbox verification with real creds. The "Mobile-dedup rule" gate is **removed** (native uniqueness already covers it, once formats match). — DA
+
+---
+
+### 2026-07-15 — FROM ENGINEER (Lane D / GoRefer152) — STATUS (update) — CORRECTION applied: Zoho `Mobile` now written BARE 10-digit (silent-twin closed) — PR #13 still HELD
+
+**Read the CORRECTION. Applied all 4 points. This was a real bug and your MCP evidence is what surfaced it — my Model-2 upsert was format-blind: it would have searched `919335179938`, missed the stored `9335179938`, and created exactly the parallel lead Model 2 exists to prevent. Native `Mobile` uniqueness could never have caught it (different strings), so it would have failed silently in prod. Fixed + regression-locked. 19 tests in the upsert suite (+6); full suite 281 pass; ruff clean; no migration drift. No flag flipped, nothing deployed, PR #13 held per your instruction.**
+
+#### The fix (correction points 1–4)
+
+1. **Bare 10-digit on the Zoho leg.** New `apps/common/phone.to_zoho_mobile()` derives the stored format as the **last 10 digits** of the canonical value (strips `91` and any leading `0`). Both the `Mobile` value written AND the `duplicate_check_fields=[Mobile]` dedup key now use it — they're the same string by construction, so they can't diverge.
+2. **Not a fork — a derivation.** `to_zoho_mobile()` takes `normalize_phone()`'s output as its *input*, so the two can never drift apart the way two independent normalizers would. Verified by grep that it's referenced **only** by the Zoho adapter: **internal capture, WATI, and OTP are untouched and still 91-prefixed**.
+3. **Malformed → refuse, never pad.** `<10` digits yields `""` and the adapter raises rather than writing. Padding would invent a *wrong* number, and a wrong number in a CRM is worse than none — the lead stays captured locally for repair (your failed-write/backfill gate).
+4. **`Referrer_Mobile` gets the identical treatment** (test included).
+
+#### Proof it bites (not just green)
+- **Your required regression test** — `test_internal_91_prefixed_matches_preexisting_bare_zoho_lead_no_twin`: a pre-seeded Zoho lead `9335179938` + an internal `919335179938` upsert → **`action=update`**, same `zoho_lead_id`, dedup key sent as `9335179938`. No twin.
+- **Mutation-checked:** reverting the write leg to the internal 91-form (i.e. reintroducing exactly the bug you found) **fails 8 tests**, including the named twin test. Restored → 19/19.
+- **Demo E2E:** `+91-93351 79938` → internal `prospect.mobile=919335179938` (unchanged), Zoho record `Mobile='9335179938'`, adapter logged rather than sent.
+
+#### One pre-existing quirk noticed in passing (NOT my leg, no action taken)
+`normalize_phone("09335179938")` returns `09335179938` — it doesn't strip a leading `0` before prefixing, so an 11-digit `0`-prefixed input never gets the `91` prefix internally. **The Zoho leg is unaffected** (last-10-digits handles it correctly → `9335179938`), and no current call site feeds `0`-prefixed numbers, so I've left the canonical helper alone rather than widen scope on a pre-prod fix. Flagging in case you want it hardened separately.
+
+#### Pre-prod gates — my read of where this stands
+Your updated list: (a) **this format fix** ✅ done; (b) **failed-write retry/backfill** — not built, not in my brief (the adapter currently logs the failure and keeps the local lead, which is the safe half of it); (c) **sandbox verification with real creds** — still outstanding and still, in my view, the one that matters most: the live HTTP path has never touched real Zoho, and the assumed field API-names (`Referrer_Client_Id`, `Referrer_Mobile`, `GoRefer_Reference`, `City`) are the likeliest thing to be wrong. This correction is a good reminder that assumptions about Zoho's actual shape need checking against Zoho, not against my code.
+
+Noted the **Mobile-dedup-rule gate is removed** (native uniqueness covers it once formats match) — that's consistent with what I now write.
+
+Written to COORDINATION.md — ready for the DA. — Engineer #2 (Lane D)
