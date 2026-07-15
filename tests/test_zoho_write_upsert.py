@@ -186,7 +186,7 @@ def test_resubmit_does_not_create_second_lead_and_keeps_reference():
     """THE acceptance test: re-submitting the same form must not twin the lead."""
     call_command("seed_program")
     rec = _RecordingAdapter()
-    with mock.patch("apps.referrals.lead_service.get_zoho_adapter", return_value=rec):
+    with mock.patch("apps.integrations.zoho.tasks.get_zoho_adapter", return_value=rec):
         assert _capture(Client()).status_code in (200, 201)
         assert _capture(Client()).status_code in (200, 201)  # same person, again
 
@@ -240,7 +240,7 @@ def test_punctuated_mobile_dedups_to_same_person():
     A forked normalizer here would silently split them into two Zoho leads."""
     call_command("seed_program")
     rec = _RecordingAdapter()
-    with mock.patch("apps.referrals.lead_service.get_zoho_adapter", return_value=rec):
+    with mock.patch("apps.integrations.zoho.tasks.get_zoho_adapter", return_value=rec):
         _capture(Client(), mobile="9876543210")
         _capture(Client(), mobile="+91-98765 43210")
 
@@ -256,10 +256,13 @@ def test_zoho_failure_does_not_lose_the_lead():
     call_command("seed_program")
     boom = mock.Mock()
     boom.upsert_lead.side_effect = RuntimeError("Zoho HTTP 500")
-    with mock.patch("apps.referrals.lead_service.get_zoho_adapter", return_value=boom):
+    with mock.patch("apps.integrations.zoho.tasks.get_zoho_adapter", return_value=boom):
         resp = _capture(Client())
     assert resp.status_code in (200, 201)  # request still succeeded
-    assert Lead.objects.filter(prospect__mobile="919876543210").exists()  # survived
+    lead = Lead.objects.filter(prospect__mobile="919876543210").first()
+    assert lead is not None  # survived
+    # ...and is left RETRYABLE, not stranded — the retry/backfill sweep will heal it.
+    assert lead.zoho_sync_status == Lead.SYNC_PENDING
 
 
 # --- 3. flag gating / fail-loud ---------------------------------------------------
@@ -312,7 +315,7 @@ def test_live_adapter_refuses_to_construct_without_creds(monkeypatch):
 def test_pii_never_reaches_the_immutable_event_log():
     call_command("seed_program")
     rec = _RecordingAdapter()
-    with mock.patch("apps.referrals.lead_service.get_zoho_adapter", return_value=rec):
+    with mock.patch("apps.integrations.zoho.tasks.get_zoho_adapter", return_value=rec):
         _capture(Client())
 
     blob = json.dumps([e.metadata for e in Event.objects.all()])

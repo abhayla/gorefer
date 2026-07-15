@@ -61,8 +61,16 @@ python manage.py recompute_rollups     # recompute daily/monthly rollups for any
 
 # Background queue (django-q2, ORM broker — no Redis). In dev/CI/demo, Q_ASYNC=false
 # runs tasks INLINE (no worker needed). In production set Q_ASYNC=true and run:
-#   python manage.py setup_schedules    # register the recurring rollup recompute (idempotent)
-#   python manage.py qcluster           # the worker: WATI sends + terminal-status polling + schedules
+#   python manage.py setup_schedules    # register recurring schedules (idempotent):
+#                                       #   - rollup recompute (every 5 min)
+#                                       #   - Zoho WRITE backfill sweep (every 10 min) —
+#                                       #     re-enqueues leads that never reached Zoho.
+#                                       #     REQUIRED with ENABLE_ZOHO_WRITE on, else a
+#                                       #     lead stranded by a Zoho outage never retries.
+#   python manage.py qcluster           # the worker: WATI sends + terminal-status polling
+#                                       # + the async Zoho lead upsert + schedules
+# Stuck leads are visible in the admin: Leads -> "Zoho sync" filter (unsynced /
+# needs attention / awaiting retry), with a "Retry Zoho sync" action.
 
 # 5. (Optional) create the admin from env vars — no plaintext password, hash only
 #    Generate a hash:  python -c "from django.contrib.auth.hashers import make_password; print(make_password('your-pw'))"

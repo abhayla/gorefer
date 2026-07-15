@@ -1,9 +1,11 @@
 """Lead capture service (M3) — capture-FIRST (06-API §5.3).
 
 On "Continue to Zerodha": save the lead to GoRefer FIRST (Prospect + Lead + a
-`lead_captured` event), THEN (M6) mirror to Zoho. In Sprint 1 the Zoho write stays
-behind ENABLE_ZOHO_WRITE=false — the adapter logs the intended call in demo mode
-and the request still succeeds because the lead is safely captured locally.
+`lead_captured` event), THEN mirror to Zoho ASYNCHRONOUSLY (M6 + Model 2) — the
+upsert is enqueued on_commit, so the submit never waits on Zoho and a Zoho outage
+leaves the lead `pending` for the retry/backfill sweep rather than stranding it.
+The Zoho write stays behind ENABLE_ZOHO_WRITE=false — the adapter logs the intended
+call in demo mode, so the whole flow works offline.
 
 Guardrails:
   - Account/reward STATUS is never set here — that comes only from Zoho (M6).
@@ -22,7 +24,7 @@ from apps.common.phone import normalize_phone
 from apps.events import vocab
 from apps.events.models import Event
 from apps.integrations.wati.notify import queue_lead_notifications
-from apps.integrations.zoho.adapter import get_zoho_adapter, gorefer_reference_for
+from apps.integrations.zoho.tasks import enqueue_upsert
 from apps.referrals.models import Lead, Prospect, Referral
 
 logger = logging.getLogger("gorefer.leads")
@@ -90,56 +92,14 @@ def capture_lead(*, tenant, referral: Referral, name: str, mobile: str, email: s
         )
     )
 
-    # Zoho mirror (M6). Behind the flag → log-only in demo mode; request still ok.
-    _mirror_to_zoho(lead=lead, prospect=prospect, referral=referral)
+    # Zoho mirror (M6) — ASYNC. Enqueued on_commit so the form submit never waits on
+    # Zoho, and so the task can only ever see a durably-saved lead. A Zoho outage now
+    # leaves the lead `pending` for the retry/backfill sweep instead of stranding it
+    # local-only. Behind ENABLE_ZOHO_WRITE → log-only adapter in demo (no network).
+    transaction.on_commit(lambda: enqueue_upsert(lead.pk))
     return lead
 
 
 def _referrer_client_id(referral) -> str:
     identity = referral.referral_identity
     return identity.client_id if identity is not None else ""
-
-
-def _mirror_to_zoho(*, lead, prospect, referral):
-    """UPSERT the Lead into Zoho (M6 + Model 2), stamping a journey-reference (#10).
-
-    Model 2 (DA 2026-07-15, supersedes DF-9): never a blind create. The adapter
-    upserts keyed on the normalized mobile, so Zoho decides create-vs-update
-    server-side and a repeat submit UPDATES the same lead instead of twinning it.
-
-    Behind ENABLE_ZOHO_WRITE — log-only in demo. Captures the returned zoho_lead_id
-    on the Lead so a later conversion can be joined back. Never sets account status
-    (that comes ONLY from the webhook ingest path — guardrail #2).
-
-    A Zoho failure must NOT lose the lead: it is already durably captured locally
-    (capture-first, 06-API §5.3), so we log and move on rather than fail the request.
-    """
-    adapter = get_zoho_adapter()
-    gref = gorefer_reference_for(referral)
-    try:
-        result = adapter.upsert_lead(
-            payload={
-                "name": prospect.name, "mobile": prospect.mobile, "email": prospect.email,
-                "city": prospect.city, "referred_by": _referrer_client_id(referral),
-            },
-            gorefer_reference=gref,
-        )
-    except Exception:
-        logger.exception(
-            "Zoho upsert failed for lead=%s — lead stays captured locally, retry later", lead.pk
-        )
-        return
-
-    if not result:
-        return
-    # Persist the journey-reference alongside the id: re-running must never LOSE the
-    # reference (#10) — it is what joins a later Zoho conversion back to this journey.
-    fields = []
-    if result.zoho_lead_id and lead.zoho_lead_id != result.zoho_lead_id:
-        lead.zoho_lead_id = result.zoho_lead_id
-        fields.append("zoho_lead_id")
-    if result.gorefer_reference and lead.gorefer_reference != result.gorefer_reference:
-        lead.gorefer_reference = result.gorefer_reference
-        fields.append("gorefer_reference")
-    if fields:
-        lead.save(update_fields=[*fields, "updated_at"])
