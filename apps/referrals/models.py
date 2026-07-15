@@ -300,6 +300,10 @@ class Lead(AuditedModel, SoftDeleteModel, TenantScopedModel):
     # DPDP: when consent was captured (third-party PII in the assisted branch).
     consent_captured_at = models.DateTimeField(null=True, blank=True)
     zoho_lead_id = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    # The GoRefer journey-reference stamped onto the Zoho lead (#10, Model 2). Kept
+    # here so a re-run can prove it was never lost, and so a later Zoho conversion
+    # can be joined back to this journey.
+    gorefer_reference = models.CharField(max_length=64, blank=True, default="")
     account_opened_at = models.DateTimeField(null=True, blank=True)  # TRUE Zoho date (M6)
 
     class Meta:

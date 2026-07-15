@@ -101,21 +101,45 @@ def _referrer_client_id(referral) -> str:
 
 
 def _mirror_to_zoho(*, lead, prospect, referral):
-    """Write the Lead to Zoho (M6), stamping a GoRefer journey-reference (#10).
+    """UPSERT the Lead into Zoho (M6 + Model 2), stamping a journey-reference (#10).
+
+    Model 2 (DA 2026-07-15, supersedes DF-9): never a blind create. The adapter
+    upserts keyed on the normalized mobile, so Zoho decides create-vs-update
+    server-side and a repeat submit UPDATES the same lead instead of twinning it.
 
     Behind ENABLE_ZOHO_WRITE — log-only in demo. Captures the returned zoho_lead_id
     on the Lead so a later conversion can be joined back. Never sets account status
     (that comes ONLY from the webhook ingest path — guardrail #2).
+
+    A Zoho failure must NOT lose the lead: it is already durably captured locally
+    (capture-first, 06-API §5.3), so we log and move on rather than fail the request.
     """
     adapter = get_zoho_adapter()
     gref = gorefer_reference_for(referral)
-    result = adapter.create_lead(
-        payload={
-            "name": prospect.name, "mobile": prospect.mobile, "email": prospect.email,
-            "referred_by": _referrer_client_id(referral),
-        },
-        gorefer_reference=gref,
-    )
-    if result and result.zoho_lead_id and not lead.zoho_lead_id:
+    try:
+        result = adapter.upsert_lead(
+            payload={
+                "name": prospect.name, "mobile": prospect.mobile, "email": prospect.email,
+                "city": prospect.city, "referred_by": _referrer_client_id(referral),
+            },
+            gorefer_reference=gref,
+        )
+    except Exception:
+        logger.exception(
+            "Zoho upsert failed for lead=%s — lead stays captured locally, retry later", lead.pk
+        )
+        return
+
+    if not result:
+        return
+    # Persist the journey-reference alongside the id: re-running must never LOSE the
+    # reference (#10) — it is what joins a later Zoho conversion back to this journey.
+    fields = []
+    if result.zoho_lead_id and lead.zoho_lead_id != result.zoho_lead_id:
         lead.zoho_lead_id = result.zoho_lead_id
-        lead.save(update_fields=["zoho_lead_id", "updated_at"])
+        fields.append("zoho_lead_id")
+    if result.gorefer_reference and lead.gorefer_reference != result.gorefer_reference:
+        lead.gorefer_reference = result.gorefer_reference
+        fields.append("gorefer_reference")
+    if fields:
+        lead.save(update_fields=[*fields, "updated_at"])
