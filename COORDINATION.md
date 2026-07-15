@@ -1244,3 +1244,574 @@ Full buildable spec: `docs/sprint2/S2-03` §15 → "Mission Q-M-OTP". Summary: b
 **Deferred (out of Q-M-OTP scope):** the login UI + `(tenant_id, client_id)` identity binding (Sprint-2 customer-login gate); Path-B screenshot review UI; live Wati HTTP send (parallel workstream, GO-LIVE precondition); SMS provider wiring (DF-OTP-SMS); real Meta submission of the auth template. **`main` NOT touched by this branch beyond the Q-M-PREF fast-forward; `feature/q-m-otp` awaits your review — do NOT merge until the Sprint-2 gate.**
 
 Written to COORDINATION.md — ready for the DA.
+
+---
+
+### 2026-07-12 — FROM INDEPENDENT TEST REVIEWER — Q-M-OTP EXECUTION VERIFICATION — GO/NO-GO
+
+**VERDICT: GO** (independent, run-not-trusted). I did not write this code. I fetched + checked out `feature/q-m-otp`, ran everything myself, and read the source to confirm each claim. All acceptance guardrails hold; the full suite is green in a clean run; no source drift.
+
+**Checkout / tree**
+- HEAD SHA: `823b8e24513a63b81c3c5ed0f1dcf281d8d9e86d` (= `origin/feature/q-m-otp` tip; `823b8e2 docs(Q-M-OTP): record PR #12 in COORDINATION STATUS`).
+- Only uncommitted files are review artifacts — `review/q-m-pref-tests.txt`, `review/q-m-pref.diff` (both untracked, pre-existing from the Q-M-PREF review). **No source drift** — I wrote nothing to app/test code.
+
+**7. `main` green after the Q-M-PREF fast-forward — CONFIRMED.** Both `a349c6e` (Q-M-PREF top-Save + Yes/No) and `7b4d3d5` (DA docs) are ancestors of `origin/main` (`git merge-base --is-ancestor` → both IN main). `feature/q-m-otp` was branched off that updated main.
+
+**RAW COMMAND OUTPUTS**
+
+`python -m pytest -q` (FULL suite, single clean run):
+```
+........................................................................ [ 27%]
+........................................................................ [ 54%]
+........................................................................ [ 82%]
+..............................................                           [100%]
+262 passed in 445.38s (0:07:25)
+EXIT=0
+```
+(262 passed — one MORE than the Engineer's reported 261, still all green.)
+
+`pytest -v tests/test_qmotp.py` — **20/20 PASSED**, exit 0:
+```
+test_code_stored_hashed_never_plaintext PASSED          test_invalid_primary_channel_falls_back_to_default PASSED
+test_code_never_logged_plaintext PASSED                 test_expired_code_rejected PASSED
+test_single_use PASSED                                  test_wrong_then_over_attempt_rejected PASSED
+test_primary_nondelivery_cascades_to_fallback PASSED    test_verify_with_no_active_code PASSED
+test_cascade_falls_through_multiple PASSED              test_rate_limited_per_identity PASSED
+test_raising_primary_cascades_not_crashes PASSED        test_resend_cooldown PASSED
+test_demo_mode_sends_nothing PASSED                     test_per_tenant_isolation PASSED
+test_demo_adapter_selected_when_flag_off PASSED         test_recipient_from_customer_never_user_typed PASSED
+test_switch_primary_channel_via_config_no_code PASSED   test_otp_config_keys_seeded PASSED
+                                                        test_preferences_screen_persists_otp_config PASSED
+                                                        test_preferences_screen_clamps_bad_otp_values PASSED
+============================= 20 passed in 44.14s =============================
+```
+
+`ruff check .` → `All checks passed!` (exit 0).
+`manage.py makemigrations --check --dry-run` → `No changes detected` (exit 0).
+`manage.py check` → `System check identified no issues (0 silenced).` (exit 0).
+
+**⚠️ TEST-HARNESS NOTE (not a code defect, but the DA/Engineer should know):** this suite uses a **shared PostgreSQL test DB with no test-DB-per-worker isolation**. My first two attempts ran two pytest invocations *concurrently* against that one DB and produced `django.db.utils.OperationalError: deadlock detected` on `otp_challenges` (Process A waiting AccessShareLock, Process B waiting AccessExclusiveLock) → 42 spurious failures / 32 errors the first time, 1 the second. **Run serially and the whole suite is 262/262 green** (verified above). Recommend documenting "one pytest run at a time" (or wiring `--reuse-db`/isolated DBs) so a future reviewer/CI doesn't misread a lock collision as a regression. Filing as an observation, not a blocker.
+
+**CODE-READING CONFIRMATIONS (read, not trusted — file:line)**
+
+1. **OTP stored HASHED only, single active, single-use — CONFIRMED.** `apps/otp/hashing.py:37-40` peppered (`OTP_HASH_PEPPER` env, `hashing.py:29-30`) + identity-bound + per-challenge salted SHA-256; `hashing.py:43-46` constant-time `hmac.compare_digest`; code via CSPRNG `secrets.randbelow` (`hashing.py:21-26`). `apps/otp/models.py:44-45` stores `code_hash`+`salt` only — **no plaintext field exists**. Single active: `service.py:96-98` supersedes prior ACTIVE on issue. Single-use: `service.py:196-198` consumes to VERIFIED; `test_single_use` proves a 2nd use fails. Never logged: adapters log `len(code)` / `code_len` only (`adapters.py:55,63,91-94,111-114,129-132`), service logs exception **type** not body (`service.py:147-151`); `test_code_never_logged_plaintext` asserts the recovered plaintext is absent from logs.
+
+2. **Flags off → nothing sent — CONFIRMED.** With `ENABLE_OTP_LOGIN` off (default), `resolve_channel` returns `DemoOtpAdapter` for **every** channel (`channels.py:47-50`) → `STATUS_SUPPRESSED`, no send (`adapters.py:118-133`). No Wati path is even reached. (With OTP on + WATI off, the WhatsApp adapter routes through the M5 `LogOnlyWatiAdapter` — `apps/integrations/wati/adapter.py:46-64,87-92` — still **no network call**; live HTTP is `NotImplementedError` and would cascade.) No live Wati HTTP fires in any current flag combination.
+
+3. **Recipient from ON-FILE channel only, never caller-typed — CONFIRMED.** `apps/otp/recipient.py:29-55` resolves from `Customer` table then a **stubbed** Zoho READ (`_from_zoho`, gated `ENABLE_ZOHO_READ`, returns "" until wired, `recipient.py:58-70`); unknown → "" → Path-B assisted, never a guess. `OtpService` takes a `recipient_resolver`, never a request param (`service.py:69-75,92`). `test_recipient_from_customer_never_user_typed` confirms.
+
+4. **Primary non-delivery AUTO-CASCADES; a raising adapter cascades, never crashes/leaks — CONFIRMED.** `service.py:126-157`: iterates `[primary, *fallbacks]` from config; `STATUS_FAILED` cascades, `DELIVERED/QUEUED/SUPPRESSED` terminate; a raising adapter is caught (`service.py:147-151`), logs only `type(exc).__name__`, converts to FAILED → cascades. Proven by `test_primary_nondelivery_cascades_to_fallback`, `test_cascade_falls_through_multiple`, `test_raising_primary_cascades_not_crashes`.
+
+5. **`gorefer_login_otp` template — CONFIRMED.** `apps/integrations/wati/wati-templates.json:104-121`: `_status: "HOLD — do NOT submit to Meta…"` (not submitted), `"category": "AUTHENTICATION"`, one `{"type": "otp", "otp_type": "copy_code"}` button, **no URL / no marketing** (body = login-code + do-not-share; footer = expiry).
+
+6. **No inline secrets; flag defaults false; no reachable prod OTP UI/endpoint — CONFIRMED.** Pepper from env `OTP_HASH_PEPPER` (`settings.py:262`, dev-fallback to SECRET_KEY), `.env.example:80`; Wati/Zoho creds from env (`adapter.py:70-75`). `ENABLE_OTP_LOGIN=False` default (`flags.py:80`), `ENABLE_ZOHO_READ=False` (`flags.py:90`). No OTP **login** endpoint exists (login UI deferred, per STATUS). The only OTP surface is the Preferences config block, behind `@_staff_required` (login+is_staff, `views.py:25-27,174-176`); `otp_enabled` renders as a live status flag, not a dead/disabled button (`preferences_service.py:62`). Admin numeric knobs are **clamped** on save (TTL≥60, attempts≥1, etc.) so a bad entry can't disable OTP security (`preferences_service.py:193-210`); `test_preferences_screen_clamps_bad_otp_values` confirms.
+
+**Extras verified:** ADR-035 present (`docs/architecture/02` :355); OTP migration `apps/otp/migrations/0001_initial.py` present and clean (no drift); per-tenant isolation (`test_per_tenant_isolation`); config-switch-with-no-code (`test_switch_primary_channel_via_config_no_code`).
+
+**Nothing merged, nothing deployed, all write flags left OFF** (`ENABLE_OTP_LOGIN`, `ENABLE_WATI_SEND`, `ENABLE_ZOHO_WRITE`, `ENABLE_ZOHO_READ` all false). `feature/q-m-otp` is verified and **cleared to hold for the Sprint-2 customer-login gate — do NOT merge to main before that gate.** Non-blocking items acknowledged as correctly stubbed: DF-OTP-SMS (provider choice) and Q-M-OTP-2 (Zoho `client_id→channel` read wiring). One harness hygiene note above (serialize test runs / isolate test DBs).
+
+— Independent Test Reviewer
+
+---
+
+### 2026-07-12 — FROM DA — Q-M-OTP REVIEW ACCEPTED — GO confirmed; HOLD for Sprint-2 gate
+
+Independent test-execution verification (HEAD `823b8e2`) **ACCEPTED**. Gate passed: 262/262 serial green, 20/20 OTP guardrails, ruff/migrations/`check` clean, main green after the Q-M-PREF fast-forward, and all six security claims confirmed by code-read at file:line (hashed+peppered+salted+constant-time OTP, flags-off→zero network, recipient-from-on-file-only, cascade-never-crashes/leaks, template HOLD/AUTHENTICATION, no inline secrets + clamped admin knobs + no dead UI). No source drift. This is a clean GO.
+
+**Disposition:** `feature/q-m-otp` (PR #12) is **verified and HELD — do NOT merge to `main` until the Sprint-2 customer-login gate.** Keep `ENABLE_OTP_LOGIN` / `ENABLE_WATI_SEND` / `ENABLE_ZOHO_WRITE` / `ENABLE_ZOHO_READ` all false.
+
+**Backlog opened — DF-TESTDB-ISOLATION (test-harness hygiene, NON-blocking):** the suite shares one PostgreSQL test DB with no per-worker isolation, so *concurrent* pytest invocations deadlock on `otp_challenges` and produce spurious failures (serial = 262/262 green). CI (`ci.yml`) already runs serial so prod risk = nil; the real risk is a human reviewer running parallel and misreading a lock collision as a regression. **Decision:** (a) document "one pytest run at a time" in the test README now, and (b) wire `--reuse-db` / isolated per-worker test DBs — fold into the next branch touch or a small CI-hardening task, NOT a standalone urgent mission.
+
+**Still-open (Sprint-2, non-blocking, correctly stubbed):** DF-OTP-SMS (SMS provider choice) and Q-M-OTP-2 (Zoho `client_id→on-file channel` READ wiring — confirm the M9 method; live QPJ023→9335138774 exists). **GO-LIVE preconditions (outside this mission):** fix Wati ~60% delivery reliability + Meta-approve `gorefer_login_otp`. — DA
+
+---
+
+### 2026-07-14 — FROM ENGINEER — STATUS + BLOCKER — Wati Send Queue (DF-WATI-REL Phase 1) + 3 reusable skills
+
+**Mission `GoRefer131`** (Wati "Send Queue" build + reusable skills). This workstream lives in **live production Zoho** (org 60019670093) + Wati acct 105355 — separate from the GoRefer Django app. Scope grounded in `Wati-Project/wati-send-queue-design.md` (§3–§11) + `zoho-workflow-send-map.md` audit.
+
+**Mission B — reusable skills: DONE (3/3, installed + discoverable, low-risk local files).**
+1. **`audit-whatsapp-sends`** — finalized the DA draft: upgraded frontmatter to the companion-skill standard (`type`/`allowed-tools`/`argument-hint`/`version`), added prereqs + read-only safety rails. Installed to `~/.claude/skills/`; confirmed it registers in the skills list.
+2. **`check-whatsapp-delivery-health`** — NEW. **Corrected a real defect in the pre-existing stub:** it used the Wati MCP `wati_list_campaigns`/`wati_get_campaign`, which read the **UI Campaign Overview that EXCLUDES the Zoho API sends** (≈100% of PIFS volume → would report ~0). Rebuilt on the **v3 Broadcasts API** (the all-customer source per WATI-KNOWLEDGE.md) + curl; kept the fail-code table + baseline framing. Read-only.
+3. **`run-whatsapp-send-queue`** — NEW. Dry-run-default + fail-closed test-recipient allowlist; proves the one-msg-per-mobile-per-30-days invariant before any live drain. Reconciled to the 2-module design (below).
+
+**Two design decisions taken with Abhay (this session):**
+- **Modules = 2, not 3 (deviation from spec §3, Abhay-approved 2026-07-13).** `WA_Send_Queue` (high-churn send-intent LOG) + `WA_Contact_State` (per-MOBILE dedup/session state — the thing that makes dedup person-scoped). **Config = ROWS in a lightweight `WA_Queue_Config` store, NOT a 3rd custom module** (a full module for ~18 config values is over-provisioned). Queue+State cannot merge without re-introducing the per-record dedup bug. Logged here per the pause-and-report rule.
+- **3 TBD configs defaulted (Abhay-approved, all configurable, flagged tuning):** `session_soft_cap=3`, `note_ttl_days=7`, OfficeVisitor feedback template treated **MARKETING** until category confirmed (§11#16) — a single msg still clears the ~2/day cap.
+
+**Mission A — BLOCKED on execution channel (surfaced, NOT worked around):**
+- **Reconnaissance done (read-only, live):** confirmed org identity; confirmed **no `WA_*` modules exist yet**; existing modules incl. Contacts/Leads/Referrers/OfficeVisitors (+ new CustomModule5006/5007 not in the audit).
+- **Hard constraint found:** the Zoho CRM MCP can read metadata + read/write RECORDS + add FIELDS to existing modules, but has **NO tool to (a) create a custom module, (b) author a Deluge scheduled function, or (c) edit a workflow rule.** Those are UI-only (as the audit skill documents).
+- **Abhay chose:** drive the Zoho settings UI via Claude-in-Chrome (additive-only, pause before any live rule edit).
+- **BLOCKER:** the CRM **Modules & Fields builder UI will not render** in this browser session. Across **4 navigation attempts** (plain settings path, `crm.zoho.in` direct → "Invalid URL", `settings/customize/modules`, and the `#Settings:Customize:Modules` hash route) the CRM-Plus wrapper repeatedly shows **"Oops! Something went wrong. We were unable to load this page." / blank content pane / "No module found."** Per the browser-automation stop-rule (fail after 2–3 attempts → STOP, don't thrash a LIVE production CRM), I stopped rather than risk half-created modules in prod.
+- **Ready artifact:** the complete, apply-by-hand-or-resumable **build blueprint** is written to `Wati-Project/wati-send-queue-BUILD.md` — every module + field (api_name/type), the config rows with locked defaults, the rollback plan, and the build order with the ⛔ PAUSE GATE before any live rule is rewired. NOTHING live was changed; no rule touched; no message sent; no record created/edited/deleted.
+
+**QUESTION — Q-WATI-1 (execution channel for Mission A, blocking the Zoho build only):** the module-builder UI won't render for browser automation in this session, and the MCP can't create modules/Deluge/rules. Options: (a) Abhay (or a Zoho-side session) applies `wati-send-queue-BUILD.md` by hand in the UI — safest for live prod; (b) retry the browser build in a fresh session/after clearing the CRM-Plus wrapper glitch (try the direct CRM data-centre URL once the org loads cleanly); (c) I do the records-level parts the MCP CAN do (Phase-0 hygiene: flag the 111 junk `1111111111` records as `Incorrect_Mobile` via updateRecords — no deletion — and seed config rows once the config module exists) and leave module/Deluge/rule work to (a)/(b). **Pausing on the Zoho build; Mission B is complete and safe.**
+
+Written to COORDINATION.md — ready for the DA / Abhay.
+
+---
+
+### 2026-07-14 — FROM ENGINEER — STATUS (update) — Wati Send Queue UI build: unblocked + proven, then browser froze (prod CLEAN)
+
+Follow-up to the blocker entry above. Abhay granted the Chrome extension host access to `*.zoho.in`, which **unblocked the Zoho module-builder UI**. Outcome:
+
+- **UI build PROVEN to work.** Found the only URL that renders the builder for this org (CRM-Plus wrapper + `#Settings:Customize:Modules` hash), created the **`WA Send Queue`** custom module (Organization type) on the canvas, and placed **13 of ~16 fields cleanly** (Mobile[Phone], Template Name, Source Rule/Module/Record Id, Wati Status/Message Id, Fail Code, Tenant Id [Single Line]; Priority[Number]; Params JSON[Multi-Line]; Eligible After[Date/Time]; Business Date[Date]). The working drag pattern: drop the palette field INTO the section (not the empty area below), then type the label.
+- **Then the browser froze.** A `left_click_drag` (adding the Dry Run checkbox) hit a CDP `Input.dispatchMouseEvent` timeout mid-drag and **wedged the builder iframe**; subsequent screenshots time out. A `force:true` reload discarded the unsaved canvas (Zoho has no draft autosave); fresh loads then also CDP-timeout, and a native "Leave site? unsaved changes" dialog on the old tab now blocks even closing it (needs Abhay to dismiss in-browser).
+- **Production is CLEAN — verified browser-independently via the Zoho MCP:** `getModuleByApiName("WA_Send_Queue")` → empty `data`. **No module was ever saved**, so there is **no orphan/partial module and no data corruption** — the freeze only cost the unsaved canvas (pure re-work, fully re-specified in the blueprint).
+- **Everything captured for a clean retry:** `Wati-Project/wati-send-queue-BUILD.md` now includes a **"UI build playbook + session learnings"** section — the exact working URL, the drag pattern, the freeze root-cause + mitigations (partway-Save every ~8–10 fields; short sessions; MCP orphan-check), and the confirmed field list. A fresh browser session can resume turnkey.
+
+**NET for this session:** Mission B = 100% DONE (3 skills, installed + discoverable). Mission A = **de-risked and started, not finished** — modules/Deluge/rules remain, gated behind the ⛔ pause-before-live-rule-edit anyway. No live rule touched, no message sent, no record created/edited/deleted; prod verified clean.
+
+**Q-WATI-2 (browser stability, minor):** the CRM-Plus module builder is freeze-prone under many drag ops in one session. Retry with the partway-Save strategy in the playbook, or apply the blueprint by hand. Abhay to clear the stuck browser tab/dialog first.
+
+---
+
+### 2026-07-14 — FROM ENGINEER — STATUS — Send Queue DATA LAYER complete + verified (all 3 modules, all fields, config seeded)
+
+The Send Queue data layer is **built and verified in production**. Split that worked: Abhay created the 3 empty module SHELLS in the browser (the browser-reliable part); the Engineer added + verified ALL fields and config rows via the Zoho MCP API (the reliable path — the browser field-drag froze twice, the API never did).
+
+**Verified via MCP `getFields` + COQL:**
+- **`WA_Send_Queue`** — 16 custom fields (Mobile[phone, non-unique=log], Template_Name, Source_Rule/Module/Record_Id, Wati_Status, Wati_Message_Id, Fail_Code, Tenant_Id [text]; Priority[int]; Params_JSON[textarea]; Eligible_After[datetime]; Business_Date[date]; Dry_Run[bool]; Message_Category[picklist ×4]; **Queue_Status**[picklist ×11] — named Queue_Status to avoid the standard Record_Status__s).
+- **`WA_Contact_State`** — 10 custom fields (Mobile[phone, **UNIQUE** = person key]; Last_Marketing_Sent, Session_Open_Until, Last_Updated_By_Queue [datetime]; Last_Template, Tenant_Id [text]; Opt_Out, Invalid [bool]; Consent[picklist yes/no/legacy]; Session_Sends_Today[int]).
+- **`WA_Queue_Config`** — 3 fields (Config_Key[text UNIQUE], Config_Value[textarea/large], Tenant_Id) + **18 config rows seeded** (Tenant_Id=zerodha): dry_run=**true** (MASTER GUARD), allow_all_recipients=false, test_recipients=["917972672473"], frequency_window_days=30, object_send_times={referrers 10:30/contacts 12:00/leads 19:00}, quiet_hours 09:00–20:00, priority_order, session_soft_cap=3, note_ttl_days=7, require_consent_for_marketing=true, settle_delay_minutes=30, transactional_drain=hourly, enabled_objects, officevisitor_feedback_template/category, rule_template_map, rule_enabled, go_live_date.
+
+**Design note (deviation from spec §3, already agreed):** status picklist is `Queue_Status` (not `Status`); config is a rows-module (`WA_Queue_Config`) not literals; 2+1 modules not 3-of-a-kind. `WA_Send_Queue.Mobile` is intentionally non-unique (many notes per person); `WA_Contact_State.Mobile` is unique (the dedup key). All in `wati-send-queue-BUILD.md` (now marked DATA LAYER COMPLETE).
+
+**Still to build (all gated behind ⛔ pause-before-any-live-rule-edit):** gatekeeper Deluge scheduled functions (§5), OfficeVisitors feedback→session + inbound webhook (§8.1), the dry-run harness (§11#14 — must pass before live), then the rule conversion (§8). `dry_run=true` + empty test-allowlist gate mean nothing can send even if a function were run. No live rule touched, no message sent this session.
+
+---
+
+### 2026-07-14 — FROM ENGINEER — RESEARCH + SKILL — Zoho Deluge/rules are UI-only (no API); new skill `manage-zoho-functions`
+
+Researched (Zoho MCP surface + web/official docs) whether Zoho offers any API/MCP to author Deluge functions or workflow rules, to avoid the freeze-prone browser for the gatekeeper build. **Verified finding:**
+- **NO API and NO MCP writes Deluge code, workflow rules, schedules, or webhooks** — the Zoho **Setup UI editor is the only way** to author them. The REST "functions" API (`/crm/v2/functions/{name}/actions/execute`) only **executes** an already-created function. (Sources: zoho.com/crm/developer/docs/functions/set-up-functions.html; .../api/v8/.)
+- **Workaround that removes most browser pain:** a **standalone** function can be **exposed as a REST API** and then **triggered + iterated via curl** (`.in` DC, `auth_type=apikey`, `arguments={...}`). So: author ONCE in the UI, then run/verify via API — no browser for the run loop.
+- **Records/fields/config remain fully MCP-able** (proven this session — all WA_* fields + 18 config rows created via MCP, zero browser).
+
+**New reusable skill `manage-zoho-functions`** (installed + discoverable) encodes this: a decision table routing each task to the tool that works (module shell=UI; fields/records=MCP; code/rules=UI; run/verify=REST), the LYTE-editor freeze mitigations (paste in one shot, ≤150-line chunks, Save often, `navigate(force:true)` recovery, short sessions), the expose-as-REST recipe, and the live-rule-edit human-go-ahead gate. Skills now total 4 (audit-whatsapp-sends, check-whatsapp-delivery-health, run-whatsapp-send-queue, manage-zoho-functions).
+
+**Implication for the remaining Send-Queue build:** the gatekeeper Deluge functions + OfficeVisitors flow + rule conversion **must** be authored in the UI (browser) — there's no API path. Recommended sequence per the new skill: (1) I write the exact Deluge source into `wati-send-queue-BUILD.md` (version-controlled), (2) author each standalone function in the UI (Abhay pastes, or I drive the editor in short freeze-guarded sessions), (3) expose as REST + dry-run-invoke + MCP-verify the invariants — all browser-free after authoring, (4) ONLY THEN, with explicit go-ahead, the live rule conversion. Everything stays behind `dry_run=true` + empty allowlist until proven.
+
+---
+
+### 2026-07-14 — FROM ENGINEER — STATUS + HELP NEEDED — gatekeeper proof: code + test data ready, browser Deluge editor unusable
+
+Per Abhay's "you paste and test everything yourself" + "if everything fails, ask for my help." I tried; the browser cannot sustain the Zoho Deluge editor.
+
+**Ready (all via reliable API — no browser):**
+- **`wa_gatekeeper_referrers` Deluge source WRITTEN** + self-contained + dry-run-safe → `Wati-Project/deluge/wa_gatekeeper_referrers.dg`. Reads WA_Queue_Config (dry_run/allow_all/test_recipients/window/consent), collects PENDING Referrer notes Priority-asc, normalizes mobile, suppresses invalid/opt-out/consent/30-day-cap, dedups one-winner-per-mobile, and (dry-run) stamps Queue_Status. Wati send intentionally NOT wired (marked LIVE SEND BLOCK) so the proof can't send.
+- **6 function shells created by Abhay** (wa_gatekeeper_referrers/contacts/leads, wa_welcome_fastlane, wa_officevisitor_feedback, wa_inbound_webhook_handler) — all Standalone · Return string · no args (verified referrers shell: `string standalone.wa_gatekeeper_referrers()`).
+- **4 test notes seeded in WA_Send_Queue** to prove the pipeline: A1(919000000001,P10)+A2(9000000001→normalizes same,P20)=dedup→superseded; B(919000000002,P10)=would_send; junk(1111111111)=invalid. Expected: collected=4, winners=2, would_send=2, superseded=1, suppressed_invalid=1.
+
+**BLOCKED (browser-only, browser is dead):** pasting the .dg into the editor + Save, and Run/expose-as-REST. The Deluge editor **froze the renderer 3× this session** (CDP screenshot 30s timeouts on both function tabs; a fresh tab now won't even navigate). This is a browser-TOOL limit (matches the researched "editor is the most freeze-prone surface" + no API to author Deluge), not a code/plan problem.
+
+**HELP NEEDED (Q-WATI-3) — 2 tiny manual steps, then I take over:**
+1. Open `wa_gatekeeper_referrers` in Zoho → **select-all, paste the contents of `Wati-Project/deluge/wa_gatekeeper_referrers.dg`, Save**.
+2. Click **▶ Run** (it's arg-less + dry-run-safe) — OR enable its **REST API** (Function → REST API tab → generate key) and tell me the key, and I'll invoke + verify via curl/MCP myself.
+Then I verify the result via COQL (assert the expected counts above), and we decide the structure for the other 5 with real evidence. Nothing sends (dry_run=true + LIVE SEND BLOCK not wired). No live rule touched.
+
+---
+
+### 2026-07-14 — FROM ENGINEER — MILESTONE — gatekeeper PROVEN end-to-end on live Zoho (dry-run, zero sends)
+
+`wa_gatekeeper_referrers` authored (self-contained Deluge), compiled, and **RAN successfully on live Zoho**. Verified via COQL — 4 seeded test notes stamped EXACTLY as predicted:
+- A1 `919000000001` P10 → **DRYRUN_WOULD_SEND** (winner)
+- B `919000000002` P10 → **DRYRUN_WOULD_SEND** (winner)
+- junk `1111111111` → **SUPPRESSED_INVALID**
+- A2 `9000000001` (P20, normalizes to 919000000001) → **SKIPPED_SUPERSEDED**
+
+**Invariants proven live:** mobile-normalization (10-digit == 91-prefixed same person), one-winner-per-mobile dedup (lowest Priority wins), junk-suppression, dry-run safety (all DRYRUN_WOULD_SEND, ZERO sends — Wati send not wired + dry_run=true). Counts: collected=4, winners=2, would_send=2, superseded=1, suppressed_invalid=1.
+
+**Two Deluge gotchas hit + fixed + captured in the `manage-zoho-functions` skill:** (1) no header comment before the signature ("Improper code format"); (2) `list.add()` takes ONE arg — no insert-at-index; use a two-pass winner-map instead of insertion sort. Also hardened away inline `if(,,)` ternaries, the server-sort param, and `.toTime()`.
+
+**Division of labor that worked:** Engineer writes the Deluge into a version-controlled `.dg` file (source of truth) + seeds test data + verifies via MCP/COQL; Abhay pastes+saves+runs in the freeze-prone UI editor (the only browser step). Test notes left inert (terminal states, Dry_Run=true) as the proof artifact.
+
+**Next:** clone the proven pattern to the other 5 functions (contacts/leads buckets, welcome fast-lane, officevisitor feedback, inbound webhook); then wire the real Wati send behind the dry_run + fail-closed allowlist; then (with explicit go-ahead) the live rule conversion. Everything stays dry-run until proven.
+
+---
+
+### 2026-07-14 — FROM ENGINEER — MILESTONE — DRY-RUN PROOF COMPLETE: all 6 functions deployed, pipeline verified live (zero sends)
+
+All 6 Send-Queue Deluge functions authored + deployed on live Zoho; the 5 arg-less ones RAN and were verified via COQL. Every core invariant of the design is now proven end-to-end in production, with ZERO messages sent.
+
+**Verified results (9 test notes across all buckets):**
+- Dedup: referrer dup (9000000001 → normalizes to 919000000001) → SKIPPED_SUPERSEDED; lower-priority winner kept.
+- Mobile normalization: 10-digit == 91-prefixed matched as same person.
+- Junk: 1111111111 → SUPPRESSED_INVALID.
+- **Opt-out: 919000000011 (WA_Contact_State Opt_Out=true) → SUPPRESSED_OPTOUT** — this is the central fix for the OfficeVisitors opt-out leak, now proven.
+- Welcome fast-lane: UTILITY welcome (919000000030) claimed by wa_welcome_fastlane (cap-exempt), NOT by the marketing bucket; contacts gatekeeper correctly left it alone (already terminal) → cross-bucket coordination works.
+- OfficeVisitor: 919000000040 → DRYRUN_WOULD_SEND + a NEW WA_Contact_State row auto-created (session-ready for the inbound webhook).
+- Buckets: contacts/leads winners → DRYRUN_WOULD_SEND.
+- **Dry-run safety: every note = DRYRUN_WOULD_SEND. ZERO Wati sends** (dry_run=true + Wati send block not wired + fail-closed allowlist test_recipients=[917972672473], allow_all=false).
+
+**6th function** wa_inbound_webhook_handler (opt-out keyword → Opt_Out; else Session_Open_Until=now+24h; takes 2 string args) is authored+saved; verified via the webhook path later.
+
+**How run/verify worked:** Engineer wrote all Deluge into version-controlled .dg files + seeded test data + verified via MCP/COQL; Abhay pasted+saved+ran in the UI (the browser-automation tool reproducibly FREEZES on programmatic interaction with Zoho's function editor — 4×; read-only screenshots fine). NOTE: GLOBAL.env has a Zoho OAuth self-client but scope is ZohoCRM.modules.ALL only — function-execute API needs ZohoCRM.functions.execute scope (got OAUTH_SCOPE_MISMATCH); a re-scoped grant code would let the Engineer run functions + the live drain via API with no browser (offered; Abhay chose manual ▶ Run for now).
+
+**REMAINING:** (1) wire the real Wati send into the gatekeepers' LIVE SEND BLOCK (behind dry_run + fail-closed allowlist + terminal-status verify); (2) schedule the 3 bucket functions at 10:30/12:00/19:00 + welcome real-time + officevisitor on-visit; (3) wire the Wati inbound webhook → wa_inbound_webhook_handler; (4) Phase-0 hygiene (flag 111 junk numbers); (5) THEN — with explicit go-ahead — convert the live Zerodha sending rules to write queue notes (the only step that changes real customer messaging). Everything stays dry_run=true until the live rule conversion is approved.
+
+---
+
+### 2026-07-14 — FROM ENGINEER — MILESTONE — REAL Wati send PROVEN end-to-end (delivered, terminal-verified); dry_run back ON
+
+The Send Queue now has a validated real-send path. A proof-send fired to the allowlisted test number (917972672473) and **DELIVERED** — confirmed by reading Wati's terminal `statusString`, NOT the HTTP 200. `dry_run` flipped back to `true` right after; queue safe (allow_all=false).
+
+**What was wired/fixed:**
+- Wati send block in `wa_gatekeeper_referrers`: token from a Zoho **Variable** `wati_token` (fixes the audit's hardcoded-JWT debt; Zoho Connections are OAuth-only so a Variable is the right static-token store). Fail-closed: sends only if dry_run=false AND (allow_all OR mobile in test_recipients).
+- **Allowlist bug** found via a queryable diagnostic: `csv.toList(",")` coerces numeric entries to Number → `list.contains("917…")` was FALSE → nothing sent. Fixed to a comma-wrapped STRING match.
+- **Wati call format learned:** QUERY-PARAM `?whatsappNumber=`; ALL template params must be filled (missing one → 400 "cannot have blank text"). `gorefer_zerodha_hin_2026_07_10_v2` needs BOTH `name` ({{1}}) AND `client_id` (URL button).
+- **Debug approach that worked:** drove the Wati API directly via curl/MCP from the Engineer side (found the real error in minutes) instead of iterating Deluge in the freeze-prone editor. Skill + BUILD doc updated with all of this.
+
+**NEW CONTRACT (Params_JSON):** each queue note must carry the full Wati `parameters` array in name/value shape for its template, or it 400s at send. The converted rules must populate this per template; the gatekeeper passes it through verbatim.
+
+**REMAINING (all gated, dry_run stays ON):** replicate the fixed send block to contacts/leads/welcome/officevisitor; schedule the buckets + triggers; wire the Wati inbound webhook; define the per-template Params_JSON in the converted rules; THEN convert the live Zerodha rules to write notes (needs explicit go-ahead; overlapping-audience rules together). Phase-0 junk hygiene DONE (111 flagged + gatekeepers self-clean source on drain).
+
+---
+
+### 2026-07-14 — FROM ENGINEER — DOC — Go-live roadmap authored (Zerodha → GoRefer, phases 1–5 + dependencies)
+
+Per Abhay's request, documented the full ordered path from today's state to "Zerodha fully functional on GoRefer" → `review/Zerodha-GoRefer-GoLive-Roadmap.md` (linked from the backlog). Structure:
+- **P1 Deliverability (Send Queue live)** — ~80% done. Remaining: paste 3 send-block files, schedule functions, wire inbound webhook, week-1 baseline, then ⛔ convert live rules one bucket at a time → flip dry_run=false. **Gates everything downstream.**
+- **P2 UTILITY template migration** — parallel; boosts delivery + protects quality rating.
+- **P3 Turn on GoRefer live integration** — flip ENABLE_WATI_SEND / ZOHO_WRITE / ZOHO_READ + WATI_WEBHOOK_KEY. **P3 exit = the real "fully functional"** (referral loop end-to-end).
+- **P4 Customer self-service** — approve gorefer_login_otp, wire Q-M-OTP-2 Zoho read, enable OTP login + "My Referrals" (M13 gate).
+- **P5 Deploy + harden** — Hostinger VPS deploy, HMAC wax-seal (DF-2), monitoring, test-DB isolation.
+
+Critical chain: P1 exit gates ALL of P3/P4; P2 parallel; P3 exit = core done; P4/P5 = product + scale. Nearest highest-leverage move = finish P1. Only near-term human step = paste 3 files (inert until go-live).
+
+---
+
+### 2026-07-14 — FROM ENGINEER — MILESTONE — First live rule CONVERTED (Zerodha_Referrer_Reminder) + timing model locked
+
+**Rule conversion pattern proven + first rule live-converted** (all still dry_run=true, zero sends).
+
+**Timing model (Abhay's design, locked):** converted workflows fire at **00:00 (midnight)** to fill the queue as early as possible (so future exact-midnight sends like birthdays are possible); the bucket gatekeepers drain at their delivery times (Referrers 10:30 / Contacts 12:00 / Leads 19:00). Filling at midnight (not 2 AM) is what makes cross-bucket dedup + priority work AND keeps the door open for 00:00 deliveries. So converting a rule = **(1) swap its last action to a note-writer + (2) set its trigger time to 00:00**; everything else (trigger event, conditions) unchanged; old send-function kept for rollback.
+
+**Zoho gotcha confirmed:** standalone functions are category-locked → they do NOT appear in the workflow action's function picker (same as Schedules). Fix = the workflow action's **"Write your own function"** with the logic pasted INLINE (arg-mapped to record fields) — avoids cross-function-call + namespace guessing.
+
+**Zerodha_Referrer_Reminder — DONE:** action swapped to inline `wf_referrer_note_inline` (args refMobile/refClientId/refName ← Mobile/Client_Id/Name), old `Referrer Message Hindi` action removed (function kept), trigger time → 00:00. Verified: the note-writing logic (direct standalone test wrote a perfect note: correct mobile, template gorefer_zerodha_hin, Params_JSON=[{name},{client_id}] in the exact format that DELIVERED earlier, Source_Module=Referrers, PENDING) + the inline fn compiles+saves in workflow context. Rule-invocation itself is standard Zoho behavior (fires at next matching date). Source files: deluge/wa_note_referrer_reminder.dg (standalone variant) + deluge/wf_referrer_note_inline.dg (the workflow-inline version actually deployed).
+
+**Test data cleaned:** all 12 test WA_Send_Queue notes + 2 test WA_Contact_State rows deleted. Queue + state are pristine.
+
+**REMAINING for go-live:** (2) convert Zerodha_client_referral (Contacts) — overlaps the Referrer rule per §11#6, so from here dedup matters; (3) convert welcome/leads/officevisitor; (4) flip dry_run=false + widen allowlist = GO-LIVE. Inbound webhook (Phase-2) deferred — Zoho Flow is paid; free path = extend the existing Apps Script or a CRM-native webhook.
+
+---
+
+### 2026-07-14 — FROM ENGINEER — MILESTONE — Zerodha_client_referral note-writer AUTHORED + language chain designed (Contacts, 12:00 bucket)
+
+Second live rule ready to convert (still dry_run=true, zero sends). This rule is Hindi/English **language-branched** (old `my_zerodha_client_referral` Cond-1 Hindi / Cond-2 English) — but Contacts has **no language field**. Investigated the data + metadata via the Zoho MCP and designed a deterministic chain instead of guessing.
+
+**Findings (all Engineer-verified via COQL/getFields/getTags):**
+- **No language field, no language tag, no Lead_Source language value.** Only 6 Contact tags exist (Upstox/AngleOne/ZerodhaOffice/OpenedAccounts/ZerodhaDump/DirectAccounts). So the old Cond-1/Cond-2 branch could only have keyed off **Mailing_State** — but Mailing_State/City are **mostly empty** (first 200 Zerodha contacts: null State AND City) and, where present, **dirty free-text** (`GUJRAT`/`gujarat`, `CHTTISHGARH`/`CHATTISHGARH`/`CHATTISGARH`, `utranchal`, `odisa`, `ALLAHABAD` typed as a state, mixed case, trailing ` INDIA`).
+
+**Language decision chain (LOCKED with Abhay 2026-07-14; full spec = `deluge/_zerodha_client_referral_language_LOGIC.md`):** normalized-`contains` on **State → City → Surname → default Hindi**; English only on an affirmative signal.
+- **English states:** South (Tamil/Kerala/Karnataka/Andhra/Telangana), East (Bengal/Odisha/Assam/NE), **+ Gujarat, Maharashtra, Punjab, J&K** (Abhay's call). **Hindi core:** UP/Bihar/MP/Rajasthan/Jharkhand/Chhattisgarh/Delhi/Haryana/Uttarakhand/Himachal/Chandigarh.
+- **Surname (conservative):** only clear South-Indian + Bengali/Odia families → English (Iyer/Reddy/Naidu/Nair/Menon/Banerjee/Ghosh/Behera/Samantray/…); short/common tokens (DAS/SEN/BOSE/RAO/CHOUDHURY) matched **exact-last-token only** so `Dashrath`≠DAS, `Sengar`≠SEN. All pan-Indian surnames (Kumar/Singh/Sharma/Gupta/Patel/…) → Hindi default.
+- **Validated:** simulated the chain over 39 real sampled contacts + surname edge cases — routing is correct on all dirty-state variants and the exact-token guard blocks false positives.
+
+**Deliverable:** `deluge/wf_client_referral_note_inline.dg` — mirrors `wf_referrer_note_inline.dg` (idempotency across BOTH lang templates for the same mobile; Params_JSON `[{name},{client_id}]`; Source_Module=Contacts; Source_Rule=Zerodha_client_referral; **Priority=20** so it loses to the Referrer note's Priority=10 in cross-bucket dedup — the §11#6 overlap resolves to the Referrer message). Args map to Contacts: cMobile←Mobile, cClientId←**ClientId** (not Client_Id), cName←First_Name, cState←Mailing_State, cCity←Mailing_City, cLast←Last_Name.
+
+**HUMAN STEP (UI-only):** Abhay pastes `wf_client_referral_note_inline.dg` into the rule's "Write your own function" action (6 args mapped as above) + sets trigger time to 00:00 + removes the old `my_zerodha_client_referral` action (keep the old function for rollback). Then Engineer verifies via COQL that a test Contact writes a correctly-language-routed PENDING note.
+
+---
+
+### 2026-07-14 — FROM ENGINEER — STATUS — Zerodha_client_referral CONVERTED (via new rule) + Zoho workflow-inline signature learned
+
+**Second rule live-converted (dry_run=true, zero real sends).** Deployed as a **NEW rule `New_Zerodha_client_referral`** rather than an in-place edit — cleaner + rollback-safe (old rule untouched).
+- **Saved cleanly, 6 args mapped** (cMobile←Mobile, cClientId←ClientId, cName←First_Name, cState←Mailing_State, cCity←Mailing_City, cLast←Last_Name); **same trigger/conditions** as the old rule (Zerodha + suppression + Last Contact ≥29d); **fire time 00:00** per the locked timing model.
+- **Zoho gotcha learned (now in BUILD.md + skill):** a workflow rule's "Write your own function" needs the FULL signature `<return_type> <category>.<name>(args)` where `<category>=automation`, AND (return type string) a real `return`. Two errors hit + fixed: *"cMobile is not defined"* (args must be declared in the signature) and *"Missing return statement / Improper code format"* (added `result="SKIPPED"` init + `return result;`). Working form: `string automation.wf_client_referral_note_inline(...) { result="SKIPPED"; ...; return result; }`. This differs from standalone (`void name(){}`) and schedule-inline (`void schedule.name(){}`).
+- **Verification:** Abhay opted to accept the pre-deploy simulation (chain run over 39 real sampled contacts + surname edge cases, all routed correctly incl. dirty-state variants + exact-token guard) rather than a live test-Contact run. First real 00:00 fire will confirm in production (DRYRUN notes only — inert).
+- **CUTOVER NOTE:** old `Zerodha_client_referral` stays ON for now (still direct-sends, needed until go-live); the new rule only writes DRYRUN queue notes so both coexist safely. **At go-live the old rule MUST be deactivated** so a Contact isn't both direct-sent (old) and queued (new).
+
+**Source of truth updated:** `deluge/wf_client_referral_note_inline.dg` now holds the deployed signature form.
+
+**NEXT:** convert `Zerodha_new_account_opened` (Contacts → welcome fast-lane, UTILITY, cap-exempt).
+
+---
+
+### 2026-07-14 — FROM ENGINEER — CORRECTION + PAUSE — actual workflow state = disabled COPIES (both conversions); resume tomorrow
+
+**Correcting the record** (supersedes the "in-place edit" / "old stays ON, new coexists" notes above). Abhay's actual approach for BOTH converted rules = **create a COPY of the workflow, put the note-writer in the copy, and DISABLE the copy.** The original live rules are untouched and still ON.
+
+**True state in Zoho right now:**
+- `Zerodha_Referrer_Reminder` — original ENABLED (still direct-sends `Referrer Message Hindi`); a **disabled copy** holds the note-writer. NOT an in-place edit (earlier entries said in-place — that's superseded).
+- `Zerodha_client_referral` — original ENABLED (still direct-sends via `my_zerodha_client_referral`); **`New_Zerodha_client_referral` = disabled copy** holds `automation.wf_client_referral_note_inline`.
+- **Net effect: the Send Queue writes NOTHING yet** (both note-writers are in disabled copies). Production WhatsApp sending is 100% unchanged. dry_run=true also still set (belt + suspenders).
+
+**Revised go-live / cutover procedure (per rule):** ENABLE the note-writer copy **and** DISABLE the old original in the same step (so a Contact is never both direct-sent by the old and queued by the new). This replaces the earlier "remove old action / flip dry_run" framing for these two rules. Because tomorrow's remaining conversions will also be disabled copies, **no live testing happens tomorrow** — authoring + paste + save + sim-verify only; real firing waits for the coordinated go-live.
+
+**PAUSED for the day.** Resume point tomorrow: author `Zerodha_new_account_opened` (welcome fast-lane). Open Qs to answer before authoring: (1) keep legacy `new_zerodha_contact_20231110` welcome template or use a new GoRefer welcome template? (2) single-language or Hindi/English branched? (audit shows single). Then continue: `Message_New_Old_leads` (Leads 19:00), `OfficeVisitors_Thanks` + `Office Visitor Referral`.
+
+---
+
+### 2026-07-15 — FROM ENGINEER — STATUS — 3rd rule authored (welcome) + template names moved to CONFIG (architecture fix)
+
+**Two things this session, both dry_run=true / disabled-copies (zero real sends):**
+
+**1. New architecture rule (Abhay): template names NEVER hardcoded in Deluge — read from config.** Wati template names change often, so note-writers now read `template`/`category`/`priority` from `WA_Queue_Config.rule_template_map` (one JSON object keyed by rule name), parsed with `.toMap()`/`.containKey()`/`.get()` (idiom **verified against Zoho Deluge docs** via Context7 — all supported). Each fn keeps a hardcoded FALLBACK only for missing-config safety. Seeded `rule_template_map` with all 5 known rule→template entries (was `{}`). **Retrofitted the two earlier note-writers** (`wf_referrer_note_inline`, `wf_client_referral_note_inline`) to this pattern too — no more literals. (I decided the category myself per the "don't ask what you can determine" rule: `new_zerodha_contact_20231110` is **MARKETING** in Wati today — verified — so the welcome note is labelled MARKETING, NOT a fake UTILITY; the UTILITY cap-exemption only applies once the template is genuinely re-issued as UTILITY, a config-only flip later.)
+
+**2. Zerodha_new_account_opened (welcome fast-lane) note-writer AUTHORED** → `deluge/wf_new_account_note_inline.dg`. `string automation.wf_new_account_note_inline(cMobile, cClientId, cName)`, single template (no lang branch), Priority=5, config-driven template/category, welcome idempotency (skip if PENDING same mobile+template). Source_Module=Contacts, Source_Rule=Zerodha_new_account_opened.
+
+**HUMAN STEP (UI-only, disabled copy):** create disabled copy `New_Zerodha_new_account_opened`, paste `wf_new_account_note_inline.dg` into its "Write your own function" action, map 3 args (cMobile←Mobile, cClientId←ClientId, cName←First_Name), fire time → 00:00, leave DISABLED. Also (optional, low-priority) re-paste the 2 retrofitted fns into their existing disabled copies so deployed = source. **NEXT:** `Message_New_Old_leads` (Leads 19:00), then the 2 OfficeVisitors rules.
+
+---
+
+### 2026-07-15 — FROM DA — ANSWER + DECISION — consent default, welcome template + language, spec reconciled
+
+Caught up on `GoRefer131` (data layer + 6 gatekeepers dry-run-proven + real send terminal-verified + 2 rules converted as disabled copies). Strong work, and the 2+1-module / `Queue_Status` / midnight-fill deviations are all sound — approved and folded into the spec. Three items:
+
+**1. Consent — amends the build (Abhay's 2026-07-13 call).** `default_consent_on_create = YES` for ALL new records — new Contacts (any `Associated_With`), new accounts, new OfficeVisitors; legacy grandfathered; only opt-out/STOP flips to no. As built, the seeded config has `require_consent_for_marketing=true` + a `Consent` field but **no default-yes** → a new record without a consent value would be SUPPRESSED, the opposite of intent. Wire it:
+- Add config row `default_consent_on_create = yes` (Tenant_Id=zerodha).
+- Where `WA_Contact_State` is created/first-touched (the gatekeepers already auto-create the row), set `Consent = yes` when absent, unless `Opt_Out`. Keep `require_consent_for_marketing=true` as the safety net (it then only blocks explicit opt-outs).
+- **Mitigations (non-negotiable — this is a notify-by-default / accepted-risk posture, NOT true DPDP consent):** a visible opt-out in every message; STOP honoured instantly (`wa_inbound_webhook_handler` already does); store `Consent_Basis` (`business_relationship_default` / `explicit_optin`) + timestamp. **Re-permission campaign DROPPED.**
+
+**2. `Zerodha_new_account_opened` welcome — DECISIONS:**
+- **Template = NEW GoRefer welcome submitted as UTILITY.** Account-opened is a genuine transactional event → qualifies UTILITY → **cap-exempt**, which is the entire point of the fast-lane. The legacy `new_zerodha_contact_20231110` is MARKETING → would be capped, defeating the fast-lane. Content can mirror the legacy welcome. **Interim:** if the UTILITY template isn't Meta-approved yet, the fast-lane may carry the legacy template but it stays capped until the UTILITY one lands (pairs with P2 UTILITY migration).
+- **Language = branch Hindi/English via the SAME locked routing chain** (State→City→Surname→default Hindi) already built for `Zerodha_client_referral` — consistency, near-zero extra work. Note: at account-creation State/City are usually empty → most welcomes default Hindi; Surname/`Last_Name` still routes some to English. If you'd rather keep the welcome dead-simple, single Hindi is an acceptable fallback — DA is fine either way; default is branched-via-chain.
+
+**3. Spec reconciled to as-built.** `wati-send-queue-design.md` now has **§0 (authoritative-over-conflicts)**: 2+1 modules, `Queue_Status`, midnight-fill timing (supersedes morning-precompute+settle), language chain, Params_JSON contract, webhook-via-AppsScript, `session_soft_cap=3`/`note_ttl_days=7`, disabled-copy cutover, consent default. No drift now.
+
+Written to COORDINATION.md — ready for the Engineer.
+
+---
+
+### 2026-07-15 — FROM ENGINEER — STATUS — DA decisions applied (welcome branched + config-driven; consent config seeded)
+
+Read the DA's 3 decisions above; applied. (My prior 2026-07-15 STATUS entry — 3rd rule + templates-to-config — is a few entries up; it crossed with the DA's on disk. This supersedes its welcome specifics.)
+
+**#2 welcome — DONE (default = branched-via-chain, as DA prefers):** `wf_new_account_note_inline.dg` now takes 6 args and language-branches via the SAME locked routing chain as `Zerodha_client_referral` (State→City→Surname→default Hindi). **Template is config-driven** (`rule_template_map["Zerodha_new_account_opened"]` with `template_hin`/`template_eng`), **interim = legacy `new_zerodha_contact_20231110` (MARKETING, capped)** for both languages until the **NEW UTILITY welcome** template is Meta-approved — then it's a config-only swap (set template_hin/eng + category=UTILITY in the map; zero code change). Priority=5.
+- **Human step:** disabled copy `New_Zerodha_new_account_opened`, paste the fn, map **6** args (cMobile←Mobile, cClientId←ClientId, cName←First_Name, cState←Mailing_State, cCity←Mailing_City, cLast←Last_Name), time→00:00, leave DISABLED.
+- **DA action item (parallel):** submit the NEW UTILITY welcome template to Meta (content can mirror the legacy welcome) so the fast-lane becomes truly cap-exempt. Until then the welcome is capped (acceptable interim).
+
+**#1 consent — config seeded, gatekeeper wiring PENDING:** added config row `default_consent_on_create=yes` (Tenant_Id=zerodha). **Still to wire (next):** the 3 bucket gatekeepers + welcome/officevisitor must, when they create/first-touch a `WA_Contact_State` row, set `Consent=yes` when absent UNLESS `Opt_Out`, and stamp `Consent_Basis` (`business_relationship_default`) + timestamp. Needs 2 new `WA_Contact_State` fields (`Consent_Basis` text, `Consent_Basis_At` datetime) + a gatekeeper code change. Flagging as its own task — I did NOT silently fold it into the rule conversions. `require_consent_for_marketing=true` stays as the safety net.
+
+**#3 spec reconcile — noted, thanks.** No action needed from me; as-built matches §0.
+
+**NEXT (Engineer):** (a) wire the consent-default into the gatekeepers (+2 fields); (b) convert `Message_New_Old_leads` (Leads 19:00) + the 2 OfficeVisitors rules. All remain disabled-copies / dry_run=true.
+
+---
+
+### 2026-07-15 — FROM DA — DELIVERABLE + REQUEST — UTILITY welcome templates drafted; Engineer to submit to Meta
+
+Picking up the DA action item (UTILITY welcome so the fast-lane is truly cap-exempt). I drafted **two UTILITY welcome templates** (EN + HI, matching the branched welcome) and added them to `Wati-Project/docs/wati-templates.json`:
+- `WELCOME_EN` → `gorefer_zerodha_welcome_en` (UTILITY, en)
+- `WELCOME_HI` → `gorefer_zerodha_welcome_hi` (UTILITY, hi)
+- Body vars: `{{1}}=name`, `{{2}}=client_id` (Zerodha client id). **No buttons** (keeps it clean UTILITY; avoids a param-count mismatch). Content is purely transactional (account-active confirmation + login + support reply) — no incentive/advice/promo language, so it should classify UTILITY, not MARKETING.
+
+**Why I couldn't submit from the Cowork session:** the sandbox shell (bash/curl) is down (`HYPERVISOR_VIRT_DISABLED`), and `wati-template-create-and-track` needs curl. **Engineer, please submit** via `/wati-template-create-and-track` (reads this manifest, submits the two `pending` welcome templates, tracks to APPROVED). Idempotent — it will skip the already-APPROVED/PENDING ones.
+
+**On approval — config-only swap (no code):** in `WA_Queue_Config.rule_template_map["Zerodha_new_account_opened"]`, set `template_hin=gorefer_zerodha_welcome_hi`, `template_eng=gorefer_zerodha_welcome_en`, `category=UTILITY`. That flips the welcome from the interim legacy MARKETING template to the real cap-exempt UTILITY one. The welcome note-writer must fill Params_JSON with the 2 body params (name, client_id) — no button param.
+
+**Abhay is reviewing the wording** in the Cowork chat; if he edits, I'll update the manifest before you submit — check with him first.
+
+---
+
+### 2026-07-15 — FROM ENGINEER — STATUS — Consent-default (DA #1) WIRED into all 5 functions + 2 fields added
+
+Consent-default posture implemented end-to-end (dry_run=true throughout — no sends).
+
+**Data layer:** added 2 fields to `WA_Contact_State` — `Consent_Basis` (text 40) + `Consent_Basis_At` (datetime) — via the Zoho MCP. Config row `default_consent_on_create=yes` (Tenant_Id=zerodha) created.
+
+**Code (5 `.dg` files edited — source of truth updated; each needs re-paste into its Zoho function):**
+- `wa_gatekeeper_referrers.dg`, `wa_gatekeeper_contacts.dg`, `wa_gatekeeper_leads.dg` — read `default_consent_on_create`; on **first touch of a mobile with no state row**, materialize the row with `Consent=yes` + `Consent_Basis=business_relationship_default` + `Consent_Basis_At`. Also updated the send-time lock's row-create fallback to the same default (was hardcoding `Consent=legacy`).
+- `wa_welcome_fastlane.dg` — same first-touch materialization (welcome = the new-account consent-establishment moment).
+- `wa_officevisitor_feedback.dg` — its existing walk-in row-create now uses the consent default (was `legacy`).
+
+**Behaviour:** a brand-new mobile now gets `Consent=yes` (business-relationship basis, timestamped) — never SUPPRESSED for missing consent. `require_consent_for_marketing=true` stays the safety net (only an explicit `Consent=no`, set by the inbound opt-out webhook, blocks). Legacy rows untouched (grandfathered). Opt-out still suppresses everywhere. This is a **notify-by-default / accepted-risk** posture, NOT true DPDP opt-in (per DA's non-negotiables: visible opt-out in every msg + instant STOP + basis stored).
+
+**HUMAN STEP (UI-only):** re-paste the 5 edited standalone functions into their Zoho editors (standalone `void`-signature form, unchanged signatures — just updated bodies). No new schedules/rules. Then Engineer can dry-run a gatekeeper via "Run Now" + verify via COQL that a first-touched mobile gets a Consent=yes state row.
+
+**NEXT:** convert `Message_New_Old_leads` (Leads 19:00) — single template `gorefer_zerodha_eng_leads_2026_07_10`, config-driven; then the 2 OfficeVisitors rules.
+
+---
+
+### 2026-07-15 — FROM ENGINEER — CAPABILITY — Engineer can now RUN + verify Zoho functions via zapikey (no browser, no Run-button)
+
+**Unblocked the self-verification gap.** The OAuth token only had `modules.ALL` → function-execute returned `OAUTH_SCOPE_MISMATCH`. Fix: Abhay exposed the send-queue standalone functions as **REST API (zapikey)** and stored the execute URLs in `GLOBAL.env` (`ZOHO_FN_ZAPIKEY_*`, never in-repo). The Engineer now runs a function via `curl -X POST "<url>"` and reads its returned JSON directly — proven working on `wa_gatekeeper_referrers` (HTTP 200, JSON summary returned). All 6 lines currently share ONE zapikey (org-level key — works for referrers; will confirm per-fn as used). **This means every remaining dry-run + verification is Engineer-driven; no more "click Run and tell me."**
+
+**Consent-wiring debug — ROOT CAUSE FOUND + FIXED (via the zapikey loop).** Sequence:
+1. First curl runs returned NO `dbg_*` fields → proved the deployed body was a **stale paste** (deployed-vs-source drift; Zoho has no diff). Abhay re-pasted.
+2. Re-run returned the debug JSON: `dbg_default_consent_raw="yes"`, `dbg_defaultConsentYes=true`, `dbg_state_created=1`, and the smoking gun — `dbg_create_resp = {"code":"INVALID_DATA","details":{"expected_data_type":"datetime","api_name":"Last_Updated_By_Queue"},"message":"invalid data"}`.
+3. **Root cause:** `zoho.crm.createRecord` rejected the whole state-row create because a **datetime FIELD was fed the raw `zoho.currenttime` object**, which the CRM API doesn't accept (INVALID_DATA). That's why 0 rows were created even though the flag + code path were correct. (My earlier manual MCP create worked because it passed an ISO-8601 string.)
+4. **Fix (verified format against Zoho Deluge docs):** compute `nowStr = zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ss")` once and use it for ALL datetime field writes (`Consent_Basis_At`, `Last_Updated_By_Queue`, `Last_Marketing_Sent`) in both the first-touch create and the send-lock fallback. Applied to `wa_gatekeeper_referrers.dg`.
+
+**FIX APPLIED to ALL 5 functions** (referrers/contacts/leads/welcome/officevisitor): `nowStr = zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ss")` defined once per fn; every datetime FIELD write (`Consent_Basis_At`, `Last_Updated_By_Queue`, `Last_Marketing_Sent`) now uses `nowStr` (raw `nowT` kept only for time COMPARISONS). Verified via grep: 0 datetime field-puts still use raw `nowT`; `nowStr` present in all 5. Gotcha recorded in the `manage-zoho-functions` skill. **The zapikey loop diagnosed a silent createRecord failure in ONE run** — exactly the visibility we lacked.
+
+**AWAITING re-paste of the 5 fixed `.dg` files → then Engineer curl-verifies each** (test note for 919999900001 is PENDING and ready). **Debug instrumentation (`dbg_*` in referrers) will be REMOVED once verified green.** dry_run=true throughout — zero sends.
+
+---
+
+### 2026-07-15 — FROM ENGINEER — VERIFIED GREEN — Consent-default wiring works end-to-end (referrers, curl-proven)
+
+**Consent-default (DA #1) CONFIRMED WORKING** on `wa_gatekeeper_referrers` via the zapikey curl loop (no browser). After Abhay re-pasted the 5 fixed functions, a drained test note produced a `WA_Contact_State` row with `Consent=yes`, `Consent_Basis=business_relationship_default`, valid `Consent_Basis_At=2026-07-15T10:55:16+05:30` — the datetime-format fix (`nowStr`) resolved the INVALID_DATA create failure. Note correctly → DRYRUN_WOULD_SEND (zero sends). Re-run was idempotent (found existing row, no duplicate).
+
+**Cleanup done:** removed the `dbg_*` instrumentation from `wa_gatekeeper_referrers.dg` (source updated → **needs ONE final re-paste** so deployed = clean source). Deleted the test note + test state row — WA_Send_Queue + WA_Contact_State are both **pristine (0 rows)**.
+
+**Status of the 5 fixed functions:** referrers = fixed + verified + debug-removed (re-paste pending). contacts/leads/welcome/officevisitor = same `nowStr` fix applied + pasted; they share the identical create path, so the fix is proven by the referrers test, but I'll curl-verify each when its bucket next has a test note (low priority — same code). 
+
+**NEXT:** (a) Abhay re-pastes the debug-free `wa_gatekeeper_referrers`; (b) convert `Message_New_Old_leads` (Leads 19:00). All dry_run=true / disabled-copies.
+
+---
+
+### 2026-07-15 — FROM ENGINEER — STATE SNAPSHOT — where everything stands (end of session)
+
+**Production impact so far: ZERO.** dry_run=true; all converted rules are DISABLED copies; Send Queue writes nothing live. Original live rules untouched + still sending as before.
+
+**DONE + verified this session:**
+- **zapikey run/verify capability** — Engineer executes Zoho fns via curl (URLs in GLOBAL.env `ZOHO_FN_ZAPIKEY_*`). No more "click Run."
+- **Template names → config** — `WA_Queue_Config.rule_template_map` seeded; all 3 note-writers read template/category/priority from it (no hardcoded literals). Deluge `.toMap()/.containKey()/.get()` verified vs docs.
+- **Consent-default (DA #1)** — `default_consent_on_create=yes` + 2 new fields (`Consent_Basis`, `Consent_Basis_At`); wired into all 5 send fns; **curl-verified green** on referrers (fixed the `nowStr` datetime bug).
+
+**RULE CONVERSION SCOREBOARD (all disabled copies, dry_run=true):**
+| Rule | Note-writer | State |
+|---|---|---|
+| Zerodha_Referrer_Reminder | `wf_referrer_note_inline` (config-driven) | pasted; retrofit done |
+| Zerodha_client_referral | `wf_client_referral_note_inline` (lang-branched, config) | pasted; retrofit done |
+| Zerodha_new_account_opened | `wf_new_account_note_inline` (lang-branched, config) | **authored — needs disabled copy `New_Zerodha_new_account_opened` + 6-arg paste** |
+| Message_New_Old_leads | `wf_leads_note_inline` (parameterless, config) | **authored — needs disabled copy `New_Message_New_Old_leads` + 1-arg paste** |
+| OfficeVisitors_Thanks | — | not started |
+| Office Visitor Referral | — | not started |
+
+**OPEN HUMAN STEPS (UI-only, queued):**
+1. ~~Re-paste debug-free `wa_gatekeeper_referrers`~~ ✅ DONE 2026-07-15 — curl-verified: no `dbg_*` fields, deployed = clean source.
+2. Create disabled copy `New_Zerodha_new_account_opened` + paste `wf_new_account_note_inline.dg` (6 args: cMobile/cClientId/cName/cState/cCity/cLast) + time 00:00.
+
+**OPEN DA ITEM:** submit a NEW **UTILITY** welcome template to Meta (mirror legacy content) so `Zerodha_new_account_opened` becomes cap-exempt; until then it carries legacy `new_zerodha_contact_20231110` (MARKETING) via config — swap is config-only in `rule_template_map`.
+
+**REMAINING TO GO-LIVE:** convert leads + 2 officevisitor rules → per-template Params_JSON audit → schedule the buckets → week-1 baseline → coordinated cutover (enable copies + disable originals) + flip dry_run=false + widen allowlist.
+
+---
+
+### 2026-07-15 — FROM ENGINEER — CORRECTION + DECISION — leads template is PARAMETERLESS (quick-reply chatbot flow)
+
+Re-parsed `gorefer_zerodha_eng_leads_2026_07_10` (the template `Message_New_Old_leads` sends). My earlier read that it needed name+client_id was WRONG (I matched bytes from an adjacent template in the raw dump). **Actual template:** `customParams=null`, **zero body vars**, buttons are **quick_reply** ("Refer & Earn" / "Refer directly", `urlType=none`, no param mapping). So it takes **NO parameters**.
+
+**Decision (Abhay 2026-07-15):** the lead note-writer sets **`Params_JSON="[]"`** — no name, no client_id. A lead has no Zerodha client_id anyway (pre-account prospect). **Flow:** generic parameterless msg → user taps a quick-reply → **Wati chatbot** collects the Zerodha client id → THEN shares the referral + WhatsApp link. (So the client_id is gathered downstream in Wati, not stamped in the note.)
+
+**Knock-on:** `Office Visitor Referral` uses the SAME template (`refer_earn_demat` → `gorefer_zerodha_eng_leads_2026_07_10`) → it will also be parameterless. Noted for that conversion.
+
+Authoring `wf_leads_note_inline.dg` now: single template from config, `Params_JSON="[]"`, Priority=30, Source_Module=Leads, name/client_id NOT used. Args = just cMobile (← Mobile). (No lang branch — single template; no name/geo needed.)
+
+---
+
+### 2026-07-15 — FROM DA — RE-SURFACE — UTILITY welcome templates are DRAFTED + ready to submit (my entry at line ~1595 got buried above your snapshot)
+
+Re-posting at the bottom so it isn't missed: the **UTILITY welcome DA item you list as open is already drafted.** Two templates are in `Wati-Project/docs/wati-templates.json` (status `pending`):
+- `WELCOME_EN` → `gorefer_zerodha_welcome_en` (UTILITY, en)
+- `WELCOME_HI` → `gorefer_zerodha_welcome_hi` (UTILITY, hi)
+- 2 body vars `{{1}}=name`, `{{2}}=client_id`; no buttons; purely transactional (account-active + login + support reply) → should classify UTILITY.
+
+**Engineer action:** submit via `/wati-template-create-and-track` (curl works your side; the Cowork sandbox shell is down — HYPERVISOR_VIRT_DISABLED — so I can't run curl, hence routing to you). On APPROVED, config-only swap in `rule_template_map["Zerodha_new_account_opened"]` → `template_eng=gorefer_zerodha_welcome_en`, `template_hin=gorefer_zerodha_welcome_hi`, `category=UTILITY`. Abhay is reviewing the wording in Cowork — confirm with him before submitting in case he edits.
+
+(Full detail: my earlier entry ~line 1595.)
+
+---
+
+### 2026-07-15 — FROM DA — STATUS — human-step done: debug-free `wa_gatekeeper_referrers` re-pasted
+
+Abhay confirms the debug-free `wa_gatekeeper_referrers` is re-pasted into Zoho (deployed = clean source now). Engineer's next zapikey run will confirm green. **Remaining human (UI-only) step:** create disabled copy `New_Zerodha_new_account_opened` + paste `wf_new_account_note_inline.dg` (6 args) + time 00:00. Curl tasks for the Engineer (routed above): delivery baseline read + UTILITY welcome template submit (pending Abhay's wording sign-off). All dry_run=true.
+
+**UPDATE 2026-07-15 (DA):** Abhay has now pasted the welcome disabled copy (`New_Zerodha_new_account_opened`, `wf_new_account_note_inline.dg`, 6 args, 00:00, disabled). **Both UI paste steps are DONE.** Engineer next: (a) zapikey dry-run to confirm referrer (debug-free) + welcome fast-lane both write correct PENDING notes; (b) the curl tasks (baseline + UTILITY submit once Abhay signs off wording). Then author leads + 2 officevisitor note-writers.
+
+---
+
+### 2026-07-15 — FROM ENGINEER (Lane D / GoRefer152) — STATUS + QUESTION — Zoho READ path VERIFIED in demo; flag-staging order PAUSED on a locked-decision conflict
+
+**Lane D of `review/Parallel-Execution-Plan.md` (GoRefer P3, Django app only — I have NOT touched the Wati-Project / Zoho Send Queue; that's Engineer #1's lane).** The verification half is **done and green**. The staging half is **paused on one conflict I will not resolve myself** — see Q-LANE-D-1.
+
+#### ✅ Part 1 — Zoho READ path verified end-to-end behind `ENABLE_ZOHO_READ` (demo, adapters log-only)
+
+Verified on this box (Postgres `gorefer_dev`, branch `feature/q-m-otp` @ `823b8e2`). **Nothing deployed, nothing merged, no flag flipped anywhere — least of all prod.**
+
+- **Flag posture confirmed at rest:** `ENABLE_WATI_SEND=False`, `ENABLE_ZOHO_WRITE=False`, `ENABLE_ZOHO_READ=False` — the documented demo default.
+- **Adapter selection is flag-driven and correct:** with `ENABLE_ZOHO_READ=false`, `get_zoho_read_adapter()` returns **`LogOnlyZohoReadAdapter`** (fixtures, zero network). `LiveZohoReadAdapter` **refuses to construct** without `ZOHO_CLIENT_ID/SECRET/REFRESH_TOKEN` — so a flag flip without creds fails loudly, not silently-live.
+- **READ returns enrichment offline:** `fetch_contact_by_client_id(RJ4521)` → `matched=True`, `Rajesh Joshi`, `Account_Status=Active`, `Account_Opened_On=2019-03-12` (the ADR-017 TRUE open date, distinct from sync date).
+- **Referral loop proven (click → journey → lead → status read):** live `GET /r/RJ4521` → **200**, wrote `click` + `landing_viewed` to the journey; the RJ4521 journey carries the canonical vocabulary (`click / landing_viewed / human_confirmed(source=beacon) / lead_captured / redirect_completed`); Zoho READ enriches the same referrer by `ClientId`.
+- **Guardrail #2 holds under observation (not just assertion):** all conversions are `source_origin=zoho` (**0** exceptions); `account_opened` events = 2, **0** not sourced from Zoho. True open dates land in their real period (2026-06-15 / 2026-05-02), no fake day-1 spike.
+- **Tests:** `test_referral_profile.py` **23 passed**; `test_zoho.py` + `test_guardrails.py` + `test_flags.py` **18 passed**. (Ran serially per DF-TESTDB-ISOLATION.)
+
+**Conclusion: the Zoho READ path works end-to-end in demo/sandbox, offline, with adapters logging instead of sending.** The only unwired piece is the live HTTP body of `LiveZohoReadAdapter` (`NotImplementedError` — explicitly reserved for sandbox verification) and the `_from_zoho` recipient hook (Q-M-OTP-2, correctly stubbed).
+
+#### ⛔ QUESTION Q-LANE-D-1 (BLOCKER on the staging half) — my task's flag order includes `ENABLE_ZOHO_WRITE`, which a locked decision says must NEVER flip for PIFS
+
+My Lane-D brief says to stage three flags **in dependency order: `ENABLE_WATI_SEND` → `ENABLE_ZOHO_WRITE` → `ENABLE_ZOHO_READ`**, and `review/Zerodha-GoRefer-GoLive-Roadmap.md` P3 says the same (3.2 flip WRITE → 3.3 flip READ, "3.3 depends on 3.2"). **That contradicts the locked lead-write policy.** Per the **DA note of 2026-07-07** ("PIFS Zerodha tenant writes NO lead to Zoho… `ENABLE_ZOHO_WRITE` remains **off** for PIFS") and **DF-9** in the backlog ("Abhay's own Zerodha tenant deliberately writes to NO destination — Ashok enters leads into Zoho manually, and that must not change"), WRITE is off **by design, permanently, for this tenant** — not "off until P1 exits."
+
+Three concrete consequences if I'd followed the brief literally:
+1. **I'd have staged a flag that must never flip for PIFS**, silently reversing an Abhay-level business decision (Ashok's manual lead entry).
+2. **The stated dependency is false for PIFS.** READ does **not** depend on WRITE — they're independent flags in `flags.py`, and M9 built READ precisely so it works with WRITE off. Staging "READ after WRITE" would gate READ behind something that never happens.
+3. **DF-9's accepted consequence would be quietly re-litigated:** with no GoRefer→Zoho write there's no journey-id stamp on the lead, so the journey↔Zoho link is match-based (mobile/email/ClientId). That limitation is *accepted*; flipping WRITE would change it without a decision.
+
+**Recommendation (my call, not applied):** stage **two** flags for PIFS, not three — **`ENABLE_WATI_SEND` → `ENABLE_ZOHO_READ`** (independent of WRITE), and **leave `ENABLE_ZOHO_WRITE=false` permanently for the PIFS tenant** per DF-9. `ENABLE_WATI_SEND` still gates on P1 exit (Send Queue live + >90% delivery) as the roadmap's load-bearing rule requires. If a future tenant wants auto-write, that's DF-9's pluggable Lead Destination adapter, not a flag flip here.
+
+**Ask:** confirm (a) the 2-flag order above for PIFS, and (b) whether `review/Zerodha-GoRefer-GoLive-Roadmap.md` P3.2/3.3 should be corrected to match DF-9 (right now the roadmap and the backlog disagree in-repo, and the roadmap is the newer doc — so whichever a future reader trusts, one of them misleads). **Pausing on the staging half only** — the verification half above is complete and needed no assumption.
+
+#### Not done, deliberately
+- **No PR opened.** The mission's PR would contain **zero code changes** — the verification found the READ path already correct, and the only remaining action (staging flags) is what's blocked. I'd rather not open an empty PR to satisfy the letter of the mission; say the word if you want one for the record.
+- **No flag flipped in any environment** (dev, demo, or prod). Prod remains `main` @ `7e51abc`-lineage with all write flags off.
+- **No Wati-Project / Send-Queue file touched** (Engineer #1's lane).
+
+Written to COORDINATION.md — ready for the DA. — Engineer #2 (Lane D)
+
+### 2026-07-15 — FROM DA — ANSWER — Q-LANE-D-1: correct catch. Stage 2 flags, WRITE stays off permanently (Abhay-confirmed)
+
+Good catch, and the error was mine — the Lane-D brief copied the roadmap's stale 3-flag order. **Abhay confirmed (A):**
+
+- **(a) 2-flag order for PIFS = `ENABLE_WATI_SEND` → `ENABLE_ZOHO_READ`.** `ENABLE_ZOHO_READ` is **independent of WRITE** and gates only on **P1 exit** (Send Queue live + >90% delivery), not on any WRITE flip.
+- **`ENABLE_ZOHO_WRITE` stays OFF permanently for the PIFS tenant** per DF-9 + the DA note of 2026-07-07. Ashok enters leads into Zoho manually; GoRefer writes no lead. The journey↔Zoho link stays **match-based (mobile/ClientId)** — that limitation is accepted, not to be re-litigated by a flag flip. Auto-write, if ever wanted, is DF-9's pluggable **Lead Destination adapter**, not this flag.
+- **(b) Roadmap corrected:** `review/Zerodha-GoRefer-GoLive-Roadmap.md` P3.2 now marks `ENABLE_ZOHO_WRITE` ⛔ off-by-design, P3.3 depends on **P1 exit** (not 3.2), and the dependency-summary line drops WRITE. `review/Parallel-Execution-Plan.md` Lane D row updated to the 2-flag order. CLAUDE.md M6 already says "Behind `ENABLE_ZOHO_WRITE=false`" so it needs no change — it never claimed the flip; only the roadmap did.
+
+**Go:** stage the 2-flag order (no prod flip; `ENABLE_WATI_SEND` still waits on P1 exit). No empty PR needed — the verification finding + this decision are the record. Park until P1 exits, then `ENABLE_WATI_SEND` + `ENABLE_ZOHO_READ` flip together for the "fully functional" milestone. — DA
+
+### 2026-07-15 — FROM DA — DECISION CHANGE — Q-LANE-D-1 REVERSED: `ENABLE_ZOHO_WRITE` goes ON (Model 2, upsert-by-mobile). DF-9 SUPERSEDED.
+
+Abhay reversed the earlier A. **New locked decision (Abhay + DA, 2026-07-15): DF-9 is superseded — `ENABLE_ZOHO_WRITE` will be turned ON for the PIFS tenant, using Model 2 (idempotent upsert by mobile).** GoRefer becomes a writer to Zoho, but a *safe* one: it never blind-creates.
+
+**What Model 2 means (build spec):**
+1. Finish + verify the **LIVE Zoho WRITE adapter** (create Lead on landing-form submit) — currently stubbed behind `ENABLE_ZOHO_WRITE=false`.
+2. The write is an **UPSERT keyed on normalized mobile** — never a blind create. Prefer Zoho's `upsertRecords` with `duplicate_check_fields=[Mobile]` (server-side dedup) over hand-rolled search-then-create. Exists → UPDATE (stamp GoRefer journey-reference + new capture fields); else CREATE (stamped with journey-reference).
+3. **Phone normalization** = the one canonical helper (strip spaces/+/()/-, prefix 91) — reuse, don't fork.
+4. **Idempotency test**: re-submitting the same form / re-running must NOT create a 2nd lead and must NOT lose the journey-reference. Prove no double-create.
+5. Keep behind `ENABLE_ZOHO_WRITE` (default false in demo); `LiveZohoWriteAdapter` must **refuse to construct without ZOHO creds** (fail loud), same pattern as `LiveZohoReadAdapter`.
+6. **DPDP**: PII stays out of the immutable event log; consent already captured on the form.
+
+**Two safety nets outside the Django build (DA owns):**
+- **Zoho Mobile-dedup rule** (Setup → mark Lead `Mobile` unique / duplicate-check) — backstop so Ashok's *manual* entries also can't twin a GoRefer lead. **Prod `ENABLE_ZOHO_WRITE` flip is gated on this rule being live.**
+- **Ashok brief**: work the leads that appear in Zoho; don't re-create a GoRefer lead.
+
+**Flag order reverts to three**: `ENABLE_WATI_SEND` → `ENABLE_ZOHO_WRITE` → `ENABLE_ZOHO_READ`. Roadmap P3.2/3.3 + dependency line and `review/Parallel-Execution-Plan.md` Lane D corrected to match. **Note for backlog owner:** DF-9 in the backlog doc is now superseded — update it there too so the repo doesn't disagree.
+
+**Engineer #2:** build steps 1–6 behind the flag in demo, tests green, STATUS + PR (do NOT merge/flip). Prod flip waits on P1 exit + the Zoho Mobile-dedup rule. Surface any inconsistency as a QUESTION and pause. — DA
+
+---
+
+### 2026-07-15 — FROM ENGINEER (Lane D / GoRefer152) — STATUS — Q-LANE-D: Zoho WRITE = idempotent upsert-by-mobile (Model 2) — DONE (branch `feature/q-lane-d-zoho-write`, PR opened, NOT merged)
+
+**Read the DECISION CHANGE — my Q-LANE-D-1 is resolved and closed; DF-9's "PIFS never writes" rationale is superseded. Built Model 2 steps 1–6 behind the flag. 13 new tests; full suite 275 pass (262 baseline + 13); ruff clean; no migration drift; demo works offline. NO flag flipped in any environment, nothing deployed, nothing merged. GoRefer Django app only — no Wati-Project / Send-Queue file touched (Engineer #1's lane).**
+
+#### Build (steps 1–6)
+
+1. **Live WRITE adapter finished.** `LiveZohoAdapter.upsert_lead()` POSTs `/crm/v8/Leads/upsert` with an OAuth refresh-token flow, via **stdlib `urllib`** — the repo has no `requests` dependency and I wasn't going to add one for a single adapter (matches the existing Wati/Zoho stdlib pattern).
+2. **UPSERT, never a blind create.** `duplicate_check_fields=["Mobile"]` → **Zoho decides create-vs-update server-side**, as specified. I took the DA's stated preference over hand-rolled search-then-create for a concrete reason worth recording: search-then-create **races** — two concurrent submits can both read "not found" and both create, which is exactly the twinning Model 2 exists to prevent. Zoho returns `action=insert|update`; the adapter surfaces it so tests can *prove* a repeat submit updated rather than twinned.
+3. **Phone normalization = the one canonical helper.** `build_lead_record()` calls `apps/common/phone.normalize_phone` — no second normalizer. This matters more than it looks: if GoRefer's local dedup key and Zoho's server-side dedup key are normalized differently, the same person silently becomes two leads. A test asserts `+91-98765 43210` and `9876543210` produce one lead and one `Mobile` value.
+4. **Idempotency proven, not asserted.** `test_resubmit_does_not_create_second_lead_and_keeps_reference` drives the **real `/api/leads/` endpoint twice** → 1 Lead, 1 Prospect, `gorefer_reference` intact, same `zoho_lead_id`. To persist the reference I added **`Lead.gorefer_reference`** (migration `0007`, additive) — previously the journey-ref (#10) was passed to Zoho but never stored, so "must not lose the reference" was untestable. It's now durable and re-run-safe.
+5. **Fail loud, never silently live.** `LiveZohoAdapter` refuses to construct without `ZOHO_CLIENT_ID/SECRET/REFRESH_TOKEN` (same pattern as `LiveZohoReadAdapter`) — tested. It **also refuses to upsert with no normalized mobile**, because an upsert without its dedup key degrades into precisely the blind create Model 2 forbids. Default stays `ENABLE_ZOHO_WRITE=false` → log-only, zero network.
+6. **DPDP.** PII (name/mobile/email/city) goes only to Zoho (the lead's purpose-limited destination) and onto the erasable Prospect/Lead; a test asserts none of it reaches the immutable event log. Consent already captured on the form — untouched.
+
+#### One robustness change I made beyond the letter of the spec (flagging, not hiding)
+`_mirror_to_zoho` previously let an adapter exception propagate out of `capture_lead`. With WRITE **off** that was unreachable; with WRITE **on** a Zoho outage would have **failed the submit and lost the lead** — directly contradicting capture-first (06-API §5.3, BR-007). It now logs the exception and returns; the lead is already durably saved locally. Test: `test_zoho_failure_does_not_lose_the_lead` (Zoho 500 → 201 + lead survives). Say the word if you'd rather it hard-fail, but capture-first reads unambiguous to me.
+
+#### Verification (observed, not just green ticks)
+- **Demo end-to-end, adapters logging not sending:** two submits (second punctuated `+91-98123 45678`) → **1 lead**; `gorefer_reference='GR-1'`; `zoho_lead_id=demo-zoho-919812345678`; adapter logged `Zoho upsert_lead suppressed: ref=GR-1 dedup_on=['Mobile'] …`. Flags confirmed `ENABLE_WATI_SEND/ZOHO_WRITE/ZOHO_READ = False` throughout.
+- **Mutation-checked the guardrails** (a test that cannot fail proves nothing): emptying `duplicate_check_fields` → **2 tests fail**; forking the phone normalizer → **3 tests fail**; restored → 13/13 green. These tests genuinely bite.
+- Full suite **275 passed** (serial, per DF-TESTDB-ISOLATION); `ruff` clean; `makemigrations --check` → no drift beyond `0007`.
+
+#### Note for the backlog/roadmap owner (no action from me)
+DF-9 + the roadmap P3.2/3.3 + Lane D are **already reconciled** in-repo to the new decision (I re-read them; the earlier disagreement I flagged is gone). I corrected one stale reference the sweep missed: `.env.example` line 39 still cited DF-9 as the reason READ is independent of WRITE — now neutral. Added `ZOHO_API_BASE` (optional, defaults to the `.in` DC).
+
+#### Not done, deliberately
+- **No prod flag flip** — gated on P1 exit + the DA's Zoho Mobile-dedup rule + this review, all correctly outside my lane.
+- **`fetch_referrer_history` still stubbed** (`NotImplementedError`) — out of this mission's scope (#9 / DF-4).
+- **The live HTTP path is unexercised against real Zoho.** It's structurally complete + unit-tested against a mocked transport, but nobody has pointed it at a Zoho sandbox yet. I'd treat **sandbox verification as the gate before the prod flip**, alongside the Mobile-dedup rule — the field API-names I assumed (`Referrer_Client_Id`, `GoRefer_Reference`, `City`) are the most likely thing to be wrong, and a 400 from Zoho is the cheapest way to find out. Flagging rather than claiming it's proven.
+
+Written to COORDINATION.md — ready for the DA. — Engineer #2 (Lane D)
