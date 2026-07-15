@@ -37,7 +37,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 
-from apps.common.phone import normalize_phone
+from apps.common.phone import to_zoho_mobile
 from gorefer.flags import flags
 
 logger = logging.getLogger("gorefer.zoho")
@@ -73,11 +73,17 @@ def gorefer_reference_for(referral) -> str:
 def build_lead_record(*, payload: dict, gorefer_reference: str) -> dict:
     """Map a GoRefer capture payload to a Zoho Leads record.
 
-    Mobile is normalized through the ONE canonical helper so the value GoRefer
-    dedups on locally is byte-identical to the value Zoho dedups on server-side —
-    a fork here would silently split the same person into two leads.
+    Mobile is written in Zoho's stored format — BARE 10-digit, no country code (DA
+    correction 2026-07-15, verified against live Leads). It is DERIVED from the one
+    canonical normalizer via `to_zoho_mobile`, so the dedup key GoRefer sends is
+    byte-identical to what Zoho already holds. Writing the internal 91-prefixed form
+    here would make `duplicate_check_fields=[Mobile]` miss the existing record and
+    silently twin the lead.
+
+    A malformed mobile yields "" — the caller refuses the write rather than sending
+    a padded/garbage dedup key.
     """
-    mobile = normalize_phone(payload.get("mobile"))
+    mobile = to_zoho_mobile(payload.get("mobile"))
     record = {
         "Last_Name": payload.get("name") or "(GoRefer lead)",  # Zoho requires Last_Name
         "Mobile": mobile,
@@ -90,6 +96,10 @@ def build_lead_record(*, payload: dict, gorefer_reference: str) -> dict:
         record["City"] = payload["city"]
     if payload.get("referred_by"):
         record["Referrer_Client_Id"] = payload["referred_by"]
+    # Referrer_Mobile takes the SAME bare-10-digit treatment as Mobile — it is matched
+    # against the same Zoho-stored format (DA correction #4).
+    if payload.get("referrer_mobile"):
+        record["Referrer_Mobile"] = to_zoho_mobile(payload["referrer_mobile"])
     if gorefer_reference:
         record[GOREFER_REFERENCE_FIELD] = gorefer_reference
     return record
@@ -108,8 +118,9 @@ class LogOnlyZohoAdapter:
             "[demo] Zoho upsert_lead suppressed: ref=%s dedup_on=%s record=%s",
             gorefer_reference, DUPLICATE_CHECK_FIELDS, record,
         )
-        # Deterministic fake id keyed on the CANONICAL mobile, so a repeat submit in
-        # demo resolves to the same id — the offline analogue of Zoho's dedup.
+        # Deterministic fake id keyed on the Zoho-format (bare 10-digit) mobile, so a
+        # repeat submit in demo resolves to the same id — the offline analogue of
+        # Zoho's server-side dedup.
         fake_id = f"demo-zoho-{record['Mobile'] or 'x'}"
         return LeadWriteResult(
             zoho_lead_id=fake_id, gorefer_reference=gorefer_reference, action="insert"
@@ -173,8 +184,11 @@ class LiveZohoAdapter:
         """Idempotent upsert keyed on Mobile (Model 2). Zoho decides insert vs update."""
         record = build_lead_record(payload=payload, gorefer_reference=gorefer_reference)
         if not record["Mobile"]:
-            # No dedup key => an upsert would degrade to a blind create. Refuse.
-            raise RuntimeError("Zoho upsert refused: no normalized mobile to dedup on.")
+            # No usable dedup key (malformed / <10 digits) => an upsert degrades to a
+            # blind create. Refuse; the lead stays captured locally for later repair.
+            raise RuntimeError(
+                "Zoho upsert refused: no bare 10-digit mobile to dedup on (malformed)."
+            )
 
         body = json.dumps({
             "data": [record],
