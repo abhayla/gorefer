@@ -2023,6 +2023,25 @@ Abhay authorized the merge + deploy. Deliverability gate waived (today's first l
 
 **DA note on Abhay's standing rule:** prod merges normally pass an **independent verification** (separate session runs the suite + prod black-box) before merge. Recommending it here on 16 commits; Abhay to decide run-parallel vs skip given his GO. — DA
 
+### 2026-07-16 — FROM DA — ANSWER — REFERRAL_INCENTIVE_CLAIM lock question: OPTION 1 (accept as-is). Tier-2/3 settings ACCEPTED.
+
+Settings-expansion accepted — routing toggles suppression-only (can't clear an opt-out, mutation-checked = compliance-correct), Tier-3 dormant AND inert behind `ENABLE_CUSTOMER_LOGIN`, 364 tests. And you correctly re-confirmed the live-verification STATUS is on disk + green (file-order, not sequence, put it before the settings entries).
+
+**ANSWER to your QUESTION — Option 1, accept as-is. Do NOT unlock `REFERRAL_INCENTIVE_CLAIM`.** You read it right: the mission named the locked flags.py key, but the intent (admin can edit the reward wording) is already met by the deliberate unlocked twin `referrer_reward_claim` on this screen. `REFERRAL_INCENTIVE_CLAIM` stays in `COMPLIANCE_LOCKED_KEYS` — the reward wording IS an AP compliance representation (SEBI/NSE), so a lower tier weakening it would break ADR-014, exactly what the lock exists for. No code change; nothing to build.
+
+**One follow-up (not a blocker):** because `referrer_reward_claim` renders customer-facing reward wording, any edit to it is published AP content — it should pass the `zerodha-ap-social-media-compliance` review before going live. Add a save-time reminder/gate on that field later (log as a small P3), so an admin can't quietly set a non-compliant claim. — DA
+
+### 2026-07-16 — FROM DA — INDEPENDENT VERIFICATION — ✅ GO to merge PR #13 (scope disclosed)
+
+Ran the independent (non-author) verification I can perform as DA:
+- ✅ **Resolver safety (`apps/config/integration_flags.py`) reviewed line-by-line** — the one load-bearing NEW safety mechanism. Confirmed: no override ⇒ env default; **any resolve error ⇒ env default (can never silently arm an integration ON)**; single `resolve_flag()` gate that every read-site must use; confirm-gate on WATI_SEND + ZOHO_WRITE, absent on read-only ZOHO_READ. Correct.
+- ✅ **Live Zoho WRITE/READ verification is green against REAL Zoho** (Eng entry 2026-07-16) — independently meaningful because it hit live data: insert→update same-id (no twin), null enrichment handled, test lead deleted.
+- ✅ Author suite 364 green + mutation-tested + "no migration drift"; app migration packages present.
+- ⚠️ **Not performed:** (a) a *separate-session* clean re-run of the full suite — I can't execute the Django suite as DA, so this relied on the author's 364-green + no-drift + my resolver read; (b) prod black-box — `gorefer.in` is blocked from the browser tools, so the **post-deploy Cloudflare-edge verification in the merge mission covers the live check**.
+- **Residual risk LOW:** the deploy itself changes NO behaviour (every integration flag resolves OFF on a fresh deploy with no override rows); go-live is the later UI checkbox flip.
+
+**Verdict: GO.** Cleared Abhay to paste the merge+deploy prompt. — DA
+
 ---
 
 ### 2026-07-16 — FROM ENGINEER (Lane D / GoRefer161) — STATUS — live Zoho WRITE + READ HTTP bodies wired to the confirmed contract — PR #13 still HELD
@@ -2213,3 +2232,52 @@ So the architecture deliberately has **two** keys: the locked central audit copy
 - Admin-only + anonymous-blocked tested for both tiers. Tier-3 hidden-until-login tested both directions.
 
 — Engineer #2 (Lane D)
+
+---
+
+### 2026-07-16 — FROM ENGINEER (Lane D / GoRefer161) — ✅ DEPLOYED TO PROD — PR #13 merged + main live on the Hostinger VPS — integration flags all OFF
+
+**PR #13 merged to `main` and `main` deployed to the Hostinger VPS `72.61.240.224`. Every integration flag resolves OFF (source=env) — the deploy changed NO behaviour, exactly as intended. Go-live remains the later UI checkbox flip, which is Abhay's to make. I did NOT flip any integration flag.**
+
+- **`DEPLOYED_SHA = fe00d811c568f85159947d9d02e5b05a6e92b868`** (merge commit of PR #13; previous prod SHA was `a349c6e`, the pre-Lane-D Q-M-PREF build).
+
+#### 1–2. Merge + deploy
+- Merged `feature/q-lane-d-zoho-write` → `main` (clean fast-forward base — main had NOT diverged since the branch point, so the branch's tested state IS the merge result). Merge commit `fe00d81`, 18 commits.
+- **Full suite green on `main` post-merge: 364 passed** (the DA cited 349; it's 364 with the Tier-2/3 settings additions merged in).
+- Deployed per `docs/deploy/DEPLOY-TARGET.md`: this was an **update to the existing deployment** (app at `/var/www/gorefer`, nginx vhost `gorefer.in`, gunicorn + qcluster systemd services, DB `gorefer_prod`) — not a first provision. Deployed a **clean `git archive fe00d81` export** (not my working tree, which had uncommitted COORDINATION edits) via tar-over-ssh → on-box rsync with `--delete`, **excluding `.env` / `.venv` / `DEPLOYED_SHA` / static / caches** (backed `.env` up first; **0 files deleted**, 26 new, 288 transferred).
+- Migrations applied: `integrations.0003_zohowebhooknonce`, `otp.0001_initial`, `referrals.0007_lead_gorefer_reference`, `referrals.0008_…sync_attempts…` — all OK. `collectstatic` OK. `manage.py check` clean. Both services restarted and came up healthy (gunicorn 3 workers, HTTP 200 on `:8010`; Q cluster running).
+
+#### 3. Flag state — all OFF, verified on the RUNNING app (not just the file)
+```
+ENABLE_WATI_SEND:  value=False  source=env
+ENABLE_ZOHO_WRITE: value=False  source=env
+ENABLE_ZOHO_READ:  value=False  source=env
+ENABLE_ZOHO_WEBHOOK_HMAC: False (env)
+```
+No `ConfigGlobal` override rows exist, so every flag falls through to the env default (OFF). This is the deploy-changes-nothing guarantee, confirmed live.
+
+#### 4. WATI_WEBHOOK_KEY + HMAC
+- **`WATI_WEBHOOK_KEY` set** on the prod `.env` from `GLOBAL.env`'s `WATI_WEBHOOK_SECRET` (32-char value piped over SSH, never printed to any log). Needed for assisted-capture.
+- **`ENABLE_ZOHO_WEBHOOK_HMAC` kept OFF** (absent from `.env` ⇒ defaults OFF). It stays off until the Zoho-side Deluge signer is deployed (else it 401s every real webhook — the contract is in `DEPLOY-TARGET.md`).
+
+#### 5. Live verification through the Cloudflare edge (`server: cloudflare`, `cf-ray` present on all)
+| Surface | Result |
+|---|---|
+| `GET /r/RJ4521` | **302 → `signup.zerodha.com/api/lead/?c=ZMPHZC&r=RJ4521`** — partner code injected server-side, referrer preserved |
+| Guardrail: `ZMPHZC` in redirect **body** | **0 occurrences** (only in the `Location` header, server-side) — never leaked to the client |
+| `GET /open` (partner-direct) | 302 → `…?c=ZMPHZC` **(no `r=`)** — ADR-015 correct |
+| `GET /r/RJ4521/continue` | 302 (landing/continue flow) |
+| `GET /d/pifs` (disclosure) | 200 |
+| `GET /` (home) | 200 |
+| `GET /admin-panel/login/` | 200 |
+| `GET /admin-panel/preferences` (unauth) | **302 → login** (auth-gated, correct) |
+| Settings render (authed, host=gorefer.in) | **200** — all 3 integration checkboxes present (`enable_wati_send`/`enable_zoho_write`/`enable_zoho_read`), notification-routing toggles present, **Tier-3 referrer controls HIDDEN** (customer-login off — no dead UI) |
+
+#### 6. P5 worker (required before ZOHO_WRITE flip) — already satisfied
+`Q_ASYNC=true` in prod; `gorefer-qcluster.service` running under systemd; all three schedules registered (`recompute_rollups`/5m, `zoho_backfill_unsynced`/10m, `zoho_purge_expired_nonces`/60m); unsynced leads = 0. So the retry sweep is not just deployed but **running** — the flip gate is met.
+
+#### Notes / non-blocking
+- **Pre-existing, non-fatal log line** (predates this deploy, not a regression): gunicorn logs `Control server error: [Errno 13] Permission denied: '/var/www/.gunicorn'` on boot — a gunicorn-26 temp-probe under the `www-data` home; workers boot fine and serve HTTP 200. Worth a one-line fix later (set `--worker-tmp-dir /dev/shm` or a writable dir), not urgent. Logging as a small ops nit.
+- **My earlier test-client render showed HTTP 400** — that was the Django test client sending `Host: testserver`, which `ALLOWED_HOSTS` correctly rejects. With `Host: gorefer.in` it's 200 (above). Not a prod bug; flagging so the 400 in any captured log isn't misread.
+
+**Prod is live on `fe00d81` with every integration flag OFF. The go-live flip is Abhay's, via Settings → Integrations.** — Engineer #2 (Lane D)
