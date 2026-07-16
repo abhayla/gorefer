@@ -1987,3 +1987,37 @@ Request shape ✅ (yours, live) · code contract-matched ✅ (this mission) · r
 **QUESTION (non-blocking):** `ZOHO_ACCOUNTS_BASE` is now overridable alongside `ZOHO_API_BASE` (both default `.in`). If sandbox verification runs against a **different DC or a sandbox host**, both must move together — worth confirming which host Abhay's creds are issued for before the first live call, since a DC mismatch fails as a confusing 401 rather than an obvious error.
 
 Written to COORDINATION.md — ready for the DA. — Engineer #2 (Lane D)
+
+---
+
+### 2026-07-16 — FROM ENGINEER (Lane D / GoRefer161) — ✅ LIVE VERIFICATION GREEN — WRITE+READ proven against real Zoho — the last technical gate is CLOSED — PR #13 still HELD
+
+**Ran the live WRITE+READ verification with the `GLOBAL.env` creds. Everything passed, first try. No `OAUTH_SCOPE_MISMATCH` — the existing token already carries the needed scope, so no re-mint. Test lead created + deleted, zero residue. No flag flipped, nothing merged, PR #13 held.**
+
+**Method:** sourced ONLY `ZOHO_CLIENT_ID/SECRET/REFRESH_TOKEN` + `ZOHO_API_BASE/ACCOUNTS_BASE` from `GLOBAL.env` into the process env for the run (skipped every other GLOBAL.env secret). The runner was a **scratchpad script, deleted after the run** — no secret value ever touched a repo file, and the repo diff is code/docs only.
+
+#### Observed results (real Zoho, org PIFS, DC `.in`)
+
+| # | Check | Observed | Verdict |
+|---|---|---|---|
+| 1 | OAuth (refresh → access token) | token acquired (len 70) | ✅ **no scope mismatch** |
+| 2 | `upsert_lead` first call, mobile `9999900042` | **`action=insert`**, `id=475281000041506003` | ✅ |
+| 3 | `upsert_lead` identical replay | **`action=update`**, **id `475281000041506003` (SAME)** | ✅ **no twin — Model 2 proven live** |
+| 4 | `fetch_contact_by_client_id("EKU497")` | `matched=True`, `full_name='Ram Chandra Gupta'`, **`account_opened_on='2026-07-09'`** | ✅ matches your MCP result exactly |
+| 5 | Same call, null-field caveat | `account_status=None`, `city=None` — **enrichment did NOT fail** | ✅ **your caveat handled** |
+| 6 | `fetch_contact_by_client_id("ZZ0000XX")` (no match) | `matched=False`, **no exception** | ✅ |
+| 7 | `fetch_referred_people("RJ4521")` | 0 people, no error | ✅ (no live leads carry that referrer yet) |
+| 8 | Cleanup | test lead **deleted, HTTP 200** | ✅ **zero residue** |
+
+#### What this closes
+
+Your ⚠️ **null caveat was the one thing that could have broken a first live call, and it didn't** — I'd already built `_norm_contact` to map blank/missing → `None` (the view renders "— not on file —"), so `Account_Status`/`Mailing_City` being null on live contacts is a non-event. Worth noting the demo fixture's `"Active"` is now known to be *unrepresentative* of live data; the code never depended on it, but anyone reading the fixture might assume otherwise.
+
+**`RJ4521` (the demo fixture's headline referrer) does NOT exist in live Zoho** — `matched=False`. That's correct behaviour, not a bug (fixtures ≠ live data), but it means demo-mode screenshots of the Referral Profile will look richer than the live page does for a referrer with no Zoho contact. Expected under ADR-001's open-ended referrers.
+
+#### Pre-prod gate status — all three now ✅
+(a) bare-10-digit format ✅ · (b) failed-write retry/backfill ✅ · **(c) sandbox/live verification with real creds ✅ — as of this run.**
+
+**Lane D is technically complete.** The `ENABLE_ZOHO_WRITE` / `ENABLE_ZOHO_READ` prod flips remain gated on **P1 exit** only — no code work stands between here and the flip. Moving to DF-2 (HMAC wax-seal) per your priority #2.
+
+— Engineer #2 (Lane D)
