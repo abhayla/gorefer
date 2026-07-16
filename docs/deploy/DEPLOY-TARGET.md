@@ -68,6 +68,48 @@ the first Zoho outage — by which time leads are already stranded and Ashok nev
 them in the CRM. Exhausted leads (attempts ≥ 5) are deliberately left for a human and
 surface under "needs attention" with a **"Retry Zoho sync"** action.
 
+## Rendered check — what curl cannot see (REQUIRED after any CSS/template change)
+
+> **Why this is here:** the Settings toggles shipped to prod rendering as an invisible /
+> collapsed switch, and **every** existing check passed while it was broken. The HTML was
+> correct, so `curl | grep 'enable_zoho_write'` found the input and reported "3 checkboxes
+> present"; unit tests assert logic, not rendering. The class `bg-ink-300/50` simply
+> emitted **no CSS rule** — a silent Tailwind failure, no build error. Nothing that reads
+> HTML or runs Python can catch that; only something that resolves CSS can.
+> (DA bug 2026-07-16.)
+
+**On every PR (automatic, no browser):** `tests/test_css_utilities_resolve.py` asserts that
+every styling class the templates use actually resolves to a rule in the built
+`static/css/app.css`, and that the colour tokens stay channel triplets. This catches the
+whole "utility silently vanished" class — purge dropped it, or the config refuses to emit
+it — deterministically and in ~0.2s. It is the primary guard; it would have caught this bug
+on the PR that introduced it.
+
+**After deploying any CSS/template change, verify the real page renders** (a rendered check
+still catches what static analysis cannot: overlap, stacking, layout collapse). No headless
+browser is installed on the box, so drive it from a session that has one:
+
+| Check | How | Expected |
+|---|---|---|
+| Toggle geometry | Load `/admin-panel/preferences` (authed) and measure a toggle's track span | computed **width ≥ 40px** (design = 44px) and **height ≈ 24px** |
+| Toggle visibility | Read the track's `backgroundColor` for an **OFF** toggle | a real colour (`rgba(148,163,184,0.5)`), **never** `rgba(0, 0, 0, 0)` — transparent = the bug |
+| Token resolution | Scan computed styles for any value still containing `var(` | **zero** — an unresolved token means a broken colour form |
+
+```js
+// Paste in the browser console on /admin-panel/preferences. Prints a PASS/FAIL line.
+const t = [...document.querySelectorAll('label.relative.inline-flex')].map(l => {
+  const s = l.querySelector('span'), cb = l.querySelector('input[type=checkbox]');
+  const r = s.getBoundingClientRect();
+  return { name: cb?.name, on: cb?.checked, w: Math.round(r.width),
+           bg: getComputedStyle(s).backgroundColor };
+});
+console.log(t.every(x => x.w >= 40 && x.bg !== 'rgba(0, 0, 0, 0)')
+  ? `PASS — ${t.length} toggles render` : 'FAIL', t);
+```
+
+**Gate:** run this after any deploy that touches `static/css/*`, `tailwind.config.js`, or a
+template with themed classes. A green curl check is **not** evidence the page renders.
+
 ## DF-2 wax-seal — the Zoho-side signer contract (needed before flipping the flag)
 
 > **Order matters:** `ENABLE_ZOHO_WEBHOOK_HMAC=true` makes the seal **mandatory** (the

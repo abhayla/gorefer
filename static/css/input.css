@@ -6,36 +6,49 @@
    Variant C · Cobalt Clean-Fintech — design tokens (DA DESIGN LOCKED 2026-07-08).
    Implemented as CSS variables so DF-10 runtime theming is a later CONFIG layer:
    a theme swap only re-points these variables (or a [data-theme] block below),
-   never a template/CSS rewrite. tailwind.config.js reads each token via var().
+   never a template/CSS rewrite. tailwind.config.js reads each token via rgb(var()).
+
+   TOKENS ARE "R G B" CHANNEL TRIPLETS, NOT #hex — this is load-bearing, not style.
+   Tailwind composes an opacity modifier (`bg-ink-300/50`) as
+   `rgb(<channels> / <alpha>)`, which it can only do when it holds the channels.
+   Given a whole colour like `var(--c-ink-300)` it CANNOT inject an alpha, so it
+   emits NOTHING for the `/50` variant — the utility silently vanishes from the CSS
+   and the element renders transparent. That is a silent failure: no build error, no
+   purge warning, and unit tests + curl still pass because the HTML is unchanged.
+   (This is what collapsed the Settings toggles to an invisible/sliver switch.)
+   Keep these as channels; `tailwind.config.js` wraps them via withAlpha().
    ───────────────────────────────────────────────────────────────────────── */
 :root {
-  --c-bg: #f4f6fb;
-  --c-line: #e9edf3;
-  --c-ink-900: #0f1729;
-  --c-ink-700: #334155;
-  --c-ink-500: #64748b;
-  --c-ink-300: #94a3b8;
-  --c-cobalt-600: #2f5bff;
-  --c-cobalt-500: #4b70ff;
-  --c-cobalt-50: #eef2ff;
-  --c-positive: #16a34a; /* accounts / positive */
-  --c-pending: #f59e0b;  /* leads / pending */
-  --c-danger: #f43f5e;   /* bot / error */
+  --c-bg: 244 246 251;      /* #f4f6fb */
+  --c-line: 233 237 243;    /* #e9edf3 */
+  --c-ink-900: 15 23 41;    /* #0f1729 */
+  --c-ink-700: 51 65 85;    /* #334155 */
+  --c-ink-500: 100 116 139; /* #64748b */
+  --c-ink-300: 148 163 184; /* #94a3b8 */
+  --c-cobalt-600: 47 91 255;  /* #2f5bff */
+  --c-cobalt-500: 75 112 255; /* #4b70ff */
+  --c-cobalt-50: 238 242 255; /* #eef2ff */
+  --c-positive: 22 163 74;  /* #16a34a — accounts / positive */
+  --c-pending: 245 158 11;  /* #f59e0b — leads / pending */
+  --c-danger: 244 63 94;    /* #f43f5e — bot / error */
 }
 
 /* DF-10 hook: a future theme layer flips these by stamping data-theme on <html>.
    Present now (dormant) so theming is config-only later. Dark tokens are a starting
-   point, tuned when theming actually ships. */
+   point, tuned when theming actually ships. Channel triplets, same as above. */
 :root[data-theme="dark"] {
-  --c-bg: #0b1120;
-  --c-line: #1e293b;
-  --c-ink-900: #f1f5f9;
-  --c-ink-700: #cbd5e1;
-  --c-ink-500: #94a3b8;
-  --c-ink-300: #64748b;
-  --c-cobalt-50: #172554;
+  --c-bg: 11 17 32;         /* #0b1120 */
+  --c-line: 30 41 59;       /* #1e293b */
+  --c-ink-900: 241 245 249; /* #f1f5f9 */
+  --c-ink-700: 203 213 225; /* #cbd5e1 */
+  --c-ink-500: 148 163 184; /* #94a3b8 */
+  --c-ink-300: 100 116 139; /* #64748b */
+  --c-cobalt-50: 23 37 84;  /* #172554 */
 }
 
+/* The tokens above are CHANNEL TRIPLETS, so every direct use must wrap them:
+   `rgb(var(--c-line))`, never a bare `var(--c-line)` (which is "233 237 243" — not
+   a colour, so the declaration is dropped and the element renders unstyled). */
 @layer components {
   /* Card soft shadow token (mirrors mockups' .card). */
   .card {
@@ -47,34 +60,34 @@
     user-select: none;
   }
   .sortable:hover {
-    color: var(--c-cobalt-600);
+    color: rgb(var(--c-cobalt-600));
   }
   /* Filter chip (rounded-full, visible active state). */
   .chip {
-    border: 1px solid var(--c-line);
+    border: 1px solid rgb(var(--c-line));
     border-radius: 999px;
     padding: 0.2rem 0.8rem;
-    color: var(--c-ink-500);
+    color: rgb(var(--c-ink-500));
     background: #fff;
     font-weight: 500;
   }
   .chip-on {
-    background: var(--c-cobalt-600);
-    border-color: var(--c-cobalt-600);
+    background: rgb(var(--c-cobalt-600));
+    border-color: rgb(var(--c-cobalt-600));
     color: #fff;
     font-weight: 600;
   }
   /* Pagination pill control. */
   .pg {
-    border: 1px solid var(--c-line);
+    border: 1px solid rgb(var(--c-line));
     border-radius: 999px;
     padding: 0.1rem 0.6rem;
-    color: var(--c-ink-500);
+    color: rgb(var(--c-ink-500));
   }
   /* KPI ring stat card. */
   .ring-card {
     background: #fff;
-    border: 1px solid var(--c-line);
+    border: 1px solid rgb(var(--c-line));
     border-radius: 16px;
     padding: 0.5rem 0.75rem;
     display: flex;
