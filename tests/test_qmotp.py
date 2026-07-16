@@ -52,14 +52,24 @@ def _set_flags(monkeypatch, **overrides):
     that imported `flags` by reference (the snapshot is frozen, so we replace it)."""
     import dataclasses
 
-    from apps.integrations.wati import adapter as wati_adapter
     from apps.otp import channels
     from gorefer import flags as flags_mod
 
     new = dataclasses.replace(flags_mod.flags, **overrides)
     monkeypatch.setattr(flags_mod, "flags", new)
     monkeypatch.setattr(channels, "flags", new)
-    monkeypatch.setattr(wati_adapter, "flags", new)
+    # NB: the WATI adapter no longer holds a module-level `flags` to patch — its send
+    # gate now reads the RESOLVED integration flag (admin Settings override -> env
+    # default), so ENABLE_WATI_SEND is steered through the resolver below rather than
+    # by swapping a frozen snapshot into that module.
+    if "ENABLE_WATI_SEND" in overrides:
+        import apps.config.integration_flags as ifl
+
+        want = overrides["ENABLE_WATI_SEND"]
+        monkeypatch.setattr(
+            ifl, "resolve_flag",
+            lambda key, **kw: want if key == ifl.ENABLE_WATI_SEND else ifl.env_default(key),
+        )
     return new
 
 

@@ -21,7 +21,6 @@ from __future__ import annotations
 import logging
 
 from apps.common.phone import normalize_phone
-from gorefer.flags import flags
 
 logger = logging.getLogger("gorefer.otp.recipient")
 
@@ -62,7 +61,12 @@ def _from_zoho(tenant, client_id: str) -> str:
     module/method is confirmed. Until then, return "" so the flow falls back to the
     assisted path (never guesses a number). Gated by ENABLE_ZOHO_READ.
     """
-    if not flags.ENABLE_ZOHO_READ:
+    # Resolved (admin override -> env default), not raw env, so this stub honours the
+    # Settings checkbox the same way the real read adapter does — otherwise wiring
+    # Q-M-OTP-2 later would silently inherit the wrong gate.
+    from apps.config.integration_flags import ENABLE_ZOHO_READ, resolve_flag
+
+    if not resolve_flag(ENABLE_ZOHO_READ, tenant_id=getattr(tenant, "id", None)):
         return ""
     # TODO(Q-M-OTP-2): call the M9 Zoho READ adapter, read Contact.Mobile/Phone for
     # ClientId == client_id, normalize_phone(...) and return it.

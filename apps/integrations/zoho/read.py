@@ -23,7 +23,6 @@ import logging
 from dataclasses import dataclass, field
 
 from apps.integrations.zoho.client import ZohoHttpClient
-from gorefer.flags import FeatureFlags
 
 logger = logging.getLogger("gorefer.zoho.read")
 
@@ -269,9 +268,14 @@ class LiveZohoReadAdapter:
 
 
 def get_zoho_read_adapter():
-    """Select the read adapter. Re-reads env so a test/flag toggle is honoured; demo
-    default (flag off) is the fixture-backed LogOnly adapter."""
-    if FeatureFlags.from_env().ENABLE_ZOHO_READ:
+    """Select the read adapter from the EFFECTIVE flag (admin override -> env default).
+
+    Demo default (flag off) is the fixture-backed LogOnly adapter. Resolved rather than
+    raw env so the Settings checkbox actually governs enrichment.
+    """
+    from apps.config.integration_flags import ENABLE_ZOHO_READ, resolve_flag
+
+    if resolve_flag(ENABLE_ZOHO_READ):
         return LiveZohoReadAdapter()
     return LogOnlyZohoReadAdapter()
 
