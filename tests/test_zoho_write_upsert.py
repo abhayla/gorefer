@@ -132,31 +132,142 @@ def test_dedup_is_server_side_on_mobile():
     assert DUPLICATE_CHECK_FIELDS == ["Mobile"]
 
 
-def test_live_upsert_posts_duplicate_check_fields(monkeypatch):
-    """The live call must hit /Leads/upsert with duplicate_check_fields=[Mobile]."""
+def test_live_upsert_matches_the_da_confirmed_wire_contract(monkeypatch):
+    """The live HTTP body must match the contract the DA proved against live Zoho.
+
+    Confirmed by the DA against the PIFS org (COORDINATION 2026-07-16):
+    POST /crm/v8/Leads/upsert · duplicate_check_fields:["Mobile"] · bare-10-digit
+    Mobile · fields Last_Name/Mobile/GoRefer_Reference/Referrer_Client_Id/City ·
+    response data[].code/action/details.id.
+
+    This asserts the REQUEST shape, which is the half that a live sandbox run can't
+    retro-fix cheaply: a wrong field api-name fails all 5 retries identically.
+    """
     monkeypatch.setenv("ZOHO_CLIENT_ID", "cid")
     monkeypatch.setenv("ZOHO_CLIENT_SECRET", "secret")
     monkeypatch.setenv("ZOHO_REFRESH_TOKEN", "rtok")
     adapter = LiveZohoAdapter()
     posted = {}
 
-    def fake_post(url, *, data, headers):
-        posted["url"] = url
-        if "oauth" in url:
-            return {"access_token": "tok"}
-        posted["body"] = json.loads(data.decode())
+    def fake_post_json(path, *, body):
+        posted["path"] = path
+        posted["body"] = body
         return {"data": [{"code": "SUCCESS", "action": "insert", "details": {"id": "zoho-1"}}]}
 
-    with mock.patch.object(LiveZohoAdapter, "_post", side_effect=fake_post):
+    with mock.patch.object(adapter.http, "post_json", side_effect=fake_post_json):
+        result = adapter.upsert_lead(
+            payload={
+                "name": "Rahul",
+                "mobile": "9876543210",
+                "city": "Prayagraj",
+                "referred_by": "RJ4521",
+            },
+            gorefer_reference="GR-1",
+        )
+
+    assert posted["path"] == "/crm/v8/Leads/upsert"
+    assert posted["body"]["duplicate_check_fields"] == ["Mobile"]
+    record = posted["body"]["data"][0]
+    # BARE 10-digit — must match Zoho's stored format, not GoRefer's internal 91-form.
+    assert record["Mobile"] == "9876543210"
+    # Every field the DA confirmed Zoho accepts in one payload.
+    assert record["Last_Name"] == "Rahul"
+    assert record["GoRefer_Reference"] == "GR-1"
+    assert record["Referrer_Client_Id"] == "RJ4521"
+    assert record["City"] == "Prayagraj"
+    assert result.zoho_lead_id == "zoho-1" and result.action == "insert"
+
+
+def test_live_upsert_parses_action_update_on_replay(monkeypatch):
+    """Replay must surface action=update — Model 2's no-twin guarantee, at the wire.
+
+    The DA proved live that an identical re-call returns action=update with the SAME
+    record id. This asserts we PARSE that correctly: if we mis-read the response and
+    reported "insert", a real twin would be indistinguishable from a healthy replay.
+    """
+    monkeypatch.setenv("ZOHO_CLIENT_ID", "cid")
+    monkeypatch.setenv("ZOHO_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("ZOHO_REFRESH_TOKEN", "rtok")
+    adapter = LiveZohoAdapter()
+
+    def fake_post_json(path, *, body):
+        return {"data": [{
+            "code": "SUCCESS",
+            "action": "update",
+            "duplicate_field": "Mobile",
+            "details": {"id": "zoho-existing-1"},
+        }]}
+
+    with mock.patch.object(adapter.http, "post_json", side_effect=fake_post_json):
         result = adapter.upsert_lead(
             payload={"name": "Rahul", "mobile": "9876543210"}, gorefer_reference="GR-1"
         )
 
-    assert posted["url"].endswith("/crm/v8/Leads/upsert")
-    assert posted["body"]["duplicate_check_fields"] == ["Mobile"]
-    # BARE 10-digit — must match Zoho's stored format, not GoRefer's internal 91-form.
-    assert posted["body"]["data"][0]["Mobile"] == "9876543210"
-    assert result.zoho_lead_id == "zoho-1" and result.action == "insert"
+    assert result.action == "update", "replay must be reported as an update, never an insert"
+    assert result.zoho_lead_id == "zoho-existing-1"
+
+
+def test_live_upsert_raises_on_a_zoho_error_row(monkeypatch):
+    """A non-SUCCESS row must raise, so the retry/backfill layer parks the lead.
+
+    Zoho answers HTTP 200 with a per-row error code, so a caller that only checked
+    the status code would record a phantom success and strand the lead invisibly —
+    the exact failure the retry layer exists to prevent.
+    """
+    monkeypatch.setenv("ZOHO_CLIENT_ID", "cid")
+    monkeypatch.setenv("ZOHO_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("ZOHO_REFRESH_TOKEN", "rtok")
+    adapter = LiveZohoAdapter()
+
+    def fake_post_json(path, *, body):
+        return {"data": [{"code": "MANDATORY_NOT_FOUND", "message": "required field missing"}]}
+
+    with mock.patch.object(adapter.http, "post_json", side_effect=fake_post_json):
+        with pytest.raises(RuntimeError, match="MANDATORY_NOT_FOUND"):
+            adapter.upsert_lead(
+                payload={"name": "Rahul", "mobile": "9876543210"}, gorefer_reference="GR-1"
+            )
+
+
+def test_live_fetch_referrer_history_reads_true_open_dates(monkeypatch):
+    """DF-4: the LAZY per-referrer history fetch (the primary mechanism; the all-time
+    bulk backfill stays deferred).
+
+    Must carry Zoho's TRUE Account_Opened_On (ADR-017) — keying history off the
+    import date would stack every historical account onto day 1 and fake a spike.
+    """
+    monkeypatch.setenv("ZOHO_CLIENT_ID", "cid")
+    monkeypatch.setenv("ZOHO_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("ZOHO_REFRESH_TOKEN", "rtok")
+    adapter = LiveZohoAdapter()
+    seen = {}
+
+    def fake_get(path, *, params=None):
+        seen["path"] = path
+        seen["params"] = params
+        return {"data": [{"Full_Name": "Sunil", "Account_Opened_On": "2019-04-02"}]}
+
+    with mock.patch.object(adapter.http, "get", side_effect=fake_get):
+        history = adapter.fetch_referrer_history(referrer_client_id="RJ4521")
+
+    assert seen["path"] == "/crm/v8/Leads/search"
+    assert seen["params"]["criteria"] == "(Referrer_Client_Id:equals:RJ4521)"
+    assert "Account_Opened_On" in seen["params"]["fields"]
+    assert history.referrer_client_id == "RJ4521"
+    assert history.conversions[0]["Account_Opened_On"] == "2019-04-02"
+
+
+def test_live_fetch_referrer_history_blank_id_makes_no_call(monkeypatch):
+    monkeypatch.setenv("ZOHO_CLIENT_ID", "cid")
+    monkeypatch.setenv("ZOHO_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("ZOHO_REFRESH_TOKEN", "rtok")
+    adapter = LiveZohoAdapter()
+
+    with mock.patch.object(adapter.http, "get") as get:
+        history = adapter.fetch_referrer_history(referrer_client_id="")
+
+    get.assert_not_called()
+    assert history.conversions == []
 
 
 def test_live_upsert_refuses_without_dedup_key(monkeypatch):

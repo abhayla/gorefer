@@ -5,12 +5,13 @@ internally — status still comes only through the webhook ingest path (guardrai
 It enriches the Referral Profile top band + Referred-People tab by matching a referrer
 to their Zoho Contact by ClientId (doc-08 B4).
 
-`ENABLE_ZOHO_READ` gates real calls (independent of ZOHO_WRITE, which stays OFF for
-PIFS — Ashok enters Zoho leads manually, DF-9):
+`ENABLE_ZOHO_READ` gates real calls, INDEPENDENTLY of `ENABLE_ZOHO_WRITE` (DF-9 is
+superseded — WRITE now goes ON for PIFS via Model 2 upsert-by-mobile; Abhay+DA
+2026-07-15. The two flags move separately):
   - false (default, CI/demo): LogOnlyZohoReadAdapter returns SEEDED FIXTURES, no live
     call — the whole Referral Profile works offline.
-  - true (creds present): LiveZohoReadAdapter reads ZOHO_* config; real HTTP wiring
-    lands with Zoho sandbox verification. Refuses to run without config.
+  - true (creds present): LiveZohoReadAdapter issues real Contacts/Leads searches.
+    Refuses to construct without ZOHO_* config (fail loud, never silently live).
 
 doc-08 B4 field-name note: `ClientId` (Contacts) vs `Client_Id` (Referrers) — the
 adapter normalizes both. Missing values come back as None so the view renders the
@@ -19,9 +20,9 @@ config "— not on file —" marker.
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass, field
 
+from apps.integrations.zoho.client import ZohoHttpClient
 from gorefer.flags import FeatureFlags
 
 logger = logging.getLogger("gorefer.zoho.read")
@@ -45,6 +46,22 @@ CONTACT_ENRICHMENT_FIELDS = (
     "WhatsApp_Opt_Out",
     "Do_not_contact",
 )
+
+# Zoho Leads fields backing the Referred-People tab, matched on Referrer_Client_Id
+# (the same field GoRefer's WRITE leg stamps — adapter.build_lead_record).
+REFERRED_PERSON_FIELDS = (
+    "Full_Name",
+    "City",
+    "Profession",
+    "Partner_Id",
+    "Account_Status",
+    "Account_Opened_On",  # TRUE open date (ADR-017) — never the sync date
+    "Referral_Bonus",
+)
+
+# One referrer's people are shown on a single tab; 200 is Zoho's per_page ceiling and
+# far beyond any real referrer's count. Pagination would be premature here.
+REFERRED_PEOPLE_PAGE_SIZE = 200
 
 
 @dataclass
@@ -127,6 +144,29 @@ def _norm_contact(client_id: str, raw: dict) -> ZohoContact:
     )
 
 
+def _norm_referred_person(raw: dict) -> ZohoReferredPerson:
+    """Map a raw Zoho Lead row to a ZohoReferredPerson (blank -> None)."""
+
+    def g(*keys):
+        for k in keys:
+            v = raw.get(k)
+            if v not in (None, ""):
+                return v
+        return None
+
+    return ZohoReferredPerson(
+        name=g("Full_Name"),
+        city=g("City"),
+        profession=g("Profession"),
+        partner=g("Partner_Id"),
+        account_status=g("Account_Status"),
+        opened_on=g("Account_Opened_On"),
+        # Eligibility wording only. Reward AMOUNTS live solely in the Zerodha Console
+        # (Gap 4/7) — GoRefer never reads, computes, or stores an amount.
+        reward=g("Referral_Bonus"),
+    )
+
+
 class LogOnlyZohoReadAdapter:
     """Demo/dev adapter: returns SEEDED FIXTURES, no live call. Works offline.
 
@@ -153,22 +193,79 @@ class LogOnlyZohoReadAdapter:
         return ReferredPeople(referrer_client_id=referrer_client_id, people=people)
 
 
-class LiveZohoReadAdapter:  # pragma: no cover - exercised only with ENABLE_ZOHO_READ=true
-    """Live read adapter. Refuses without ZOHO_* read config; HTTP wiring lands with
-    Zoho sandbox verification. Reads only — never writes, never sets status."""
+class LiveZohoReadAdapter:
+    """Live read adapter. Refuses without ZOHO_* read config.
 
-    def __init__(self):
-        self.client_id = os.environ.get("ZOHO_CLIENT_ID", "")
-        self.client_secret = os.environ.get("ZOHO_CLIENT_SECRET", "")
-        self.refresh_token = os.environ.get("ZOHO_REFRESH_TOKEN", "")
-        if not (self.client_id and self.client_secret and self.refresh_token):
-            raise RuntimeError("ZOHO_* read credentials not configured — cannot run live.")
+    READ-ONLY by construction: it only ever issues GETs against Contacts/Leads search.
+    It never writes and never sets conversion/account status internally — status still
+    arrives solely through the webhook ingest path (guardrail #2). What it returns is
+    *enrichment* (who the referrer is, their Zoho-held account facts), which the
+    profile view renders as clearly Zoho-sourced.
+    """
+
+    def __init__(self, http: ZohoHttpClient | None = None):
+        # Constructing the shared client reads + validates ZOHO_* creds, so this
+        # adapter still refuses to exist without them (fail loud, never silently live).
+        self.http = http or ZohoHttpClient()
 
     def fetch_contact_by_client_id(self, *, client_id: str) -> ZohoContact:
-        raise NotImplementedError("Live Zoho READ is wired during sandbox verification.")
+        """Find the referrer's Zoho Contact by ClientId and return enrichment.
+
+        doc-08 B4: Contacts stores the field as `ClientId` (the `Referrers` module
+        uses `Client_Id`). We search Contacts on `ClientId`; `_norm_contact` already
+        tolerates either spelling on the way back.
+
+        A no-match is a NORMAL outcome (an open-ended referrer need not be a PIFS
+        contact), not an error: Zoho answers 204/empty and we return an unmatched
+        ZohoContact so the view renders "— not on file —" rather than breaking.
+        """
+        if not client_id:
+            return ZohoContact(client_id=client_id, matched=False)
+
+        resp = self.http.get(
+            "/crm/v8/Contacts/search",
+            params={
+                "criteria": f"(ClientId:equals:{client_id})",
+                "fields": ",".join(CONTACT_ENRICHMENT_FIELDS),
+                "per_page": 1,
+            },
+        )
+        rows = resp.get("data") or []
+        if not rows:
+            logger.info("Zoho read: no Contact for ClientId=%s", client_id)
+            return ZohoContact(client_id=client_id, matched=False)
+        logger.info("Zoho read: matched Contact for ClientId=%s", client_id)
+        return _norm_contact(client_id, rows[0])
 
     def fetch_referred_people(self, *, referrer_client_id: str) -> ReferredPeople:
-        raise NotImplementedError("Live Zoho READ is wired during sandbox verification.")
+        """People this referrer introduced — the Referred-People tab.
+
+        Sourced from Zoho Leads carrying `Referrer_Client_Id` (the field GoRefer's
+        own WRITE leg stamps, and the field Ashok's manual leads carry). Leads that
+        converted hold the account facts, so one search answers the whole tab.
+
+        Deliberately Leads-only: a converted person also exists as a Contact, but
+        joining both modules here would double-count the same person under two
+        shapes. Conversion truth for the journey still comes from the webhook —
+        this is display enrichment, not attribution.
+        """
+        if not referrer_client_id:
+            return ReferredPeople(referrer_client_id=referrer_client_id, people=[])
+
+        resp = self.http.get(
+            "/crm/v8/Leads/search",
+            params={
+                "criteria": f"(Referrer_Client_Id:equals:{referrer_client_id})",
+                "fields": ",".join(REFERRED_PERSON_FIELDS),
+                "per_page": REFERRED_PEOPLE_PAGE_SIZE,
+            },
+        )
+        rows = resp.get("data") or []
+        people = [_norm_referred_person(r) for r in rows]
+        logger.info(
+            "Zoho read: %d referred person(s) for ClientId=%s", len(people), referrer_client_id
+        )
+        return ReferredPeople(referrer_client_id=referrer_client_id, people=people)
 
 
 def get_zoho_read_adapter():
