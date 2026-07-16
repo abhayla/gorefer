@@ -289,9 +289,14 @@ def test_m2_no_zerodha_named_symbols_in_code():
 
 # --- M10: PostgreSQL is the ONLY supported engine -------------------------
 
-def test_m10_postgres_is_the_only_engine():
+@pytest.mark.django_db
+def test_m10_postgres_is_the_only_engine(db):
     """The running suite is on PostgreSQL, settings carry the fail-fast guard,
-    and no SQLite branch survives in settings source (M10 — no SQLite path)."""
+    and no SQLite branch survives in settings source (M10 — no SQLite path).
+
+    Takes `db` so the test-database connection is actually established — the
+    dedicated-test-db assertion below inspects the live connection.
+    """
     from django.conf import settings
 
     # 1. The suite itself runs on Postgres (no SQLite fallback in the loop).
@@ -299,8 +304,22 @@ def test_m10_postgres_is_the_only_engine():
     assert engine == "django.db.backends.postgresql", (
         f"tests must run on PostgreSQL (M10); resolved engine is {engine!r}"
     )
-    # Test DB is a dedicated Postgres db, not sqlite / gorefer_dev.
-    assert settings.DATABASES["default"]["TEST"]["NAME"] == "gorefer_test"
+    # Test DB is a DEDICATED Postgres db, never sqlite / the dev db. Prefix-matched,
+    # not equality: under pytest-xdist (DF-TESTDB-ISOLATION) each worker gets its own
+    # db — gorefer_test_gw0, _gw1, … — and an exact match would fail a parallel run
+    # while proving nothing extra. What matters is that it is a dedicated test db.
+    # Assert the LIVE CONNECTION, not the settings dict. The two settings keys are
+    # unreliable here and differ by mode: serial leaves NAME as the dev db (Django
+    # swaps the connection, not the setting), while xdist rewrites NAME to the
+    # per-worker db. `connection.settings_dict["NAME"]` is what we are actually
+    # talking to in BOTH modes — a stronger claim than the config check it replaces.
+    from django.db import connection
+
+    connected_db = connection.settings_dict["NAME"]
+    assert connected_db.startswith("gorefer_test"), (
+        "tests must run against a dedicated test database (DF-TESTDB-ISOLATION: "
+        f"gorefer_test, or gorefer_test_gwN under xdist); connected to {connected_db!r}"
+    )
 
     # 2. Settings source has no SQLite *engine* wiring (the word may appear in
     #    prose explaining why there's no fallback) and does carry the guard.

@@ -114,8 +114,22 @@ HTMX is vendored at `static/js/htmx.min.js`; the compiled CSS is `static/css/app
 ```bash
 ruff check .
 python manage.py makemigrations --check --dry-run   # fails on schema drift
-python -m pytest -q
+python -m pytest -q                                 # serial (~6 min)
+python -m pytest -q -n 4                            # parallel (~2 min) — see below
 ```
+
+**Parallel runs (DF-TESTDB-ISOLATION).** `-n 4` uses pytest-xdist, and pytest-django
+gives each worker its **own** database (`gorefer_test_gw0`, `_gw1`, …). That isolation
+is what makes it correct, not just faster: on one shared test DB the workers deadlock
+on `otp_challenges` and the lock collision looks exactly like a regression.
+
+Two caveats worth knowing before you misread a red suite:
+- **Don't run two pytest invocations at once** against the same DB name — the second
+  fails with `database "gorefer_test" already exists` / `is being accessed by other
+  users`. That is a collision, **not** a code regression. For a genuinely concurrent
+  run, give it its own name: `TEST_DB_NAME=gorefer_test_mine python -m pytest -q`.
+- If a run is killed mid-way it can leave the test DB behind; drop it (or use
+  `--create-db`) before the next run.
 
 **Feature flags** live in one place — `gorefer/flags.py`, resolved from env at startup (`ENABLE_*`, plus the single swappable `REFERRAL_INCENTIVE_CLAIM`). Defaults keep every not-yet-built capability and every external adapter **off** (adapters log their intended call instead of sending), so demo mode runs end-to-end with no external systems.
 
