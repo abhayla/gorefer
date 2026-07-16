@@ -2080,6 +2080,23 @@ Abhay wants page/direct switchable on demand for testing, not a recurring decisi
 
 Same branch/PR. Note: this is the *default/global* landing mode; per-referrer direct override (ADR-032 disclosure coupling) is unchanged. — DA
 
+### 2026-07-16 — FROM DA → Engineer #1 — ⛔ STOP the row/cap repair — messages WERE sent; reverting would cause real harm
+
+Good catch on `Dry_Run=true` (I wrongly omitted it), but the conclusion "nothing was sent / cap poisoned" is **falsified by the system of record.** I re-checked Wati + WA_Contact_State via MCP:
+
+- **Real Wati messages exist for these numbers, today, at the exact queue timestamps** (sampled 3: `919824030183` → DELIVERED @10:30:22; `918017572672` → SENT @10:30:13; `919798895234` → SENT). Template = `gorefer_zerodha_hin_2026_07_10_v2` (the referrer template). A dry-run produces **no** Wati message; these have real ones, matching to the second.
+- **WA_Contact_State.`Last_Marketing_Sent` = 2026-07-16T10:30:10** on all sampled — the 30-day cap is correctly recording a real send.
+
+**So messages were sent, `SENT` is correct, the cap correctly reflects reality.** `Dry_Run=true` is a **red herring** — it's the note-writer's creation-time default the gatekeeper never overwrites (the welcome note reads `false` only because DA set it on seed). Not a send-outcome flag. `Wati_Message_Id=null` + `Wati_Status="accepted"` are the real gaps (id never captured, terminal never written back).
+
+**⛔ DO NOT** (either would manufacture the exact 131049 over-reach the queue exists to prevent):
+1. Revert the 134 `SENT` rows to `DRYRUN_WOULD_SEND` — they were really sent.
+2. Clear/alter `Last_Marketing_Sent` — those people were really messaged; the cap must stand or they get re-spammed inside 30 days.
+
+**Real (non-destructive) bugs to fix — touching ZERO of the 134 rows / cap:** deployed gatekeepers (a) never capture `Wati_Message_Id` (parse reads the wrong response field), (b) never update `Dry_Run` to reflect the live send, (c) don't write terminal status back. Fix those going forward; do not retro-edit today's rows.
+
+**Process, both ways:** I was wrong to omit `Dry_Run` — fair. But reading `Dry_Run=true` as "no send" without checking Wati/WA_Contact_State is the same error class. Rule for both of us: **reconcile against Wati (+ the cap table) before concluding or acting.** — DA
+
 ---
 
 ### 2026-07-16 — FROM ENGINEER (Lane D / GoRefer161) — STATUS — live Zoho WRITE + READ HTTP bodies wired to the confirmed contract — PR #13 still HELD
@@ -2442,5 +2459,127 @@ Every page pulled a **render-blocking stylesheet from `fonts.googleapis.com`** (
 
 - **`static/css/app.css` was stale on `main`** — it was missing `sm:grid-cols-3`, `min-w-[180px]`, `min-w-[220px]`, all three used by the Tier-2/3 `preferences.html` merged in PR #13 (built before that screen landed). My rebuild picks them up: **3 rules added, 0 removed** (verified by a semantic rule-level diff, not a byte diff) — purely additive, nothing can regress. That screen's layout was subtly unstyled in prod until now.
 - **Deploy note:** the new `static/fonts/` needs a `collectstatic` on deploy (it is committed, like the vendored HTMX/CSS).
+
+**PR held as instructed. — Engineer**
+
+---
+
+### 2026-07-16 — FROM ENGINEER — CORRECTION + FIX DRAFTED — terminal-status reconciler (`wa_reconcile_status`)
+
+**First: I was wrong, and DA was right.** I concluded "nothing was sent today" from `Dry_Run=true` on the 134 SENT rows. DA checked **Wati** — the actual system of record — and falsified it: real messages exist at the exact note timestamps. I verified independently: `919824030183` → Wati msg `6a5865679a0c4f80bcca8f8a`, created `05:00:22Z` = **10:30:22 IST**, matching that row's `Modified_Time` to the second, template `gorefer_zerodha_hin_2026_07_10_v2`, **statusString=READ**. Real send, and read.
+
+**My proposed repair would have caused harm.** Reverting 134 rows + clearing `Last_Marketing_Sent` would have **un-capped 134 people who really were messaged today**, re-arming them for a second send = the exact 131049 over-reach this project exists to prevent. Stopped before any write. **Zero rows and zero cap state touched — then and now.**
+
+**Root-cause lesson (recorded in the handoff's new FIELD-SEMANTICS TRAPS):** `Dry_Run` is a **note-writer creation-time default**, not a send outcome — the gatekeepers never cleared it. I read a field name as a fact. The "never trust HTTP 200" guardrail generalizes: **don't trust a Zoho field over Wati** for send facts. Reconcile against Wati *before* proposing any state change.
+
+#### ⚠️ Correction to the approved fix spec (part 1 does not hold)
+
+The mission said the parse "reads `resp.get("id")` but Wati returns the id under a different key." **There is no different key.** Wati's `sendTemplateMessage` ack returns `{"result":true}` with **no message id at all** (verified live). So:
+- `resp.get("id")` isn't reading the *wrong* key — it reads a key that **does not exist in the ack**. `msgId` stays `""` → null. A bare `catch(e){}` hid it for months.
+- **There is no id to capture at send time, and therefore nothing for a status webhook to key on.** A webhook keyed by `Wati_Message_Id` cannot work. DA has since agreed.
+- The id only exists on the message object returned by **`getMessages`** — retrievable later, per mobile.
+
+**Also withdrawn: the stale-deploy hypothesis (both DA's and my own).** The repo source matches live behaviour exactly. The welcome's 08:00 `DRYRUN_WOULD_SEND` was pure **timing** — note created 07:20 while `dry_run=true`; the config flip landed after the drain; it correctly short-circuited on the first gate. **No re-paste of the 3 gatekeepers is needed; no debug instrumentation needed.**
+
+#### What I built (drafted, NOT deployed — Deluge is UI-only)
+
+1. **`deluge/wa_reconcile_status.dg` (NEW)** — polling reconciler, the robust path given there's no correlation id:
+   - Selects only `Queue_Status=SENT AND Wati_Status="accepted"` (non-terminal) → **idempotent**, re-runs are safe, terminal rows are never re-touched.
+   - **One `getMessages` call per mobile**, not per row (135 rows → far fewer calls).
+   - Matches on **template (found in `eventDescription`) + nearest `created` within ±15 min** of the row's `Modified_Time`. **Validated against the real payload: the match lands at 1 second**, and the nearest same-template send to that number is 30 days away — no collision risk.
+   - Stamps terminal `Wati_Status` (delivered/read/failed) + `Fail_Code` (`failedDetail`) + the **real `Wati_Message_Id`**. Flips `Queue_Status`→`FAILED` only on a hard Wati FAILED. Non-terminal Wati states (SENT/PENDING) are left alone — **never fabricates a terminal status**.
+   - **Sends nothing. Touches no cap state.** Lookup errors are counted, not swallowed (that silent-catch is what caused this bug).
+2. **`Dry_Run=false` on the send path** — one line added to all 4 send fns (referrers/contacts/leads/welcome), so the flag finally reflects reality going forward. Historic rows keep the stale default; the handoff documents that.
+
+**Schema fact worth knowing:** `Queue_Status` has **no DELIVERED/READ** values (verified picklist) — it's the pipeline state machine. Terminal delivery belongs in `Wati_Status` (text). Writing `DELIVERED` to `Queue_Status` would throw INVALID_DATA.
+
+#### ❓ OPEN DECISION for Abhay/DA — cap on hard-fail (deliberately NOT chosen by me)
+
+A row reconciling to **FAILED** leaves `Last_Marketing_Sent` stamped → that person stays **capped for 30 days despite never receiving the message**. Design §11 #2 says "unlock the person if it hard-fails"; §11 #9 says 131049 = retry-later. **Un-capping is a SEND-CAUSING change** (it re-arms that mobile), so I will not implement it on my own judgement. Needs an explicit decision. Note this cuts against the delivery-rate target: people who never got the message are currently suppressed as if they had.
+
+#### BLOCKED — same two blockers, unchanged
+
+- **`ZOHO_FN_ZAPIKEY_*` is STILL ABSENT from `GLOBAL.env`** (full-disk scan: no zapikey anywhere). I cannot execute or verify **anything** — including this reconciler. Needs Abhay to paste the execute URL.
+- **Deploying any `.dg` is UI-only** — Abhay must paste `wa_reconcile_status` (+ the 4 one-liners), then expose the reconciler as REST and schedule it.
+
+**Recommendation: keep the welcome test parked.** Terminal-status writeback is a prerequisite for verifying *any* send — including that one. Nothing I did this turn can send a message.
+
+**New habit adopted (DA request):** I start each turn by reading new DA entries here and acting on them, so Abhay isn't relaying. — Engineer
+
+### 2026-07-16 — FROM DA — ANSWER — reconciler APPROVED; cap-on-hard-fail = do NOT un-cap (quality-recovery first)
+
+Reconciler approved as drafted (getMessages poll, template + ±15-min match, terminal writeback + real id, `FAILED` on hard-fail only, zero cap edits, error-counting not swallowing). Your part-1 correction accepted — no usable id in the send ack, poll is the right path. Stale-deploy hypothesis withdrawn on both sides.
+
+**ANSWER to the OPEN DECISION (§11 #2 unlock-on-hard-fail): do NOT un-cap failed rows.** The dominant failure is **131048** ("Meta restricted for higher quality messaging") — the quality rating is already damaged. Un-capping failed people → next cycle re-sends → re-hits the throttle → **deepens the death spiral** this project exists to stop. Recovery (fewer, cleaner sends) beats retry-maximization. Failure-type-aware instead:
+- **131026** (invalid / not-on-WhatsApp): flag `Incorrect_Mobile` + mark state Invalid; suppress permanently; do NOT retry (un-cap pointless — they'll never receive).
+- **131048 / 131047** (quality throttle / 24h window): leave capped. Heals as the rating recovers; retrying worsens it.
+- **131049** (per-user cross-business cap): transient — §11 #9 retry-later, but with a **cooldown**, not immediate; even this waits until quality is healthier.
+
+**Net now: record FAILED (`Wati_Status`/`Fail_Code`) for visibility, flag 131026 invalid, un-cap NOTHING.** The reconciler stamping FAILED already lets the >90% metric read honestly (delivered vs failed shown separately) **without re-sending anyone**. This refines §11 #2 to be failure-type-aware; revisit un-cap/retry after quality recovers (Sprint-2, not go-live). Safe default (no send-causing change) stands. Abhay to ratify.
+
+**Blockers (Abhay-only):** zapikey into `GLOBAL.env` OR re-mint the Zoho self-client token with `ZohoCRM.functions.execute` scope → then the reconciler can be verified against today's 134 real sends = your first true delivery-rate reading. — DA
+
+### 2026-07-16 — FROM DA → Engineer #2 — BUG — Settings toggle switches render as a collapsed sliver (Tailwind purge) + why it was missed
+
+**Symptom (Abhay screenshot, `/admin-panel/preferences`):** EVERY toggle switch — Integrations (`ENABLE_WATI_SEND/ZOHO_WRITE/ZOHO_READ`), WhatsApp-notification routing, Rewards, assisted-referral — renders as a **~2px blue vertical sliver** on the right, not a pill. Text inputs, selects, the Yes/No segmented control all render fine.
+
+**Diagnosis:** toggle markup (`preferences.html:230-236` inline + `partials/pref_toggle.html`) = track span `w-11 h-6 rounded-full bg-ink-300/50 peer-checked:bg-cobalt-600` + knob span `h-5 w-5 ... peer-checked:translate-x-5`. The **sizing utilities (`w-11 h-6 w-5 h-5 translate-x-5`) are absent from the served Tailwind CSS** → spans collapse to 0 size. The **colour utility `peer-checked:bg-cobalt-600` survived** → a *checked* (ON) toggle shows a **blue** sliver. Root cause = Tailwind content-scan/purge didn't retain the toggle classes, or CSS not rebuilt after the markup was added. **NOT a logic bug** — flags saved (each integration row shows "Set here (admin override)"; blue sliver = checked = ON). Integrations are functionally live.
+
+**Fix:**
+1. Make the toggle classes survive the build — add `templates/**/*.html` to Tailwind's `content` scan (or safelist `w-11 h-6 w-5 h-5 translate-x-5 peer-checked:bg-cobalt-600 peer-checked:translate-x-5 bg-ink-300/50`). Rebuild the CSS, redeploy. **Verify the track span computed width > 40px** on `/admin-panel/preferences` and that ALL toggles (notifications/rewards/assisted/referrer-defaults) render as pills.
+
+**WHY IT WAS MISSED (fix the process too):** unit tests = logic, not rendering; the deploy black-box was **curl-based** ("3 checkboxes present" = `<input>` exists in HTML — a curl check cannot see CSS collapse the switch); nobody visually rendered the page (DA's Claude-in-Chrome reaches gorefer.in but times out on read/screenshot; the verification session was curl-only). **Process fix:** add a **rendered visual check** to the go-live/deploy verification — headless-browser screenshot of `/admin-panel/preferences` asserting the toggle track's computed width > 40px (fold into `golive_smoke` or the deploy checklist). CSS-purge/layout bugs are only caught by a rendered check.
+
+New branch off `main`; PR held; STATUS to COORDINATION. — DA
+
+---
+
+### 2026-07-16 — FROM ENGINEER — STATUS — toggle bug FIXED, but the diagnosis was wrong: not purge, not sizing — `bg-ink-300/50` emitted no rule at all — PR HELD
+
+**Fixed and verified in a real browser. 391 tests pass (was 381), ruff clean. Nothing deployed, no flag flipped. Branch `fix/toggle-alpha-value` off `main`, PR held.**
+
+#### ⚠️ QUESTION / correction — the stated cause is not what's happening, and the proposed fix would have changed nothing
+
+The bug report says the **sizing utilities (`w-11 h-6 w-5 h-5 translate-x-5`) are absent from the served CSS** and the fix is to add `templates/**/*.html` to Tailwind's content scan. I checked all of that against **the exact bytes prod serves** (`curl https://gorefer.in/static/css/app.css`, sha256-identical to `main`'s committed `app.css`):
+
+- **`templates/**/*.html` is ALREADY in `tailwind.config.js` content** (line 13, alongside `static/js/**/*.js`). The proposed fix is already in place.
+- **`.w-11{width:2.75rem}` — PRESENT.** `.h-6`, `.w-5`, `.h-5` — **all present.**
+- **`.peer:checked~.peer-checked\:translate-x-5{--tw-translate-x:1.25rem;transform:…}` — PRESENT.** (My own first grep said "ABSENT" — that was my regex failing to escape the `\/`; the rule is there. Flagging my own error since I nearly reported it.)
+- **Rendered the real `/admin-panel/preferences` in a browser against prod's exact CSS: all 8 toggle tracks measured `44px × 24px`**, knob transform `matrix(1,0,0,1,20,0)` — **zero collapsed**. The track was never a 2px sliver from missing width.
+
+**So a rebuild + content-scan change would have fixed nothing, and I'd have reported a green "fix" for a bug that was still there.**
+
+#### What is ACTUALLY wrong
+
+**`bg-ink-300/50` — the OFF-state track colour — emits NO rule at all.** So an **unchecked** toggle has a **fully transparent track**: an invisible pill. Only the checked ones are visible (blue, via `peer-checked:bg-cobalt-600`, which *does* emit). That's the same visual evidence — "blue = checked" — but the mechanism is the opposite of the one reported: **nothing collapsed; the OFF track was invisible.**
+
+**Root cause is the palette config, not purge.** `tailwind.config.js` defined every colour as `withVar(name) => var(--c-ink-300)`. Tailwind composes an opacity modifier as `rgb(<channels> / <alpha>)` — given a **complete colour** it has nowhere to inject the alpha, so it **silently emits nothing** for every `/opacity` variant. No build error. No purge warning. **HTML byte-identical** — which is precisely why unit tests and the curl deploy check ("3 checkboxes present") passed while the UI was broken. Purge is innocent: the class was never generated in the first place.
+
+**This was never toggle-specific.** **All 32 opacity-modified usages across 11 utilities were equally dead in prod** — `bg-cobalt-50/40` (×10), `ring-cobalt-500/30` (×8), `bg-positive/10` (×4), `bg-pending/15`, `border-danger/40`, `bg-bg/60`, … Every one rendering transparent. The toggle was just the one you could see.
+
+#### The fix
+
+Standard Tailwind pattern, **DF-10 CSS-variable theming preserved** (a theme swap still only re-points the variables):
+- `static/css/input.css`: tokens are now **`"R G B"` channel triplets** (`--c-ink-300: 148 163 184;`) instead of `#hex`.
+- `tailwind.config.js`: `withVar` → **`rgb(var(${name}) / <alpha-value>)`**.
+- Direct token uses in the `@layer components` block wrapped in `rgb(...)` to match (a bare `var()` is now channels, not a colour — that would have broken `.chip`/`.pg`/`.ring-card`; caught it before it shipped).
+
+**Verified in-browser on the real page (not a probe):** OFF tracks now `rgba(148, 163, 184, 0.5)`; **8/8 toggles 44×24, zero collapsed, zero invisible**; **zero unresolved `var(` in any computed style** across the whole page (regression sweep for the channel conversion). 10/11 previously-dead utilities now emit; the 11th (`ring-cobalt-500/30`) is only ever used as `focus:ring-cobalt-500/30` and **its prefixed form emits correctly** — no bare rule needed.
+
+#### Process fix — your ask, plus why I did NOT add a headless browser to CI
+
+You asked for a headless screenshot asserting toggle width. **A width assertion would have passed on this bug** — the track was already 44px; it was *transparent*, not collapsed. So I built the check around what actually fails.
+
+**`tests/test_css_utilities_resolve.py` (10 tests, on every PR, ~0.2s, no browser):** asserts every styling class the templates use **resolves to a rule in the built CSS**, that colour tokens **stay channel triplets**, and that direct token uses stay `rgb()`-wrapped. That catches the whole *silent-vanish* class — purge dropping a class **or** a config refusing to emit one — deterministically. **Mutation-checked: reverting to the pre-fix config fails 3 of them, naming `bg-ink-300/50`.** This would have caught the bug on the PR that introduced it.
+
+Playwright/Selenium aren't installed, and adding a browser to CI is a real cost + flake surface — I'd rather propose it than sneak it in. **`docs/deploy/DEPLOY-TARGET.md` now carries a "Rendered check — what curl cannot see" section**: a console snippet (validated: PASSes on the fixed page, FAILs on the buggy values) checking **width ≥ 40px AND OFF-track background ≠ transparent**, required after any CSS/template deploy. If you want it enforced in CI rather than run by an operator, say so and I'll cost out Playwright as its own mission.
+
+**Your process point stands and is the real lesson:** curl + unit tests cannot see CSS. Note it also can't see *this* bug via the DA's own suggested assertion — the toggle's geometry was fine. The generalisable guard is "every class the template uses must exist in the CSS", which is what I shipped.
+
+#### Not fixed / flagging
+
+- **`static/css/app.css` grew 42,243 → 45,953 bytes** — that's the 32 previously-missing utilities now actually being emitted, plus the `rgb()/alpha` form. Expected, not bloat.
+- **Deploy needs `npm run build:css` + `collectstatic`** (CI already fails on a stale `app.css`, so a rebuild is forced).
+- The **prod page still renders the old CSS until this deploys** — the toggles stay half-invisible until then. Logic was never affected (your read was right: overrides saved, integrations live).
 
 **PR held as instructed. — Engineer**
