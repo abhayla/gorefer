@@ -244,6 +244,11 @@ PII_MASK_FOR_CUSTOMER_VIEW = os.environ.get(
 # HMAC wax-seal is deferred (DF-2). The key is a SECRET (from env, never inline).
 ZOHO_WEBHOOK_KEY = os.environ.get("ZOHO_WEBHOOK_KEY", "")
 ZOHO_WEBHOOK_IP_ALLOWLIST = os.environ.get("ZOHO_WEBHOOK_IP_ALLOWLIST", "")  # csv; empty = any (dev)
+# DF-2 wax-seal (used only when ENABLE_ZOHO_WEBHOOK_HMAC=true). The shared secret the
+# Zoho-side Deluge signer holds. Unset => the seal REJECTS everything (fail-closed).
+ZOHO_WEBHOOK_HMAC_SECRET = os.environ.get("ZOHO_WEBHOOK_HMAC_SECRET", "")
+# Freshness window for a sealed request, in seconds (absorbs clock skew).
+ZOHO_WEBHOOK_MAX_SKEW_SECONDS = int(os.environ.get("ZOHO_WEBHOOK_MAX_SKEW_SECONDS", "300"))
 
 # --- WATI webhook auth (B4, interim R2): static key + IP allowlist ----------
 # The Wati assisted-referral flow posts here. Same interim model as Zoho (static

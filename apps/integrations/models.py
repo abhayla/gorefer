@@ -126,6 +126,31 @@ class ZohoSyncIdempotency(TimestampedModel, TenantScopedModel):
         db_table = "zoho_sync_idempotency"
 
 
+class ZohoWebhookNonce(TimestampedModel):
+    """DF-2 wax-seal: a burnt one-time nonce from a sealed Zoho webhook request.
+
+    Deliberately NOT tenant-scoped and deliberately separate from
+    `ZohoSyncIdempotency`. Those two distinctions are load-bearing:
+
+    - **Not tenant-scoped:** the nonce is verified BEFORE the request is trusted, so
+      the tenant it claims isn't yet authenticated. Scoping the uniqueness per tenant
+      would let a replay succeed simply by claiming a different tenant.
+    - **Not ZohoSyncIdempotency:** that is a BUSINESS dedupe on Zoho's `event_id` (the
+      same real event delivered twice is a benign no-op). This is a SECURITY nonce —
+      a byte-identical replay of a signed request. Sharing one table would let a
+      legitimate business retry burn the security nonce, or vice versa.
+
+    Rows are purged past the freshness window (`purge_expired_nonces`) — a nonce older
+    than the window can't enable a replay, because the timestamp check rejects it first.
+    """
+
+    nonce = models.CharField(max_length=128, unique=True)
+
+    class Meta:
+        db_table = "zoho_webhook_nonce"
+        indexes = [models.Index(fields=["created_at"])]  # the purge sweep's scan
+
+
 class ZohoSyncWatermark(TenantScopedModel):
     """The sync worker's resume point (#7). Advances as records are processed so
     each run resumes where it left off."""
