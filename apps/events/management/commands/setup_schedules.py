@@ -18,6 +18,10 @@ SCHEDULES = {
     # Every 10 min: frequent enough that a recovered Zoho drains the backlog promptly,
     # sparse enough that a long outage doesn't hammer it. Each sweep is bounded.
     "zoho_backfill_unsynced": ("apps.integrations.zoho.tasks.backfill_unsynced", 10),
+    # Hourly: burnt wax-seal nonces past the freshness window are dead weight (a nonce
+    # that old already fails the timestamp check), so purging them can't enable a
+    # replay — it just stops the table growing forever.
+    "zoho_purge_expired_nonces": ("apps.integrations.zoho.waxseal.purge_expired_nonces", 60),
 }
 
 
