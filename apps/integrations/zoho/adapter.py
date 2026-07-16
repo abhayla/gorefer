@@ -29,15 +29,11 @@ purpose-limited destination. PII never enters the immutable event log.
 """
 from __future__ import annotations
 
-import json
 import logging
-import os
-import urllib.error
-import urllib.parse
-import urllib.request
 from dataclasses import dataclass, field
 
 from apps.common.phone import to_zoho_mobile
+from apps.integrations.zoho.client import ZohoHttpClient
 from gorefer.flags import flags
 
 logger = logging.getLogger("gorefer.zoho")
@@ -48,6 +44,21 @@ GOREFER_REFERENCE_FIELD = "GoRefer_Reference"
 
 # Server-side dedup key. Zoho decides create-vs-update on this field (Model 2).
 DUPLICATE_CHECK_FIELDS = ["Mobile"]
+
+# Zoho Leads fields pulled for the lazy per-referrer history fetch (#9, DF-4).
+# Account_Opened_On is the TRUE open date (ADR-017) — analytics must never key off
+# the import/sync date, or a backfill stacks all history onto day 1.
+HISTORY_FIELDS = (
+    "Full_Name",
+    "Mobile",
+    "City",
+    "Account_Status",
+    "Account_Opened_On",
+    "Referrer_Client_Id",
+    GOREFER_REFERENCE_FIELD,
+)
+
+HISTORY_PAGE_SIZE = 200
 
 
 @dataclass
@@ -138,45 +149,10 @@ class LiveZohoAdapter:
     config fails LOUDLY at startup instead of silently degrading.
     """
 
-    TOKEN_URL = "https://accounts.zoho.in/oauth/v2/token"
-
-    def __init__(self):
-        self.client_id = os.environ.get("ZOHO_CLIENT_ID", "")
-        self.client_secret = os.environ.get("ZOHO_CLIENT_SECRET", "")
-        self.refresh_token = os.environ.get("ZOHO_REFRESH_TOKEN", "")
-        # .in data centre (org passiveincomesolutions) — overridable per environment.
-        self.api_base = os.environ.get("ZOHO_API_BASE", "https://www.zohoapis.in")
-        if not (self.client_id and self.client_secret and self.refresh_token):
-            raise RuntimeError("ZOHO_* credentials not configured — cannot run live.")
-
-    # --- HTTP plumbing (stdlib only — no new dependency for one adapter) ---------
-
-    def _post(self, url: str, *, data: bytes, headers: dict) -> dict:
-        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-        try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                body = resp.read().decode("utf-8")
-        except urllib.error.HTTPError as exc:  # surface Zoho's error body, not a bare 4xx
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"Zoho HTTP {exc.code}: {detail}") from exc
-        return json.loads(body) if body else {}
-
-    def _access_token(self) -> str:
-        payload = urllib.parse.urlencode({
-            "refresh_token": self.refresh_token,
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
-            "grant_type": "refresh_token",
-        }).encode()
-        data = self._post(
-            self.TOKEN_URL,
-            data=payload,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
-        token = data.get("access_token")
-        if not token:
-            raise RuntimeError(f"Zoho token refresh returned no access_token: {data}")
-        return token
+    def __init__(self, http: ZohoHttpClient | None = None):
+        # Constructing the client reads (and validates) ZOHO_* creds — so this adapter
+        # still refuses to exist without them. Shared with the live READ adapter.
+        self.http = http or ZohoHttpClient()
 
     # --- Contract ----------------------------------------------------------------
 
@@ -190,17 +166,12 @@ class LiveZohoAdapter:
                 "Zoho upsert refused: no bare 10-digit mobile to dedup on (malformed)."
             )
 
-        body = json.dumps({
-            "data": [record],
-            "duplicate_check_fields": DUPLICATE_CHECK_FIELDS,
-        }).encode()
-        resp = self._post(
-            f"{self.api_base}/crm/v8/Leads/upsert",
-            data=body,
-            headers={
-                "Authorization": f"Zoho-oauthtoken {self._access_token()}",
-                "Content-Type": "application/json",
-            },
+        # Contract confirmed live by the DA against the PIFS org (2026-07-16):
+        # POST /crm/v8/Leads/upsert with duplicate_check_fields:["Mobile"] →
+        # first call action=insert; identical re-call action=update, same record id.
+        resp = self.http.post_json(
+            "/crm/v8/Leads/upsert",
+            body={"data": [record], "duplicate_check_fields": DUPLICATE_CHECK_FIELDS},
         )
         rows = resp.get("data") or []
         if not rows:
@@ -221,7 +192,35 @@ class LiveZohoAdapter:
         )
 
     def fetch_referrer_history(self, *, referrer_client_id: str) -> ReferrerHistory:
-        raise NotImplementedError("Live Zoho history fetch is wired during sandbox verification.")
+        """Lazy per-referrer history pull on first appearance (#9, DF-4).
+
+        DF-4 records the decision: the PRIMARY mechanism is this lazy per-referrer
+        fetch — each referrer's past conversions load when they first become active in
+        GoRefer — with the all-time bulk backfill deliberately deferred. This is that
+        lazy path.
+
+        Reads Zoho Leads credited to this referrer that Zoho marks as opened, keyed on
+        the same `Referrer_Client_Id` the WRITE leg stamps. Returns raw Zoho-shaped
+        rows; the ingest layer decides what becomes a Conversion — this adapter never
+        writes status itself (guardrail #2), and the true open date (ADR-017) rides
+        along as `Account_Opened_On` so history lands in its REAL period, not today.
+        """
+        if not referrer_client_id:
+            return ReferrerHistory(referrer_client_id=referrer_client_id, conversions=[])
+
+        resp = self.http.get(
+            "/crm/v8/Leads/search",
+            params={
+                "criteria": f"(Referrer_Client_Id:equals:{referrer_client_id})",
+                "fields": ",".join(HISTORY_FIELDS),
+                "per_page": HISTORY_PAGE_SIZE,
+            },
+        )
+        rows = resp.get("data") or []
+        logger.info(
+            "Zoho fetch_referrer_history: %d row(s) for ClientId=%s", len(rows), referrer_client_id
+        )
+        return ReferrerHistory(referrer_client_id=referrer_client_id, conversions=rows)
 
 
 def get_zoho_adapter():
