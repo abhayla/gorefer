@@ -1964,6 +1964,41 @@ The Zoho OAuth creds already exist in **`C:\Abhay\VibeCoding\GLOBAL.env`** and t
 
 Gated on P1 exit (NOT now): the `ENABLE_WATI_SEND`/`ZOHO_WRITE`/`ZOHO_READ` prod flips, OTP login, customer login. — DA
 
+### 2026-07-16 — FROM DA → Engineer #2 — MISSION — Admin Settings: integration flags as UI checkboxes (Abhay request)
+
+Abhay wants `ENABLE_WATI_SEND`, `ENABLE_ZOHO_WRITE`, `ENABLE_ZOHO_READ` toggleable from the **admin Settings UI (checkboxes)** — flip on/off manually, no `.env` edit / redeploy. This makes the P3 "flip" a UI action.
+
+**Build (GoRefer Django only; extend the existing Q-M-PREF Preferences/Settings screen — same pattern that already sets `LANDING_MODE` via the config cascade):**
+1. Move these three flags from **env-only → the config cascade** (DB-backed `ConfigGlobal`, admin-editable at runtime; **env stays the default/fallback** when no override row exists). Flipping a checkbox changes effective behaviour **without a redeploy** — exactly how `LANDING_MODE` works now.
+2. Render each as a **checkbox** on the admin Settings screen, showing the **current effective value** and its **source** (env default vs admin override). Admin-only (Sprint-1 auth).
+3. Everywhere the code reads the flag, it must read the **resolved** value (override → env default), not the raw env. Audit the read sites.
+4. **Safety (DA default, pending Abhay confirm):** turning **ON** `ENABLE_WATI_SEND` or `ENABLE_ZOHO_WRITE` triggers a one-line confirm ("This starts sending real WhatsApp / writing real leads to Zoho — confirm?"). `ENABLE_ZOHO_READ` = plain toggle (read-only, safe).
+5. **Scope (DA default, pending Abhay confirm):** expose ONLY these 3 integration flags now. Keep `ENABLE_CUSTOMER_LOGIN` / `ENABLE_OTP_LOGIN` OUT until their features ship — no dead UI (Constitution §4).
+6. Tests (toggle persists, resolves correctly, confirm-gate fires on the risky two, admin-only); STATUS to COORDINATION; **PR held** (do not merge/flip). Note: this does NOT change prod flag state — a fresh checkbox with no override still resolves to the env default (all OFF).
+
+Blocks nothing else; independent of the live-verification + DF-2 missions. — DA
+
+### 2026-07-16 — FROM DA → Engineer #2 — SCOPE EXPANDED — Settings = tiered (Central / Admin-Global / User), per the 3-tier config cascade
+
+Abhay: don't limit the settings screen to the 3 integration flags — expose the full set, **split by config tier** (central → global/admin → user, ADR-022 cascade; nearest-wins).
+
+**Tier 1 — Central (platform-locked; NOT rendered in any settings UI, never toggleable):** SEBI/NSE disclosure block + market-risk warning + reward wording (auto-injected, cannot be omitted — Constitution compliance gate), partner-code (`ZMPHZC`) server-side injection, `tenant_id` isolation, the 3 guardrails. **Never expose these as switches.**
+
+**Tier 2 — Global / Admin (BUILD NOW; admin-only Settings screen):**
+- `ENABLE_WATI_SEND` · `ENABLE_ZOHO_WRITE` · `ENABLE_ZOHO_READ` — checkboxes; confirm-gate on turning ON WATI_SEND / ZOHO_WRITE.
+- `REFERRAL_INCENTIVE_CLAIM` — editable text (the single "10% brokerage + 300 points" field). Admin-only, never user-editable.
+- Default `LANDING_MODE` (page | direct) — org default (already cascade-backed via Q-M-PREF).
+- WhatsApp notification routing — which recipients fire (Ashok / new-person / referrer) as individual toggles.
+- KEEP OUT (no dead UI): `ENABLE_CUSTOMER_LOGIN`, `ENABLE_OTP_LOGIN`, `ENABLE_ASSET_GENERATOR` — features not shipped/gated.
+
+**Tier 3 — User (DESIGN + STAGE NOW; render only when `ENABLE_CUSTOMER_LOGIN` is on — no dead UI before then):** per-referrer, in the customer "My Referrals" area:
+- Personal `landing_mode` override (page | direct) for their own links.
+- Notification preference — receive WhatsApp updates on their referrals (on/off).
+- Preferred language (Hindi | English).
+- Promotional-nudge opt-in/out.
+
+Each tier is a cascade layer: user override → global/admin → env/central default. Build Tier 2 live; wire Tier 3 behind the customer-login gate so it activates the instant that flag flips. Pending Abhay's confirm on the exact Tier-2/Tier-3 split (default above holds unless he moves an item). — DA
+
 ---
 
 ### 2026-07-16 — FROM ENGINEER (Lane D / GoRefer161) — STATUS — live Zoho WRITE + READ HTTP bodies wired to the confirmed contract — PR #13 still HELD
@@ -2075,5 +2110,43 @@ One thing I had to fix: `test_m10_postgres_is_the_only_engine` hard-asserted `TE
 
 #### Where Lane D stands
 Pre-prod gates **all ✅** (format · retry/backfill · live verification). DF-2 ✅, DF-TESTDB ✅. Remaining Lane D options from your list: `fetch_referrer_history` is **already done** (shipped in my previous mission), leaving **Q-M-OTP-2** (client_id→channel READ wiring) as the only open optional. Prod flips still gated on P1 exit.
+
+— Engineer #2 (Lane D)
+
+---
+
+### 2026-07-16 — FROM ENGINEER (Lane D / GoRefer161) — STATUS — Admin Settings: integration flags as checkboxes — DONE — PR #13 still HELD
+
+**Built all 6 mission items. `ENABLE_WATI_SEND` / `ENABLE_ZOHO_WRITE` / `ENABLE_ZOHO_READ` are now flippable from Settings → Integrations, no `.env` edit, no redeploy. 349 tests pass (+23), ruff clean, no migration drift, **no new migration** (reuses `ConfigGlobal`). No flag flipped, nothing deployed, PR #13 held.**
+
+**Your safety note is verified, not assumed:** resolution is `ConfigGlobal override → env default`. A fresh install has **no override row**, so all three still resolve **OFF** exactly as before. There is a test asserting precisely that, because if it were wrong, merging this would silently arm real WhatsApp sends and real Zoho writes.
+
+#### Where the resolver lives, and why not the obvious places
+It is a new `apps/config/integration_flags.py`, **not** in `gorefer/flags.py` and **not** routed through `cascade.resolve()`. Both obvious homes are structurally impossible:
+- `flags.py` is deliberately **Django-free and frozen at import time** — it is imported *by* `settings`, so it cannot query the ORM.
+- `cascade.resolve()` itself **reads `flags.ENABLE_CUSTOMER_LOGIN`** — routing flag reads back through it would be circular.
+
+So the resolver reads the GLOBAL tier directly and falls back to the frozen env object. Two deliberate properties: **not cached** (a checkbox must take effect on the next request — caching reintroduces "redeploy to flip" in a subtler form), and **fail-safe** (any resolution error → env default, never an exception; an admin screen must not be able to take down the redirect path, and that direction can never silently turn an integration ON).
+
+#### The read-site audit (your item 3) — the part that could have quietly failed
+Three real gates rewired to the resolved value: `get_wati_adapter`, `get_zoho_adapter`, `get_zoho_read_adapter` — plus the Q-M-OTP-2 stub, so wiring it later inherits the right gate rather than the old one. **A raw-env read at any gate would make the checkbox a LIE** — an operator seeing "off" while the system kept sending. There is a mutation-checked test per gate. Every other `ENABLE_*` mention is a log string or docstring, not a gate.
+
+**A pre-existing bug fell out of the audit:** `wati/webhook.py` logged `getattr(settings, "ENABLE_ZOHO_WRITE", False)`, which **always printed `False`** — it is a flag, not a Django setting, so the `getattr` never found it. Log-only (it gated nothing), but it would have actively misled anyone debugging a write. Fixed to report the effective value.
+
+#### Confirm-gate (your item 4) — enforced server-side, deliberately asymmetric
+The dialog is UI convenience; the gate is re-checked in `save_preferences`, so a hand-rolled POST or a JS-off browser **cannot** start real sends. Asymmetry is intentional and tested:
+- **OFF→ON** is gated (the irreversible direction: real WhatsApp to real people, real leads in the CRM).
+- **ON→OFF is never gated** — that is the kill switch; an operator hitting a live problem must not have to clear a dialog first.
+- **Already-on is not a transition**, so it isn't re-gated (otherwise every unrelated save would nag, or worse, silently switch sending off).
+A refused toggle **returns a notice** rather than silently no-op'ing.
+
+Screen shows each flag's **effective value AND source** (admin override vs env default) — "off, untouched" and "off, admin turned it off" look identical on a switch but behave differently on the next deploy; only the first moves with env. **Only the 3** are exposed; `ENABLE_CUSTOMER_LOGIN`/`ENABLE_OTP_LOGIN` stay out (Constitution §4), asserted by a test.
+
+#### Proof
+- **Mutation-checked:** a gate reverting to raw env → fails; the confirm-gate removed → 3 fail; the gate wrongly applied to the OFF direction (breaking the kill switch) → 2 fail. Restored → 23/23.
+- **I broke 4 existing tests and fixed them, flagging it here rather than burying it:** 3 adapter-selection tests + the OTP `_set_flags` helper patched the old env/frozen-flags seam, which no longer gates. Their intent (flag on ⇒ live adapter ⇒ fails loud without creds) is preserved, repointed at the resolver. The OTP guardrails **caught the breakage** — worth knowing they earn their keep.
+- Full suite **349 passed**, ruff clean, no drift. `.env.example` now warns that these three are the *default* only and an override wins.
+
+**QUESTION (non-blocking):** the override is stored at the **GLOBAL (tenant) tier**, so it is per-tenant — correct for a multi-tenant future, but it means these are *tenant* switches, not process-wide ones. With one tenant (PIFS) that is indistinguishable today. Flagging in case you intended a truly global kill switch; if so, a central-tier row would be the change.
 
 — Engineer #2 (Lane D)
