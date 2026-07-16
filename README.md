@@ -109,6 +109,22 @@ npm run build:css      # compile static/css/app.css (purged from templates/); re
 
 HTMX is vendored at `static/js/htmx.min.js`; the compiled CSS is `static/css/app.css`. Both are committed so the app runs without Node at runtime; rebuild the CSS whenever templates change (a test asserts the asset exists).
 
+**Inter is self-hosted** at `static/fonts/inter-latin-var.woff2` (one variable woff2, latin subset, covers weights 400–800). Pages load **no third-party origin at all** — no `fonts.googleapis.com`, no CDN. This is not only a privacy/offline preference: a render-blocking stylesheet on a third-party origin leaves the document loading forever on any network that *blackholes* that origin (the request neither completes nor fails), so the page never reaches "idle" and browser automation cannot read or fill it. `tests/test_no_third_party_origin.py` fails if a cross-origin `<link>`/`<script>` is reintroduced on a public page.
+
+**Operator commands (no browser needed):**
+
+```bash
+# Run the FULL capture loop end-to-end and print a structured report.
+# Uses the real service layer and honors the live flags: with the integration flags
+# OFF this is log-only (zero network, zero live effect). Idempotent — re-running with
+# the same mobile updates rather than duplicating. Never fabricates account status.
+python manage.py golive_smoke --referrer EKU497 --mobile 9876543210 [--name X] [--email Y] [--json]
+
+# Flip the landing mode without the Preferences screen (same config path the UI uses).
+# `direct` is refused (non-zero exit) unless a live /d/{slug} disclosure page exists — ADR-032.
+python manage.py set_landing_mode page|direct [--tenant pifs]
+```
+
 **Tests + lint** (run against Postgres `gorefer_test`; CI runs the same against a Postgres service container):
 
 ```bash
