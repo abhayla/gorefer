@@ -117,9 +117,15 @@ def process_assisted_capture(request, payload: dict) -> dict:
         submitted_by="referrer",
         lead_source=LEAD_SOURCE_ASSISTED,
     )
+    # NB: this log line previously read `getattr(settings, "ENABLE_ZOHO_WRITE", False)`,
+    # which ALWAYS logged False — ENABLE_ZOHO_WRITE is a flag, not a Django setting, so
+    # the getattr never found it. Log-only (it gated nothing), but it would have
+    # actively misled anyone debugging a write. Now reports the effective value.
+    from apps.config.integration_flags import ENABLE_ZOHO_WRITE, resolve_flag
+
     logger.info(
         "assisted capture -> lead %s (referrer=%s, consent=%s, zoho_write=%s)",
-        lead.pk, client_id, consent, getattr(settings, "ENABLE_ZOHO_WRITE", False),
+        lead.pk, client_id, consent, resolve_flag(ENABLE_ZOHO_WRITE),
     )
     return {
         "status": "ok",

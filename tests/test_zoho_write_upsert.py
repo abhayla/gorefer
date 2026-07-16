@@ -388,15 +388,14 @@ def test_flag_off_selects_log_only_adapter_and_sends_nothing():
 
 def test_flag_on_selects_live_adapter(monkeypatch):
     """Flipping the flag must select the LIVE adapter — proving the flag is the only
-    thing standing between demo and a real write (and that it fails loud w/o creds)."""
-    import dataclasses
+    thing standing between demo and a real write (and that it fails loud w/o creds).
 
-    from gorefer.flags import flags as live_flags
-
-    # flags is a FROZEN dataclass — swap in a modified copy rather than mutate.
+    Patches the RESOLVER rather than the frozen `flags` object: the selector now reads
+    the EFFECTIVE flag (admin Settings override -> env default), so that is where the
+    decision is made. Intent unchanged — flag on => live adapter => fails loud.
+    """
     monkeypatch.setattr(
-        "apps.integrations.zoho.adapter.flags",
-        dataclasses.replace(live_flags, ENABLE_ZOHO_WRITE=True),
+        "apps.config.integration_flags.resolve_flag", lambda key, **kw: True
     )
     for k in ("ZOHO_CLIENT_ID", "ZOHO_CLIENT_SECRET", "ZOHO_REFRESH_TOKEN"):
         monkeypatch.delenv(k, raising=False)

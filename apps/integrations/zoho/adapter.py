@@ -34,7 +34,6 @@ from dataclasses import dataclass, field
 
 from apps.common.phone import to_zoho_mobile
 from apps.integrations.zoho.client import ZohoHttpClient
-from gorefer.flags import flags
 
 logger = logging.getLogger("gorefer.zoho")
 
@@ -224,6 +223,13 @@ class LiveZohoAdapter:
 
 
 def get_zoho_adapter():
-    if flags.ENABLE_ZOHO_WRITE:
+    """Select the write adapter from the EFFECTIVE flag (admin override -> env default).
+
+    Not `flags.ENABLE_ZOHO_WRITE` directly: the Settings checkbox owns this now, and a
+    raw-env read would make the checkbox a lie.
+    """
+    from apps.config.integration_flags import ENABLE_ZOHO_WRITE, resolve_flag
+
+    if resolve_flag(ENABLE_ZOHO_WRITE):
         return LiveZohoAdapter()
     return LogOnlyZohoAdapter()

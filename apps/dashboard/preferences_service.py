@@ -22,6 +22,13 @@ from django.utils.text import slugify
 
 from apps.config import preferences as prefkeys
 from apps.config.cascade import set_tenant
+from apps.config.integration_flags import (
+    INTEGRATION_FLAG_KEYS,
+    INTEGRATION_FLAG_META,
+    RISKY_FLAG_KEYS,
+    integration_flags_view,
+    resolve_flag,
+)
 from apps.referrals.landing_mode import (
     LANDING_MODE_DIRECT,
     LANDING_MODE_PAGE,
@@ -58,11 +65,52 @@ def current_view(tenant) -> dict:
         "channel_choices": SHARE_CHANNEL_CHOICES,
         "regulator_choices": REGULATOR_CHOICES,
         "partnerships": list_partnerships(tenant),
+        # Integration flags as checkboxes (Abhay request 2026-07-16): the P3 "flip" is
+        # a UI action, not a redeploy. Each row carries its effective value AND its
+        # source (admin override vs env default) — "off because untouched" and "off
+        # because an admin turned it off" look identical otherwise, but a deploy moves
+        # only the first.
+        "integration_flags": integration_flags_view(tenant_id),
         # OTP config surface (Q-M-OTP) — the admin picks channel/order/limits here.
         "otp_enabled": flags.ENABLE_OTP_LOGIN,
         "otp_channel_choices": prefkeys.OTP_CHANNEL_CHOICES,
         "otp_fallback_selected": prefs[prefkeys.OTP_FALLBACK_CHANNELS],
     }
+
+
+def _save_integration_flags(data, *, tenant_id: int, user=None) -> list[str]:
+    """Persist the three integration checkboxes. Returns notices.
+
+    Confirm-gate: turning one of the RISKY flags (WhatsApp send / Zoho write) from OFF
+    to ON requires the matching `confirm_<name>` to be present, which the UI attaches
+    only after the operator accepts the dialog. Without the confirmation the flag is
+    LEFT AS IT WAS and a notice explains why.
+
+    Deliberate asymmetry — the gate applies ONLY to off->on:
+      - turning something ON starts real outbound effects (real WhatsApp to real
+        people, real leads into the CRM), which is the irreversible direction;
+      - turning it OFF is the safe direction and must never be blocked — an operator
+        hitting a live problem should be able to stop sending instantly.
+      - already-on staying on is not a transition, so it isn't re-gated.
+    """
+    notices: list[str] = []
+    for key in INTEGRATION_FLAG_KEYS:
+        field = key.lower()
+        requested = _checkbox(data, field)
+        current = resolve_flag(key, tenant_id=tenant_id)
+
+        turning_on = requested and not current
+        if turning_on and key in RISKY_FLAG_KEYS and not _checkbox(data, f"confirm_{field}"):
+            notices.append(
+                f"“{INTEGRATION_FLAG_META[key]['label']}” was NOT turned on — "
+                "confirmation is required before real messages/leads start going out."
+            )
+            continue  # leave the stored state untouched
+
+        set_tenant(key, requested, tenant_id=tenant_id, user=user)
+        if turning_on and key in RISKY_FLAG_KEYS:
+            notices.append(f"“{INTEGRATION_FLAG_META[key]['label']}” is now ON — this is live.")
+    return notices
 
 
 def list_partnerships(tenant) -> list[dict]:
@@ -157,6 +205,9 @@ def save_preferences(tenant, data, *, user=None) -> list[str]:
         tenant_id=tenant_id,
         user=user,
     )
+
+    # --- Integration flags (WATI send / Zoho write / Zoho read) ------------------
+    notices.extend(_save_integration_flags(data, tenant_id=tenant_id, user=user))
 
     # --- OTP login channel (Q-M-OTP) — config-over-code: swap channel/order/limits
     # here, no deploy. Persisted at the tenant tier of the same cascade the OtpService

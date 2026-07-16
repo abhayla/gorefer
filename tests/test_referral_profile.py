@@ -223,7 +223,15 @@ def test_zoho_read_field_name_normalization(db):
 
 def test_zoho_read_live_adapter_selected_when_flag_on(db, monkeypatch):
     """With ENABLE_ZOHO_READ on but no creds, the LIVE adapter is selected and
-    refuses to run (never silently falls back to fixtures)."""
+    refuses to run (never silently falls back to fixtures).
+
+    Patches the RESOLVER, not the env: the selector now reads the effective flag
+    (admin override -> env default) so the Settings checkbox governs it. Intent of
+    this test is unchanged — flag on => live adapter => fails loud without creds.
+    """
+    monkeypatch.setattr(
+        "apps.config.integration_flags.resolve_flag", lambda key, **kw: True
+    )
     monkeypatch.setenv("ENABLE_ZOHO_READ", "true")
     monkeypatch.delenv("ZOHO_CLIENT_ID", raising=False)
     monkeypatch.delenv("ZOHO_CLIENT_SECRET", raising=False)
