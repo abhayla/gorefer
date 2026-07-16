@@ -1999,6 +1999,30 @@ Abhay: don't limit the settings screen to the 3 integration flags — expose the
 
 Each tier is a cascade layer: user override → global/admin → env/central default. Build Tier 2 live; wire Tier 3 behind the customer-login gate so it activates the instant that flag flips. Pending Abhay's confirm on the exact Tier-2/Tier-3 split (default above holds unless he moves an item). — DA
 
+### 2026-07-16 — FROM DA — ANSWER (tier question) + settings-flags build ACCEPTED
+
+**Build accepted** — the 3 integration flags now flippable from Settings → Integrations via the config cascade; 349 tests, mergeable, PR #13 held, resolves OFF on a fresh install (verified, not assumed). Good catches: the fail-safe resolver direction (any error → env default, never silently ON), the asymmetric confirm-gate (OFF→ON gated, ON→OFF never — the kill switch shouldn't need a dialog), and the pre-existing `wati/webhook.py` `getattr(settings,"ENABLE_ZOHO_WRITE")` always-False log bug (fixed). The 4 repointed tests + OTP guardrails catching the stale env seam = correct.
+
+**ANSWER to Q — tenant tier vs central tier:** **Keep the override at GLOBAL/tenant tier — that's correct, do not change it.** Per the multi-tenant vision ([[gorefer-config-hierarchy]]: AngelOne = tenant #2 later), each broker MUST control its own integrations independently; a process-wide flag would wrongly couple Zerodha's and AngelOne's sends. The **un-gated per-tenant OFF toggle already serves as the instant kill switch** for that tenant, which covers the emergency-stop case. Do NOT add a central-tier row now. If a *cross-tenant emergency master-stop* is ever wanted, that's a separate central-tier kill-switch that trumps tenant overrides — logging it as backlog **DF-CENTRAL-KILL (P3, multi-tenant)**, not now.
+
+**Merge gate reminder:** PR #13 now carries WRITE Model 2 + retry + settings. It stays HELD until the **live Zoho WRITE/READ verification** (the sandbox run against real creds) is reported — that result was NOT in the settings summary, so confirm it ran before any merge.
+
+**Next settings mission = build ON this, don't redo it:** the 3 flags are done. Remaining Tier-2 controls to add (same cascade + Settings screen): `REFERRAL_INCENTIVE_CLAIM` editable text (admin-only), default `LANDING_MODE` selector, WhatsApp notification-routing toggles (Ashok / new-person / referrer). Plus STAGE Tier-3 (per-referrer landing_mode override, notification on/off, language, promo opt-out) behind `ENABLE_CUSTOMER_LOGIN`. — DA
+
+### 2026-07-16 — FROM DA → Engineer #2 — MISSION — Merge PR #13 + deploy to prod (Abhay: GO, don't wait on delivery numbers)
+
+Abhay authorized the merge + deploy. Deliverability gate waived (today's first live day was clean; numbers only improve from the ~50% baseline).
+
+**Do:**
+1. Merge `feature/q-lane-d-zoho-write` (**PR #13**, 16 commits: WRITE Model 2 + retry + DF-2 + settings + test-DB) → `main`. Full suite must be green on `main` post-merge (349).
+2. Deploy `main` to the **Hostinger VPS `72.61.240.224`** per `docs/deploy/DEPLOY-TARGET.md` (authoritative target — NOT the local box).
+3. **Flags stay at env defaults = all integration flags OFF.** A fresh deploy resolves OFF, so the deploy itself changes NO behaviour. The go-live is the subsequent flag flip, which Abhay does via **Settings → Integrations** — do NOT flip them from the backend.
+4. Set **`WATI_WEBHOOK_KEY`** on the prod `.env` from `GLOBAL.env`'s `WATI_WEBHOOK_SECRET` (needed for assisted-capture). Keep **`ENABLE_ZOHO_WEBHOOK_HMAC` OFF** until the Zoho-side Deluge signer is deployed (else it 401s every real webhook).
+5. Verify LIVE through the Cloudflare edge (`server: cloudflare`, `cf-ray`): referral redirect + landing + admin + Settings→Integrations reachable; guardrails hold; prod flag state confirmed **all OFF**.
+6. Report `DEPLOYED_SHA` + prod flag state + confirm the checkboxes render. Do NOT flip integration flags.
+
+**DA note on Abhay's standing rule:** prod merges normally pass an **independent verification** (separate session runs the suite + prod black-box) before merge. Recommending it here on 16 commits; Abhay to decide run-parallel vs skip given his GO. — DA
+
 ---
 
 ### 2026-07-16 — FROM ENGINEER (Lane D / GoRefer161) — STATUS — live Zoho WRITE + READ HTTP bodies wired to the confirmed contract — PR #13 still HELD
@@ -2148,5 +2172,44 @@ Screen shows each flag's **effective value AND source** (admin override vs env d
 - Full suite **349 passed**, ruff clean, no drift. `.env.example` now warns that these three are the *default* only and an override wins.
 
 **QUESTION (non-blocking):** the override is stored at the **GLOBAL (tenant) tier**, so it is per-tenant — correct for a multi-tenant future, but it means these are *tenant* switches, not process-wide ones. With one tenant (PIFS) that is indistinguishable today. Flagging in case you intended a truly global kill switch; if so, a central-tier row would be the change.
+
+— Engineer #2 (Lane D)
+
+---
+
+### 2026-07-16 — FROM ENGINEER (Lane D / GoRefer161) — STATUS — Settings Tier-2 (notification routing) + staged Tier-3 (referrer defaults) — DONE + 1 QUESTION — PR #13 still HELD
+
+**Built on the existing screen, did not rebuild the 3 flags. Kept the override at GLOBAL/tenant tier per your answer. 364 tests pass (+15), ruff clean, no migration drift (reuses `ConfigGlobal`). No flag flipped, nothing deployed, PR #13 held.**
+
+**First, your merge-gate reminder:** the live Zoho WRITE/READ verification DID run and is green — my STATUS is on disk at COORDINATION line ~2019 (2026-07-16, "✅ LIVE VERIFICATION GREEN"): insert→update same id `475281000041506003`, READ `EKU497` → `Account_Opened_On=2026-07-09`, test lead deleted (HTTP 200), no `OAUTH_SCOPE_MISMATCH`. It just landed *before* the settings entries in the file order. So gate (c) is satisfied.
+
+#### ⚠️ QUESTION — Tier-2 item "REFERRAL_INCENTIVE_CLAIM as editable text" collides with the compliance lock
+
+I did **not** make `REFERRAL_INCENTIVE_CLAIM` tenant-editable, because doing so would break a **locked** decision, and CLAUDE.md §3 says surface-don't-guess. The facts:
+
+- `referral_incentive_claim` is in **`COMPLIANCE_LOCKED_KEYS`** (`apps/config/models.py:20`). The cascade's `set_tenant()` **raises `ComplianceLockedKeyError`** on it by design — a lower tier can never write it.
+- **ADR-014 and ADR-022 state this three times**, verbatim: *"compliance cannot be weakened or removed by lower config tiers (ADR-022 compliance lock)."* The "10% brokerage" claim is live-but-**revocable** (NSE ban in abeyance) — the lock is what stops a tenant editing it into something non-compliant.
+- **The admin-editable claim field you're describing ALREADY EXISTS on this screen.** It's `referrer_reward_claim` (an *unlocked* key), rendered as "Reward claim text" (`templates/dashboard/preferences.html:85`), admin-only, cascade-backed, gated by the `share_show_reward` toggle. The referral views already prefer it over the locked central copy (`referrals/views.py:128`).
+
+So the architecture deliberately has **two** keys: the locked central audit copy (`referral_incentive_claim`) and the tenant-editable display text (`referrer_reward_claim`). My read is that **the intent is already met** by the existing field, and the mission line just named the locked key by its `flags.py` name.
+
+**Options:**
+1. **Nothing to do — the existing `referrer_reward_claim` field IS the admin-editable claim.** (My recommendation. I can relabel it on the screen if the wording is unclear.)
+2. You want the *central* `referral_incentive_claim` editable too — that requires **unlocking a compliance key**, which is an ADR-014/022 amendment and your call, not mine. If so, say the word and I'll draft the ADR delta + a heavily-gated central-tier editor (with a compliance-review interstitial), not a plain text box.
+
+**I left it as option 1 and moved on.** The other two Tier-2 items were also already built (the default `LANDING_MODE` selector exists from Q-M-PREF), so the genuinely new Tier-2 work was the routing toggles.
+
+#### Tier 2 — WhatsApp notification routing (office / prospect / referrer)
+- Defaults **ON** for all three → adding the toggles changes nothing until an admin flips one (today all three fire).
+- **Suppression-only, and this is the load-bearing property:** routing is checked LAST in `notify.py`, so it can *add* a skip but never *clear* one. An opted-out prospect and an unknown referrer phone still skip whatever the toggle says. **Mutation-checked** — making routing clobber the opt-out fails the suite. A checkbox that could message an opted-out person would be a compliance bug (BR-008/A4), not a feature.
+- A routed-off role is recorded **skipped with a reason**, never omitted — the funnel still shows it didn't go and why.
+
+#### Tier 3 — per-referrer defaults (landing_mode / notifications / language / promo opt-out)
+- **Hidden AND inert**, not merely hidden: they resolve at the cascade's **user tier**, which `resolve()` only consults when `ENABLE_CUSTOMER_LOGIN` is on. Flag off → they fall through to the tenant default no matter what a user row holds. The screen also **refuses to write** them while the flag is off (a row nobody can reach, that the dormant tier can't read, is invisible + inert = silently misleading). **Mutation-checked** — writing them with the flag off fails the suite.
+- Per-referrer `direct` is **re-checked against the ADR-032 coupling** on save, so it can't be a side door to `direct` without a live /d/{slug}. Unknown language/mode fall back (en / inherit), never guess.
+
+#### Proof
+- Mutation-checked (both properties above). Full suite **364 passed**, ruff clean, no drift.
+- Admin-only + anonymous-blocked tested for both tiers. Tier-3 hidden-until-login tested both directions.
 
 — Engineer #2 (Lane D)
