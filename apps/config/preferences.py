@@ -25,6 +25,45 @@ WATI_BUSINESS_NUMBER = "wati_business_number"
 SHARE_CHANNELS_ALLOWLIST = "share_channels_allowlist"
 ENABLE_ASSISTED_REFERRAL = "enable_assisted_referral"
 
+# --- WhatsApp notification routing (Tier 2, admin) ---------------------------------
+# Which of the three lead-time notifications actually go out (doc-08 A6 a/b/c).
+# Routing only: turning one OFF suppresses that recipient; it never changes WHAT is
+# sent, and it never overrides the harder gates that already exist upstream —
+# ENABLE_WATI_SEND (log-only when off), opt-out state, and "referrer phone unknown ⇒
+# skip, never guess". This is the admin saying "don't route this one", not a way to
+# force a send past a suppression.
+NOTIFY_OFFICE = "notify_office"      # (a) Ashok / the office alert
+NOTIFY_PROSPECT = "notify_prospect"  # (b) the new person (warm UTILITY, opt-in-aware)
+NOTIFY_REFERRER = "notify_referrer"  # (c) the referrer thank-you (only if phone known)
+
+# Role code -> routing key. The roles match notify.queue_lead_notifications, so a new
+# recipient is a row here + a notify call, not a new branch in the screen.
+NOTIFY_ROLE_KEYS = {
+    "office": NOTIFY_OFFICE,
+    "prospect": NOTIFY_PROSPECT,
+    "referrer": NOTIFY_REFERRER,
+}
+
+# --- Per-referrer (Tier 3) — STAGED, dormant until ENABLE_CUSTOMER_LOGIN ----------
+# These resolve at the USER tier of the cascade (ADR-022), which the resolver only
+# consults when ENABLE_CUSTOMER_LOGIN is on — so they are inert today by construction,
+# not merely hidden. The screen renders them only when that flag is on (Constitution
+# §4: no dead UI). Defaults below are what every referrer gets until they choose.
+REFERRER_LANDING_MODE = "referrer_landing_mode"        # "" = inherit the tenant default
+REFERRER_NOTIFICATIONS_ON = "referrer_notifications_on"
+REFERRER_LANGUAGE = "referrer_language"
+REFERRER_PROMO_OPT_OUT = "referrer_promo_opt_out"
+
+LANG_EN = "en"
+LANG_HI = "hi"
+REFERRER_LANGUAGE_CHOICES = [(LANG_EN, "English"), (LANG_HI, "Hindi")]
+_VALID_LANGUAGES = {code for code, _ in REFERRER_LANGUAGE_CHOICES}
+
+# A referrer may only pick a landing mode the TENANT allows; "" means inherit. The
+# ADR-032 coupling (direct needs a live /d/{slug}) is a tenant-level fact, so a
+# per-referrer `direct` can never bypass it — it is re-checked on resolve.
+REFERRER_LANDING_INHERIT = ""
+
 # --- OTP login keys (Q-M-OTP) — per-tenant, cascade-resolved, edited on the screen.
 # The "very easily configurable for admin" requirement: swap the OTP channel/order/
 # template/limits through Preferences with NO deploy (config-over-code). The master
@@ -71,6 +110,17 @@ def central_defaults() -> dict:
         WATI_BUSINESS_NUMBER: settings.WATI_BUSINESS_NUMBER,
         SHARE_CHANNELS_ALLOWLIST: DEFAULT_SHARE_CHANNELS,
         ENABLE_ASSISTED_REFERRAL: False,
+        # Notification routing defaults to ON for all three — this mirrors today's
+        # behaviour exactly (doc-08 A6 fires all three), so adding the toggles changes
+        # nothing until an admin turns one off.
+        NOTIFY_OFFICE: True,
+        NOTIFY_PROSPECT: True,
+        NOTIFY_REFERRER: True,
+        # Tier-3 per-referrer defaults (dormant until ENABLE_CUSTOMER_LOGIN).
+        REFERRER_LANDING_MODE: REFERRER_LANDING_INHERIT,  # inherit the tenant default
+        REFERRER_NOTIFICATIONS_ON: True,
+        REFERRER_LANGUAGE: LANG_EN,
+        REFERRER_PROMO_OPT_OUT: False,
         # OTP defaults (Q-M-OTP) — WhatsApp/Wati primary, manual fallback until SMS
         # provider is chosen. Behaviour identical to the spec defaults until an admin
         # overrides through the screen.
@@ -122,6 +172,42 @@ def _as_channel_list(value) -> list[str]:
     return [c for c in items if c in _VALID_OTP_CHANNELS]
 
 
+def notification_routing(tenant_id: int | None) -> dict:
+    """Role code -> whether that lead-time notification is routed (Tier 2).
+
+    Consumed by notify.queue_lead_notifications. A role that is OFF is recorded as
+    skipped with a reason (never silently dropped) — the funnel must still show that
+    the message did not go, and why.
+    """
+    prefs = get_preferences(tenant_id)
+    return {role: bool(prefs[key]) for role, key in NOTIFY_ROLE_KEYS.items()}
+
+
+def get_referrer_preferences(tenant_id: int | None, user_id: int | None) -> dict:
+    """Resolve the Tier-3 per-referrer settings through the USER tier of the cascade.
+
+    Inert by construction, not merely hidden: `cascade.resolve()` only consults the
+    user tier when ENABLE_CUSTOMER_LOGIN is on, so with the flag off every key here
+    falls through to the tenant/central default no matter what a user row says. That
+    is the guarantee that staging this now cannot change Sprint-1 behaviour.
+    """
+    defaults = central_defaults()
+
+    def r(key):
+        return resolve(key, tenant_id=tenant_id, user_id=user_id, default=defaults[key])
+
+    mode = str(r(REFERRER_LANDING_MODE) or "").strip().lower()
+    if mode not in {"page", "direct", REFERRER_LANDING_INHERIT}:
+        mode = REFERRER_LANDING_INHERIT  # unknown value => inherit, never guess
+    lang = str(r(REFERRER_LANGUAGE) or "").strip().lower()
+    return {
+        REFERRER_LANDING_MODE: mode,
+        REFERRER_NOTIFICATIONS_ON: _as_bool(r(REFERRER_NOTIFICATIONS_ON)),
+        REFERRER_LANGUAGE: lang if lang in _VALID_LANGUAGES else LANG_EN,
+        REFERRER_PROMO_OPT_OUT: _as_bool(r(REFERRER_PROMO_OPT_OUT)),
+    }
+
+
 def get_preferences(tenant_id: int | None) -> dict:
     """Resolve every preference key for a tenant through the cascade (typed).
 
@@ -151,6 +237,16 @@ def get_preferences(tenant_id: int | None) -> dict:
         SHARE_CHANNELS_ALLOWLIST: list(channels),
         ENABLE_ASSISTED_REFERRAL: _as_bool(
             resolve(ENABLE_ASSISTED_REFERRAL, tenant_id=tenant_id, default=defaults[ENABLE_ASSISTED_REFERRAL])
+        ),
+        # Notification routing (Tier 2) — which of the three recipients are routed.
+        NOTIFY_OFFICE: _as_bool(
+            resolve(NOTIFY_OFFICE, tenant_id=tenant_id, default=defaults[NOTIFY_OFFICE])
+        ),
+        NOTIFY_PROSPECT: _as_bool(
+            resolve(NOTIFY_PROSPECT, tenant_id=tenant_id, default=defaults[NOTIFY_PROSPECT])
+        ),
+        NOTIFY_REFERRER: _as_bool(
+            resolve(NOTIFY_REFERRER, tenant_id=tenant_id, default=defaults[NOTIFY_REFERRER])
         ),
         # OTP (Q-M-OTP) — the same cascade the screen writes, so a saved override
         # takes effect immediately with no deploy.

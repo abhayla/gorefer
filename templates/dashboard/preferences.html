@@ -129,6 +129,79 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
       </div>
     </div>
 
+    {# ---- WhatsApp notifications (routing) ------------------------------- #}
+    {% comment %}
+    Routing only: turning one off suppresses that recipient. It can never force a
+    send past an existing suppression — an opted-out prospect, an unknown referrer
+    phone, or ENABLE_WATI_SEND being off all still win.
+    {% endcomment %}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">WhatsApp notifications</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">
+      <div class="flex items-start justify-between gap-4 py-1.5">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">Alert the office (Ashok)</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">New-lead alert so the call can go out immediately.</div>
+        </div>
+        {% include "dashboard/partials/pref_toggle.html" with name="notify_office" on=prefs.notify_office %}
+      </div>
+      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">Welcome the new person</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">Warm notice naming the referrer. Opted-out people are never messaged, whatever this says.</div>
+        </div>
+        {% include "dashboard/partials/pref_toggle.html" with name="notify_prospect" on=prefs.notify_prospect %}
+      </div>
+      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">Thank the referrer</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">Sent only when the referrer’s phone is already known — never guessed.</div>
+        </div>
+        {% include "dashboard/partials/pref_toggle.html" with name="notify_referrer" on=prefs.notify_referrer %}
+      </div>
+    </div>
+
+    {# ---- Referrer defaults (Tier 3) — only when customer login is on ----- #}
+    {% if customer_login_enabled %}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Referrer defaults</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">
+      <div class="py-1.5">
+        <div class="text-[13.5px] font-semibold">Default landing mode for referrers</div>
+        <div class="text-[11.5px] text-ink-500 mt-0.5">What a referrer gets until they choose their own.</div>
+        <select name="referrer_landing_mode"
+                class="mt-2 rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none">
+          <option value="" {% if not referrer_defaults.referrer_landing_mode %}selected{% endif %}>Inherit the tenant default</option>
+          <option value="page" {% if referrer_defaults.referrer_landing_mode == 'page' %}selected{% endif %}>Show landing page</option>
+          <option value="direct" {% if referrer_defaults.referrer_landing_mode == 'direct' %}selected{% endif %}
+                  {% if not direct_allowed %}disabled{% endif %}>Direct to Zerodha</option>
+        </select>
+      </div>
+      <div class="py-1.5 border-t border-line">
+        <div class="text-[13.5px] font-semibold">Default language</div>
+        <div class="text-[11.5px] text-ink-500 mt-0.5">Language a referrer’s messages default to.</div>
+        <select name="referrer_language"
+                class="mt-2 rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none">
+          {% for code, label in referrer_language_choices %}
+            <option value="{{ code }}" {% if referrer_defaults.referrer_language == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">Referrer notifications on</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">Whether referrers get updates about their referrals by default.</div>
+        </div>
+        {% include "dashboard/partials/pref_toggle.html" with name="referrer_notifications_on" on=referrer_defaults.referrer_notifications_on %}
+      </div>
+      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">Opt out of promotional nudges</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">Transactional messages are unaffected.</div>
+        </div>
+        {% include "dashboard/partials/pref_toggle.html" with name="referrer_promo_opt_out" on=referrer_defaults.referrer_promo_opt_out %}
+      </div>
+    </div>
+    {% endif %}
+
     {# ---- Integrations (live on/off) ------------------------------------- #}
     {% comment %}
     Each row shows the EFFECTIVE value and where it came from. Source matters:

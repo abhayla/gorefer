@@ -71,11 +71,62 @@ def current_view(tenant) -> dict:
         # because an admin turned it off" look identical otherwise, but a deploy moves
         # only the first.
         "integration_flags": integration_flags_view(tenant_id),
+        # Tier-3 per-referrer settings are STAGED: rendered only when customer login is
+        # on, because until then a referrer has no way to reach a screen to set them —
+        # showing the controls would be dead UI (Constitution §4). The keys resolve at
+        # the cascade's USER tier, which is itself dormant behind the same flag, so
+        # this is a real gate, not just a hidden div.
+        "customer_login_enabled": flags.ENABLE_CUSTOMER_LOGIN,
+        "referrer_defaults": prefkeys.get_referrer_preferences(tenant_id, None),
+        "referrer_language_choices": prefkeys.REFERRER_LANGUAGE_CHOICES,
         # OTP config surface (Q-M-OTP) — the admin picks channel/order/limits here.
         "otp_enabled": flags.ENABLE_OTP_LOGIN,
         "otp_channel_choices": prefkeys.OTP_CHANNEL_CHOICES,
         "otp_fallback_selected": prefs[prefkeys.OTP_FALLBACK_CHANNELS],
     }
+
+
+def _save_referrer_defaults(data, *, tenant, tenant_id: int, user=None) -> list[str]:
+    """Persist the Tier-3 per-referrer DEFAULTS (staged; customer-login only).
+
+    These are the tenant-tier baseline every referrer inherits until they set their
+    own at the user tier (which the cascade only consults once ENABLE_CUSTOMER_LOGIN
+    is on). Stored at the GLOBAL tier for the same reason the integration flags are:
+    per-tenant, so AngelOne later never inherits Zerodha's choices.
+    """
+    notices: list[str] = []
+
+    # Landing mode: "" = inherit the tenant default. `direct` is re-checked against the
+    # ADR-032 coupling here — a per-referrer preference must never be a way to reach
+    # `direct` without a live /d/{slug}, which is the whole point of that gate.
+    mode = (data.get("referrer_landing_mode") or "").strip().lower()
+    if mode not in {LANDING_MODE_PAGE, LANDING_MODE_DIRECT, prefkeys.REFERRER_LANDING_INHERIT}:
+        mode = prefkeys.REFERRER_LANDING_INHERIT
+    if mode == LANDING_MODE_DIRECT and not has_live_disclosure_page(tenant):
+        mode = prefkeys.REFERRER_LANDING_INHERIT
+        notices.append(
+            "Referrer default “Direct to Zerodha” needs a live disclosure page "
+            "(/d/{slug}) first — kept “Inherit”."
+        )
+    set_tenant(prefkeys.REFERRER_LANDING_MODE, mode, tenant_id=tenant_id, user=user)
+
+    set_tenant(
+        prefkeys.REFERRER_NOTIFICATIONS_ON,
+        _checkbox(data, "referrer_notifications_on"),
+        tenant_id=tenant_id, user=user,
+    )
+
+    lang = (data.get("referrer_language") or "").strip().lower()
+    if lang not in {code for code, _ in prefkeys.REFERRER_LANGUAGE_CHOICES}:
+        lang = prefkeys.LANG_EN
+    set_tenant(prefkeys.REFERRER_LANGUAGE, lang, tenant_id=tenant_id, user=user)
+
+    set_tenant(
+        prefkeys.REFERRER_PROMO_OPT_OUT,
+        _checkbox(data, "referrer_promo_opt_out"),
+        tenant_id=tenant_id, user=user,
+    )
+    return notices
 
 
 def _save_integration_flags(data, *, tenant_id: int, user=None) -> list[str]:
@@ -205,6 +256,19 @@ def save_preferences(tenant, data, *, user=None) -> list[str]:
         tenant_id=tenant_id,
         user=user,
     )
+
+    # --- WhatsApp notification routing (Tier 2) ----------------------------------
+    # Which of the three lead-time notifications are routed. Suppression-only: an
+    # opted-out prospect or an unknown referrer phone still skips regardless.
+    for role, key in prefkeys.NOTIFY_ROLE_KEYS.items():
+        set_tenant(key, _checkbox(data, key), tenant_id=tenant_id, user=user)
+
+    # --- Per-referrer defaults (Tier 3) ------------------------------------------
+    # Only writable while customer login is on. Writing them otherwise would persist
+    # settings no referrer can reach or change — and the user tier that reads them is
+    # dormant anyway, so the rows would be invisible AND inert (silently misleading).
+    if flags.ENABLE_CUSTOMER_LOGIN:
+        notices.extend(_save_referrer_defaults(data, tenant=tenant, tenant_id=tenant_id, user=user))
 
     # --- Integration flags (WATI send / Zoho write / Zoho read) ------------------
     notices.extend(_save_integration_flags(data, tenant_id=tenant_id, user=user))
