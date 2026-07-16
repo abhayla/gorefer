@@ -22,13 +22,20 @@ from django.utils.text import slugify
 
 from apps.config import preferences as prefkeys
 from apps.config.cascade import set_tenant
+from apps.config.integration_flags import (
+    INTEGRATION_FLAG_KEYS,
+    INTEGRATION_FLAG_META,
+    RISKY_FLAG_KEYS,
+    integration_flags_view,
+    resolve_flag,
+)
 from apps.referrals.landing_mode import (
     LANDING_MODE_DIRECT,
     LANDING_MODE_PAGE,
     has_live_disclosure_page,
 )
 from apps.referrals.models import Partner, ReferralProgram
-from gorefer.flags import SHARE_CHANNEL_LABELS
+from gorefer.flags import SHARE_CHANNEL_LABELS, flags
 
 # Regulators an operator may attach a partnership for (matches ReferralProgram).
 REGULATOR_CHOICES = ReferralProgram.REGULATOR_CHOICES
@@ -58,7 +65,103 @@ def current_view(tenant) -> dict:
         "channel_choices": SHARE_CHANNEL_CHOICES,
         "regulator_choices": REGULATOR_CHOICES,
         "partnerships": list_partnerships(tenant),
+        # Integration flags as checkboxes (Abhay request 2026-07-16): the P3 "flip" is
+        # a UI action, not a redeploy. Each row carries its effective value AND its
+        # source (admin override vs env default) — "off because untouched" and "off
+        # because an admin turned it off" look identical otherwise, but a deploy moves
+        # only the first.
+        "integration_flags": integration_flags_view(tenant_id),
+        # Tier-3 per-referrer settings are STAGED: rendered only when customer login is
+        # on, because until then a referrer has no way to reach a screen to set them —
+        # showing the controls would be dead UI (Constitution §4). The keys resolve at
+        # the cascade's USER tier, which is itself dormant behind the same flag, so
+        # this is a real gate, not just a hidden div.
+        "customer_login_enabled": flags.ENABLE_CUSTOMER_LOGIN,
+        "referrer_defaults": prefkeys.get_referrer_preferences(tenant_id, None),
+        "referrer_language_choices": prefkeys.REFERRER_LANGUAGE_CHOICES,
+        # OTP config surface (Q-M-OTP) — the admin picks channel/order/limits here.
+        "otp_enabled": flags.ENABLE_OTP_LOGIN,
+        "otp_channel_choices": prefkeys.OTP_CHANNEL_CHOICES,
+        "otp_fallback_selected": prefs[prefkeys.OTP_FALLBACK_CHANNELS],
     }
+
+
+def _save_referrer_defaults(data, *, tenant, tenant_id: int, user=None) -> list[str]:
+    """Persist the Tier-3 per-referrer DEFAULTS (staged; customer-login only).
+
+    These are the tenant-tier baseline every referrer inherits until they set their
+    own at the user tier (which the cascade only consults once ENABLE_CUSTOMER_LOGIN
+    is on). Stored at the GLOBAL tier for the same reason the integration flags are:
+    per-tenant, so AngelOne later never inherits Zerodha's choices.
+    """
+    notices: list[str] = []
+
+    # Landing mode: "" = inherit the tenant default. `direct` is re-checked against the
+    # ADR-032 coupling here — a per-referrer preference must never be a way to reach
+    # `direct` without a live /d/{slug}, which is the whole point of that gate.
+    mode = (data.get("referrer_landing_mode") or "").strip().lower()
+    if mode not in {LANDING_MODE_PAGE, LANDING_MODE_DIRECT, prefkeys.REFERRER_LANDING_INHERIT}:
+        mode = prefkeys.REFERRER_LANDING_INHERIT
+    if mode == LANDING_MODE_DIRECT and not has_live_disclosure_page(tenant):
+        mode = prefkeys.REFERRER_LANDING_INHERIT
+        notices.append(
+            "Referrer default “Direct to Zerodha” needs a live disclosure page "
+            "(/d/{slug}) first — kept “Inherit”."
+        )
+    set_tenant(prefkeys.REFERRER_LANDING_MODE, mode, tenant_id=tenant_id, user=user)
+
+    set_tenant(
+        prefkeys.REFERRER_NOTIFICATIONS_ON,
+        _checkbox(data, "referrer_notifications_on"),
+        tenant_id=tenant_id, user=user,
+    )
+
+    lang = (data.get("referrer_language") or "").strip().lower()
+    if lang not in {code for code, _ in prefkeys.REFERRER_LANGUAGE_CHOICES}:
+        lang = prefkeys.LANG_EN
+    set_tenant(prefkeys.REFERRER_LANGUAGE, lang, tenant_id=tenant_id, user=user)
+
+    set_tenant(
+        prefkeys.REFERRER_PROMO_OPT_OUT,
+        _checkbox(data, "referrer_promo_opt_out"),
+        tenant_id=tenant_id, user=user,
+    )
+    return notices
+
+
+def _save_integration_flags(data, *, tenant_id: int, user=None) -> list[str]:
+    """Persist the three integration checkboxes. Returns notices.
+
+    Confirm-gate: turning one of the RISKY flags (WhatsApp send / Zoho write) from OFF
+    to ON requires the matching `confirm_<name>` to be present, which the UI attaches
+    only after the operator accepts the dialog. Without the confirmation the flag is
+    LEFT AS IT WAS and a notice explains why.
+
+    Deliberate asymmetry — the gate applies ONLY to off->on:
+      - turning something ON starts real outbound effects (real WhatsApp to real
+        people, real leads into the CRM), which is the irreversible direction;
+      - turning it OFF is the safe direction and must never be blocked — an operator
+        hitting a live problem should be able to stop sending instantly.
+      - already-on staying on is not a transition, so it isn't re-gated.
+    """
+    notices: list[str] = []
+    for key in INTEGRATION_FLAG_KEYS:
+        field = key.lower()
+        requested = _checkbox(data, field)
+        current = resolve_flag(key, tenant_id=tenant_id)
+
+        turning_on = requested and not current
+        if turning_on and key in RISKY_FLAG_KEYS and not _checkbox(data, f"confirm_{field}"):
+            notices.append(
+                f"“{INTEGRATION_FLAG_META[key]['label']}” was NOT turned on — "
+                "confirmation is required before real messages/leads start going out."
+            )
+            continue  # leave the stored state untouched
+
+        set_tenant(key, requested, tenant_id=tenant_id, user=user)
+        if turning_on and key in RISKY_FLAG_KEYS:
+            notices.append(f"“{INTEGRATION_FLAG_META[key]['label']}” is now ON — this is live.")
+    return notices
 
 
 def list_partnerships(tenant) -> list[dict]:
@@ -153,7 +256,73 @@ def save_preferences(tenant, data, *, user=None) -> list[str]:
         tenant_id=tenant_id,
         user=user,
     )
+
+    # --- WhatsApp notification routing (Tier 2) ----------------------------------
+    # Which of the three lead-time notifications are routed. Suppression-only: an
+    # opted-out prospect or an unknown referrer phone still skips regardless.
+    for role, key in prefkeys.NOTIFY_ROLE_KEYS.items():
+        set_tenant(key, _checkbox(data, key), tenant_id=tenant_id, user=user)
+
+    # --- Per-referrer defaults (Tier 3) ------------------------------------------
+    # Only writable while customer login is on. Writing them otherwise would persist
+    # settings no referrer can reach or change — and the user tier that reads them is
+    # dormant anyway, so the rows would be invisible AND inert (silently misleading).
+    if flags.ENABLE_CUSTOMER_LOGIN:
+        notices.extend(_save_referrer_defaults(data, tenant=tenant, tenant_id=tenant_id, user=user))
+
+    # --- Integration flags (WATI send / Zoho write / Zoho read) ------------------
+    notices.extend(_save_integration_flags(data, tenant_id=tenant_id, user=user))
+
+    # --- OTP login channel (Q-M-OTP) — config-over-code: swap channel/order/limits
+    # here, no deploy. Persisted at the tenant tier of the same cascade the OtpService
+    # reads, so a change takes effect immediately.
+    _save_otp(tenant_id, data, user=user)
     return notices
+
+
+def _save_otp(tenant_id, data, *, user=None) -> None:
+    """Persist the OTP config block (validated) to the tenant tier."""
+    # Primary channel — must be a known channel code, else keep the default.
+    primary = (data.get("otp_primary_channel") or "").strip().lower()
+    if primary in prefkeys._VALID_OTP_CHANNELS:
+        set_tenant(prefkeys.OTP_PRIMARY_CHANNEL, primary, tenant_id=tenant_id, user=user)
+
+    # Fallback channels — ordered, de-duplicated, validated, and never the primary.
+    submitted = (
+        data.getlist("otp_fallback_channels")
+        if hasattr(data, "getlist")
+        else data.get("otp_fallback_channels", [])
+    )
+    fallback: list[str] = []
+    for c in submitted:
+        c = (c or "").strip().lower()
+        if c in prefkeys._VALID_OTP_CHANNELS and c != primary and c not in fallback:
+            fallback.append(c)
+    set_tenant(prefkeys.OTP_FALLBACK_CHANNELS, fallback, tenant_id=tenant_id, user=user)
+
+    # Auth template name (free text — the Meta-approved AUTHENTICATION template).
+    template = (data.get("otp_whatsapp_template") or "").strip()
+    if template:
+        set_tenant(prefkeys.OTP_WHATSAPP_TEMPLATE, template, tenant_id=tenant_id, user=user)
+
+    # Numeric knobs — clamped to sane bounds so a bad admin entry can't disable OTP
+    # security (e.g. TTL=0 or attempts=0).
+    for key, field, lo, hi in (
+        (prefkeys.OTP_CODE_LENGTH, "otp_code_length", 4, 8),
+        (prefkeys.OTP_CODE_TTL_SECONDS, "otp_code_ttl_seconds", 60, 1800),
+        (prefkeys.OTP_MAX_VERIFY_ATTEMPTS, "otp_max_verify_attempts", 1, 10),
+        (prefkeys.OTP_RESEND_COOLDOWN_SECONDS, "otp_resend_cooldown_seconds", 0, 600),
+        (prefkeys.OTP_RATE_LIMIT_PER_IDENTITY_PER_HOUR, "otp_rate_limit_per_identity_per_hour", 1, 50),
+    ):
+        raw = data.get(field)
+        if raw is None or str(raw).strip() == "":
+            continue
+        try:
+            val = int(str(raw).strip())
+        except ValueError:
+            continue
+        val = max(lo, min(val, hi))
+        set_tenant(key, val, tenant_id=tenant_id, user=user)
 
 
 # ---------------------------------------------------------------- partnerships

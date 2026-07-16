@@ -20,7 +20,10 @@ class WatiAdapter(Protocol):
 
 
 class ZohoAdapter(Protocol):
-    def create_lead(self, *, payload: dict) -> dict: ...
+    # Model 2 (DA 2026-07-15): the lead write is an idempotent UPSERT keyed on the
+    # normalized mobile — never a blind create. See apps/integrations/zoho/adapter.py
+    # for the implementations selected by ENABLE_ZOHO_WRITE.
+    def upsert_lead(self, *, payload: dict, gorefer_reference: str) -> dict: ...
 
 
 class LogOnlyWatiAdapter:
@@ -32,8 +35,13 @@ class LogOnlyWatiAdapter:
 
 
 class LogOnlyZohoAdapter:
-    """Demo/dev adapter: logs the intended Zoho write, performs no network call."""
+    """Demo/dev adapter: logs the intended Zoho write, performs no network call.
 
-    def create_lead(self, *, payload: dict) -> dict:
-        logger.info("[demo] Zoho create_lead suppressed: payload=%s", payload)
+    NOTE: the adapter actually used by the lead pipeline is the one in
+    apps/integrations/zoho/adapter.py (which carries the Model 2 upsert + fixtures).
+    This M1-skeleton stub remains only as the doc-08 interface reference.
+    """
+
+    def upsert_lead(self, *, payload: dict, gorefer_reference: str = "") -> dict:
+        logger.info("[demo] Zoho upsert_lead suppressed: payload=%s", payload)
         return {"status": "suppressed", "reason": "ENABLE_ZOHO_WRITE=false"}

@@ -22,8 +22,6 @@ import logging
 import os
 from dataclasses import dataclass
 
-from gorefer.flags import flags
-
 from . import status
 
 logger = logging.getLogger("gorefer.wati")
@@ -85,7 +83,15 @@ class LiveWatiAdapter:  # pragma: no cover - exercised only with ENABLE_WATI_SEN
 
 
 def get_wati_adapter():
-    """Return the adapter for the current flag state (log-only unless sending is on)."""
-    if flags.ENABLE_WATI_SEND:
+    """Return the adapter for the EFFECTIVE flag state (log-only unless sending is on).
+
+    Reads the resolved flag (admin override -> env default), not `flags.ENABLE_WATI_SEND`
+    directly: the Settings checkbox must actually change behaviour. Reading raw env here
+    would let the checkbox show "on" while the code kept sending nothing — or worse, show
+    "off" while it kept sending.
+    """
+    from apps.config.integration_flags import ENABLE_WATI_SEND, resolve_flag
+
+    if resolve_flag(ENABLE_WATI_SEND):
         return LiveWatiAdapter()
     return LogOnlyWatiAdapter()

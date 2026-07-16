@@ -300,13 +300,37 @@ class Lead(AuditedModel, SoftDeleteModel, TenantScopedModel):
     # DPDP: when consent was captured (third-party PII in the assisted branch).
     consent_captured_at = models.DateTimeField(null=True, blank=True)
     zoho_lead_id = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    # The GoRefer journey-reference stamped onto the Zoho lead (#10, Model 2). Kept
+    # here so a re-run can prove it was never lost, and so a later Zoho conversion
+    # can be joined back to this journey.
+    gorefer_reference = models.CharField(max_length=64, blank=True, default="")
     account_opened_at = models.DateTimeField(null=True, blank=True)  # TRUE Zoho date (M6)
+
+    # --- Zoho WRITE sync state (retry/backfill) --------------------------------
+    # Lives on this ERASABLE model, never in the immutable event log (#16/#17).
+    # Tracks only whether OUR write reached Zoho — it is NOT account status, which
+    # still comes solely from the Zoho inbound path (guardrail #2).
+    SYNC_PENDING, SYNC_SYNCED, SYNC_FAILED = "pending", "synced", "failed"
+    ZOHO_SYNC_STATUS_CHOICES = [
+        (SYNC_PENDING, "pending"),
+        (SYNC_SYNCED, "synced"),
+        (SYNC_FAILED, "failed"),  # attempts exhausted — surfaced in the admin, never silent
+    ]
+    zoho_sync_status = models.CharField(
+        max_length=10, choices=ZOHO_SYNC_STATUS_CHOICES, default=SYNC_PENDING
+    )
+    zoho_sync_attempts = models.PositiveIntegerField(default=0)
+    zoho_last_error = models.TextField(blank=True, default="")
+    zoho_synced_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "leads"
         indexes = [
             models.Index(fields=["referral"]),
             models.Index(fields=["status"]),
+            # The backfill sweep scans (status, attempts) oldest-first — keep it cheap
+            # as leads accumulate.
+            models.Index(fields=["zoho_sync_status", "zoho_sync_attempts"]),
         ]
 
     def __str__(self) -> str:  # pragma: no cover - trivial

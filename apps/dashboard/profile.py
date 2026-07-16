@@ -14,10 +14,18 @@ Guardrail #2 preserved: nothing here writes/sets conversion status.
 """
 from __future__ import annotations
 
+import logging
+
 from apps.events.models import Event, VisitorPII
 from apps.integrations.models import Conversion
-from apps.integrations.zoho.read import get_zoho_read_adapter
+from apps.integrations.zoho.read import (
+    ReferredPeople,
+    ZohoContact,
+    get_zoho_read_adapter,
+)
 from apps.referrals.models import Lead, Referral, ReferralIdentity
+
+logger = logging.getLogger("gorefer.dashboard.profile")
 
 # ── Config-over-code: labels/columns/strings (a config constant, not inline literals).
 # The Clicks/People column sets are here so per-partner tuning is a config change.
@@ -184,9 +192,31 @@ def profile_exists(tenant, client_id: str) -> bool:
     return conv.exists()
 
 
+def _safe_zoho_contact(client_id: str) -> ZohoContact:
+    """Zoho enrichment, degraded to "unmatched" if Zoho is unreachable.
+
+    Enrichment is DECORATION on this page — the load-bearing content (clicks, leads,
+    conversions) is GoRefer's own data and needs no Zoho call. With ENABLE_ZOHO_READ
+    on, a Zoho outage or an expired token would otherwise 500 the whole profile and
+    take the GoRefer-owned numbers down with it. Degrading to the same unmatched shape
+    a genuine no-match returns keeps the page up and renders "— not on file —".
+
+    Deliberately NOT swallowed elsewhere: this never touches conversion status (that
+    arrives only via the webhook), so a missed read loses nothing but chips.
+    """
+    try:
+        return get_zoho_read_adapter().fetch_contact_by_client_id(client_id=client_id)
+    except Exception:
+        logger.warning(
+            "Zoho enrichment unavailable for ClientId=%s — degrading",
+            client_id, exc_info=True,
+        )
+        return ZohoContact(client_id=client_id, matched=False)
+
+
 def top_band(tenant, client_id: str) -> dict:
     """Identity + Zoho enrichment chips + the 4 headline aggregates."""
-    contact = get_zoho_read_adapter().fetch_contact_by_client_id(client_id=client_id)
+    contact = _safe_zoho_contact(client_id)
 
     referrals = list(_referrer_referrals(tenant, client_id))
     referral_ids = [r.id for r in referrals]
@@ -327,7 +357,16 @@ def clicks_rows(tenant, client_id: str) -> list[dict]:
 
 def referred_people(tenant, client_id: str) -> list[dict]:
     """Referred-People tab — one row per identified person, from Zoho READ."""
-    data = get_zoho_read_adapter().fetch_referred_people(referrer_client_id=client_id)
+    try:
+        data = get_zoho_read_adapter().fetch_referred_people(referrer_client_id=client_id)
+    except Exception:
+        # Same rationale as _safe_zoho_contact: an unreachable Zoho must not 500 the
+        # profile. An empty tab renders the honest "no people" empty state.
+        logger.warning(
+            "Zoho referred-people unavailable for ClientId=%s — degrading",
+            client_id, exc_info=True,
+        )
+        data = ReferredPeople(referrer_client_id=client_id, people=[])
     nf = PROFILE_CONFIG["not_on_file"]
     no_name = PROFILE_CONFIG["no_name"]
     rows = []

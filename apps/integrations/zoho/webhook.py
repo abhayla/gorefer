@@ -1,11 +1,16 @@
 """Zoho status webhook — the SOLE entry point for conversion mutation (M6).
 
-Interim auth (R2): a static shared key + a Zoho server-IP allowlist. The HMAC
-"wax-seal" (signature + timestamp + nonce) is deferred to DF-2. A failed record is
-retried; on repeated failure it lands in the dead-letter tray (never dropped).
+Auth has two modes, selected by `ENABLE_ZOHO_WEBHOOK_HMAC`:
+  - OFF (default, interim R2): static shared key + Zoho server-IP allowlist.
+  - ON  (DF-2 wax-seal): HMAC(payload+timestamp+nonce) + the SAME IP allowlist. The
+    static key is NOT accepted as an alternative — see `authenticate`.
+
+A failed record is retried; on repeated failure it lands in the dead-letter tray
+(never dropped).
 
 Guardrail #2: conversion/account status is set ONLY here (via ingest_conversion) —
-never by an internal business write.
+never by an internal business write. That is precisely why DF-2 matters: this
+endpoint is the one place a forged request could fabricate a conversion.
 """
 from __future__ import annotations
 
@@ -15,8 +20,10 @@ from django.conf import settings
 
 from apps.integrations.models import ZohoDeadLetter, ZohoSyncWatermark
 from apps.tenants.resolve import get_current_tenant
+from gorefer.flags import flags
 
 from .ingest import DuplicateDelivery, ingest_conversion
+from .waxseal import SealRejected, verify_seal
 
 logger = logging.getLogger("gorefer.zoho.webhook")
 
@@ -28,16 +35,51 @@ def _client_ip(request) -> str:
     return request.META.get("REMOTE_ADDR", "")
 
 
-def authenticate(request) -> bool:
-    """Static key + IP allowlist. Both must pass (allowlist empty = allow any — dev)."""
-    expected = getattr(settings, "ZOHO_WEBHOOK_KEY", "")
-    provided = request.headers.get("X-Zoho-Webhook-Key", "")
-    if not expected or provided != expected:
-        return False
+def _ip_allowed(request) -> bool:
+    """Zoho server-IP allowlist. Empty allowlist = allow any (dev only)."""
     allowlist = [ip for ip in getattr(settings, "ZOHO_WEBHOOK_IP_ALLOWLIST", "").split(",") if ip]
     if allowlist and _client_ip(request) not in allowlist:
         return False
     return True
+
+
+def _static_key_ok(request) -> bool:
+    """Interim R2 auth: a static shared key. Fails closed when the key is unset."""
+    import hmac as _hmac
+
+    expected = getattr(settings, "ZOHO_WEBHOOK_KEY", "")
+    provided = request.headers.get("X-Zoho-Webhook-Key", "")
+    if not expected:
+        return False  # fail CLOSED — never accept-any on a blank key
+    # Constant-time: the static key is a secret too, so don't leak it via `!=` timing.
+    return _hmac.compare_digest(provided, expected)
+
+
+def authenticate(request, raw_body: bytes | None = None) -> bool:
+    """Authenticate one inbound Zoho webhook request. Fails CLOSED.
+
+    With `ENABLE_ZOHO_WEBHOOK_HMAC` ON, the DF-2 wax-seal is REQUIRED and the static
+    key is **not** accepted as a fallback. That is the whole point: leaving the static
+    key as an alternative would mean a leaked key still forges conversions, and the
+    seal would be decoration. The IP allowlist applies in BOTH modes.
+
+    `raw_body` must be the untouched request bytes — the signature is computed over
+    exactly what was signed (see waxseal.compute_signature).
+    """
+    if not _ip_allowed(request):
+        return False
+
+    if flags.ENABLE_ZOHO_WEBHOOK_HMAC:
+        try:
+            verify_seal(request, raw_body if raw_body is not None else request.body)
+        except SealRejected as exc:
+            # Log the reason for US; the endpoint answers a flat 401 so the caller
+            # gets no oracle telling them which check they failed.
+            logger.warning("Zoho webhook seal rejected: %s", exc.reason)
+            return False
+        return True
+
+    return _static_key_ok(request)
 
 
 def process_webhook(request, payload: dict) -> dict:
