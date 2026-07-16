@@ -189,6 +189,36 @@ def list_partnerships(tenant) -> list[dict]:
 # -------------------------------------------------------------------------- write
 
 
+def set_landing_mode(tenant, requested, *, user=None) -> tuple[str, list[str]]:
+    """Write LANDING_MODE at the GLOBAL/tenant tier. Returns (mode_written, notices).
+
+    THE single write path for landing mode — used by both the Preferences screen and
+    `manage.py set_landing_mode`, so the UI and the command can never drift into
+    disagreeing about validation or the ADR-032 coupling. Two callers enforcing the
+    same rule separately is how a CLI ends up able to set a state the screen forbids.
+
+    Enforces:
+      - ADR-032 coupling: `direct` requires a live /d/{slug} disclosure host; without
+        one it is forced back to `page` with a notice. `direct` skips the landing
+        page, so the disclosure must be reachable somewhere or the compliance
+        surface silently disappears.
+      - Unknown/blank -> `page` (never guess; `page` is the safe default).
+    Idempotent: writing the current value is a no-op write of the same value.
+    """
+    notices: list[str] = []
+    mode = (requested or LANDING_MODE_PAGE).strip().lower()
+    if mode == LANDING_MODE_DIRECT and not has_live_disclosure_page(tenant):
+        mode = LANDING_MODE_PAGE
+        notices.append(
+            "“Direct to Zerodha” needs a live disclosure page (/d/{slug}) first — "
+            "add an active partnership, then you can switch to Direct. Kept “Show landing page”."
+        )
+    if mode not in {LANDING_MODE_PAGE, LANDING_MODE_DIRECT}:
+        mode = LANDING_MODE_PAGE
+    set_tenant(prefkeys.LANDING_MODE, mode, tenant_id=tenant.id, user=user)
+    return mode, notices
+
+
 @transaction.atomic
 def save_preferences(tenant, data, *, user=None) -> list[str]:
     """Persist the submitted preference form to the tenant tier. Returns notices.
@@ -201,16 +231,10 @@ def save_preferences(tenant, data, *, user=None) -> list[str]:
     notices: list[str] = []
 
     # --- Landing mode (LANDING_MODE) + the ADR-032 compliance coupling -----------
-    requested_mode = (data.get("landing_mode") or LANDING_MODE_PAGE).strip().lower()
-    if requested_mode == LANDING_MODE_DIRECT and not has_live_disclosure_page(tenant):
-        requested_mode = LANDING_MODE_PAGE
-        notices.append(
-            "“Direct to Zerodha” needs a live disclosure page (/d/{slug}) first — "
-            "add an active partnership, then you can switch to Direct. Kept “Show landing page”."
-        )
-    if requested_mode not in {LANDING_MODE_PAGE, LANDING_MODE_DIRECT}:
-        requested_mode = LANDING_MODE_PAGE
-    set_tenant(prefkeys.LANDING_MODE, requested_mode, tenant_id=tenant_id, user=user)
+    _mode, mode_notices = set_landing_mode(
+        tenant, data.get("landing_mode"), user=user
+    )
+    notices.extend(mode_notices)
 
     # --- Rewards -----------------------------------------------------------------
     set_tenant(
