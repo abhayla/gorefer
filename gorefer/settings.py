@@ -129,6 +129,13 @@ WSGI_APPLICATION = "gorefer.wsgi.application"
 # engine across dev/test/CI/prod (GoRefer relies on JSONB / partial-unique
 # constraints / case-sensitivity). The `test` DB name below is what the pytest
 # runner creates + tears down (default `gorefer_test`, override via TEST_DB_NAME).
+#
+# DF-TESTDB-ISOLATION: under pytest-xdist, pytest-django appends the worker id
+# (`gorefer_test_gw0`, `_gw1`, …) so each worker owns its own database. That is what
+# makes a parallel run correct, not just fast: with one shared DB the workers deadlock
+# on `otp_challenges` and a lock collision reads exactly like a regression. A second
+# concurrent pytest invocation is still a collision — set TEST_DB_NAME to a distinct
+# value for that (see README).
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
