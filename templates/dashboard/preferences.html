@@ -129,6 +129,116 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
       </div>
     </div>
 
+    {# ---- WhatsApp notifications (routing) ------------------------------- #}
+    {% comment %}
+    Routing only: turning one off suppresses that recipient. It can never force a
+    send past an existing suppression — an opted-out prospect, an unknown referrer
+    phone, or ENABLE_WATI_SEND being off all still win.
+    {% endcomment %}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">WhatsApp notifications</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">
+      <div class="flex items-start justify-between gap-4 py-1.5">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">Alert the office (Ashok)</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">New-lead alert so the call can go out immediately.</div>
+        </div>
+        {% include "dashboard/partials/pref_toggle.html" with name="notify_office" on=prefs.notify_office %}
+      </div>
+      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">Welcome the new person</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">Warm notice naming the referrer. Opted-out people are never messaged, whatever this says.</div>
+        </div>
+        {% include "dashboard/partials/pref_toggle.html" with name="notify_prospect" on=prefs.notify_prospect %}
+      </div>
+      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">Thank the referrer</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">Sent only when the referrer’s phone is already known — never guessed.</div>
+        </div>
+        {% include "dashboard/partials/pref_toggle.html" with name="notify_referrer" on=prefs.notify_referrer %}
+      </div>
+    </div>
+
+    {# ---- Referrer defaults (Tier 3) — only when customer login is on ----- #}
+    {% if customer_login_enabled %}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Referrer defaults</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">
+      <div class="py-1.5">
+        <div class="text-[13.5px] font-semibold">Default landing mode for referrers</div>
+        <div class="text-[11.5px] text-ink-500 mt-0.5">What a referrer gets until they choose their own.</div>
+        <select name="referrer_landing_mode"
+                class="mt-2 rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none">
+          <option value="" {% if not referrer_defaults.referrer_landing_mode %}selected{% endif %}>Inherit the tenant default</option>
+          <option value="page" {% if referrer_defaults.referrer_landing_mode == 'page' %}selected{% endif %}>Show landing page</option>
+          <option value="direct" {% if referrer_defaults.referrer_landing_mode == 'direct' %}selected{% endif %}
+                  {% if not direct_allowed %}disabled{% endif %}>Direct to Zerodha</option>
+        </select>
+      </div>
+      <div class="py-1.5 border-t border-line">
+        <div class="text-[13.5px] font-semibold">Default language</div>
+        <div class="text-[11.5px] text-ink-500 mt-0.5">Language a referrer’s messages default to.</div>
+        <select name="referrer_language"
+                class="mt-2 rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none">
+          {% for code, label in referrer_language_choices %}
+            <option value="{{ code }}" {% if referrer_defaults.referrer_language == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">Referrer notifications on</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">Whether referrers get updates about their referrals by default.</div>
+        </div>
+        {% include "dashboard/partials/pref_toggle.html" with name="referrer_notifications_on" on=referrer_defaults.referrer_notifications_on %}
+      </div>
+      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">Opt out of promotional nudges</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">Transactional messages are unaffected.</div>
+        </div>
+        {% include "dashboard/partials/pref_toggle.html" with name="referrer_promo_opt_out" on=referrer_defaults.referrer_promo_opt_out %}
+      </div>
+    </div>
+    {% endif %}
+
+    {# ---- Integrations (live on/off) ------------------------------------- #}
+    {% comment %}
+    Each row shows the EFFECTIVE value and where it came from. Source matters:
+    "off, nobody touched it" and "off, an admin turned it off" look identical on a
+    switch, but only the first moves when the deployment's env changes.
+    {% endcomment %}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Integrations</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">
+      {% for f in integration_flags %}
+      <div class="flex items-start justify-between gap-4 py-1.5 {% if not forloop.first %}border-t border-line{% endif %}">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">{{ f.label }}</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">{{ f.help }}</div>
+          <div class="text-[10.5px] text-ink-300 mt-1">{{ f.source_label }}</div>
+        </div>
+        <div class="flex-none">
+          {% comment %}
+          The confirm flag rides along as a hidden input the dialog sets to "on".
+          Server-side the gate is re-checked — this input is a UI convenience, never
+          the security boundary (a hand-rolled POST must still carry it).
+          {% endcomment %}
+          {% if f.requires_confirm %}
+            <input type="hidden" name="confirm_{{ f.name }}" value=""
+                   data-confirm-for="{{ f.name }}">
+          {% endif %}
+          <label class="relative inline-flex flex-none items-center cursor-pointer">
+            <input type="checkbox" name="{{ f.name }}" value="on" class="peer sr-only"
+                   {% if f.value %}checked{% endif %}
+                   {% if f.requires_confirm %}data-confirm="{{ f.confirm }}"{% endif %}>
+            <span class="w-11 h-6 rounded-full bg-ink-300/50 peer-checked:bg-cobalt-600 transition-colors"></span>
+            <span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5"></span>
+          </label>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
     {# ---- Disclosure + partnerships (drive /d/{slug}) -------------------- #}
     <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Disclosure</div>
     <div class="rounded-2xl bg-white border border-line card p-5">
@@ -142,6 +252,90 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
       </div>
       <div class="border-t border-line pt-3 mt-1">
         {% include "dashboard/partials/partnerships.html" %}
+      </div>
+    </div>
+
+    {# ---- Login OTP channel (Q-M-OTP) — config-over-code channel switch ---- #}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Login OTP</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-4">
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex-1">
+          <div class="text-[13.5px] font-semibold">How login codes are sent</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">
+            When a referrer logs in to see their link’s clicks, GoRefer sends a one-time code to the
+            channel already on file for their Client&nbsp;ID. Pick the primary channel and the fallback order —
+            no deploy needed.
+          </div>
+        </div>
+        {% if not otp_enabled %}
+          <span class="flex-none text-[10.5px] font-semibold text-ink-400 border border-line rounded-lg px-2 py-1">
+            Referrer login is off — saved and ready for when it’s enabled
+          </span>
+        {% endif %}
+      </div>
+
+      {# Primary channel #}
+      <div class="flex items-center justify-between gap-4 py-1.5 border-t border-line">
+        <label for="otp_primary_channel" class="text-[13px] font-semibold flex-1">Primary channel</label>
+        <select id="otp_primary_channel" name="otp_primary_channel"
+                class="flex-none rounded-lg border border-line text-[13px] px-3 py-2 bg-white min-w-[180px]">
+          {% for code, label in otp_channel_choices %}
+            <option value="{{ code }}" {% if code == prefs.otp_primary_channel %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      {# Fallback order (checkboxes; the service ignores the one chosen as primary) #}
+      <div class="py-1.5 border-t border-line">
+        <div class="text-[13px] font-semibold">Fallback channels (used if the primary can’t deliver)</div>
+        <div class="text-[11.5px] text-ink-500 mt-0.5">Tried in order after the primary. The primary is skipped if also ticked.</div>
+        <div class="flex flex-wrap gap-3 mt-2">
+          {% for code, label in otp_channel_choices %}
+            <label class="inline-flex items-center gap-1.5 text-[12.5px]">
+              <input type="checkbox" name="otp_fallback_channels" value="{{ code }}"
+                     {% if code in otp_fallback_selected %}checked{% endif %}>
+              {{ label }}
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      {# WhatsApp AUTHENTICATION template name #}
+      <div class="flex items-center justify-between gap-4 py-1.5 border-t border-line">
+        <label for="otp_whatsapp_template" class="text-[13px] font-semibold flex-1">WhatsApp OTP template</label>
+        <input type="text" id="otp_whatsapp_template" name="otp_whatsapp_template"
+               value="{{ prefs.otp_whatsapp_template }}"
+               class="flex-none rounded-lg border border-line text-[13px] px-3 py-2 bg-white min-w-[220px]"
+               placeholder="gorefer_login_otp">
+      </div>
+
+      {# Numeric knobs #}
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 py-1.5 border-t border-line">
+        <div>
+          <label for="otp_code_length" class="block text-[11.5px] font-semibold text-ink-600">Code length</label>
+          <input type="number" id="otp_code_length" name="otp_code_length" min="4" max="8"
+                 value="{{ prefs.otp_code_length }}" class="mt-1 w-full rounded-lg border border-line text-[13px] px-2.5 py-1.5">
+        </div>
+        <div>
+          <label for="otp_code_ttl_seconds" class="block text-[11.5px] font-semibold text-ink-600">Valid for (sec)</label>
+          <input type="number" id="otp_code_ttl_seconds" name="otp_code_ttl_seconds" min="60" max="1800"
+                 value="{{ prefs.otp_code_ttl_seconds }}" class="mt-1 w-full rounded-lg border border-line text-[13px] px-2.5 py-1.5">
+        </div>
+        <div>
+          <label for="otp_max_verify_attempts" class="block text-[11.5px] font-semibold text-ink-600">Max attempts</label>
+          <input type="number" id="otp_max_verify_attempts" name="otp_max_verify_attempts" min="1" max="10"
+                 value="{{ prefs.otp_max_verify_attempts }}" class="mt-1 w-full rounded-lg border border-line text-[13px] px-2.5 py-1.5">
+        </div>
+        <div>
+          <label for="otp_resend_cooldown_seconds" class="block text-[11.5px] font-semibold text-ink-600">Resend cooldown (sec)</label>
+          <input type="number" id="otp_resend_cooldown_seconds" name="otp_resend_cooldown_seconds" min="0" max="600"
+                 value="{{ prefs.otp_resend_cooldown_seconds }}" class="mt-1 w-full rounded-lg border border-line text-[13px] px-2.5 py-1.5">
+        </div>
+        <div>
+          <label for="otp_rate_limit_per_identity_per_hour" class="block text-[11.5px] font-semibold text-ink-600">Max codes / hour</label>
+          <input type="number" id="otp_rate_limit_per_identity_per_hour" name="otp_rate_limit_per_identity_per_hour" min="1" max="50"
+                 value="{{ prefs.otp_rate_limit_per_identity_per_hour }}" class="mt-1 w-full rounded-lg border border-line text-[13px] px-2.5 py-1.5">
+        </div>
       </div>
     </div>
 
@@ -168,6 +362,30 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
         b.classList.toggle("text-white", on);
         b.classList.toggle("text-cobalt-600", !on);
       });
+    });
+  });
+})();
+
+// Confirm-gate on the risky integration toggles (WhatsApp send / Zoho write).
+// OFF->ON only: turning something ON starts real outbound effects, which is the
+// irreversible direction. Turning OFF is never gated — an operator hitting a live
+// problem must be able to stop sending instantly.
+// This is UI convenience, not the security boundary: the server re-checks the same
+// gate, so a hand-rolled POST cannot skip it.
+(function () {
+  document.querySelectorAll('input[type="checkbox"][data-confirm]').forEach(function (box) {
+    var hidden = document.querySelector('input[data-confirm-for="' + box.name + '"]');
+    box.addEventListener("change", function () {
+      if (!box.checked) {                 // turning OFF — always allowed, clear consent
+        if (hidden) hidden.value = "";
+        return;
+      }
+      if (window.confirm(box.getAttribute("data-confirm"))) {
+        if (hidden) hidden.value = "on";  // consent travels with the submit
+      } else {
+        box.checked = false;              // declined — revert the switch
+        if (hidden) hidden.value = "";
+      }
     });
   });
 })();

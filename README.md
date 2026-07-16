@@ -61,8 +61,16 @@ python manage.py recompute_rollups     # recompute daily/monthly rollups for any
 
 # Background queue (django-q2, ORM broker — no Redis). In dev/CI/demo, Q_ASYNC=false
 # runs tasks INLINE (no worker needed). In production set Q_ASYNC=true and run:
-#   python manage.py setup_schedules    # register the recurring rollup recompute (idempotent)
-#   python manage.py qcluster           # the worker: WATI sends + terminal-status polling + schedules
+#   python manage.py setup_schedules    # register recurring schedules (idempotent):
+#                                       #   - rollup recompute (every 5 min)
+#                                       #   - Zoho WRITE backfill sweep (every 10 min) —
+#                                       #     re-enqueues leads that never reached Zoho.
+#                                       #     REQUIRED with ENABLE_ZOHO_WRITE on, else a
+#                                       #     lead stranded by a Zoho outage never retries.
+#   python manage.py qcluster           # the worker: WATI sends + terminal-status polling
+#                                       # + the async Zoho lead upsert + schedules
+# Stuck leads are visible in the admin: Leads -> "Zoho sync" filter (unsynced /
+# needs attention / awaiting retry), with a "Retry Zoho sync" action.
 
 # 5. (Optional) create the admin from env vars — no plaintext password, hash only
 #    Generate a hash:  python -c "from django.contrib.auth.hashers import make_password; print(make_password('your-pw'))"
@@ -106,8 +114,22 @@ HTMX is vendored at `static/js/htmx.min.js`; the compiled CSS is `static/css/app
 ```bash
 ruff check .
 python manage.py makemigrations --check --dry-run   # fails on schema drift
-python -m pytest -q
+python -m pytest -q                                 # serial (~6 min)
+python -m pytest -q -n 4                            # parallel (~2 min) — see below
 ```
+
+**Parallel runs (DF-TESTDB-ISOLATION).** `-n 4` uses pytest-xdist, and pytest-django
+gives each worker its **own** database (`gorefer_test_gw0`, `_gw1`, …). That isolation
+is what makes it correct, not just faster: on one shared test DB the workers deadlock
+on `otp_challenges` and the lock collision looks exactly like a regression.
+
+Two caveats worth knowing before you misread a red suite:
+- **Don't run two pytest invocations at once** against the same DB name — the second
+  fails with `database "gorefer_test" already exists` / `is being accessed by other
+  users`. That is a collision, **not** a code regression. For a genuinely concurrent
+  run, give it its own name: `TEST_DB_NAME=gorefer_test_mine python -m pytest -q`.
+- If a run is killed mid-way it can leave the test DB behind; drop it (or use
+  `--create-db`) before the next run.
 
 **Feature flags** live in one place — `gorefer/flags.py`, resolved from env at startup (`ENABLE_*`, plus the single swappable `REFERRAL_INCENTIVE_CLAIM`). Defaults keep every not-yet-built capability and every external adapter **off** (adapters log their intended call instead of sending), so demo mode runs end-to-end with no external systems.
 

@@ -78,16 +78,29 @@ def queue_lead_notifications(*, tenant, referral, prospect, client_id: str) -> l
     deduped). Enqueue happens via the background queue; in sync/demo mode the task
     runs inline and verifies terminal status.
     """
+    from apps.config.preferences import notification_routing
+
     from .tasks import enqueue_send  # local import to avoid app-loading cycles
 
     journey_key = str(referral.pk)
     queued_ids: list[int] = []
+    # Admin routing toggles (Settings → Notifications). A role switched OFF is recorded
+    # as SKIPPED WITH A REASON rather than not created: the funnel must still show the
+    # message did not go and why. Routing is additive to the existing suppressions
+    # (opt-out, unknown phone) — it can only ever suppress, never force a send.
+    routed = notification_routing(getattr(tenant, "id", None))
 
-    # (a) office / Ashok — always.
+    def _routing_skip(role: str) -> str:
+        return "" if routed.get(role, True) else "turned off in settings"
+
+    # (a) office / Ashok.
+    office_skip = _routing_skip("office") or (
+        "" if _office_mobile() else "office number not configured"
+    )
     office = _create_notification(
         tenant=tenant, referral=referral, role="office", mobile=_office_mobile(),
         template=TPL_OFFICE, journey_key=journey_key,
-        skip_reason="" if _office_mobile() else "office number not configured",
+        skip_reason=office_skip,
     )
     _maybe_enqueue(office, queued_ids, enqueue_send)
 
@@ -96,6 +109,9 @@ def queue_lead_notifications(*, tenant, referral, prospect, client_id: str) -> l
     prospect_skip = "" if prospect_mobile else "prospect mobile unknown"
     if prospect and _is_opted_out(prospect):
         prospect_skip = "prospect opted out"
+    # Routing is checked LAST so it can add a skip but never clear one: an opted-out
+    # prospect stays opted out regardless of the toggle (BR-008 / doc-08 A4).
+    prospect_skip = prospect_skip or _routing_skip("prospect")
     prospect_n = _create_notification(
         tenant=tenant, referral=referral, role="prospect", mobile=prospect_mobile,
         template=TPL_PROSPECT, journey_key=journey_key, skip_reason=prospect_skip,
@@ -104,10 +120,12 @@ def queue_lead_notifications(*, tenant, referral, prospect, client_id: str) -> l
 
     # (c) referrer — ONLY if phone known; else skip (never guess).
     referrer_mobile = _referrer_phone_if_known(tenant, client_id)
+    referrer_skip = "" if referrer_mobile else "referrer phone unknown"
+    referrer_skip = referrer_skip or _routing_skip("referrer")
     referrer_n = _create_notification(
         tenant=tenant, referral=referral, role="referrer", mobile=referrer_mobile,
         template=TPL_REFERRER, journey_key=journey_key,
-        skip_reason="" if referrer_mobile else "referrer phone unknown",
+        skip_reason=referrer_skip,
     )
     _maybe_enqueue(referrer_n, queued_ids, enqueue_send)
 

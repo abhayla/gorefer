@@ -71,6 +71,7 @@ INSTALLED_APPS = [
     "apps.referrals",
     "apps.events",
     "apps.integrations",
+    "apps.otp",  # pluggable OTP delivery port (Q-M-OTP; behind ENABLE_OTP_LOGIN)
 ]
 
 # --- Background queue (django-q2, Postgres/ORM broker — NO Redis) -----------
@@ -128,6 +129,13 @@ WSGI_APPLICATION = "gorefer.wsgi.application"
 # engine across dev/test/CI/prod (GoRefer relies on JSONB / partial-unique
 # constraints / case-sensitivity). The `test` DB name below is what the pytest
 # runner creates + tears down (default `gorefer_test`, override via TEST_DB_NAME).
+#
+# DF-TESTDB-ISOLATION: under pytest-xdist, pytest-django appends the worker id
+# (`gorefer_test_gw0`, `_gw1`, …) so each worker owns its own database. That is what
+# makes a parallel run correct, not just fast: with one shared DB the workers deadlock
+# on `otp_challenges` and a lock collision reads exactly like a regression. A second
+# concurrent pytest invocation is still a collision — set TEST_DB_NAME to a distinct
+# value for that (see README).
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
@@ -243,9 +251,27 @@ PII_MASK_FOR_CUSTOMER_VIEW = os.environ.get(
 # HMAC wax-seal is deferred (DF-2). The key is a SECRET (from env, never inline).
 ZOHO_WEBHOOK_KEY = os.environ.get("ZOHO_WEBHOOK_KEY", "")
 ZOHO_WEBHOOK_IP_ALLOWLIST = os.environ.get("ZOHO_WEBHOOK_IP_ALLOWLIST", "")  # csv; empty = any (dev)
+# DF-2 wax-seal (used only when ENABLE_ZOHO_WEBHOOK_HMAC=true). The shared secret the
+# Zoho-side Deluge signer holds. Unset => the seal REJECTS everything (fail-closed).
+ZOHO_WEBHOOK_HMAC_SECRET = os.environ.get("ZOHO_WEBHOOK_HMAC_SECRET", "")
+# Freshness window for a sealed request, in seconds (absorbs clock skew).
+ZOHO_WEBHOOK_MAX_SKEW_SECONDS = int(os.environ.get("ZOHO_WEBHOOK_MAX_SKEW_SECONDS", "300"))
 
 # --- WATI webhook auth (B4, interim R2): static key + IP allowlist ----------
 # The Wati assisted-referral flow posts here. Same interim model as Zoho (static
 # key + IP allowlist; HMAC wax-seal deferred DF-2). Key is a SECRET (env only).
 WATI_WEBHOOK_KEY = os.environ.get("WATI_WEBHOOK_KEY", "")
 WATI_WEBHOOK_IP_ALLOWLIST = os.environ.get("WATI_WEBHOOK_IP_ALLOWLIST", "")  # csv; empty = any (dev)
+
+# --- OTP login (Q-M-OTP, behind ENABLE_OTP_LOGIN) --------------------------
+# The pluggable OTP delivery port. The per-tenant behavioural knobs (primary
+# channel, fallback order, template, TTL, limits) live in the ADR-022 config
+# cascade and are edited on the Preferences screen (apps/config/preferences.py) —
+# NOT here. This block holds only the process-level SECRET used to hash codes.
+# OTP codes are stored HASHED (never plaintext); the pepper strengthens the hash
+# so a DB leak alone can't brute-force 6-digit codes. SECRET — env only, never
+# inline; falls back to SECRET_KEY in dev so the flow works offline.
+OTP_HASH_PEPPER = os.environ.get("OTP_HASH_PEPPER", "") or SECRET_KEY
+# Central default for the AUTHENTICATION template name (per-tenant override on the
+# Preferences screen wins). Config, not a secret.
+OTP_WHATSAPP_TEMPLATE = os.environ.get("OTP_WHATSAPP_TEMPLATE", "gorefer_login_otp")
