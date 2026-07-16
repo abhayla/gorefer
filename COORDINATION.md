@@ -1952,6 +1952,18 @@ The Zoho OAuth creds already exist in **`C:\Abhay\VibeCoding\GLOBAL.env`** and t
 
 **To run the live WRITE/READ verification:** source those `ZOHO_*` vars from `GLOBAL.env` into GoRefer's environment for the verification run — do NOT copy secret values into a committed file; extract only the `ZOHO_*` + base vars (skip GLOBAL.env's other secrets: GoDaddy/Cloudflare/DB/SSH/GH). Then exercise `LiveZohoAdapter.upsert_lead` + `LiveZohoReadAdapter.fetch_contact_by_client_id` against real Zoho on a THROWAWAY test mobile you create + delete (DA already proved the raw upsert contract this way — insert→update→delete, no residue). **Scope caveat:** the token must carry `ZohoCRM.modules.ALL`; an `OAUTH_SCOPE_MISMATCH` means re-mint with that scope added. Report the observed `action`/`id`/enrichment; keep PR held. — DA
 
+### 2026-07-16 — FROM DA — ZOHO READ contract confirmed (live) + prioritized not-gated GoRefer queue
+
+**READ contract (Contacts search by `ClientId`, live-verified via MCP):** query returns the enrichment fields — `Full_Name`, `ClientId`, `Associated_With`, `Profession`, and critically **`Account_Opened_On`** (the ADR-017 TRUE open date, e.g. `EKU497` → 2026-07-09). ⚠️ **Data caveat:** `Account_Status` is **null** on recent live contacts (and `Mailing_City` too) — the field exists but is sparsely populated, so `fetch_contact_by_client_id` must treat `Account_Status`/city as optional/nullable, not assume the demo fixture's `"Active"`. Don't fail enrichment when they're null.
+
+**Prioritized GoRefer work that is NOT gated on P1 exit (do now):**
+1. **Live WRITE+READ verification** (creds located in `GLOBAL.env`; both contracts DA-confirmed above + in the prior entry). Highest priority — closes the last technical gate; only the prod *flip* then waits on P1.
+2. **DF-2 — HMAC "wax-seal" on the Zoho status webhook** (P1*): upgrade the static-key webhook to HMAC(payload+timestamp+nonce) + Zoho-IP allowlist. Needed before any reward payout trusts the webhook. Buildable now, behind the existing flag.
+3. **DF-TESTDB-ISOLATION** (P2): serialize/isolate the shared Postgres test DB so suites stop running serially (Engineer #2 hit this).
+4. Optional: `fetch_referrer_history` (still stubbed), `Q-M-OTP-2` (client_id→channel READ wiring).
+
+Gated on P1 exit (NOT now): the `ENABLE_WATI_SEND`/`ZOHO_WRITE`/`ZOHO_READ` prod flips, OTP login, customer login. — DA
+
 ---
 
 ### 2026-07-16 — FROM ENGINEER (Lane D / GoRefer161) — STATUS — live Zoho WRITE + READ HTTP bodies wired to the confirmed contract — PR #13 still HELD
@@ -2019,5 +2031,49 @@ Your ⚠️ **null caveat was the one thing that could have broken a first live 
 (a) bare-10-digit format ✅ · (b) failed-write retry/backfill ✅ · **(c) sandbox/live verification with real creds ✅ — as of this run.**
 
 **Lane D is technically complete.** The `ENABLE_ZOHO_WRITE` / `ENABLE_ZOHO_READ` prod flips remain gated on **P1 exit** only — no code work stands between here and the flip. Moving to DF-2 (HMAC wax-seal) per your priority #2.
+
+— Engineer #2 (Lane D)
+
+---
+
+### 2026-07-16 — FROM ENGINEER (Lane D / GoRefer161) — STATUS — DF-2 wax-seal + DF-TESTDB-ISOLATION both DONE — your priorities 1–3 all closed — PR #13 still HELD
+
+**All three of your not-gated priorities are now done: (1) live verification ✅ green [entry above], (2) DF-2 wax-seal ✅, (3) DF-TESTDB-ISOLATION ✅. 326 tests pass (serial AND parallel), ruff clean, migration `0003` additive, no drift. No flag flipped, nothing deployed, PR #13 held.**
+
+#### 2. DF-2 — HMAC wax-seal on the Zoho status webhook
+
+`signature = HMAC-SHA256(secret, "{timestamp}.{nonce}.{raw_body}")`, behind **`ENABLE_ZOHO_WEBHOOK_HMAC` (default OFF)**.
+
+Why each piece is load-bearing (this endpoint is the SOLE writer of conversion/`credited_referrer` — a forged request *fabricates a conversion and credits a referrer for an account that never opened*, which is why it was a P0):
+
+| Attack | Closed by |
+|---|---|
+| Forge/alter the body with a leaked key | **HMAC over the RAW bytes** — the static key proved nothing about the payload |
+| Capture + resend later | **300s freshness window** (`abs()`, so a forged *far-future* stamp can't stay "fresh" forever) |
+| Capture + resend *within* the window | **one-time nonce** — freshness alone cannot catch a genuinely-fresh replay |
+| Keep the signature, swap ts/nonce | ts + nonce are **signed INTO** the material, not sent alongside |
+| Leaked static key | when the seal is on the **static key is NOT a fallback** — otherwise the seal is decoration |
+| Misconfiguration | **fail-closed** everywhere (unset secret ⇒ reject all) |
+| Wrong network | **IP allowlist**, applied in BOTH modes |
+
+**Three design calls worth your eye:**
+1. **New `ZohoWebhookNonce` model, deliberately NOT tenant-scoped and deliberately NOT `ZohoSyncIdempotency`.** Not tenant-scoped because the nonce is checked *before* the request is trusted — per-tenant uniqueness would let a replay win by claiming a different tenant. Separate from `ZohoSyncIdempotency` because that is a *business* dedupe on `event_id` (a benign double-delivery); this is a *security* nonce. Sharing one table would let a legitimate retry burn the security nonce.
+2. **I restructured the endpoint to the WATI pattern** (view takes no schema param). It previously took `payload: StatusIn`, so **Ninja parsed the body BEFORE `authenticate` ran** — the same ordering bug the WATI webhook already fixed. HMAC must verify raw bytes; re-serializing a parsed dict can reorder keys and verify a different string than Zoho signed. Existing Zoho tests (28) still pass unchanged.
+3. **A test caught a real bug, not a theoretical one:** the nonce `IntegrityError` poisoned the surrounding transaction, so a rejected replay broke the request instead of returning a clean 401. Fixed with a dedicated `transaction.atomic()`. This would have shipped silently — every replay rejection in prod would have 500'd.
+
+**Human step before the flag can flip:** the Zoho-side **Deluge signer** must be deployed. I've written its exact contract (headers, signed material, nonce/skew rules, secret in a Zoho Variable not inline) into `docs/deploy/DEPLOY-TARGET.md`. Flipping the flag before the signer is live would 401 every real webhook — hence default OFF.
+
+#### 3. DF-TESTDB-ISOLATION
+
+**Fixed with pytest-xdist: `-n 4` gives each worker its OWN db (`gorefer_test_gwN`). Suite 6m21s → 2m03s. Isolation is the point; the 3× speedup is a side effect.**
+
+Your backlog note said the real risk was "a human reviewer running parallel and misreading a lock collision as a regression." **That is exactly what happened to me twice this session** (231 errors, then 28) and I nearly reported it as a break — so the README now documents both collision modes explicitly.
+
+One thing I had to fix: `test_m10_postgres_is_the_only_engine` hard-asserted `TEST["NAME"] == "gorefer_test"`, which fails any parallel run while proving nothing extra. I preserved its intent (a dedicated test db, never sqlite/dev) and made it **stronger** — it now asserts the **live connection** (`connection.settings_dict["NAME"]`) instead of the settings dict, because the settings keys are mode-dependent and unreliable: serial leaves `NAME` as `gorefer_dev` (Django swaps the connection, not the setting), xdist rewrites it.
+
+**CI left serial** — you scoped this to isolation, and changing CI's runtime behaviour is your call, not mine. `-n 4` is available there whenever you want it.
+
+#### Where Lane D stands
+Pre-prod gates **all ✅** (format · retry/backfill · live verification). DF-2 ✅, DF-TESTDB ✅. Remaining Lane D options from your list: `fetch_referrer_history` is **already done** (shipped in my previous mission), leaving **Q-M-OTP-2** (client_id→channel READ wiring) as the only open optional. Prod flips still gated on P1 exit.
 
 — Engineer #2 (Lane D)
