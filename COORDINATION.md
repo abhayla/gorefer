@@ -2042,6 +2042,44 @@ Ran the independent (non-author) verification I can perform as DA:
 
 **Verdict: GO.** Cleared Abhay to paste the merge+deploy prompt. — DA
 
+### 2026-07-16 — FROM DA — COMPLETENESS AUDIT — no true gaps + "test everything" independent-verification dispatched
+
+Ran a full Zerodha feature-completeness audit (spec REQ/BR/NFR/AC × M1–M7 × Sprint-2 Track B × DF backlog, cross-checked against `apps/` code). **Verdict: NO true gaps.** Every discussed feature is shipped-and-verified in code or consciously deferred with a logged DF-# + trigger. Full matrix in the audit; highlights: redirect + ZMPHZC injection + /open, lazy journey, landing+capture+2 buttons+auto-disclosure, funnel+true-open-date, WATI 3-recipient (terminal-verified), Zoho WRITE(Model 2)+READ(never-fabricate)+idempotent sync, dashboard+explorer+profile, cookie+bot-filter+beacon, PII-out-of-events+erasable VisitorPII, config cascade+Settings UI, admin-from-env, multi-tenant boundary, 3 guardrail tests, OTP port (held).
+
+**Two watch-points (not gaps):** (1) automated 12-mo PII purge not built — Sprint-1 spec requires only *manual* erasure (present), so spec-correct; logged **DF-PII-PURGE (P2)** for Sprint 2. (2) all live integrations ship flag-disabled by design (go-live = the checkbox flips, not missing code).
+
+**"Test everything" = the independent verification pass** (Abhay's process: a FRESH session, not the author): clean checkout main @ `fe00d81` → full suite (364) + 3 guardrail tests + `makemigrations --check` → prod edge black-box (redirect guardrail, /open, /d/pifs, admin, Settings) → demo log-only E2E of the full referral loop with flags OFF → GO/NO-GO to COORDINATION. Prompt handed to Abhay to run in a separate session. — DA
+
+### 2026-07-16 — FROM DA — go-live flip runbook written + DF-2 signer routed to the Zoho session
+
+- **`review/GoLive-Flip-Runbook.md`** written — the operator sequence for the 3 checkbox flips (READ→WRITE→SEND), the live check DA runs after each (Zoho/Wati side via MCP; Abhay does the landing-form submit since gorefer.in is blocked from DA's browser), expected result, and rollback.
+- **DF-2 Deluge signer → Zoho session (Engineer #1), not DA-authored.** The signer contract is fully specified in `docs/deploy/DEPLOY-TARGET.md` (headers `X-Zoho-Timestamp/Nonce/Signature`; signed material `ts.nonce.raw_body`; HMAC-SHA256 hex; secret from a Zoho Variable, never inline; 300s skew). Authoring correct Deluge (epoch-seconds + HMAC-hex idioms) needs the Zoho env to test — routing it there rather than shipping an untested guess that would 401 every webhook. Not on the go-live critical path (basic keyed webhook works; HMAC is later hardening). — DA
+
+### 2026-07-16 — FROM DA → Engineer #2 — MISSION — (A) fix pages never reaching document-idle + (B) `golive_smoke` end-to-end test command
+
+New branch off `main` (fe00d81 is merged/deployed); PR held; GoRefer Django only; do NOT flip prod flags.
+
+**Part A — pages never reach browser "idle" (blocks DA's browser testing).** From this Cowork/DA seat, Claude-in-Chrome **can reach gorefer.in** (disclosure page loads; `/r/EKU497`→302 Zerodha confirmed), but EVERY `get_page_text` / `screenshot` / `read_page` call **times out at `document_idle` (45s)** — the page never idles, so the DA can't see or fill any form. Almost certainly an always-on **HTMX poll** (`hx-trigger="every Ns"`) or a persistent SSE/websocket/animation on the landing/disclosure/admin templates.
+- Find it: grep templates for `hx-trigger` with `every`, `load`, polling; any SSE/websocket; long-running JS/animation that keeps the event loop busy.
+- Fix so pages reach idle **without losing function**: bound/stop the poll after load, scope it to a fragment that idles, or switch a live widget to on-demand refresh. If a dashboard genuinely needs polling, ensure it doesn't hold `document_idle` on the **public landing/capture** pages at minimum (those are what DA must drive).
+- Verify: confirm the landing (page mode), `/d/pifs`, and admin login reach idle. After deploy, DA will re-test Claude-in-Chrome read/fill.
+
+**Part B — `golive_smoke` management command (the repeatable "test the whole loop" button).**
+`python manage.py golive_smoke --referrer <client_id> --mobile <mobile> [--name <n>] [--email <e>]`
+- Runs the FULL capture loop through the **real service layer** (`lead_service.capture_lead`), independent of `LANDING_MODE` (so it tests capture even while the site is in direct mode): synthesize a click on the referrer (journey + click event) → capture (name/mobile) → whatever the live flags dictate: `ENABLE_ZOHO_WRITE`→ upsert to Zoho (bare-10-digit, journey-ref); `ENABLE_WATI_SEND`→ the 3 notifications; status stays Zoho-only (never fabricate).
+- **Structured report**: journey id, lead id, Zoho action (`insert|update|log-only`) + `zoho_lead_id`, notification recipients + status (`sent|log-only|failed`+code), errors. Idempotent (re-run upserts, no twin). Honors flags (flags OFF ⇒ log-only, zero live effect). PII stays out of events.
+- Add a test. This lets ANY Code session or a scheduled task run the loop on demand; DA verifies the Zoho write + Wati send via MCP each run — **Abhay fills the form zero times.**
+
+STATUS to COORDINATION; open a PR (held). Surface inconsistencies as QUESTIONs. — DA
+
+### 2026-07-16 — FROM DA → Engineer #2 — ADD to the same mission — `set_landing_mode` lever (so page/direct is togglable for testing without the UI)
+
+Abhay wants page/direct switchable on demand for testing, not a recurring decision. Two levers:
+1. **`manage.py set_landing_mode <page|direct> [--tenant pifs]`** — writes the `LANDING_MODE` override at the GLOBAL/tenant tier via the same config path as the Preferences screen (so UI + command agree); prints the resulting resolved value + source. Idempotent. This lets any Code session or a scheduled task flip the mode with no browser.
+2. **Browser path (post Part-A fix):** once pages reach `document_idle`, the DA can flip it from the **Preferences screen on Abhay's already-authenticated Chrome session** (DA never enters credentials — operates the existing logged-in session, same as the Zoho-settings read). Part A of this mission is the prerequisite.
+
+Same branch/PR. Note: this is the *default/global* landing mode; per-referrer direct override (ADR-032 disclosure coupling) is unchanged. — DA
+
 ---
 
 ### 2026-07-16 — FROM ENGINEER (Lane D / GoRefer161) — STATUS — live Zoho WRITE + READ HTTP bodies wired to the confirmed contract — PR #13 still HELD
@@ -2281,3 +2319,128 @@ No `ConfigGlobal` override rows exist, so every flag falls through to the env de
 - **My earlier test-client render showed HTTP 400** — that was the Django test client sending `Host: testserver`, which `ALLOWED_HOSTS` correctly rejects. With `Host: gorefer.in` it's 200 (above). Not a prod bug; flagging so the 400 in any captured log isn't misread.
 
 **Prod is live on `fe00d81` with every integration flag OFF. The go-live flip is Abhay's, via Settings → Integrations.** — Engineer #2 (Lane D)
+
+---
+
+### 2026-07-16 — FROM VERIFIER (independent) — STATUS — Pre-go-live verification of main @ `fe00d81` — **GO**
+
+**Role:** independent verifier — not the author of this code. **No flag flipped, no code modified.** All work done in a throwaway clean clone (`scratchpad/verify-fe00d81`) with its own venv and its own Postgres test DB; prod touched **read-only** (curl + `ssh` reads).
+
+**Verdict: GO.** Every claim in the deploy STATUS above independently reproduced. No blocking discrepancy. Three non-blocking notes at the bottom.
+
+#### 1. Clean-room build + test — PASS
+| Check | Result |
+|---|---|
+| Clean checkout @ `fe00d81` | clean tree; code identical to `c9db2d3` (only `COORDINATION.md` differs) |
+| Full suite, fresh venv from `requirements.txt`, isolated Postgres | **364 passed**, 0 failed (217s) — matches the expected 364 exactly |
+| Guardrail #1 redirect-never-submits | PASS — static (no `requests.post`/`urlopen`/`.submit(`, no HTTP import) **+ behavioural** (socket-blocked run: the 302 assembles the URL with **0 connections**) |
+| Guardrail #2 status-only-from-Zoho | PASS — and **independently re-derived**: a full-codebase grep proves `apps/integrations/zoho/ingest.py` is the **sole writer** of `conversion_status` / `credited_referrer` / `account_opened_at`. Behavioural: a full lead capture leaves status `""` and emits 0 `account_opened` events |
+| Guardrail #3 no-partner-code-in-body | PASS (6 assertions, none skipped — the M1 scaffolds are live) |
+| `makemigrations --check` | **No changes detected** — no drift |
+| `manage.py check` / `ruff` | no issues / all checks passed |
+
+#### 2. Prod edge black-box through Cloudflare — PASS
+All responses carry `server: cloudflare` + `cf-ray` (edge confirmed, `-SIN`).
+
+| Surface | Result |
+|---|---|
+| `/r/RJ4521` | **302** → `https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=RJ4521`; sets `gr_vid` (HttpOnly, SameSite=Lax, 1y) |
+| `/r/RJ4521/continue` | **302**, same destination, `c=ZMPHZC` **only in the `Location` header** |
+| `/open` | **302** → `...?c=ZMPHZC` — **no `r=`** ✅ |
+| `/d/pifs` · home | **200** · **200** |
+| **Body-leak count** (`/`, `/r/…`, `/r/wa/…`, `/open`, `/d/pifs`, `/api/health`) | `ZMPHZC` **×0** and `signup.zerodha.com` **×0** in every body ✅ |
+| Admin login `/admin-panel/login/` | **200**; `/admin-panel/` unauthed → 302 to login (auth gate holds) |
+| Settings → Integrations (authed) | **200**, exactly **3 integration checkboxes** (`enable_wati_send`, `enable_zoho_write`, `enable_zoho_read`); **Tier-3 hidden** (`enable_customer_login` / `enable_otp_login` absent); no "Coming Soon" / dead UI |
+
+**Integration flags resolve OFF — verified the strong way.** Not read from `.env`, but resolved **through the live cascade on the prod box**:
+```
+tenant pifs → ENABLE_WATI_SEND=False (env) · ENABLE_ZOHO_WRITE=False (env) · ENABLE_ZOHO_READ=False (env)
+OVERRIDE ROWS for ENABLE_*: NONE (env defaults stand)
+```
+Zero override rows, so no admin toggle is silently arming anything.
+
+**Deployed-code identity proven, not assumed.** `/var/www/gorefer` is not a git repo; `DEPLOYED_SHA` claims `fe00d811c568…`. I verified the claim by **sha256-comparing deployed files against my clean `fe00d81` checkout** — `redirect_service.py`, `views.py`, `integration_flags.py` all **match byte-for-byte**. `DJANGO_DEBUG=false`; no `.py` newer than the deploy (no stale-bytecode risk); gunicorn restarted after deploy.
+
+**P5 worker checklist (DEPLOY-TARGET) — all satisfied:** `Q_ASYNC=true`; `gorefer.service` **active**; `gorefer-qcluster.service` **active running** (3 procs); schedules registered: `recompute_rollups` 5m, `zoho_backfill_unsynced` **10m**, `zoho_purge_expired_nonces` 60m. The retry layer is *running*, not merely present.
+
+#### 3. Demo/log-only end-to-end, flags OFF — PASS (0 live calls)
+Ran the whole loop with **`socket.connect` hard-blocked** — any live send/write would have raised.
+
+`click → journey + click event (gr_vid set) → landing 200 (form + NSE AP AP2516003693, no code leak) → capture POST /api/leads/ → 201, lead saved locally (GR-1) → WATI notify → Zoho write → status read → dashboard`
+
+| Leg | Result |
+|---|---|
+| Adapters selected | `LogOnlyWatiAdapter` · `LogOnlyZohoAdapter` · `LogOnlyZohoReadAdapter` (fixture-backed) |
+| Intended calls **logged, not sent** | `[demo] WATI send suppressed: …gorefer_office_new_lead / gorefer_prospect_welcome`; `[demo] Zoho upsert_lead suppressed: ref=GR-1 …`; `zoho_lead_id=demo-zoho-…` (demo- prefix, not a real Zoho id) |
+| Status never fabricated | `conversion_status=''`, `account_opened` events **0** |
+| Funnel recorded | `click · landing_viewed · lead_captured · notification` |
+| Dashboard | `/admin-panel/` 200 · explorer 200 **shows RJ4521** · journey detail 200 |
+| **Outbound network attempts** | **0 — no live send/write occurred** ✅ |
+
+**DPDP posture confirmed as a side-effect:** lead PII lives on a **separate `prospect` record** (name + mobile, normalized `919876543210`, consent captured), and the `Event` model has **no name/mobile/IP columns at all** — PII exclusion from the immutable log is structural, not merely conventional. A targeted scan found **no PII in any event metadata**.
+
+#### Non-blocking notes (none gate go-live)
+1. **`/r/{client_id}` 302s straight to Zerodha in prod** rather than rendering the landing page — this is `LANDING_MODE=direct` (ADR-032), a *configured* choice, and the compliance coupling holds: the live `/d/pifs` disclosure host returns 200, so the bypass-without-disclosure gap (§3b) is closed. Legitimate, but worth a conscious confirmation that `direct` is the intended go-live mode, since the landing form is then only reached via `/r/{id}` in `page` mode.
+2. **Journey detail does not display prospect name** — intentional (the view passes only `client_id`/timeline/conversion, never PII). Flagging only so it isn't later mistaken for a bug.
+3. **`ENABLE_ZOHO_WEBHOOK_HMAC` is not set in prod `.env`** → falls back to the code default (`false`), i.e. the interim static-key + IP-allowlist path. Correct for today (the Deluge signer isn't live), but it's an *implicit* off rather than an explicit one — worth pinning explicitly in `.env` so the DF-2 flip order stays deliberate.
+
+**Bottom line: `fe00d81` is what's running in prod, it's byte-identical to what I tested, all 364 tests + 3 guardrails pass, every integration flag resolves OFF with no override rows, and the full referral loop runs end-to-end with zero live sends. GO.** — Independent Verifier
+
+---
+
+### 2026-07-16 — FROM ENGINEER — STATUS — (A) idle: the poll does not exist; root cause is the browser tooling + (B) `golive_smoke` + (C) `set_landing_mode` — PR HELD
+
+**All three parts done. 381 tests pass (was 364), ruff clean, no migration drift. No flag flipped, nothing deployed. Branch `feature/idle-fix-golive-smoke` off `main` (fe00d81), PR held.**
+
+#### ⚠️ QUESTION / correction — Part A's stated cause is not real, and I did not "fix" a thing that doesn't exist
+
+The mission says *"almost certainly an always-on HTMX poll (`hx-trigger="every Ns"`) or SSE/websocket/animation."* **There is none.** I grepped every template and JS file:
+
+- **`hx-trigger` appears ZERO times** in any template. The only hit repo-wide is inside the minified `htmx.min.js` library itself (the string is in its parser).
+- **No `EventSource`, no `WebSocket`, no `setInterval`, no `requestAnimationFrame`, no CSS animation loop.** All JS (`landing.js`, `rings.js`, `referral_profile.js`) is event-driven and terminates: `rings.js` renders SVG once and exits; `landing.js` binds listeners + fires one beacon.
+- **No `StreamingHttpResponse`** anywhere — no server-side hold.
+
+So there was no poll to bound or scope. **I did not invent one to fix.**
+
+**What the timeout actually is — I reproduced it, then falsified my own first hypothesis:**
+
+1. Reproduced the DA's exact failure locally: `get_page_text` → `waited 45000ms for document_idle`.
+2. Queried the page from the same tab via `javascript_tool`: **`readyState: "complete"`, `loadEventEnd: 4188ms`.** The page had fully loaded and idled ~40s before the tool gave up.
+3. **Control test — `https://example.com`** (no GoRefer code, no fonts, no HTMX, static): **`loadEventEnd: 304ms`, `readyState: "complete"`, body text readable** — and `get_page_text` **still 45s-timeouts on it.**
+
+**Conclusion: `get_page_text`/`screenshot`/`read_page` are failing to inject in that browser session regardless of the page. It is a Claude-in-Chrome extension/session fault, not a GoRefer bug.** `javascript_tool` reads the same tabs fine — that's the DA's workaround today (`document.body.innerText`), and it worked on GoRefer's landing page for me. Suggest the DA reload the extension / restart Chrome / re-grant the site permission and re-test; if `example.com` also fails there, it's confirmed environment-side and no GoRefer change will fix it.
+
+**Prod is not slow, for the record:** `/d/pifs` 200 in **0.54s**, `/` 0.72s, `/admin-panel/login/` 0.73s, and the HTML is complete and readable over plain HTTP (AP reg `AP2516003693` present).
+
+#### What I DID fix in Part A (a real defect, found on the way — plausibly a *second* cause of the same symptom)
+
+Every page pulled a **render-blocking stylesheet from `fonts.googleapis.com`** (`templates/partials/pifs_head.html`, included by landing, disclosure, admin, home). This is the one page-side thing that genuinely can prevent idle forever: on a network that **blackholes** that origin (drops packets rather than refusing), the request neither completes nor errors, so the browser waits on it and `load`/idle never fires. **The DA's seat reaching gorefer.in but not Google's CDN is exactly that shape** — I could not reproduce it (Google Fonts is reachable from my Chrome: 213ms), so I can't *prove* it was a contributing cause for the DA, but it is a real hazard and a hard third-party dependency for the page to render at all.
+
+**Fix: Inter is now self-hosted** — one variable woff2 (latin subset, 48KB, covers all five weights 400–800) at `static/fonts/`. **Pages now reference no third-party origin at all.** Design unchanged (same typeface). Consistent with ADR-003 + the existing "NO CDN runtime" stance the head partial already claimed — Google Fonts was the one thing violating it.
+
+`tests/test_no_third_party_origin.py` (4 tests) locks it in: no third-party origin on any public page; every stylesheet/script same-origin (catches a *new* CDN host, not just known ones); Inter self-hosted + valid woff2; and no always-on poll/SSE/websocket on public pages. **Mutation-checked** — re-adding the CDN link fails 2 of them.
+
+#### Part B — `golive_smoke`
+
+`python manage.py golive_smoke --referrer EKU497 --mobile 9876543210 [--name] [--email] [--json]`
+
+- **Real service layer, not a copy:** synthesizes the click via `redirect_service.handle_direct_redirect` (same lazy identity+journey+click a browser makes), then captures via `lead_service.capture_lead` — which fires its own `on_commit` hooks for the 3 WATI notifications + the Zoho upsert. A smoke test that re-implemented capture would prove nothing about the code that runs.
+- **Independent of `LANDING_MODE`** (tested both modes) — calls capture directly, so it works while prod is in `direct`.
+- **Structured report:** journey id, lead id, GoRefer reference, Zoho action + `zoho_lead_id` + sync status, per-recipient notification status, errors, and the live flag values **with their source**.
+- **`insert|update` comes from the adapter's own `LeadWriteResult.action`** (Zoho's server-side dedup verdict — `update` on a re-run IS the idempotency proof). That field is logged but never persisted on the Lead, so I observe it in-process via a scoped wrapper rather than adding a column + migration for a diagnostic. Where this run performed no write (already-synced), it says so rather than guessing insert-vs-update.
+- **Proven:** honors flags (OFF ⇒ `log-only`, **socket-blocked test: zero network**); **idempotent** (re-run → same journey id, same lead id, no twin — verified live on the dev DB too); **never fabricates status** (`conversion_status=""`, 0 `account_opened` events); **PII stays out of events**; a skipped notification reports its reason (`referrer phone unknown`), never omitted.
+
+#### Part C — `set_landing_mode`
+
+`python manage.py set_landing_mode page|direct [--tenant pifs]`
+
+- **One write path, not two.** The screen's landing-mode logic lived inline in `save_preferences`, which writes the *whole* form — calling it from the CLI would clobber unrelated settings. I extracted it to **`preferences_service.set_landing_mode`**, now called by **both** the Preferences screen and the command. Two callers enforcing the same rule separately is how a CLI ends up able to set a state the screen forbids; a test asserts both refuse `direct` for the same reason.
+- **ADR-032 coupling enforced for the command too:** `direct` without a live `/d/{slug}` is refused, and the command **exits non-zero** rather than printing a cheerful message about a change it didn't make.
+- **Prints the value read back through the cascade** (+ which tier answered), not echoed from the input. **Idempotent** (re-run = no-op, single `ConfigGlobal` row). Per-referrer override + the coupling itself unchanged.
+
+#### Also (flagging, not hiding)
+
+- **`static/css/app.css` was stale on `main`** — it was missing `sm:grid-cols-3`, `min-w-[180px]`, `min-w-[220px]`, all three used by the Tier-2/3 `preferences.html` merged in PR #13 (built before that screen landed). My rebuild picks them up: **3 rules added, 0 removed** (verified by a semantic rule-level diff, not a byte diff) — purely additive, nothing can regress. That screen's layout was subtly unstyled in prod until now.
+- **Deploy note:** the new `static/fonts/` needs a `collectstatic` on deploy (it is committed, like the vendored HTMX/CSS).
+
+**PR held as instructed. — Engineer**
