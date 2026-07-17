@@ -50,7 +50,18 @@ def send_notification(notification_id: int) -> str:
         _finalize(n, st.STATUS_FAILED, meta_error_code=None)
         return st.STATUS_FAILED
 
-    delivery = adapter.get_message_status(provider_message_id=n.provider_message_id)
+    # The Wati ack has no message id, so terminal status is reconciled by mobile +
+    # template (getMessages), not by an id. If it can't be reconciled yet the adapter
+    # honestly returns the non-terminal 'accepted' — we then leave the row ACCEPTED
+    # (not fabricated as delivered); a later reconcile pass moves it terminal.
+    delivery = adapter.get_message_status(
+        provider_message_id=n.provider_message_id,
+        recipient_mobile=n.recipient_mobile,
+        template=n.template,
+    )
+    if delivery.status == st.STATUS_ACCEPTED:
+        # No terminal proof available — keep it at ACCEPTED, don't finalize.
+        return st.STATUS_ACCEPTED
     _finalize(n, delivery.status, meta_error_code=delivery.meta_error_code)
     return delivery.status
 
