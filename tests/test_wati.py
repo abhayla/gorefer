@@ -153,6 +153,7 @@ def test_live_send_template_post_shape(monkeypatch):
     accepted, and NO fabricated message id."""
     monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/999999")
     monkeypatch.setenv("WATI_API_TOKEN", "Bearer abc.def.ghi")  # leading Bearer stripped
+    monkeypatch.setenv("WATI_ALLOW_ALL_RECIPIENTS", "true")  # this test asserts the POST shape
 
     calls = []
 
@@ -180,9 +181,57 @@ def test_live_send_template_post_shape(monkeypatch):
     assert payload["parameters"] == []            # no positional vars for this template
 
 
+def test_live_send_blocked_for_non_allowlisted_recipient(monkeypatch):
+    """Fail-closed: with allow-all off, a recipient NOT in WATI_TEST_RECIPIENTS is
+    BLOCKED — no transport call, raw_status=blocked, not accepted."""
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/1")
+    monkeypatch.setenv("WATI_API_TOKEN", "tok")
+    monkeypatch.setenv("WATI_TEST_RECIPIENTS", "917972672473")
+    monkeypatch.setenv("WATI_ALLOW_ALL_RECIPIENTS", "false")
+
+    called = []
+    adapter = LiveWatiAdapter(transport=lambda *a: called.append(a) or (200, '{"result":true}'))
+    res = adapter.send_template(to="917388882020", template="t", params={})  # office number
+    assert res.accepted is False
+    assert res.raw_status == st.STATUS_BLOCKED
+    assert called == []  # NO network call was made
+
+
+def test_live_send_allowed_for_allowlisted_recipient(monkeypatch):
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/1")
+    monkeypatch.setenv("WATI_API_TOKEN", "tok")
+    monkeypatch.setenv("WATI_TEST_RECIPIENTS", "917972672473")
+    monkeypatch.setenv("WATI_ALLOW_ALL_RECIPIENTS", "false")
+    adapter = LiveWatiAdapter(transport=lambda *a: (200, '{"result":true}'))
+    res = adapter.send_template(to="+91 79726 72473", template="t", params={})
+    assert res.accepted is True  # the allowlisted number goes through
+
+
+def test_live_send_allow_all_bypasses_the_gate(monkeypatch):
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/1")
+    monkeypatch.setenv("WATI_API_TOKEN", "tok")
+    monkeypatch.setenv("WATI_TEST_RECIPIENTS", "")
+    monkeypatch.setenv("WATI_ALLOW_ALL_RECIPIENTS", "true")
+    adapter = LiveWatiAdapter(transport=lambda *a: (200, '{"result":true}'))
+    res = adapter.send_template(to="919999999999", template="t", params={})
+    assert res.accepted is True
+
+
+def test_live_send_empty_allowlist_blocks_everything(monkeypatch):
+    """Empty allowlist + allow-all off = block all (the safe default)."""
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/1")
+    monkeypatch.setenv("WATI_API_TOKEN", "tok")
+    monkeypatch.setenv("WATI_TEST_RECIPIENTS", "")
+    monkeypatch.setenv("WATI_ALLOW_ALL_RECIPIENTS", "false")
+    adapter = LiveWatiAdapter(transport=lambda *a: (200, '{"result":true}'))
+    res = adapter.send_template(to="917972672473", template="t", params={})
+    assert res.accepted is False and res.raw_status == st.STATUS_BLOCKED
+
+
 def test_live_send_non_result_true_is_not_accepted(monkeypatch):
     monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/1")
     monkeypatch.setenv("WATI_API_TOKEN", "tok")
+    monkeypatch.setenv("WATI_ALLOW_ALL_RECIPIENTS", "true")  # isolate the result-parse path from the gate
     adapter = LiveWatiAdapter(transport=lambda *a: (200, json.dumps({"result": False})))
     res = adapter.send_template(to="919876543210", template="t", params={})
     assert res.accepted is False

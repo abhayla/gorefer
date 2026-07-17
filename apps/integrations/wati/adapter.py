@@ -103,6 +103,10 @@ class LiveWatiAdapter:
     # --- HTTP -------------------------------------------------------------------
 
     def _http(self, method: str, url: str, headers: dict, body: bytes | None):
+        # A real User-Agent is REQUIRED: Wati sits behind Cloudflare, which 403s the
+        # default `Python-urllib/x.y` UA as a bot signature. curl (UA `curl/x`) passes,
+        # which is why manual curl sends worked while the adapter's urllib send got 403.
+        headers = {**headers, "User-Agent": "GoRefer/1.0 (+https://gorefer.in)"}
         req = urllib.request.Request(url, data=body, headers=headers, method=method)
         try:
             with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SECONDS) as resp:
@@ -133,10 +137,22 @@ class LiveWatiAdapter:
         params["template_params"] (a list of {name,value}) — future-proofing without
         guessing a mapping we don't have.
         """
+        number = "".join(ch for ch in str(to) if ch.isdigit())
+
+        # FAIL-CLOSED recipient allowlist. Unless WATI_ALLOW_ALL_RECIPIENTS is
+        # explicitly "true", a send is REFUSED for any number not in
+        # WATI_TEST_RECIPIENTS — no network call is made. This is the same rail the
+        # test-send skill enforces, now enforced inside GoRefer's own send path so a
+        # capture during testing can never fire a real message to a non-test number
+        # (e.g. the office/Ashok alert). A blocked send is recorded, not sent.
+        if not _recipient_allowed(number):
+            logger.warning("WATI send BLOCKED by allowlist: template=%s (recipient not allowlisted)",
+                           template)
+            return SendResult(accepted=False, provider_message_id=None, raw_status=status.STATUS_BLOCKED)
+
         tvars = params.get("template_params") if isinstance(params, dict) else None
         if not isinstance(tvars, list):
             tvars = []
-        number = "".join(ch for ch in str(to) if ch.isdigit())
         url = (
             f"{self.base_url}/api/v1/sendTemplateMessage"
             f"?whatsappNumber={urllib.parse.quote(number)}"
@@ -233,6 +249,23 @@ def _extract_meta_code(failed_detail: str) -> int | None:
         if str(code) in (failed_detail or ""):
             return code
     return None
+
+
+def _recipient_allowed(number: str) -> bool:
+    """Fail-closed allowlist check for the LIVE send path.
+
+    Returns True only if WATI_ALLOW_ALL_RECIPIENTS is explicitly "true", OR the number
+    (digits only) is in WATI_TEST_RECIPIENTS. An empty allowlist with allow-all off
+    blocks everything (the safe default for a test run). Reading env every call is
+    deliberate — the gate must reflect the CURRENT config, never a cached value.
+    """
+    allow_all = os.environ.get("WATI_ALLOW_ALL_RECIPIENTS", "").strip().lower() == "true"
+    if allow_all:
+        return True
+    raw = os.environ.get("WATI_TEST_RECIPIENTS", "")
+    allowed = {"".join(ch for ch in item if ch.isdigit()) for item in raw.split(",")}
+    allowed.discard("")
+    return number in allowed
 
 
 def get_wati_adapter():
