@@ -12,6 +12,7 @@ STATUS_SENT = "sent"
 STATUS_DELIVERED = "delivered"
 STATUS_READ = "read"
 STATUS_FAILED = "failed"
+STATUS_BLOCKED = "blocked"     # refused by the fail-closed recipient allowlist — never sent
 
 # A terminal status is one the message will not move past.
 TERMINAL_STATUSES = frozenset({STATUS_DELIVERED, STATUS_READ, STATUS_FAILED})

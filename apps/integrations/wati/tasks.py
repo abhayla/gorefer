@@ -43,6 +43,16 @@ def send_notification(notification_id: int) -> str:
         template=n.template,
         params={"role": n.recipient_role, "template_params": n.template_params or []},
     )
+
+    # Fail-closed allowlist blocked this recipient — NOTHING was sent. Record it as a
+    # skip with a reason (not a delivery failure): the funnel must show it did not go
+    # AND that it was suppressed by the gate, never mistaken for a Meta failure.
+    if result.raw_status == st.STATUS_BLOCKED:
+        n.status = "skipped"
+        n.skip_reason = "recipient not in WATI allowlist (fail-closed)"
+        n.save(update_fields=["status", "skip_reason", "updated_at"])
+        return st.STATUS_BLOCKED
+
     # HTTP 200 / accepted is NOT delivery — record it, then verify the terminal status.
     n.provider_message_id = result.provider_message_id or ""
     n.status = st.STATUS_ACCEPTED
