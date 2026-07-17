@@ -7,6 +7,10 @@
 > Applying Abhay's guidance (2026-07-17): **Ashok alert = no compliance**; **prospect welcome +
 > referrer-used = add the disclosure line at the end** (matching the approved templates:
 > `*Disclosures*: https://gorefer.in/d/pifs`), **keep everything else the same**.
+>
+> **Names follow `WATI-TEMPLATE-NAMING-CONVENTION.md`** (`gr_<group>_<partner>_<purpose>_[lang]_<date>`).
+> For these: `gr_brokers_zerodha_<purpose>_[hin]_2026_07_17`. The code (`notify.py`) must read these
+> from config (not the old hardcoded `gorefer_office_new_lead` constants) — see §On your go-ahead.
 
 ---
 
@@ -29,7 +33,7 @@
 
 ---
 
-## 1. `gorefer_office_new_lead` — Office/Ashok alert · UTILITY · **NO disclosure** (internal)
+## 1. `gr_brokers_zerodha_office_new_lead_2026_07_17` — Office/Ashok alert · UTILITY · **NO disclosure** (internal)
 
 **Audience:** PIFS's own office line (Ashok). Internal staff → no client disclosure needed (RULE §4).
 **Trigger:** a lead is captured. **Category:** UTILITY. **Buttons:** none. **Language:** EN only (internal).
@@ -45,7 +49,7 @@ New GoRefer lead: {{1}} (mobile {{2}}), referred by client {{3}}. Please call to
 
 ---
 
-## 2. `gorefer_prospect_welcome` — Prospect welcome · UTILITY · **WITH disclosure** (client-facing)
+## 2. `gr_brokers_zerodha_prospect_welcome_2026_07_17` (+ `_hin_`) — Prospect welcome · UTILITY · **WITH disclosure** (client-facing)
 
 **Audience:** the person who just submitted the form. **Trigger:** lead captured. **Category:** UTILITY.
 **Buttons:** none (recommended). **Language:** EN + Hindi.
@@ -63,7 +67,7 @@ the 2 the code sends.
 *(Change vs current manifest: only the `*Disclosures*: https://gorefer.in/d/pifs` line appended, and the
 market-risk sentence put on its own line. Wording otherwise identical.)*
 
-**Body (Hindi companion — `gorefer_prospect_welcome_hin`):**
+**Body (Hindi companion — `gr_brokers_zerodha_prospect_welcome_hin_2026_07_17`):**
 ```
 नमस्कार {{1}} जी, {{2}} ने आपको PIFS के माध्यम से एक मुफ़्त Zerodha डीमैट और ट्रेडिंग अकाउंट खोलने के लिए रेफ़र किया है। हमारा प्रतिनिधि आपको इसे पूरा करने में मदद के लिए कॉल करेगा।
 
@@ -75,7 +79,7 @@ market-risk sentence put on its own line. Wording otherwise identical.)*
 
 ---
 
-## 3. `gorefer_referrer_used` — "Someone used your link" · UTILITY · **WITH disclosure** (client-facing)
+## 3. `gr_brokers_zerodha_referrer_used_2026_07_17` (+ `_hin_`) — "Someone used your link" · UTILITY · **WITH disclosure** (client-facing)
 
 **Audience:** the referrer (only if GoRefer knows their phone). **Trigger:** their link produced a lead.
 **Category:** UTILITY. **Buttons:** none (recommended). **Language:** EN + Hindi.
@@ -88,7 +92,7 @@ Good news! Someone just used your PIFS referral link to start opening a Zerodha 
 ```
 **Variables:** none (matches the code). *(Change vs current manifest: only the disclosure line appended.)*
 
-**Body (Hindi companion — `gorefer_referrer_used_hin`):**
+**Body (Hindi companion — `gr_brokers_zerodha_referrer_used_hin_2026_07_17`):**
 ```
 खुशखबरी! किसी ने अभी-अभी आपके PIFS रेफ़रल लिंक का उपयोग करके Zerodha अकाउंट खोलना शुरू किया है। हम आपको अपडेट करते रहेंगे। रिवॉर्ड की स्थिति आपके Zerodha Console में दिखती है।
 
@@ -100,11 +104,11 @@ Good news! Someone just used your PIFS referral link to start opening a Zerodha 
 
 ## Summary table
 
-| Template | Audience | Category | Disclosure | Buttons | Languages | Vars |
+| Template (`gr_brokers_zerodha_…_2026_07_17`) | Audience | Category | Disclosure | Buttons | Languages | Vars |
 |---|---|---|---|---|---|---|
-| `gorefer_office_new_lead` | Ashok (internal) | UTILITY | ❌ no | none | EN | 3 |
-| `gorefer_prospect_welcome` (+ `_hin`) | prospect | UTILITY | ✅ yes | none | EN + HI | 2 |
-| `gorefer_referrer_used` (+ `_hin`) | referrer | UTILITY | ✅ yes | none | EN + HI | 0 |
+| `…_office_new_lead_…` | Ashok (internal) | UTILITY | ❌ no | none | EN | 3 |
+| `…_prospect_welcome_…` (+ `_hin_`) | prospect | UTILITY | ✅ yes | none | EN + HI | 2 |
+| `…_referrer_used_…` (+ `_hin_`) | referrer | UTILITY | ✅ yes | none | EN + HI | 0 |
 
 ## Open questions for Abhay (before I submit)
 1. **Buttons on the prospect message?** Recommend NONE (it's a notice; the call is the next step). If
