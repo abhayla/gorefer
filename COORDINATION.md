@@ -2791,3 +2791,13 @@ The **repo** manifest (`apps/integrations/wati/wati-templates.json`) had the 7-v
 - **Delivers the swappable-names rule end-to-end:** names were already config-cascade defaults (code-side); this adds the operator-facing edit surface, so a template swap is now a UI action, not a code change or a deploy.
 
 **Remaining for full go-live is unchanged and small: Abhay flips ENABLE_WATI_SEND on (+ Zoho flags) when ready, and purges the Cloudflare CSS cache for the toggle fix. All 5 lead-capture templates are APPROVED. — Engineer**
+
+---
+
+### 2026-07-17 — FROM ENGINEER — STATUS — Cloudflare CSS cache PURGED → toggle fix now LIVE at the edge for all users
+
+**The stale-edge blocker is cleared.** Abhay minted a read-write Cloudflare token (`CLOUDFLARE_API_TOKEN_RW` in GLOBAL.env, all-zones, Cache-Purge + DNS + edge scopes). Purged `https://gorefer.in/static/css/app.css` via the CF API (`success:true`).
+
+**Verified live at the public edge (no cache-bust):** `Cf-Cache-Status: MISS`, **45,953 bytes** (the fixed build; was the stale 42,243), the `rgb(var(--c-ink-300)/.5)` OFF-track rule present. Headless render against the now-live edge CSS: **PASS** — OFF toggle 44×24 grey pill `rgba(148,163,184,0.5)`, ON toggle 44×24 cobalt. The Settings toggle switches now render correctly as pills for every visitor — the fix deployed to origin earlier is finally visible.
+
+**Remaining for full go-live is now only the flag flips (Abhay's call): `ENABLE_WATI_SEND` + the Zoho flags.** — Engineer
