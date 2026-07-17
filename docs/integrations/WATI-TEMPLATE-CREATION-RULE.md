@@ -90,7 +90,11 @@ For every button, record: type, label, and (critically) **what the user gets aft
       referrer preference, default). Record it.
 
 ### 8. Naming & versioning
-- [ ] Convention: `gorefer_{partner}_{purpose}_{YYYY_MM_DD}` (Abhay 2026-07-09); bump `_v2` on a re-submit.
+- [ ] **Convention: `gr_<partnerGroup>_<partner>_<purpose>_[lang]_<YYYY_MM_DD>`** — see the authoritative
+      `WATI-TEMPLATE-NAMING-CONVENTION.md` (Abhay 2026-07-17). E.g. `gr_brokers_zerodha_prospect_welcome_2026_07_17`,
+      Hindi `…_prospect_welcome_hin_2026_07_17`. English omits the lang marker; partner is a single token
+      (`angelone`, not `angel_one`). Bump the date (or `_v2` for same-day) on a re-submit.
+      *(Templates created before this — `gorefer_zerodha_*` — are grandfathered, not renamed.)*
 - [ ] A template body/button change = a NEW template + Meta re-approval (you cannot edit an approved
       template in place). Bot-reply materials (not in the template) are editable in the dashboard, no
       approval. Plan the version bump before you start.
