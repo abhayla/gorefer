@@ -17,6 +17,8 @@ ACTIVE program in regulator order.
 """
 from __future__ import annotations
 
+import re
+
 from django.db import transaction
 from django.utils.text import slugify
 
@@ -83,6 +85,10 @@ def current_view(tenant) -> dict:
         "otp_enabled": flags.ENABLE_OTP_LOGIN,
         "otp_channel_choices": prefkeys.OTP_CHANNEL_CHOICES,
         "otp_fallback_selected": prefs[prefkeys.OTP_FALLBACK_CHANNELS],
+        # WhatsApp lead-time notification template NAMES (config-over-code): swap the
+        # Meta-approved template each role/language uses with NO deploy. One editable
+        # field per (role, language) — the swappable-names rule (Abhay 2026-07-17).
+        "notify_template_fields": prefkeys.notify_template_fields_view(tenant_id),
     }
 
 
@@ -301,6 +307,43 @@ def save_preferences(tenant, data, *, user=None) -> list[str]:
     # here, no deploy. Persisted at the tenant tier of the same cascade the OtpService
     # reads, so a change takes effect immediately.
     _save_otp(tenant_id, data, user=user)
+
+    # --- WhatsApp notification template NAMES — swap the approved template each role/
+    # language sends with NO deploy (config-over-code). Persisted at the tenant tier the
+    # notify service reads, so a change takes effect on the next send.
+    notices.extend(_save_notify_templates(tenant_id, data, user=user))
+    return notices
+
+
+# Meta template names: lowercase letters, digits, underscore only.
+_META_NAME_RE = re.compile(r"^[a-z0-9_]+$")
+
+
+def _save_notify_templates(tenant_id, data, *, user=None) -> list[str]:
+    """Persist the lead-time notification template-name overrides (validated).
+
+    Each field is optional: a blank value clears the override (falls back to the
+    approved default). A non-blank value must be a valid Meta template name
+    (lowercase/digits/underscore) or it is rejected with a notice and left unchanged —
+    a malformed name would make every send for that role fail template-not-found.
+    """
+    notices: list[str] = []
+    for row in prefkeys.notify_template_fields_view(tenant_id):
+        key = row["form_key"]
+        if key not in data:
+            continue  # field not submitted → leave as-is
+        value = (data.get(key) or "").strip()
+        if value == "":
+            # Clear the override → back to the approved default.
+            set_tenant(key, row["default"], tenant_id=tenant_id, user=user)
+            continue
+        if not _META_NAME_RE.match(value):
+            notices.append(
+                f"“{row['label']}” template name “{value}” is invalid — Meta names use "
+                "only lowercase letters, digits and underscores. Kept the previous value."
+            )
+            continue
+        set_tenant(key, value, tenant_id=tenant_id, user=user)
     return notices
 
 
