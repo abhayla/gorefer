@@ -290,3 +290,53 @@ def test_routing_not_settable_by_non_admin(seeded):
 def test_routing_not_settable_anonymously(seeded):
     Client().post(PREFS_URL, _form(notify_office=""))
     assert prefkeys.notification_routing(_tenant().id)["office"] is True
+
+
+# --- WhatsApp template NAMES: config-driven, editable in the Settings UI ----------
+
+def test_template_fields_render_on_the_screen(admin_client):
+    body = admin_client.get(PREFS_URL).content.decode()
+    assert "WhatsApp templates" in body
+    # each editable field is present with its default value prefilled
+    assert 'name="notify_template_prospect_en"' in body
+    assert "gr_brokers_zerodha_prospect_welcome_en_2026_07_17_v2" in body
+    assert 'name="notify_template_office_en"' in body
+
+
+def test_template_name_override_persists_and_resolves(admin_client):
+    t = _tenant()
+    admin_client.post(PREFS_URL, _form(notify_template_prospect_en="my_new_approved_template"))
+    assert prefkeys.notify_template_name("prospect", lang="en", tenant_id=t.id) == "my_new_approved_template"
+
+
+def test_blank_template_name_clears_override_to_default(admin_client):
+    t = _tenant()
+    admin_client.post(PREFS_URL, _form(notify_template_prospect_en="custom_one"))
+    assert prefkeys.notify_template_name("prospect", lang="en", tenant_id=t.id) == "custom_one"
+    # blank submission → back to the approved default
+    admin_client.post(PREFS_URL, _form(notify_template_prospect_en=""))
+    assert (
+        prefkeys.notify_template_name("prospect", lang="en", tenant_id=t.id)
+        == "gr_brokers_zerodha_prospect_welcome_en_2026_07_17_v2"
+    )
+
+
+def test_invalid_template_name_rejected_and_kept(admin_client):
+    t = _tenant()
+    admin_client.post(PREFS_URL, _form(notify_template_prospect_en="valid_name_1"))
+    # an invalid name (spaces / uppercase) is rejected; the previous value is kept
+    admin_client.post(PREFS_URL, _form(notify_template_prospect_en="Bad Name!"))
+    assert prefkeys.notify_template_name("prospect", lang="en", tenant_id=t.id) == "valid_name_1"
+
+
+def test_template_name_not_settable_by_non_admin(seeded):
+    User = get_user_model()
+    User.objects.create_user(username="joe2", password="pw12345!", is_staff=False)
+    c = Client()
+    c.login(username="joe2", password="pw12345!")
+    c.post(PREFS_URL, _form(notify_template_prospect_en="sneaky_template"))
+    # unchanged from the approved default
+    assert (
+        prefkeys.notify_template_name("prospect", lang="en", tenant_id=_tenant().id)
+        == "gr_brokers_zerodha_prospect_welcome_en_2026_07_17_v2"
+    )

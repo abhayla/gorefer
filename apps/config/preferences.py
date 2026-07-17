@@ -100,6 +100,36 @@ def notify_template_name(role: str, *, lang: str = LANG_EN, tenant_id: int | Non
         raise KeyError(f"no notify template default for role={role!r}")
     return resolve(key, tenant_id=tenant_id, default=default)
 
+
+# The (role, lang, label) rows the Settings screen renders + persists, in display
+# order. One row per editable template-name field. Office is en-only (its hi key maps
+# to the same en name, so the screen shows a single office field).
+NOTIFY_TEMPLATE_FIELDS = [
+    ("office", LANG_EN, "Office / Ashok alert (English)"),
+    ("prospect", LANG_EN, "Prospect welcome (English)"),
+    ("prospect", LANG_HI, "Prospect welcome (Hindi)"),
+    ("referrer", LANG_EN, "Referrer thank-you (English)"),
+    ("referrer", LANG_HI, "Referrer thank-you (Hindi)"),
+]
+
+
+def notify_template_fields_view(tenant_id: int | None = None) -> list[dict]:
+    """Rows for the Settings 'WhatsApp Templates' section: each editable field with its
+    form key, label, currently-resolved value, and whether it is an override or default."""
+    rows = []
+    for role, lang, label in NOTIFY_TEMPLATE_FIELDS:
+        key = _notify_template_key(role, lang)
+        default = NOTIFY_TEMPLATE_DEFAULTS[key]
+        current = resolve(key, tenant_id=tenant_id, default=default)
+        rows.append({
+            "form_key": key,          # e.g. notify_template_prospect_en
+            "label": label,
+            "value": current,
+            "default": default,
+            "is_override": current != default,
+        })
+    return rows
+
 # A referrer may only pick a landing mode the TENANT allows; "" means inherit. The
 # ADR-032 coupling (direct needs a live /d/{slug}) is a tenant-level fact, so a
 # per-referrer `direct` can never bypass it — it is re-checked on resolve.

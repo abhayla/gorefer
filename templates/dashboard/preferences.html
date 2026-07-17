@@ -255,6 +255,28 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
       </div>
     </div>
 
+    {# ---- WhatsApp templates (config-over-code: swap the approved name, no deploy) ---- #}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">WhatsApp templates</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">
+      <div class="text-[11.5px] text-ink-500 mb-1">
+        The Meta-approved template each lead-time notification uses. Change a name here to swap a
+        template — no deploy. Leave blank to use the approved default. Names are lowercase letters,
+        digits and underscores only.
+      </div>
+      {% for f in notify_template_fields %}
+      <div class="flex items-center justify-between gap-4 py-1.5 {% if not forloop.first %}border-t border-line{% endif %}">
+        <label for="{{ f.form_key }}" class="text-[13px] font-semibold flex-1">
+          {{ f.label }}
+          {% if f.is_override %}<span class="text-[10.5px] font-normal text-cobalt-600 ml-1">(custom)</span>{% endif %}
+        </label>
+        <input type="text" id="{{ f.form_key }}" name="{{ f.form_key }}"
+               value="{{ f.value }}"
+               class="flex-none rounded-lg border border-line text-[13px] px-3 py-2 bg-white min-w-[220px]"
+               placeholder="{{ f.default }}">
+      </div>
+      {% endfor %}
+    </div>
+
     {# ---- Login OTP channel (Q-M-OTP) — config-over-code channel switch ---- #}
     <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Login OTP</div>
     <div class="rounded-2xl bg-white border border-line card p-5 space-y-4">
