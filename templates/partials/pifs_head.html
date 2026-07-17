@@ -1,4 +1,4 @@
-{% load static %}{% comment %}
+{% load static %}{% load assetver %}{% comment %}
 Reusable PIFS head: compiled/purged Tailwind CSS + local HTMX + SELF-HOSTED Inter
 (NO CDN runtime, no third-party origin at all). Light + offline for mobile-first on
 slow Indian networks (ADR-003). Rebuild the CSS after template changes:
@@ -13,8 +13,8 @@ One variable woff2 (latin subset) covers all five weights: 400/500/600/700/800.
 {% endcomment %}
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<link rel="stylesheet" href="{% static 'css/app.css' %}" />
-<script src="{% static 'js/htmx.min.js' %}" defer></script>
+<link rel="stylesheet" href="{% static_v 'css/app.css' %}" />
+<script src="{% static_v 'js/htmx.min.js' %}" defer></script>
 <style>
 @font-face {
   font-family: 'Inter';
