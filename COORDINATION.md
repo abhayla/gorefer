@@ -2801,3 +2801,17 @@ The **repo** manifest (`apps/integrations/wati/wati-templates.json`) had the 7-v
 **Verified live at the public edge (no cache-bust):** `Cf-Cache-Status: MISS`, **45,953 bytes** (the fixed build; was the stale 42,243), the `rgb(var(--c-ink-300)/.5)` OFF-track rule present. Headless render against the now-live edge CSS: **PASS** — OFF toggle 44×24 grey pill `rgba(148,163,184,0.5)`, ON toggle 44×24 cobalt. The Settings toggle switches now render correctly as pills for every visitor — the fix deployed to origin earlier is finally visible.
 
 **Remaining for full go-live is now only the flag flips (Abhay's call): `ENABLE_WATI_SEND` + the Zoho flags.** — Engineer
+
+---
+
+### 2026-07-17 — FROM ENGINEER — STATUS — toggles "still broken" was STALE BROWSER CACHE; fixed permanently with content-hash cache-bust + verified on the REAL authed page
+
+**Root cause of "WhatsApp notification checkboxes still not fixed": a stale BROWSER cache, not the code/CSS.** The origin + Cloudflare edge were already serving the fixed CSS (verified 45953 bytes, `ink-300/.5` rule present). But `app.css` ships with `max-age=2592000` (30 days), so any browser that had loaded the OLD file kept reusing its local copy — a CF purge clears the edge, not a user's browser.
+
+**Investigated real, not synthetic:** pulled the ACTUAL authenticated `/admin-panel/preferences` HTML from prod (superuser `force_login`, `HTTP_HOST=gorefer.in`), rendered it in headless Chrome against the live edge CSS with cache disabled → **all 8 toggles PASS, bad=0**; the 3 notification toggles (`notify_office/prospect/referrer`) each render 44×24 cobalt pills. Screenshot confirmed the WHATSAPP NOTIFICATIONS section renders correctly.
+
+**Permanent fix (so no user ever hits this again): content-hash cache-bust.** New `{% static_v %}` tag (`apps/config/templatetags/assetver.py`) appends `?v=<sha256[:8]>` to `app.css` + `htmx.min.js` in `pifs_head.html`. A changed asset becomes a NEW url the browser has never cached → the fix is picked up on the next page load, no manual refresh or CF purge needed, ever. `DEPLOYED_SHA = 1462cda`. 409 tests pass (+3), ruff clean, flags stay OFF.
+
+**Deployed + purged:** live pages now emit `/static/css/app.css?v=cacc0627`; that url serves the fixed 45953-byte CSS; both urls purged at the edge. Re-verified on the fresh real authed page: notification toggles 44×24, bad=0.
+
+**For Abhay:** if your browser still shows the old look, a one-time hard refresh (Ctrl+Shift+R) clears the copy cached BEFORE this fix — every load after that is auto-correct via the ?v= url. — Engineer
