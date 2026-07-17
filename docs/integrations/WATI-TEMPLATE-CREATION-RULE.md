@@ -90,10 +90,11 @@ For every button, record: type, label, and (critically) **what the user gets aft
       referrer preference, default). Record it.
 
 ### 8. Naming & versioning
-- [ ] **Convention: `gr_<partnerGroup>_<partner>_<purpose>_[lang]_<YYYY_MM_DD>`** — see the authoritative
-      `WATI-TEMPLATE-NAMING-CONVENTION.md` (Abhay 2026-07-17). E.g. `gr_brokers_zerodha_prospect_welcome_2026_07_17`,
-      Hindi `…_prospect_welcome_hin_2026_07_17`. English omits the lang marker; partner is a single token
-      (`angelone`, not `angel_one`). Bump the date (or `_v2` for same-day) on a re-submit.
+- [ ] **Convention: `gr_<lang>_<partnerGroup>_<partner>_<purpose>_<YYYY_MM_DD>`** — see the authoritative
+      `WATI-TEMPLATE-NAMING-CONVENTION.md` (Abhay 2026-07-17). **Language (`en`/`hin`) is MANDATORY and at
+      the 2nd level, always present even for English.** E.g. `gr_en_brokers_zerodha_prospect_welcome_2026_07_17`,
+      Hindi `gr_hin_brokers_zerodha_prospect_welcome_2026_07_17`. Partner is a single token (`angelone`,
+      not `angel_one`). Bump the date (or `_v2` for same-day) on a re-submit.
       *(Templates created before this — `gorefer_zerodha_*` — are grandfathered, not renamed.)*
 - [ ] A template body/button change = a NEW template + Meta re-approval (you cannot edit an approved
       template in place). Bot-reply materials (not in the template) are editable in the dashboard, no
