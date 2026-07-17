@@ -58,6 +58,71 @@ def test_meta_error_classification():
     assert "unclassified" in st.classify_failure(999999)
 
 
+# --- config-driven template names (no hardcoded names in notify.py) ------------
+
+def test_notify_template_names_resolve_to_approved(db):
+    """The lead-time notifications resolve their Meta template name from config,
+    defaulting to the 2026-07-17 approved gr_brokers_zerodha_* names."""
+    from apps.config.preferences import notify_template_name
+
+    office = "gr_brokers_zerodha_office_lead_alert_en_2026_07_17"
+    prospect_en = "gr_brokers_zerodha_prospect_welcome_en_2026_07_17_v2"
+    prospect_hi = "gr_brokers_zerodha_prospect_welcome_hi_2026_07_17_v2"
+    assert notify_template_name("office", lang="en") == office
+    assert notify_template_name("prospect", lang="en") == prospect_en
+    assert notify_template_name("prospect", lang="hi") == prospect_hi
+    assert notify_template_name("referrer", lang="en") == "gr_brokers_zerodha_referrer_thankyou_en_2026_07_17"
+    assert notify_template_name("referrer", lang="hi") == "gr_brokers_zerodha_referrer_thankyou_hi_2026_07_17"
+    # office has no Hindi variant → falls back to the English office template
+    assert notify_template_name("office", lang="hi") == office
+    # unknown language → English
+    assert notify_template_name("prospect", lang="xx") == prospect_en
+
+
+def test_notify_template_name_tenant_override(db):
+    """A tenant override swaps the template with NO code change (config-over-code)."""
+    from apps.config.cascade import set_tenant
+    from apps.config.preferences import notify_template_name
+    from apps.tenants.resolve import get_current_tenant
+
+    call_command("seed_program")
+    t = get_current_tenant()
+    set_tenant("notify_template_prospect_en", "some_other_approved_template", tenant_id=t.id)
+    assert notify_template_name("prospect", lang="en", tenant_id=t.id) == "some_other_approved_template"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_notifications_use_approved_names_and_named_params():
+    """On capture, the 3 notifications carry the approved template names + ordered
+    named params matching each approved template's variable order."""
+    call_command("seed_program")
+    # make the referrer a known customer so the office alert fills referrer fields
+    program = ReferralProgram.objects.get()
+    Customer.objects.create(
+        tenant=program.tenant, program=program, partner=program.partner,
+        client_id="RJ4521", mobile="9998887777", first_name="Ramesh", last_name="Kumar",
+    )
+    _capture_lead(Client())
+
+    office = Notification.objects.get(recipient_role="office")
+    assert office.template == "gr_brokers_zerodha_office_lead_alert_en_2026_07_17"
+    names = [p["name"] for p in office.template_params]
+    assert names == ["prospect_name", "prospect_mobile", "referrer_name", "referrer_client_id"]
+    by = {p["name"]: p["value"] for p in office.template_params}
+    assert by["referrer_name"] == "Ramesh Kumar"
+    assert by["referrer_client_id"] == "RJ4521"
+
+    prospect = Notification.objects.get(recipient_role="prospect")
+    assert prospect.template == "gr_brokers_zerodha_prospect_welcome_en_2026_07_17_v2"
+    assert [p["name"] for p in prospect.template_params] == [
+        "prospect_name", "referrer_name", "office_number",
+    ]
+
+    referrer = Notification.objects.get(recipient_role="referrer")
+    assert referrer.template == "gr_brokers_zerodha_referrer_thankyou_en_2026_07_17"
+    assert [p["name"] for p in referrer.template_params] == ["referrer_name", "prospect_name"]
+
+
 # --- LiveWatiAdapter: flag gating, refuse-loud, POST shape, honest status ------
 
 def test_flag_off_selects_log_only_and_no_network(monkeypatch):

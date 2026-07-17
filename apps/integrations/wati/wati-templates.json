@@ -1,60 +1,119 @@
 {
-  "_comment": "GoRefer WATI template manifest (M5). Lead-time transactional templates, all UTILITY (first message to a non-opted-in number must be a warm utility notice — doc-08 A4). Live sending stays behind ENABLE_WATI_SEND until APPROVED. NAMED variables per WATI-TEMPLATE-NAMING/CREATION docs. The `_APPROVED_2026_07_17_*` entries below (new gr_ naming convention) are the current authored+approved set replacing the superseded `gorefer_*` design entries; see docs/integrations/WATI-lead-capture-templates-PROPOSAL.md.",
+  "_comment": "GoRefer WATI template manifest — RECONCILED 2026-07-17 to the APPROVED shape. The `_APPROVED_SET` block below is the authoritative current set (matches what is live/submitted in Wati and what apps/config/preferences.notify_template_name resolves + notify.py sends). SUBMISSION SOURCE OF TRUTH is C:/Abhay/5Wealths/Wati-Project/docs/wati-templates.json (the wati-template-create-and-track skill submits from there). The prospect_welcome is 3-VAR (prospect_name, referrer_name, office_number) — the earlier 7-var/email drift is KILLED. Template NAMES are config-driven (preferences.NOTIFY_TEMPLATE_DEFAULTS, cascade-overridable), never hardcoded in notify.py. Historical/superseded design entries are retained below the approved set for the record.",
+  "_reconciliation_2026_07_17": "office alert = gr_brokers_zerodha_office_lead_alert_en_2026_07_17 (4 vars, APPROVED, Meta gave MARKETING). prospect_welcome EN/HI = the *_v2 UTILITY re-cut (3 vars; v1 reclassified MARKETING, so notify.py points at v2). referrer_thankyou EN/HI (2 vars, APPROVED, MARKETING). The 7-var office_new_lead + positional gorefer_* entries are SUPERSEDED (never existed live). See COORDINATION.md 2026-07-17.",
   "templates": [
     {
-      "_review": "APPROVED by Abhay 2026-07-17 (verbatim). Template 1 of 3 — office/Ashok alert.",
+      "_set": "_APPROVED_SET — office alert (internal). 4 vars, no disclosure (internal).",
+      "name": "gr_brokers_zerodha_office_lead_alert_en_2026_07_17",
+      "category": "UTILITY",
+      "metaCategory": "MARKETING",
+      "status": "APPROVED",
+      "language": "en",
+      "recipient_role": "office",
+      "disclosure": false,
+      "variables": [
+        {"position": 1, "name": "prospect_name", "sample": "Rahul Sharma", "fallback": "A new lead"},
+        {"position": 2, "name": "prospect_mobile", "sample": "9876543210", "fallback": "not provided"},
+        {"position": 3, "name": "referrer_name", "sample": "Ramesh Kumar", "fallback": "not on file"},
+        {"position": 4, "name": "referrer_client_id", "sample": "RJ4521", "fallback": null}
+      ],
+      "buttons": []
+    },
+    {
+      "_set": "_APPROVED_SET — prospect welcome EN (v2 UTILITY re-cut; notify.py uses this, NOT the v1 MARKETING one). 3 vars.",
+      "name": "gr_brokers_zerodha_prospect_welcome_en_2026_07_17_v2",
+      "category": "UTILITY",
+      "metaCategory": "UTILITY",
+      "status": "PENDING",
+      "language": "en",
+      "recipient_role": "prospect",
+      "disclosure": true,
+      "variables": [
+        {"position": 1, "name": "prospect_name", "sample": "Rahul", "fallback": "there"},
+        {"position": 2, "name": "referrer_name", "sample": "Ramesh Kumar", "fallback": "A friend"},
+        {"position": 3, "name": "office_number", "sample": "+91 73888 82020", "fallback": null}
+      ],
+      "buttons": []
+    },
+    {
+      "_set": "_APPROVED_SET — prospect welcome HI (v2 UTILITY). 3 vars.",
+      "name": "gr_brokers_zerodha_prospect_welcome_hi_2026_07_17_v2",
+      "category": "UTILITY",
+      "metaCategory": "UTILITY",
+      "status": "PENDING",
+      "language": "hi",
+      "recipient_role": "prospect",
+      "disclosure": true,
+      "variables": [
+        {"position": 1, "name": "prospect_name", "sample": "Rahul", "fallback": "there"},
+        {"position": 2, "name": "referrer_name", "sample": "Ramesh Kumar", "fallback": "A friend"},
+        {"position": 3, "name": "office_number", "sample": "+91 73888 82020", "fallback": null}
+      ],
+      "buttons": []
+    },
+    {
+      "_set": "_APPROVED_SET — referrer thank-you EN. 2 vars.",
+      "name": "gr_brokers_zerodha_referrer_thankyou_en_2026_07_17",
+      "category": "UTILITY",
+      "metaCategory": "MARKETING",
+      "status": "APPROVED",
+      "language": "en",
+      "recipient_role": "referrer",
+      "disclosure": true,
+      "variables": [
+        {"position": 1, "name": "referrer_name", "sample": "Ramesh Kumar", "fallback": "there"},
+        {"position": 2, "name": "prospect_name", "sample": "Rahul", "fallback": "someone"}
+      ],
+      "buttons": []
+    },
+    {
+      "_set": "_APPROVED_SET — referrer thank-you HI. 2 vars.",
+      "name": "gr_brokers_zerodha_referrer_thankyou_hi_2026_07_17",
+      "category": "UTILITY",
+      "metaCategory": "MARKETING",
+      "status": "APPROVED",
+      "language": "hi",
+      "recipient_role": "referrer",
+      "disclosure": true,
+      "variables": [
+        {"position": 1, "name": "referrer_name", "sample": "Ramesh Kumar", "fallback": "there"},
+        {"position": 2, "name": "prospect_name", "sample": "Rahul", "fallback": "someone"}
+      ],
+      "buttons": []
+    },
+    {
+      "_status": "SUPERSEDED 2026-07-17 — 7-var/email drift, never existed in Wati. Approved shape is the 4-var gr_brokers_zerodha_office_lead_alert_en_2026_07_17 above.",
       "name": "gr_brokers_zerodha_office_new_lead_en_2026_07_17",
       "category": "UTILITY",
       "language": "en",
       "recipient_role": "office",
-      "disclosure": false,
-      "_disclosure_note": "Internal (goes to PIFS office/Ashok, not a client) — no SEBI/NSE AP disclosure needed.",
-      "body": "You received a new lead for Zerodha 🔔\n\n*Prospect details*\nName: {{prospect_name}}\nMobile: {{prospect_mobile}}\nEmail: {{prospect_email}}\n\n*Referrer details*\nName: {{referrer_name}}\nClient ID: {{client_id}}\nEmail: {{referrer_email}}\nMobile: {{referrer_mobile}}\n\nPlease call the prospect to help them open their account. If they don't respond, you can also reach the referrer above.",
-      "variables": [
-        {"name": "prospect_name", "meaning": "prospect's name", "sample": "Rahul Sharma", "fallback": null},
-        {"name": "prospect_mobile", "meaning": "prospect's mobile", "sample": "9876543210", "fallback": null},
-        {"name": "prospect_email", "meaning": "prospect's email", "sample": "rahul@example.com", "fallback": "not provided"},
-        {"name": "referrer_name", "meaning": "referrer's name (if a known customer)", "sample": "Ramesh Kumar", "fallback": "not on file"},
-        {"name": "client_id", "meaning": "referrer's Zerodha client id", "sample": "RJ4521", "fallback": null},
-        {"name": "referrer_email", "meaning": "referrer's email (if a known customer)", "sample": "ramesh@example.com", "fallback": "not on file"},
-        {"name": "referrer_mobile", "meaning": "referrer's mobile (if a known customer)", "sample": "9998887777", "fallback": "not on file"}
-      ],
-      "buttons": [],
-      "_code_wiring": "notify.py must pass named params: prospect_name/mobile/email from Prospect; client_id from referral; referrer_name/email/mobile from the Customer row when _referrer_phone_if_known matches (else the fallback strings). Currently notify.py sends only 3 positional vars — extend it at build time."
+      "buttons": []
     },
     {
-      "_status": "SUPERSEDED 2026-07-17 by gr_brokers_zerodha_office_new_lead_en_2026_07_17 (new naming + named vars + email + referrer details + block formatting). Kept for the record. Never existed in Wati.",
+      "_status": "SUPERSEDED 2026-07-17 by gr_brokers_zerodha_office_lead_alert_en_2026_07_17. Never existed in Wati.",
       "name": "gorefer_office_new_lead",
       "category": "UTILITY",
       "language": "en",
       "recipient_role": "office",
       "body": "New GoRefer lead: {{1}} (mobile {{2}}), referred by client {{3}}. Please call to help them open their Zerodha account.",
-      "variables": [
-        {"index": 1, "meaning": "prospect_name", "sample": "Rahul Sharma"},
-        {"index": 2, "meaning": "prospect_mobile", "sample": "9876543210"},
-        {"index": 3, "meaning": "referrer_client_id", "sample": "RJ4521"}
-      ],
       "buttons": []
     },
     {
+      "_status": "SUPERSEDED 2026-07-17 by gr_brokers_zerodha_prospect_welcome_*_v2. Never existed in Wati.",
       "name": "gorefer_prospect_welcome",
       "category": "UTILITY",
       "language": "en",
       "recipient_role": "prospect",
       "body": "Hi {{1}}, {{2}} referred you to PIFS to open a free Zerodha demat & trading account. Our representative will call to help you complete it. Investments in the securities market are subject to market risks.",
-      "variables": [
-        {"index": 1, "meaning": "prospect_name", "sample": "Rahul"},
-        {"index": 2, "meaning": "referrer_display", "sample": "Ramesh Kumar"}
-      ],
       "buttons": []
     },
     {
+      "_status": "SUPERSEDED 2026-07-17 by gr_brokers_zerodha_referrer_thankyou_*. Never existed in Wati.",
       "name": "gorefer_referrer_used",
       "category": "UTILITY",
       "language": "en",
       "recipient_role": "referrer",
       "body": "Good news! Someone just used your PIFS referral link to start opening a Zerodha account. We'll keep you posted. Reward status is shown in your Zerodha Console.",
-      "variables": [],
       "buttons": []
     },
     {

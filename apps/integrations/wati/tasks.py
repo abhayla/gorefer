@@ -39,7 +39,9 @@ def send_notification(notification_id: int) -> str:
 
     adapter = get_wati_adapter()
     result = adapter.send_template(
-        to=n.recipient_mobile, template=n.template, params={"role": n.recipient_role}
+        to=n.recipient_mobile,
+        template=n.template,
+        params={"role": n.recipient_role, "template_params": n.template_params or []},
     )
     # HTTP 200 / accepted is NOT delivery — record it, then verify the terminal status.
     n.provider_message_id = result.provider_message_id or ""

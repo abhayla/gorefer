@@ -44,6 +44,7 @@ NOTIFY_ROLE_KEYS = {
     "referrer": NOTIFY_REFERRER,
 }
 
+
 # --- Per-referrer (Tier 3) — STAGED, dormant until ENABLE_CUSTOMER_LOGIN ----------
 # These resolve at the USER tier of the cascade (ADR-022), which the resolver only
 # consults when ENABLE_CUSTOMER_LOGIN is on — so they are inert today by construction,
@@ -58,6 +59,46 @@ LANG_EN = "en"
 LANG_HI = "hi"
 REFERRER_LANGUAGE_CHOICES = [(LANG_EN, "English"), (LANG_HI, "Hindi")]
 _VALID_LANGUAGES = {code for code, _ in REFERRER_LANGUAGE_CHOICES}
+
+# --- Lead-time WATI template names (config-over-code) -------------------------------
+# The Meta-approved template each (role, language) send uses. Config-driven so a new
+# approved template version (or a new partner) is swapped through config with NO deploy
+# — never hardcoded in notify.py (the earlier bug: notify.py named templates that did
+# not exist in Wati). Key = "notify_template_<role>_<lang>". Office is English-only
+# (internal alert); prospect/referrer carry both. Central defaults are the names
+# APPROVED 2026-07-17 (see Wati-Project/docs/wati-templates.json + docs/integrations/
+# WATI-TEMPLATE-INVENTORY.md). A tenant override wins per the cascade.
+def _notify_template_key(role: str, lang: str) -> str:
+    return f"notify_template_{role}_{lang}"
+
+
+NOTIFY_TEMPLATE_DEFAULTS = {
+    # office has no Hindi variant → both map to the English office alert.
+    _notify_template_key("office", LANG_EN): "gr_brokers_zerodha_office_lead_alert_en_2026_07_17",
+    _notify_template_key("office", LANG_HI): "gr_brokers_zerodha_office_lead_alert_en_2026_07_17",
+    # prospect: use the v2 UTILITY re-cut (the v1 pair reclassified to MARKETING, which
+    # is capped — wrong for a must-arrive welcome). v2 dropped the promo phrasing.
+    _notify_template_key("prospect", LANG_EN): "gr_brokers_zerodha_prospect_welcome_en_2026_07_17_v2",
+    _notify_template_key("prospect", LANG_HI): "gr_brokers_zerodha_prospect_welcome_hi_2026_07_17_v2",
+    _notify_template_key("referrer", LANG_EN): "gr_brokers_zerodha_referrer_thankyou_en_2026_07_17",
+    _notify_template_key("referrer", LANG_HI): "gr_brokers_zerodha_referrer_thankyou_hi_2026_07_17",
+}
+
+
+def notify_template_name(role: str, *, lang: str = LANG_EN, tenant_id: int | None = None) -> str:
+    """Resolve the Meta template name for a (role, language) lead-time notification.
+
+    Config-driven (cascade), defaulting to the approved names. Unknown language falls
+    back to English; an unknown role raises (a new role must register a default).
+    """
+    lang = lang if lang in _VALID_LANGUAGES else LANG_EN
+    key = _notify_template_key(role, lang)
+    default = NOTIFY_TEMPLATE_DEFAULTS.get(key) or NOTIFY_TEMPLATE_DEFAULTS.get(
+        _notify_template_key(role, LANG_EN)
+    )
+    if default is None:
+        raise KeyError(f"no notify template default for role={role!r}")
+    return resolve(key, tenant_id=tenant_id, default=default)
 
 # A referrer may only pick a landing mode the TENANT allows; "" means inherit. The
 # ADR-032 coupling (direct needs a live /d/{slug}) is a tenant-level fact, so a

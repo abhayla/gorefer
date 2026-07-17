@@ -40,6 +40,12 @@ class Notification(TimestampedModel, TenantScopedModel):
     recipient_mobile = models.CharField(max_length=20, blank=True, default="")  # canonical 91-key
     template = models.CharField(max_length=100)
     category = models.CharField(max_length=16, default="UTILITY")  # UTILITY / MARKETING
+    # Named template variables for this send, as an ordered [{"name","value"}] list —
+    # a point-in-time snapshot resolved at create time (so a later customer-record edit
+    # can't retro-change what was sent). Holds name/email like recipient_mobile does;
+    # this is the erasable operational record, NOT the immutable event log (PII stays
+    # out of Event by construction). Empty for variable-free templates.
+    template_params = models.JSONField(default=list, blank=True)
     idempotency_key = models.CharField(max_length=200, unique=True)
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="queued")
     provider_message_id = models.CharField(max_length=120, blank=True, default="")
