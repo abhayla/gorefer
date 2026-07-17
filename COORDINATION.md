@@ -2778,3 +2778,16 @@ The **repo** manifest (`apps/integrations/wati/wati-templates.json`) had the 7-v
 ⚠️ **Flags were ON in prod** (from the earlier go-live flip). The task required a non-activating deploy, so I **set `ENABLE_ZOHO_READ/WRITE/WATI_SEND` OFF** (confirmed with Abhay) BEFORE deploying — otherwise landing the real template names would have made the next lead capture do a live Zoho write + WATI send. Post-deploy on prod: all 3 flags **False (override)**, `migrate 0004` applied, `check` clean, services active, homepage/`/d/pifs` 200, and `golive_smoke` runs **log-only (zero send/write)**. `DEPLOYED_SHA = ef2a204` (was `96aa3cc`). `.env` md5 unchanged (creds preserved). Backup `/var/backups/gorefer-pre-tplwire-ef2a204-…`.
 
 **Net: the send-wiring is DONE, tested, and live in prod in a dormant (flags-off) state. Flipping ENABLE_WATI_SEND on is now all that stands between this and real WhatsApp sends — gated on the 3 PENDING templates approving + Abhay's activation. — Engineer**
+
+---
+
+### 2026-07-17 — FROM ENGINEER — STATUS — admin Settings UI for WhatsApp template names (edit-in-UI, no deploy) — deployed NON-ACTIVATING
+
+**Built + deployed the "WhatsApp templates" section on the Preferences screen — the full "change a template name in one place, no deploy" experience. 406 tests pass (+5), ruff clean, section renders correctly (headless). `DEPLOYED_SHA = f27142a`. Flags stay OFF; non-activating.**
+
+- **What:** a new Settings section with one editable field per (role, language) — Office EN, Prospect EN/HI, Referrer EN/HI — each prefilled with the current approved template name. Change a name → takes effect on the next send, **no deploy** (writes the `notify_template_*` cascade key at the tenant tier the notify service reads). Mirrors the existing OTP-template-name pattern.
+- **Validation:** a submitted name must be a valid Meta name (lowercase/digits/underscore) or it's rejected with a notice and the previous value kept (a malformed name would make every send for that role fail template-not-found). A blank field clears the override back to the approved default. Non-admins cannot set it (existing auth gate).
+- **Verified on prod:** all 5 fields resolve to the approved set on the running app; homepage healthy; flags all **False** (override); no migration (pure UI/config); services active. Backup `/var/backups/gorefer-pre-tplui-f27142a-…`.
+- **Delivers the swappable-names rule end-to-end:** names were already config-cascade defaults (code-side); this adds the operator-facing edit surface, so a template swap is now a UI action, not a code change or a deploy.
+
+**Remaining for full go-live is unchanged and small: Abhay flips ENABLE_WATI_SEND on (+ Zoho flags) when ready, and purges the Cloudflare CSS cache for the toggle fix. All 5 lead-capture templates are APPROVED. — Engineer**
