@@ -2742,3 +2742,39 @@ Once the mapping is set, the adapter already does the rest correctly.
 - A real user's form submit on prod now **reaches Zoho for real** (creds present) and **attempts** the WATI send (which fails on the same template gap until the names are fixed).
 
 **Net: Zoho write path is GO and proven; WATI send path is built + wired + honest, delivery gated on the template-name mapping (a config decision for you). Deployed `96aa3cc`, flags ON, no secrets committed, queue rows/WA_Contact_State untouched. DA to verify Zoho lead `475281000041538002` + confirm the template mapping. — Engineer**
+
+### 2026-07-17 — FROM DA — VERIFIED + DECISIONS — Zoho lead confirmed via MCP · office_number config tier · template names must be config-driven per-partner
+
+**DA independently confirmed the real Zoho lead via MCP COQL:** `id 475281000041538002 · Last_Name "Abhay Test" · Mobile 7972672473 · GoRefer_Reference GR-11 · Referrer_Client_Id EKU497 · Created 2026-07-17T08:49`. Real write, real numeric id — **the GoRefer→Zoho lead-capture loop is LIVE and proven.** Excellent work: adapter built, creds RAM-staged over SSH (clean), 398 tests, honest accepted/failed (no fabricated delivery).
+
+**DECISION 1 — `office_number` storage tier (Abhay, confirmed):** store **per-partner, scoped to (GoRefer user × partner)**, as a small cascade — a **user-level default** all the user's partners inherit, **overridable per partner**. Send-time resolution: `partner override → user default`. Rationale: different Zerodha APs have different office numbers; a user may reuse one across partners (set the user default once) or differ per partner (add an override). Concretely now: user-default = `+91 73888 82020`, no Zerodha override. **NOT** platform/5Wealths-wide (would force one number on all brokers), **NOT** per-referrer. The template's `office_number` variable reads the RESOLVED value from this chain — add a **partner dimension** to the config model; do not use the flat `support_helpline_phone` field.
+
+**DECISION 2 — template names → config, not hardcoded (resolves your gap #1 direction):** `notify.py`'s hardcoded `gorefer_office_new_lead` / `gorefer_prospect_welcome` / `gorefer_referrer_used` **violate the config-over-code rule** and don't exist in Wati. Move the role→template mapping into **`ReferralProgram`/config, per-partner**, read at send time (mirror the `WA_Queue_Config.rule_template_map` pattern). The actual template CONTENT is being drafted with Abhay now (UTILITY, EN+HI, disclosure, `office_number` variable) → submit to Meta → on approval, point the per-partner config at the approved names. Until then WATI send correctly attempts + fails (honest) — no code change needed, it's the mapping. Confirm each chosen template is **APPROVED + UTILITY** (MARKETING hits 131049) with matching variable count. — DA
+
+---
+
+### 2026-07-17 — FROM ENGINEER — STATUS — notification template NAMES now config-driven (approved set, prospect=v2 UTILITY) · both manifests reconciled to 3-var shape · deployed NON-ACTIVATING (flags OFF)
+
+**Send-wiring finished and deployed to prod. 401 tests pass (+3), ruff clean, 6 guardrails pass, golive smoke green. Deploy is non-activating: I set the 3 integration flags OFF first (they were ON from the earlier go-live flip), so nothing sends or writes. `DEPLOYED_SHA = ef2a204`. No template sent, no lead written.**
+
+#### 1. Config-driven template names (no hardcoding — the swappable-names rule)
+`notify.py` no longer names templates inline. `apps/config/preferences.notify_template_name(role, lang)` resolves from the config cascade (`NOTIFY_TEMPLATE_DEFAULTS`, tenant-overridable), so swapping a template name is a **config change, not a deploy**. Final mappings (verified resolving on prod):
+| role | template | cat | status |
+|---|---|---|---|
+| office | `gr_brokers_zerodha_office_lead_alert_en_2026_07_17` | UTILITY | APPROVED (Meta gave MARKETING) |
+| prospect en | `gr_brokers_zerodha_prospect_welcome_en_2026_07_17_v2` | UTILITY | PENDING |
+| prospect hi | `gr_brokers_zerodha_prospect_welcome_hi_2026_07_17_v2` | UTILITY | PENDING |
+| referrer en | `gr_brokers_zerodha_referrer_thankyou_en_2026_07_17` | UTILITY | APPROVED (MARKETING) |
+| referrer hi | `gr_brokers_zerodha_referrer_thankyou_hi_2026_07_17` | UTILITY | APPROVED (MARKETING) |
+**Prospect uses the v2 UTILITY re-cut, NOT the v1 pair Meta reclassified MARKETING** (as instructed).
+
+#### 2. Named params + a stable basic set (the params-can't-break rule)
+Params are **named, not positional**, built at create time with safe fallbacks (`not on file` / `not provided` / `there`), stored on `Notification.template_params` (new JSONField + migration `0004`), passed to the adapter. Approved variable shapes (matched exactly to what's live in Wati): office=4 (prospect_name, prospect_mobile, referrer_name, referrer_client_id), prospect=3 (prospect_name, referrer_name, office_number), referrer=2 (referrer_name, prospect_name). Fresh-capture smoke confirmed each role gets the right name + params.
+
+#### 3. Both manifests reconciled to the APPROVED 3-var shape
+The **repo** manifest (`apps/integrations/wati/wati-templates.json`) had the 7-var/email office+prospect drift — **killed**. It now carries an `_APPROVED_SET` block matching what's live in Wati + what the code sends (prospect = 3-var, no email). The **Wati-Project** manifest was already the clean 3-var authoritative submission source; unchanged. Both now agree.
+
+#### 4. Deploy — NON-ACTIVATING (flags OFF), per instruction
+⚠️ **Flags were ON in prod** (from the earlier go-live flip). The task required a non-activating deploy, so I **set `ENABLE_ZOHO_READ/WRITE/WATI_SEND` OFF** (confirmed with Abhay) BEFORE deploying — otherwise landing the real template names would have made the next lead capture do a live Zoho write + WATI send. Post-deploy on prod: all 3 flags **False (override)**, `migrate 0004` applied, `check` clean, services active, homepage/`/d/pifs` 200, and `golive_smoke` runs **log-only (zero send/write)**. `DEPLOYED_SHA = ef2a204` (was `96aa3cc`). `.env` md5 unchanged (creds preserved). Backup `/var/backups/gorefer-pre-tplwire-ef2a204-…`.
+
+**Net: the send-wiring is DONE, tested, and live in prod in a dormant (flags-off) state. Flipping ENABLE_WATI_SEND on is now all that stands between this and real WhatsApp sends — gated on the 3 PENDING templates approving + Abhay's activation. — Engineer**
