@@ -1,7 +1,29 @@
 {
-  "_comment": "GoRefer WATI template manifest (M5). Three lead-time transactional templates, all UTILITY (first message to a non-opted-in number must be a warm utility notice — doc-08 A4). Submitted to Meta for approval as a parallel workstream; live sending stays behind ENABLE_WATI_SEND until APPROVED. Positional vars use {{n}} with Meta sample values.",
+  "_comment": "GoRefer WATI template manifest (M5). Lead-time transactional templates, all UTILITY (first message to a non-opted-in number must be a warm utility notice — doc-08 A4). Live sending stays behind ENABLE_WATI_SEND until APPROVED. NAMED variables per WATI-TEMPLATE-NAMING/CREATION docs. The `_APPROVED_2026_07_17_*` entries below (new gr_ naming convention) are the current authored+approved set replacing the superseded `gorefer_*` design entries; see docs/integrations/WATI-lead-capture-templates-PROPOSAL.md.",
   "templates": [
     {
+      "_review": "APPROVED by Abhay 2026-07-17 (verbatim). Template 1 of 3 — office/Ashok alert.",
+      "name": "gr_brokers_zerodha_office_new_lead_en_2026_07_17",
+      "category": "UTILITY",
+      "language": "en",
+      "recipient_role": "office",
+      "disclosure": false,
+      "_disclosure_note": "Internal (goes to PIFS office/Ashok, not a client) — no SEBI/NSE AP disclosure needed.",
+      "body": "You received a new lead for Zerodha 🔔\n\n*Prospect details*\nName: {{prospect_name}}\nMobile: {{prospect_mobile}}\nEmail: {{prospect_email}}\n\n*Referrer details*\nName: {{referrer_name}}\nClient ID: {{client_id}}\nEmail: {{referrer_email}}\nMobile: {{referrer_mobile}}\n\nPlease call the prospect to help them open their account. If they don't respond, you can also reach the referrer above.",
+      "variables": [
+        {"name": "prospect_name", "meaning": "prospect's name", "sample": "Rahul Sharma", "fallback": null},
+        {"name": "prospect_mobile", "meaning": "prospect's mobile", "sample": "9876543210", "fallback": null},
+        {"name": "prospect_email", "meaning": "prospect's email", "sample": "rahul@example.com", "fallback": "not provided"},
+        {"name": "referrer_name", "meaning": "referrer's name (if a known customer)", "sample": "Ramesh Kumar", "fallback": "not on file"},
+        {"name": "client_id", "meaning": "referrer's Zerodha client id", "sample": "RJ4521", "fallback": null},
+        {"name": "referrer_email", "meaning": "referrer's email (if a known customer)", "sample": "ramesh@example.com", "fallback": "not on file"},
+        {"name": "referrer_mobile", "meaning": "referrer's mobile (if a known customer)", "sample": "9998887777", "fallback": "not on file"}
+      ],
+      "buttons": [],
+      "_code_wiring": "notify.py must pass named params: prospect_name/mobile/email from Prospect; client_id from referral; referrer_name/email/mobile from the Customer row when _referrer_phone_if_known matches (else the fallback strings). Currently notify.py sends only 3 positional vars — extend it at build time."
+    },
+    {
+      "_status": "SUPERSEDED 2026-07-17 by gr_brokers_zerodha_office_new_lead_en_2026_07_17 (new naming + named vars + email + referrer details + block formatting). Kept for the record. Never existed in Wati.",
       "name": "gorefer_office_new_lead",
       "category": "UTILITY",
       "language": "en",
