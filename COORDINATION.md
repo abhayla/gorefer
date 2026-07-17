@@ -2815,3 +2815,30 @@ The **repo** manifest (`apps/integrations/wati/wati-templates.json`) had the 7-v
 **Deployed + purged:** live pages now emit `/static/css/app.css?v=cacc0627`; that url serves the fixed 45953-byte CSS; both urls purged at the edge. Re-verified on the fresh real authed page: notification toggles 44×24, bad=0.
 
 **For Abhay:** if your browser still shows the old look, a one-time hard refresh (Ctrl+Shift+R) clears the copy cached BEFORE this fix — every load after that is auto-correct via the ?v= url. — Engineer
+
+---
+
+### 2026-07-17 — FROM ENGINEER — STATUS — Level-B FULL-APP E2E: PASS (all stages), real adapters, allowlist locked; found + fixed 2 real WATI defects; prod untouched (flags OFF)
+
+**Drove GoRefer's own code end-to-end with the REAL WATI+Zoho adapters (not log-only), on a LOCAL instance so prod stayed flags-OFF and untouched throughout. Every stage verified. The E2E surfaced two real defects, now fixed (`c977019`). 413 tests pass (+4). Zoho test lead deleted — zero residue.**
+
+**Flag state — PROD (start AND end): `ENABLE_ZOHO_READ/WRITE/WATI_SEND` all False.** The E2E ran on a local process with a transient injected env (real creds from GLOBAL.env, flags ON, allowlist locked to 917972672473, `WATI_ALLOW_ALL_RECIPIENTS=false`); nothing persisted, prod never touched. Allowlist vars in GLOBAL.env unchanged.
+
+#### Stage-by-stage
+| Stage | Result | Evidence |
+|---|---|---|
+| 1. Redirect `/r/{id}` (page mode) | ✅ | 200 branded landing; **AP2516003693 + market-risk present**; ZMPHZC + signup.zerodha.com **NOT in body**. `/continue` → **302 Location `…?c=ZMPHZC&r=E2ETEST01`** — partner code in the Location header ONLY, never a client body. |
+| 2. Landing render + capture | ✅ | form present; `POST /api/leads/` → **201, lead #9** |
+| 3a. Lead saved FIRST + immutable event | ✅ | Lead present; `lead_captured` event present; **event has NO PII** |
+| 3b. Zoho REAL write (ENABLE_ZOHO_WRITE) | ✅ | `zoho_lead_id=475281000041538002`, `sync_status=synced` (via LiveZohoAdapter) |
+| 3c. Zoho read-back (ENABLE_ZOHO_READ) | ✅ | `LiveZohoReadAdapter` selected; COQL read-back: Last_Name "E2E Prospect", Lead_Source GoRefer, Lead_Status **null (not fabricated)** |
+| 3d. Zoho test-lead DELETED | ✅ | `record deleted`; re-query for mobile 7972672473 → **empty (zero residue)** |
+| 4a. WATI gate — office alert | ✅ **BLOCKED** | office → 917388882020 → `skipped: recipient not in WATI allowlist (fail-closed)` — **no send** |
+| 4b. WATI gate — referrer | ✅ skipped | `referrer phone unknown` (no Customer row for test id) |
+| 4c. WATI prospect-welcome (allowlisted) | ✅ **DELIVERED** | to 917972672473 via LiveWatiAdapter → accepted → **terminal `delivered`** (getMessages, not the ack) |
+
+#### Two real defects found + fixed (`c977019`)
+1. **No allowlist gate on the live send path** — a real capture would have fired the office alert to 917388882020. Added a **fail-closed** gate to `LiveWatiAdapter` (block+log any non-allowlisted recipient unless `WATI_ALLOW_ALL_RECIPIENTS=true`; empty allowlist = block all). This is what made 4a/4b safe.
+2. **Live sends 403 in prod** — Wati is behind Cloudflare, which blocks the default `Python-urllib/x` User-Agent (manual curl worked, the adapter's urllib didn't). Added a real UA (urllib→200 with UA, 403 without). **Without this fix, the WATI adapter would fail every live send in prod.**
+
+**Nothing left activated. Prod flags OFF. Real go-live remains Abhay's separate deliberate flip. Note: the branch (prod runs `1462cda`) does NOT yet include `c977019` — the gate + UA fix are committed but NOT deployed; they must ship before any real WATI go-live or sends will 403. — Engineer**
