@@ -9,16 +9,35 @@ from __future__ import annotations
 
 from apps.events import vocab
 
-# Zoho Lead/Contact status → GoRefer conversion stage (the mirror).
+# Zoho Lead/Contact status → GoRefer conversion stage (the mirror). Keys are matched
+# lowercased+trimmed. Includes the REAL PIFS Leads picklist values (verified against the
+# live Zoho Leads layout) alongside the generic ones — so a real "Account Opened with Us"
+# is mapped EXPLICITLY, not merely caught by the account_opened fallback in ingest.
 ZOHO_STATUS_TO_STAGE = {
     "new": "new",
+    "not contacted": "new",
     "contacted": "contacted",
+    "attempted to contact": "contacted",
+    "call not picked": "contacted",
+    "contact in future": "contacted",
     "interested": "interested",
+    "pre-qualified": "interested",
+    "in-progress": "kyc_started",
     "kyc started": "kyc_started",
     "kyc_started": "kyc_started",
     "account opened": "account_opened",
     "account_opened": "account_opened",
+    # Real PIFS "opened" picklist value that credits PIFS (verified from the live Leads
+    # layout). "Opened with Other Broker/Partner" is deliberately NOT mapped to a PIFS
+    # conversion — those accounts weren't opened with us; if the workflow ever fires on
+    # them, ingest's `or "account_opened"` fallback still records the journey, but they
+    # are not asserted here as a PIFS conversion.
+    "account opened with us": "account_opened",
     "rejected": "rejected",
+    "not interested": "rejected",
+    "junk lead": "rejected",
+    "lost lead": "rejected",
+    "not qualified": "rejected",
 }
 
 # The stage that fires the account_opened event (default terminal).

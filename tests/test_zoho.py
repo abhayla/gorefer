@@ -70,6 +70,33 @@ def test_conversion_credits_referrer_by_client_id(settings):
     assert Event.objects.filter(event_type="account_opened", source="zoho").count() == 1
 
 
+@pytest.mark.django_db(transaction=True)
+def test_real_pifs_opened_status_maps_explicitly(settings):
+    """The REAL PIFS Leads picklist value 'Account Opened with Us' registers a
+    conversion by EXPLICIT status-map entry (not merely the ingest fallback), so a
+    non-opened status like 'Contacted' can never be mistaken for a conversion."""
+    from apps.integrations.zoho import statusmap
+
+    # Explicit mapping (verified against the live Zoho Leads layout).
+    assert statusmap.map_zoho_status("Account Opened with Us") == "account_opened"
+    assert statusmap.map_zoho_status("Contacted") == "contacted"        # NOT account_opened
+    assert statusmap.map_zoho_status("Not Interested") == "rejected"
+
+    settings.ZOHO_WEBHOOK_KEY = "testkey"
+    call_command("seed_program")
+    c = Client()
+    c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0")
+    r = _post(c, {
+        "event_id": "e-realstatus", "opener_zerodha_account_id": "ZA200",
+        "referrer_client_id": "RJ4521", "status": "Account Opened with Us",
+        "account_opened_at": "2026-05-10T09:00:00",
+    }, **KEY_HEADER)
+    assert r.status_code == 200 and r.json()["applied"] is True
+    conv = Conversion.objects.get()
+    assert conv.status == "account_opened"
+    assert Event.objects.filter(event_type="account_opened", source="zoho").count() == 1
+
+
 # --- idempotency: replay is a no-op ---------------------------------------
 
 @pytest.mark.django_db(transaction=True)
