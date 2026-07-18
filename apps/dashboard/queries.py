@@ -141,7 +141,14 @@ def top_referrers(tenant=None, limit: int = 10) -> list[dict]:
 
 
 def _referrer_name(tenant, client_id: str) -> str:
-    cust = Customer.objects.filter(tenant=tenant, client_id=client_id).exclude(first_name="").first()
+    # Guard the tenant filter: filtering `tenant=None` matches only literally-NULL
+    # rows (never real Customers), so names would never render on the tenant-agnostic
+    # path. Only scope by tenant when one is supplied — same behaviour as
+    # profile._referrer_name (L1/M2: the two helpers must not diverge).
+    cust = Customer.objects.filter(client_id=client_id).exclude(first_name="")
+    if tenant is not None:
+        cust = cust.filter(tenant=tenant)
+    cust = cust.first()
     return f"{cust.first_name} {cust.last_name}".strip() if cust else ""
 
 
