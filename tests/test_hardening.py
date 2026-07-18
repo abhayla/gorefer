@@ -337,6 +337,46 @@ def test_h1_boot_guard_raises_in_a_clean_prod_env(tmp_path):
     assert "DJANGO_SECRET_KEY is unset" in (proc.stderr + proc.stdout)
 
 
+def test_dotenv_loads_before_flags_snapshot():
+    """Regression: settings.py must call load_dotenv() BEFORE importing the
+    `gorefer.flags.flags` snapshot. flags is built once at import from os.environ, so a
+    flag whose value lives only in .env (e.g. ENABLE_ZOHO_WEBHOOK_HMAC) would be frozen
+    at its default — and a .env flip would silently no-op — if the import ran first."""
+    src = (BASE_DIR / "gorefer" / "settings.py").read_text(encoding="utf-8")
+    load_pos = src.find("load_dotenv(")
+    import_pos = src.find("from gorefer.flags import flags")
+    assert load_pos != -1 and import_pos != -1
+    assert load_pos < import_pos, (
+        "load_dotenv() must run before `from gorefer.flags import flags` — otherwise a "
+        ".env-only flag never reaches the frozen flags snapshot (webhook-HMAC flip no-op)"
+    )
+
+
+def test_env_set_flag_reaches_flags_snapshot():
+    """Functional companion: a flag present in the environment at import time IS picked
+    up by the flags snapshot (subprocess so we build a fresh snapshot with the var set;
+    the in-process snapshot is already frozen)."""
+    import subprocess
+    import sys
+
+    env = {**os.environ, "ENABLE_ZOHO_WEBHOOK_HMAC": "true"}
+    code = (
+        "import os;"
+        "os.environ.setdefault('DJANGO_SETTINGS_MODULE','gorefer.settings');"
+        "import django; django.setup();"
+        "from gorefer.flags import flags;"
+        "print('HMAC=' + str(flags.ENABLE_ZOHO_WEBHOOK_HMAC))"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code], cwd=str(BASE_DIR), env=env,
+        capture_output=True, text=True,
+    )
+    assert "HMAC=True" in proc.stdout, (
+        f"env flag did not reach the flags snapshot. stdout={proc.stdout!r} "
+        f"stderr={proc.stderr[-300:]!r}"
+    )
+
+
 # --- M10: PostgreSQL is the ONLY supported engine -------------------------
 
 @pytest.mark.django_db
