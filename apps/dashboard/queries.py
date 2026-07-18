@@ -53,7 +53,11 @@ def kpis(tenant=None) -> dict:
     clicks = totals["clicks"]
     leads = totals["leads"]
     accounts = totals["accounts"]
-    conv_rate = round((accounts / leads) * 100, 1) if leads else 0.0
+    # Fable5 M10: accounts_opened counts by TRUE Zoho open date (ADR-017) and INCLUDES
+    # off-platform zero-lead conversions, while `leads` counts captured forms — mixed
+    # populations, so accounts/leads can exceed 100% and break the KPI ring (frac>1).
+    # Clamp the ratio to [0,100]; the raw counts remain exact on their own cards.
+    conv_rate = round(min(100.0, (accounts / leads) * 100), 1) if leads else 0.0
     return {
         "total_clicks": clicks,
         "unique_visitors": approximate_unique_visitors(tenant=tenant),

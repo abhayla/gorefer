@@ -33,7 +33,9 @@ from .redirect_service import (
 from .validators import InvalidClientId, validate_client_id
 
 VISITOR_COOKIE = "gr_vid"
-VISITOR_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
+# 60 days — matches the API spec (06 §4.1) AND Zerodha's 60-day attribution window, so
+# a journey is stitched across exactly the eligible period, no longer (Fable5 M11 #6).
+VISITOR_COOKIE_MAX_AGE = 60 * 60 * 24 * 60
 
 # Config-resolution failures that mean "destination can't be built" (06-API §4.1).
 PartnerUnavailable = (ReferralProgram.DoesNotExist, ProgramRedirectRule.DoesNotExist)

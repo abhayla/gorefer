@@ -83,28 +83,48 @@ def test_no_partner_code_in_client_facing_response_bodies():
 # --- Guardrail #2 (ACTIVE, M6): account/conversion status ONLY from Zoho -----
 
 def test_conversion_status_only_written_by_zoho_ingest_path():
-    """Static assertion: the ONLY code that sets a conversion/account status is the
-    Zoho ingest path. No other module writes Conversion.status / .account_opened_at
-    / referral.credited_referrer / referral.conversion_status."""
-    import inspect
+    """Static assertion (Fable5 M8): the ONLY code that assigns a conversion/account
+    status is the Zoho ingest path. Rglob the WHOLE apps/ tree (not just 3 modules)
+    excluding zoho/ingest.py, quoting/spacing-tolerant, so a FUTURE writer module in
+    any app is caught by CI — not silently allowed."""
+    import re
+    from pathlib import Path
 
-    from apps.integrations.zoho import ingest as zoho_ingest
-    from apps.referrals import lead_service, redirect_service, views
+    apps_dir = Path(__file__).resolve().parent.parent / "apps"
+    ingest_path = apps_dir / "integrations" / "zoho" / "ingest.py"
 
-    forbidden_writes = (
-        "conversion_status =",
-        "credited_referrer =",
-        "account_opened_at =",
-        ".status = \"account_opened\"",
-        "status='account_opened'",
+    # Assignment patterns (spacing-tolerant): `<field> =` (not `==`), and any
+    # assignment of the literal 'account_opened' to a .status attribute regardless of
+    # quote style/spacing. These are the guardrail-#2 truth fields.
+    field_assign = re.compile(r"\b(conversion_status|credited_referrer|account_opened_at)\s*=(?!=)")
+    status_open = re.compile(r"\.status\s*=\s*['\"]account_opened['\"]")
+
+    offenders = []
+    for py in apps_dir.rglob("*.py"):
+        if py == ingest_path or "__pycache__" in py.parts or "migrations" in py.parts:
+            continue
+        # Ignore the read-side query that FILTERS on these (…filter(status=…)); we only
+        # flag direct attribute assignment, which is what mutates truth.
+        src = py.read_text(encoding="utf-8")
+        for m in field_assign.finditer(src):
+            line = src[src.rfind("\n", 0, m.start()) + 1: m.end() + 30]
+            stripped = line.strip()
+            # Skip: (a) ORM field DEFINITIONS (`x = models.…`) — declarations, not
+            # mutations; (b) kwargs inside filter/get/exclude/values() calls — reads.
+            if "models." in stripped:
+                continue
+            if any(f"{fn}(" in line for fn in ("filter", "get", "exclude", "values")):
+                continue
+            offenders.append(f"{py.relative_to(apps_dir)}: {stripped[:70]}")
+        if status_open.search(src):
+            offenders.append(f"{py.relative_to(apps_dir)}: .status = 'account_opened'")
+
+    assert not offenders, (
+        "conversion/account status assigned OUTSIDE zoho/ingest.py (guardrail #2): "
+        + "; ".join(offenders)
     )
-    # These non-Zoho modules must NOT set conversion/account status.
-    for module in (lead_service, redirect_service, views):
-        src = inspect.getsource(module)
-        for token in forbidden_writes:
-            assert token not in src, f"{module.__name__} must not set conversion status ({token})"
-    # The Zoho ingest module IS allowed to (it's the sole writer).
-    assert "conversion_status =" in inspect.getsource(zoho_ingest)
+    # The Zoho ingest module IS the sole writer.
+    assert "conversion_status =" in ingest_path.read_text(encoding="utf-8")
 
 
 @pytest.mark.django_db(transaction=True)
