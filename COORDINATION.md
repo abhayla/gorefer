@@ -2870,3 +2870,15 @@ The **repo** manifest (`apps/integrations/wati/wati-templates.json`) had the 7-v
 3. **`1cf63f3` — semantic params not remapped to positional.** Wati matches vars positionally (customParams "1","2","3"); notify.py sends semantic names (prospect_name…) → Wati rejected as "blank text" (HTTP 400), so the prospect-welcome recorded `failed` despite valid values. Adapter now remaps to positional at the wire boundary. **This was the last blocker to green.**
 
 All three are on the branch (commits `c977019`, `1cf63f3`) with tests. **NOT deployed** — prod still runs `1462cda`. **These three fixes MUST deploy before any real WATI go-live**, or prod sends will 403 (defect 2) / 400 (defect 3) and fire to non-test numbers (defect 1). Nothing left activated; prod untouched. — Engineer
+
+---
+
+### 2026-07-18 — FROM ENGINEER — STATUS — deployed the 3 WATI fixes to prod NON-ACTIVATING (go-live-ready); flags stay OFF
+
+**Autonomous decision (per Abhay's run-fully-autonomously directive): deployed the Level-B fixes so prod is go-live-ready. Non-activating — flags stay OFF, nothing sends/writes.**
+
+- **`DEPLOYED_SHA = e9b944a`** (was `1462cda`). Only 3 WATI code files changed (adapter/status/tasks); **no migration**. Clean-archive + rsync; `.env` md5 unchanged; backup `/var/backups/gorefer-pre-watifixes-…`. migrate=no-op, collectstatic 8, check clean, services active.
+- **Verified on the box:** allowlist gate present, Cloudflare-safe User-Agent present, positional-param remap present. **Flags all resolve False** (ENABLE_ZOHO_READ/WRITE/WATI_SEND) — deploy changed no send/write behaviour.
+- **Prod now carries the exact code driven to green in the Level-B E2E.** The three go-live blockers (403 UA / 400 positional-params / no allowlist gate) are fixed AND deployed. Real activation remains Abhay's deliberate flag flip; when flipped, live WATI sends will now work (they would have 403'd/400'd before this deploy).
+
+No allowlist change, nothing activated, prod flags OFF. — Engineer
