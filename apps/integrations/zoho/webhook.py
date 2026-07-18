@@ -29,18 +29,26 @@ logger = logging.getLogger("gorefer.zoho.webhook")
 
 
 def _client_ip(request) -> str:
-    xff = request.META.get("HTTP_X_FORWARDED_FOR")
-    if xff:
-        return xff.split(",")[0].strip()
-    return request.META.get("REMOTE_ADDR", "")
+    # Spoof-resistant (Fable5 H2): resolve from the trusted-proxy hop, NOT xff[0]
+    # (which is attacker-appendable and would let X-Forwarded-For: <zoho-ip> bypass
+    # the allowlist).
+    from apps.common.netaddr import trusted_client_ip
+
+    return trusted_client_ip(request)
 
 
 def _ip_allowed(request) -> bool:
-    """Zoho server-IP allowlist. Empty allowlist = allow any (dev only)."""
+    """Zoho server-IP allowlist. An EMPTY allowlist means allow-any, which is only
+    permitted in DEBUG (dev/CI). In production (DEBUG=false) an empty allowlist is a
+    misconfiguration and is refused fail-closed (Fable5 H2) — a webhook that mutates
+    conversions must never be open to any IP in prod."""
     allowlist = [ip for ip in getattr(settings, "ZOHO_WEBHOOK_IP_ALLOWLIST", "").split(",") if ip]
-    if allowlist and _client_ip(request) not in allowlist:
-        return False
-    return True
+    if not allowlist:
+        if not settings.DEBUG and getattr(settings, "WEBHOOK_REQUIRE_IP_ALLOWLIST", False):
+            logger.warning("Zoho webhook: empty IP allowlist rejected in prod (fail-closed)")
+            return False
+        return True  # dev/CI, or interim R2 (static key alone) until allowlist is populated
+    return _client_ip(request) in allowlist
 
 
 def _static_key_ok(request) -> bool:
