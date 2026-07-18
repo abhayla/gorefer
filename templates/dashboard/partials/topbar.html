@@ -1,39 +1,60 @@
 {% comment %}
 Reusable admin top-bar — Variant C (white/blur sticky header, cobalt logo tile, pill
-nav, avatar) + a sync-freshness bar (#19). `nav_active` (set per view) drives the
+nav, avatar menu) + a sync-freshness bar (#19). `nav_active` (set per view) drives the
 active pill; a missing value just leaves all inactive (no dead UI).
+
+Layout: the MAIN NAV holds only app/data sections (Dashboard · Explorer · Referral
+Profile). USER-account items (Preferences · Sign out) live in the AVATAR DROPDOWN at the
+top-right — the conventional pattern. The dropdown is accessible (aria-haspopup/expanded,
+role=menu, focusable items), closes on Escape and outside-click, and works on mobile
+without reintroducing horizontal overflow (the nav still scrolls horizontally on small
+screens; the menu is position-absolute so it never widens the page).
 {% endcomment %}
-<header class="bg-white/90 backdrop-blur border-b border-line sticky top-0 z-20">
-  {% comment %}
-  Mobile-first: logo + avatar on the top row; the pill nav scrolls horizontally
-  BELOW it on small screens (contained, so it never pushes the page wide), and
-  folds back into a single inline row on sm+ (the Variant-C desktop look).
-  {% endcomment %}
-  <div class="mx-auto max-w-[1140px] px-4 sm:px-5 sm:flex sm:items-center sm:justify-between sm:h-14">
-    <div class="flex items-center justify-between gap-2.5 h-12 sm:h-auto">
-      <div class="flex items-center gap-2.5">
-        <div class="h-8 w-8 rounded-xl bg-cobalt-600 flex items-center justify-center text-white text-[13px] font-extrabold card">G</div>
-        <div class="text-[13px] font-bold">GoRefer <span class="text-ink-300 font-medium">Admin</span></div>
-      </div>
-      {# Avatar stays on the top row on mobile; moves into the nav on sm+. #}
-      <span class="sm:hidden h-7 w-7 rounded-full bg-cobalt-600 text-white flex items-center justify-center text-[11px] font-bold flex-none">AK</span>
+<header class="bg-white/90 backdrop-blur border-b border-line sticky top-0 z-30">
+  <div class="mx-auto max-w-[1140px] px-4 sm:px-5 flex items-center justify-between gap-3 h-14">
+    {# Brand #}
+    <div class="flex items-center gap-2.5 flex-none">
+      <div class="h-8 w-8 rounded-xl bg-cobalt-600 flex items-center justify-center text-white text-[13px] font-extrabold card">G</div>
+      <div class="text-[13px] font-bold">GoRefer <span class="text-ink-300 font-medium">Admin</span></div>
     </div>
-    <nav class="flex items-center gap-1 text-[12px] font-medium overflow-x-auto no-scrollbar -mx-4 px-4 pb-2 sm:pb-0 sm:mx-0 sm:px-0 sm:overflow-visible">
+
+    {# Main nav — app/data sections only; scrolls horizontally on small screens, inline on sm+. #}
+    <nav class="flex-1 min-w-0 flex items-center gap-1 text-[12px] font-medium overflow-x-auto no-scrollbar justify-start sm:justify-center">
       <a href="{% url 'dashboard' %}"
          class="flex-none whitespace-nowrap px-3 py-1.5 rounded-full {% if nav_active == 'dashboard' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Dashboard</a>
       <a href="{% url 'dashboard_explorer' %}"
          class="flex-none whitespace-nowrap px-3 py-1.5 rounded-full {% if nav_active == 'explorer' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Explorer</a>
       <a href="{% url 'dashboard_referrer_search' %}"
          class="flex-none whitespace-nowrap px-3 py-1.5 rounded-full {% if nav_active == 'referrer' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Referral Profile</a>
-      <a href="{% url 'dashboard_preferences' %}"
-         class="flex-none whitespace-nowrap px-3 py-1.5 rounded-full {% if nav_active == 'preferences' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Preferences</a>
-      <a href="{% url 'dashboard_logout' %}" class="flex-none whitespace-nowrap px-3 py-1.5 rounded-full text-ink-300 hover:bg-cobalt-50">Sign out</a>
-      <span class="hidden sm:flex ml-2 h-7 w-7 rounded-full bg-cobalt-600 text-white items-center justify-center text-[11px] font-bold flex-none">AK</span>
     </nav>
+
+    {# Avatar dropdown — user-account items. #}
+    <div class="relative flex-none" data-avatar-menu>
+      <button type="button" id="avatar-menu-btn"
+              class="h-8 w-8 rounded-full bg-cobalt-600 text-white flex items-center justify-center text-[11px] font-bold card focus:outline-none focus:ring-2 focus:ring-cobalt-500 focus:ring-offset-1"
+              aria-haspopup="menu" aria-expanded="false" aria-controls="avatar-menu"
+              aria-label="Account menu">AK</button>
+      <div id="avatar-menu" role="menu" aria-labelledby="avatar-menu-btn" hidden
+           class="absolute right-0 mt-2 w-56 rounded-2xl bg-white border border-line card p-1.5 z-40">
+        <div class="px-3 py-2 border-b border-line mb-1">
+          <div class="text-[12.5px] font-semibold truncate">{{ request.user.get_full_name|default:request.user.username }}</div>
+          {% if request.user.email %}<div class="text-[11px] text-ink-500 truncate">{{ request.user.email }}</div>{% endif %}
+        </div>
+        <a href="{% url 'dashboard_preferences' %}" role="menuitem"
+           class="flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-ink-700 hover:bg-cobalt-50 focus:bg-cobalt-50 focus:outline-none {% if nav_active == 'preferences' %}bg-cobalt-50 text-cobalt-600 font-semibold{% endif %}">
+          <span class="text-ink-400">⚙</span> Preferences
+        </a>
+        <a href="{% url 'dashboard_logout' %}" role="menuitem"
+           class="flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-ink-700 hover:bg-cobalt-50 focus:bg-cobalt-50 focus:outline-none">
+          <span class="text-ink-400">↪</span> Sign out
+        </a>
+      </div>
+    </div>
   </div>
+
   {# Sync-freshness bar (#19) #}
   <div class="bg-white border-t border-line">
-    <div class="mx-auto max-w-[1140px] px-5 py-1.5 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-ink-500">
+    <div class="mx-auto max-w-[1140px] px-4 sm:px-5 py-1.5 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-ink-500">
       <span class="inline-flex items-center gap-1.5">
         {% if sync_health.zoho_state == "healthy" %}
           <span class="h-1.5 w-1.5 rounded-full bg-positive"></span>
@@ -56,3 +77,43 @@ active pill; a missing value just leaves all inactive (no dead UI).
     </div>
   </div>
 </header>
+
+<script>
+// Accessible avatar dropdown: toggle on click, close on Escape / outside-click,
+// keyboard-navigable (arrow keys move between items; focus returns to the button on close).
+(function () {
+  var wrap = document.querySelector('[data-avatar-menu]');
+  if (!wrap) return;
+  var btn = wrap.querySelector('#avatar-menu-btn');
+  var menu = wrap.querySelector('#avatar-menu');
+  var items = Array.prototype.slice.call(menu.querySelectorAll('[role="menuitem"]'));
+
+  function open() {
+    menu.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    document.addEventListener('click', onOutside, true);
+    document.addEventListener('keydown', onKey, true);
+  }
+  function close(focusBtn) {
+    menu.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('click', onOutside, true);
+    document.removeEventListener('keydown', onKey, true);
+    if (focusBtn) btn.focus();
+  }
+  function onOutside(e) { if (!wrap.contains(e.target)) close(false); }
+  function onKey(e) {
+    if (e.key === 'Escape') { e.preventDefault(); close(true); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      var i = items.indexOf(document.activeElement);
+      var n = e.key === 'ArrowDown' ? (i + 1) % items.length : (i <= 0 ? items.length - 1 : i - 1);
+      items[n].focus();
+    }
+  }
+  btn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (menu.hidden) { open(); if (items[0]) items[0].focus(); } else { close(true); }
+  });
+})();
+</script>
