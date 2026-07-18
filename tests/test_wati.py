@@ -49,8 +49,11 @@ def test_adapter_accept_is_not_delivery():
     assert res.accepted is True
     assert res.raw_status == st.STATUS_ACCEPTED
     delivery = a.get_message_status(provider_message_id=res.provider_message_id)
+    # The log-only adapter made NO network call: its terminal status is SIMULATED,
+    # reported as such (Fable5 M7) and terminal — but NOT counted as a real delivery.
+    assert delivery.status == st.STATUS_SIMULATED_DELIVERED
     assert st.is_terminal(delivery.status)
-    assert st.is_delivered(delivery.status)
+    assert not st.is_delivered(delivery.status)  # simulated is never a real delivery
 
 
 def test_meta_error_classification():
@@ -294,6 +297,41 @@ def test_live_status_honest_accepted_when_no_terminal(monkeypatch):
     assert not st.is_delivered(d.status)
 
 
+def test_live_status_exact_template_match_only(monkeypatch):
+    """Fable5 M6: a row for a DIFFERENT template (or a blank templateName) must NOT
+    lend its status to this one — mismatched rows => honest 'accepted', not another
+    message's 'delivered'."""
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/1")
+    monkeypatch.setenv("WATI_API_TOKEN", "tok")
+    body = json.dumps({"messages": {"items": [
+        # newest-first: a blank-template row then a DIFFERENT template — neither is ours.
+        {"eventType": "broadcastMessage", "templateName": "", "statusString": "DELIVERED"},
+        {"eventType": "broadcastMessage", "templateName": "other_template", "statusString": "READ"},
+    ]}})
+    adapter = LiveWatiAdapter(transport=lambda *a: (200, body))
+    d = adapter.get_message_status(
+        provider_message_id="", recipient_mobile="919999900000", template="gr_ours",
+    )
+    assert d.status == st.STATUS_ACCEPTED  # no exact match -> stay honest
+    assert not st.is_delivered(d.status)
+
+
+def test_live_status_picks_the_matching_template_among_several(monkeypatch):
+    """When several templates went to one number, read THIS template's row, exactly."""
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/1")
+    monkeypatch.setenv("WATI_API_TOKEN", "tok")
+    body = json.dumps({"messages": {"items": [
+        {"eventType": "broadcastMessage", "templateName": "office_alert", "statusString": "FAILED",
+         "failedDetail": "Meta 131026 undeliverable"},
+        {"eventType": "broadcastMessage", "templateName": "gr_ours", "statusString": "DELIVERED"},
+    ]}})
+    adapter = LiveWatiAdapter(transport=lambda *a: (200, body))
+    d = adapter.get_message_status(
+        provider_message_id="", recipient_mobile="919999900000", template="gr_ours",
+    )
+    assert d.status == st.STATUS_DELIVERED  # our row, not the other template's FAILED
+
+
 def test_live_status_failed_classifies_meta_code(monkeypatch):
     monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/1")
     monkeypatch.setenv("WATI_API_TOKEN", "tok")
@@ -323,10 +361,14 @@ def test_three_notifications_fire_on_lead_capture():
 def test_notifications_reach_terminal_delivered_status():
     call_command("seed_program")
     _capture_lead(Client())
-    # office + prospect are sent and verified to a TERMINAL delivered status.
+    # In demo (log-only adapter) office + prospect reach a TERMINAL status that is
+    # honestly SIMULATED (M7) — never fabricated as a real 'delivered' — and stamped
+    # with the adapter that produced it.
     for role in ("office", "prospect"):
         n = Notification.objects.get(recipient_role=role)
-        assert n.status == st.STATUS_DELIVERED  # terminal, not "accepted"
+        assert n.status == st.STATUS_SIMULATED_DELIVERED  # terminal, not "accepted"
+        assert st.is_terminal(n.status) and not st.is_delivered(n.status)
+        assert n.adapter_kind == "log_only"
         assert n.provider_message_id  # a provider id was recorded
 
 
@@ -349,8 +391,78 @@ def test_referrer_notified_when_phone_known():
     )
     _capture_lead(Client())
     ref = Notification.objects.get(recipient_role="referrer")
-    assert ref.status == st.STATUS_DELIVERED
+    assert ref.status == st.STATUS_SIMULATED_DELIVERED  # demo/log-only terminal (M7)
     assert ref.recipient_mobile == "919998887777"  # canonical normalized
+
+
+# --- reconcile sweep (Fable5 H4) ------------------------------------------
+
+@pytest.mark.django_db(transaction=True)
+def test_reconcile_finalizes_a_stranded_accepted_row(monkeypatch):
+    """A notification left at ACCEPTED (terminal status not ready at send time) is
+    moved to its real terminal status by the scheduled reconcile sweep."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.integrations.wati import tasks
+    from apps.integrations.wati.adapter import DeliveryResult
+    from apps.tenants.resolve import get_bootstrap_tenant
+
+    call_command("seed_program")
+    t = get_bootstrap_tenant()
+    n = Notification.objects.create(
+        tenant=t, recipient_role="office", recipient_mobile="919999900000",
+        template="gr_ours", idempotency_key="k1", status=st.STATUS_ACCEPTED,
+        provider_message_id="", adapter_kind="live",
+    )
+    # Age the row past the min-age cutoff so the sweep considers it.
+    Notification.objects.filter(pk=n.pk).update(
+        updated_at=timezone.now() - timedelta(minutes=tasks.RECONCILE_MIN_AGE_MINUTES + 1)
+    )
+    # Fake a live adapter that now reports DELIVERED.
+    class _A:
+        def get_message_status(self, **kw):
+            return DeliveryResult(status=st.STATUS_DELIVERED, meta_error_code=None, classification=None)
+    monkeypatch.setattr(tasks, "_adapter_for_reconcile", lambda n: _A())
+
+    out = tasks.reconcile_pending_deliveries()
+    n.refresh_from_db()
+    assert n.status == st.STATUS_DELIVERED
+    assert out["finalized"] == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_reconcile_expires_a_very_old_pending_row(monkeypatch):
+    """A row still non-terminal past the expire window is marked FAILED so the leak is
+    VISIBLE, never silently 'accepted' forever."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.integrations.wati import tasks
+    from apps.integrations.wati.adapter import DeliveryResult
+    from apps.tenants.resolve import get_bootstrap_tenant
+
+    call_command("seed_program")
+    t = get_bootstrap_tenant()
+    n = Notification.objects.create(
+        tenant=t, recipient_role="office", recipient_mobile="919999900000",
+        template="gr_ours", idempotency_key="k2", status=st.STATUS_ACCEPTED, adapter_kind="live",
+    )
+    Notification.objects.filter(pk=n.pk).update(
+        updated_at=timezone.now() - timedelta(minutes=tasks.RECONCILE_EXPIRE_MINUTES + 1)
+    )
+    class _A:
+        def get_message_status(self, **kw):
+            return DeliveryResult(status=st.STATUS_ACCEPTED, meta_error_code=None, classification=None)
+    monkeypatch.setattr(tasks, "_adapter_for_reconcile", lambda n: _A())
+
+    out = tasks.reconcile_pending_deliveries()
+    n.refresh_from_db()
+    assert n.status == st.STATUS_FAILED
+    assert out["expired"] == 1
+    assert "reconcile window" in n.failure_classification
 
 
 # --- dedup ----------------------------------------------------------------
@@ -373,10 +485,11 @@ def test_notification_events_recorded_for_funnel():
     call_command("seed_program")
     _capture_lead(Client())
     events = Event.objects.filter(event_type="notification")
-    assert events.count() >= 2  # office + prospect delivered
+    assert events.count() >= 2  # office + prospect (demo: simulated terminal)
     for e in events:
         assert e.source == "wati"
-        assert e.metadata.get("delivery_status") == "delivered"
+        # Demo path records the honest simulated terminal status (M7), not a fake real one.
+        assert e.metadata.get("delivery_status") == "simulated_delivered"
         # no PII in the notification event
         assert "9876543210" not in str(e.metadata)
 
