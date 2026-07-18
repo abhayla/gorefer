@@ -49,6 +49,19 @@
 /* The tokens above are CHANNEL TRIPLETS, so every direct use must wrap them:
    `rgb(var(--c-line))`, never a bare `var(--c-line)` (which is "233 237 243" — not
    a colour, so the declaration is dropped and the element renders unstyled). */
+@layer utilities {
+  /* Hide the scrollbar on horizontally-scrollable mobile strips (e.g. the admin pill
+     nav) while keeping the element scrollable — the standard mobile pattern so a pill
+     nav can swipe sideways without a visible bar or pushing the page wide. */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @layer components {
   /* Card soft shadow token (mirrors mockups' .card). */
   .card {

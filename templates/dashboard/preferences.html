@@ -70,41 +70,41 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
     {# ---- Rewards --------------------------------------------------------- #}
     <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Rewards</div>
     <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">
-      <div class="flex items-start justify-between gap-4 py-1.5">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 py-1.5">
         <div class="flex-1">
           <div class="text-[13.5px] font-semibold">Show the referrer reward in messages</div>
           <div class="text-[11.5px] text-ink-500 mt-0.5">Whether the reward wording appears. Off = service-only wording.</div>
         </div>
         {% include "dashboard/partials/pref_toggle.html" with name="share_show_reward" on=prefs.share_show_reward %}
       </div>
-      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 py-1.5 border-t border-line">
         <div class="flex-1">
           <div class="text-[13.5px] font-semibold">Reward claim text</div>
           <div class="text-[11.5px] text-ink-500 mt-0.5">Shown to the referrer only (private). Flip the toggle above to hide it.</div>
         </div>
         <input name="referrer_reward_claim" value="{{ prefs.referrer_reward_claim }}"
-               class="flex-none w-[260px] max-w-[50vw] rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none">
+               class="w-full sm:w-auto sm:w-[260px] rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none">
       </div>
     </div>
 
     {# ---- Contact -------------------------------------------------------- #}
     <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Contact</div>
     <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">
-      <div class="flex items-start justify-between gap-4 py-1.5">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 py-1.5">
         <div class="flex-1">
           <div class="text-[13.5px] font-semibold">Assisted-opening helpline</div>
           <div class="text-[11.5px] text-ink-500 mt-0.5">The “Call or WhatsApp us” number in your messages.</div>
         </div>
         <input name="support_helpline_phone" value="{{ prefs.support_helpline_phone }}"
-               class="flex-none w-[260px] max-w-[50vw] rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none">
+               class="w-full sm:w-auto sm:w-[260px] rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none">
       </div>
-      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 py-1.5 border-t border-line">
         <div class="flex-1">
           <div class="text-[13.5px] font-semibold">WhatsApp Business number</div>
           <div class="text-[11.5px] text-ink-500 mt-0.5">Where “Share on WhatsApp” deep-links.</div>
         </div>
         <input name="wati_business_number" value="{{ prefs.wati_business_number }}"
-               class="flex-none w-[260px] max-w-[50vw] rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none">
+               class="w-full sm:w-auto sm:w-[260px] rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none">
       </div>
     </div>
 
@@ -120,7 +120,7 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
           {% endfor %}
         </div>
       </div>
-      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 py-1.5 border-t border-line">
         <div class="flex-1">
           <div class="text-[13.5px] font-semibold">Allow “Refer directly” (assisted)</div>
           <div class="text-[11.5px] text-ink-500 mt-0.5">Referrer hands you a prospect’s name &amp; mobile → creates a lead for follow-up (with consent).</div>
@@ -137,21 +137,21 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
     {% endcomment %}
     <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">WhatsApp notifications</div>
     <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">
-      <div class="flex items-start justify-between gap-4 py-1.5">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 py-1.5">
         <div class="flex-1">
           <div class="text-[13.5px] font-semibold">Alert the office (Ashok)</div>
           <div class="text-[11.5px] text-ink-500 mt-0.5">New-lead alert so the call can go out immediately.</div>
         </div>
         {% include "dashboard/partials/pref_toggle.html" with name="notify_office" on=prefs.notify_office %}
       </div>
-      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 py-1.5 border-t border-line">
         <div class="flex-1">
           <div class="text-[13.5px] font-semibold">Welcome the new person</div>
           <div class="text-[11.5px] text-ink-500 mt-0.5">Warm notice naming the referrer. Opted-out people are never messaged, whatever this says.</div>
         </div>
         {% include "dashboard/partials/pref_toggle.html" with name="notify_prospect" on=prefs.notify_prospect %}
       </div>
-      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 py-1.5 border-t border-line">
         <div class="flex-1">
           <div class="text-[13.5px] font-semibold">Thank the referrer</div>
           <div class="text-[11.5px] text-ink-500 mt-0.5">Sent only when the referrer’s phone is already known — never guessed.</div>
@@ -185,14 +185,14 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
           {% endfor %}
         </select>
       </div>
-      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 py-1.5 border-t border-line">
         <div class="flex-1">
           <div class="text-[13.5px] font-semibold">Referrer notifications on</div>
           <div class="text-[11.5px] text-ink-500 mt-0.5">Whether referrers get updates about their referrals by default.</div>
         </div>
         {% include "dashboard/partials/pref_toggle.html" with name="referrer_notifications_on" on=referrer_defaults.referrer_notifications_on %}
       </div>
-      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 py-1.5 border-t border-line">
         <div class="flex-1">
           <div class="text-[13.5px] font-semibold">Opt out of promotional nudges</div>
           <div class="text-[11.5px] text-ink-500 mt-0.5">Transactional messages are unaffected.</div>
@@ -242,7 +242,7 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
     {# ---- Disclosure + partnerships (drive /d/{slug}) -------------------- #}
     <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Disclosure</div>
     <div class="rounded-2xl bg-white border border-line card p-5">
-      <div class="flex items-start justify-between gap-4 py-1.5">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 py-1.5">
         <div class="flex-1">
           <div class="text-[13.5px] font-semibold">Your disclosure page</div>
           <div class="text-[11.5px] text-ink-500 mt-0.5">Auto-composed from your active partnerships below. Linked from every message (NSE §4.4).</div>
@@ -264,14 +264,14 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
         digits and underscores only.
       </div>
       {% for f in notify_template_fields %}
-      <div class="flex items-center justify-between gap-4 py-1.5 {% if not forloop.first %}border-t border-line{% endif %}">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 py-1.5 {% if not forloop.first %}border-t border-line{% endif %}">
         <label for="{{ f.form_key }}" class="text-[13px] font-semibold flex-1">
           {{ f.label }}
           {% if f.is_override %}<span class="text-[10.5px] font-normal text-cobalt-600 ml-1">(custom)</span>{% endif %}
         </label>
         <input type="text" id="{{ f.form_key }}" name="{{ f.form_key }}"
                value="{{ f.value }}"
-               class="flex-none rounded-lg border border-line text-[13px] px-3 py-2 bg-white min-w-[220px]"
+               class="w-full sm:w-auto sm:min-w-[220px] rounded-lg border border-line text-[13px] px-3 py-2 bg-white"
                placeholder="{{ f.default }}">
       </div>
       {% endfor %}
@@ -280,7 +280,7 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
     {# ---- Login OTP channel (Q-M-OTP) — config-over-code channel switch ---- #}
     <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Login OTP</div>
     <div class="rounded-2xl bg-white border border-line card p-5 space-y-4">
-      <div class="flex items-start justify-between gap-4">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4">
         <div class="flex-1">
           <div class="text-[13.5px] font-semibold">How login codes are sent</div>
           <div class="text-[11.5px] text-ink-500 mt-0.5">
@@ -290,17 +290,17 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
           </div>
         </div>
         {% if not otp_enabled %}
-          <span class="flex-none text-[10.5px] font-semibold text-ink-400 border border-line rounded-lg px-2 py-1">
+          <span class="sm:flex-none text-[10.5px] font-semibold text-ink-400 border border-line rounded-lg px-2 py-1">
             Referrer login is off — saved and ready for when it’s enabled
           </span>
         {% endif %}
       </div>
 
       {# Primary channel #}
-      <div class="flex items-center justify-between gap-4 py-1.5 border-t border-line">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 py-1.5 border-t border-line">
         <label for="otp_primary_channel" class="text-[13px] font-semibold flex-1">Primary channel</label>
         <select id="otp_primary_channel" name="otp_primary_channel"
-                class="flex-none rounded-lg border border-line text-[13px] px-3 py-2 bg-white min-w-[180px]">
+                class="w-full sm:w-auto sm:min-w-[180px] rounded-lg border border-line text-[13px] px-3 py-2 bg-white">
           {% for code, label in otp_channel_choices %}
             <option value="{{ code }}" {% if code == prefs.otp_primary_channel %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
@@ -323,11 +323,11 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
       </div>
 
       {# WhatsApp AUTHENTICATION template name #}
-      <div class="flex items-center justify-between gap-4 py-1.5 border-t border-line">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 py-1.5 border-t border-line">
         <label for="otp_whatsapp_template" class="text-[13px] font-semibold flex-1">WhatsApp OTP template</label>
         <input type="text" id="otp_whatsapp_template" name="otp_whatsapp_template"
                value="{{ prefs.otp_whatsapp_template }}"
-               class="flex-none rounded-lg border border-line text-[13px] px-3 py-2 bg-white min-w-[220px]"
+               class="w-full sm:w-auto sm:min-w-[220px] rounded-lg border border-line text-[13px] px-3 py-2 bg-white"
                placeholder="gorefer_login_otp">
       </div>
 

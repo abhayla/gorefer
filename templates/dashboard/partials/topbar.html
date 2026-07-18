@@ -4,22 +4,31 @@ nav, avatar) + a sync-freshness bar (#19). `nav_active` (set per view) drives th
 active pill; a missing value just leaves all inactive (no dead UI).
 {% endcomment %}
 <header class="bg-white/90 backdrop-blur border-b border-line sticky top-0 z-20">
-  <div class="mx-auto max-w-[1140px] px-5 flex items-center justify-between h-14">
-    <div class="flex items-center gap-2.5">
-      <div class="h-8 w-8 rounded-xl bg-cobalt-600 flex items-center justify-center text-white text-[13px] font-extrabold card">G</div>
-      <div class="text-[13px] font-bold">GoRefer <span class="text-ink-300 font-medium">Admin</span></div>
+  {% comment %}
+  Mobile-first: logo + avatar on the top row; the pill nav scrolls horizontally
+  BELOW it on small screens (contained, so it never pushes the page wide), and
+  folds back into a single inline row on sm+ (the Variant-C desktop look).
+  {% endcomment %}
+  <div class="mx-auto max-w-[1140px] px-4 sm:px-5 sm:flex sm:items-center sm:justify-between sm:h-14">
+    <div class="flex items-center justify-between gap-2.5 h-12 sm:h-auto">
+      <div class="flex items-center gap-2.5">
+        <div class="h-8 w-8 rounded-xl bg-cobalt-600 flex items-center justify-center text-white text-[13px] font-extrabold card">G</div>
+        <div class="text-[13px] font-bold">GoRefer <span class="text-ink-300 font-medium">Admin</span></div>
+      </div>
+      {# Avatar stays on the top row on mobile; moves into the nav on sm+. #}
+      <span class="sm:hidden h-7 w-7 rounded-full bg-cobalt-600 text-white flex items-center justify-center text-[11px] font-bold flex-none">AK</span>
     </div>
-    <nav class="flex items-center gap-1 text-[12px] font-medium">
+    <nav class="flex items-center gap-1 text-[12px] font-medium overflow-x-auto no-scrollbar -mx-4 px-4 pb-2 sm:pb-0 sm:mx-0 sm:px-0 sm:overflow-visible">
       <a href="{% url 'dashboard' %}"
-         class="px-3 py-1.5 rounded-full {% if nav_active == 'dashboard' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Dashboard</a>
+         class="flex-none whitespace-nowrap px-3 py-1.5 rounded-full {% if nav_active == 'dashboard' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Dashboard</a>
       <a href="{% url 'dashboard_explorer' %}"
-         class="px-3 py-1.5 rounded-full {% if nav_active == 'explorer' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Explorer</a>
+         class="flex-none whitespace-nowrap px-3 py-1.5 rounded-full {% if nav_active == 'explorer' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Explorer</a>
       <a href="{% url 'dashboard_referrer_search' %}"
-         class="px-3 py-1.5 rounded-full {% if nav_active == 'referrer' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Referral Profile</a>
+         class="flex-none whitespace-nowrap px-3 py-1.5 rounded-full {% if nav_active == 'referrer' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Referral Profile</a>
       <a href="{% url 'dashboard_preferences' %}"
-         class="px-3 py-1.5 rounded-full {% if nav_active == 'preferences' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Preferences</a>
-      <a href="{% url 'dashboard_logout' %}" class="px-3 py-1.5 rounded-full text-ink-300 hover:bg-cobalt-50">Sign out</a>
-      <span class="ml-2 h-7 w-7 rounded-full bg-cobalt-600 text-white flex items-center justify-center text-[11px] font-bold">AK</span>
+         class="flex-none whitespace-nowrap px-3 py-1.5 rounded-full {% if nav_active == 'preferences' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Preferences</a>
+      <a href="{% url 'dashboard_logout' %}" class="flex-none whitespace-nowrap px-3 py-1.5 rounded-full text-ink-300 hover:bg-cobalt-50">Sign out</a>
+      <span class="hidden sm:flex ml-2 h-7 w-7 rounded-full bg-cobalt-600 text-white items-center justify-center text-[11px] font-bold flex-none">AK</span>
     </nav>
   </div>
   {# Sync-freshness bar (#19) #}
