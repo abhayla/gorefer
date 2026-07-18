@@ -39,10 +39,10 @@ FORBIDDEN_KEYS = frozenset({"password", "pass", "pin", "otp", "pan", "aadhaar", 
 
 
 def _client_ip(request) -> str:
-    xff = request.META.get("HTTP_X_FORWARDED_FOR")
-    if xff:
-        return xff.split(",")[0].strip()
-    return request.META.get("REMOTE_ADDR", "")
+    # Spoof-resistant (Fable5 H2): trusted-proxy hop, not the appendable xff[0].
+    from apps.common.netaddr import trusted_client_ip
+
+    return trusted_client_ip(request)
 
 
 def authenticate(request) -> bool:
@@ -50,9 +50,10 @@ def authenticate(request) -> bool:
 
     FAILS CLOSED: if WATI_WEBHOOK_KEY is not configured (unset/blank), EVERY request
     is rejected — the check is never skipped and never fails open. A constant-time
-    compare avoids leaking the key via timing. The allowlist (when set) further
-    restricts source IPs; an empty allowlist means "any IP" (dev only), but that
-    never relaxes the mandatory key requirement.
+    compare avoids leaking the key via timing. The allowlist further restricts source
+    IPs; an EMPTY allowlist means "any IP" only in DEBUG (dev/CI) — in production
+    (DEBUG=false) an empty allowlist is refused fail-closed (Fable5 H2). The key
+    requirement is mandatory in every mode.
     """
     expected = (getattr(settings, "WATI_WEBHOOK_KEY", "") or "").strip()
     if not expected:
@@ -63,9 +64,12 @@ def authenticate(request) -> bool:
     if not hmac.compare_digest(provided, expected):
         return False
     allowlist = [ip for ip in getattr(settings, "WATI_WEBHOOK_IP_ALLOWLIST", "").split(",") if ip]
-    if allowlist and _client_ip(request) not in allowlist:
-        return False
-    return True
+    if not allowlist:
+        if not settings.DEBUG and getattr(settings, "WEBHOOK_REQUIRE_IP_ALLOWLIST", False):
+            logger.warning("WATI webhook: empty IP allowlist rejected in prod (fail-closed)")
+            return False
+        return True  # dev/CI, or interim R2 (static key alone) until allowlist is populated
+    return _client_ip(request) in allowlist
 
 
 class AssistedCaptureError(ValueError):

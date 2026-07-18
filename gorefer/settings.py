@@ -61,6 +61,19 @@ if not DEBUG and SECRET_KEY == _DEFAULT_INSECURE_SECRET_KEY:
 CSRF_TRUSTED_ORIGINS = [
     o for o in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if o
 ]
+# Number of TRUSTED reverse-proxy hops in front of the app (Fable5 H2). The webhook
+# IP-allowlist checks resolve the caller IP from the (hops)-th X-Forwarded-For entry
+# from the END — the one our own proxies wrote — so a spoofed left-most XFF entry can't
+# bypass the allowlist. Prod (DEPLOY-TARGET): Cloudflare -> nginx -> gunicorn = 2.
+# Dev/CI default 1 (a single local proxy or none). See apps/common/netaddr.py.
+TRUSTED_PROXY_HOPS = int(os.environ.get("DJANGO_TRUSTED_PROXY_HOPS", "1"))
+# When true, an EMPTY webhook IP allowlist is refused in production (DEBUG=false) —
+# closing the "empty = allow-any" hole (Fable5 H2). Defaults OFF so the current interim
+# R2 posture (static key alone, no allowlist populated) is NOT silently broken: flip it
+# ON only AFTER populating ZOHO_/WATI_WEBHOOK_IP_ALLOWLIST with the real source IPs.
+WEBHOOK_REQUIRE_IP_ALLOWLIST = os.environ.get(
+    "DJANGO_WEBHOOK_REQUIRE_IP_ALLOWLIST", "false"
+).strip().lower() in {"1", "true", "yes", "on"}
 if os.environ.get("DJANGO_BEHIND_TLS_PROXY", "false").strip().lower() in {"1", "true", "yes", "on"}:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SECURE_SSL_REDIRECT = os.environ.get(
