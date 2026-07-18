@@ -2973,3 +2973,28 @@ Final state: **flags UNTOUCHED — ENABLE_ZOHO_READ/WRITE/WATI_SEND all True** (
 9. **DA DECISION 1 (per-partner `office_number` cascade)** — the review flags it as possibly unimplemented. **CONFIRM with DA:** `preferences_service` persists flat `SUPPORT_HELPLINE_PHONE`/`WATI_BUSINESS_NUMBER` (no partner dimension). Sprint 1 has ONE partner (Zerodha), so a per-partner dimension is inert today; recommend implementing the partner-keyed cascade when partner #2 onboards (config-over-code path already exists). Flagging for DA ratification — not silently resolved.
 
 **Not changed (out of scope / user-owned):** the 3 integration flags, the WATI allowlist (`WATI_ALLOW_ALL_RECIPIENTS` stays `false`, locked to `917972672473`), `ENABLE_OTP_LOGIN` (OFF), `ENABLE_ZOHO_WEBHOOK_HMAC` (OFF, awaits the Zoho Deluge signer). — Engineer
+
+---
+
+### 2026-07-18 — FROM ENGINEER — STATUS — Fable5 fixes DEPLOYED to prod (f5853e6); flags + allowlist UNTOUCHED; live loop verified
+
+**Deployed the 8-area Fable5 review batch to `72.61.240.224`. `DEPLOYED_SHA = f5853e6` (was `8002ceb`). 442 tests pass (was 416; +26 new, zero regressions), ruff clean. The 3 integration flags, the WATI allowlist, `ENABLE_OTP_LOGIN`, and `ENABLE_ZOHO_WEBHOOK_HMAC` were NOT touched.**
+
+**Deploy method:** `git archive HEAD` → scp (sha256 verified local==remote `b8fa2912…`) → pre-deploy backup `/var/backups/gorefer-pre-fable5-20260718-204600.tar.gz` → rsync `--delete` over `/var/www/gorefer` (tracked files only; `.env`/`.venv`/`staticfiles`/`gorefer_cache`/`DEPLOYED_SHA` preserved) → `chown www-data`.
+
+**Migrations (both applied clean):** `integrations.0005` (Notification.adapter_kind + simulated_delivered status) and `referrals.0009` (the two partial-unique constraints — applied with no error, confirming prod had zero duplicate referrals). `createcachetable gorefer_cache` created (rate-limit backing store). `collectstatic` 8 files. `setup_schedules` registered the 2 new sweeps (`click_purge_expired_nonces` hourly, `wati_reconcile_pending` 15-min) — the 3 existing ones no-op'd. `gorefer.service` + `gorefer-qcluster.service` + nginx all **active**; 3 gunicorn workers booted clean (the pre-existing benign `.gunicorn` control-socket permission line is unrelated and does not affect serving).
+
+**Post-deploy verification (live on gorefer.in):**
+| Check | Result |
+|---|---|
+| Homepage / admin-login / api health | 200 / 200 / `{"status":"ok"}` |
+| Landing `/r/RJ4521` | 200 branded, `AP2516003693` present |
+| **Guardrail #3** (no `ZMPHZC` / raw Zerodha URL in body) | ✅ both counts 0 |
+| Redirect `/r/RJ4521/continue` 302 | ✅ `…?c=ZMPHZC&r=RJ4521` (partner code server-side, only in Location) |
+| DEBUG (effective) | **False** |
+| RATELIMIT_ENABLED | **True** (prod) |
+| ENABLE_ZOHO_READ / WRITE / WATI_SEND | **True / True / True** (Abhay's go-live state — untouched) |
+| ENABLE_OTP_LOGIN | **False** (untouched) |
+| WATI allowlist | `WATI_ALLOW_ALL_RECIPIENTS="false"`, `WATI_TEST_RECIPIENTS="917972672473"` (locked — NOT opened) |
+
+**Still Abhay's calls (not done):** opening the WATI allowlist to all; flipping `ENABLE_ZOHO_WEBHOOK_HMAC` (needs the Zoho Deluge signer deployed first) + then `DJANGO_WEBHOOK_REQUIRE_IP_ALLOWLIST=true` once the webhook source IPs are populated. The nine M11 drift adjudications above are recommendations awaiting DA ratification. — Engineer
