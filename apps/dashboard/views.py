@@ -13,7 +13,6 @@ from django.http import Http404
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_http_methods
 
-from apps.events.models import SyncHealth
 from apps.referrals.models import Referral
 from apps.referrals.validators import InvalidClientId, validate_client_id
 from apps.tenants.resolve import get_current_tenant
@@ -35,14 +34,23 @@ class DashboardLoginView(LoginView):
 
 
 def _sync_health(tenant):
-    row = SyncHealth.objects.filter(tenant=tenant).order_by("-updated_at").first()
-    if row is None:
-        return {"zoho_state": "no_sync", "zoho_last_sync": None, "wati_state": "no_sync"}
-    return {
-        "zoho_state": row.zoho_state,
-        "zoho_last_sync": row.last_successful_zoho_sync_at,
-        "wati_state": row.wati_state,
-    }
+    """Topbar status indicators — FLAG-DRIVEN (green = switched ON, red = OFF).
+
+    Two states only, reflecting the integration flags the admin controls in Settings;
+    NOT activity-based (a green light does not wait for a real sync/send). Zoho is ON
+    when WRITE or READ is on; WATI is ON when send is on. (Abhay 2026-07-18.)
+    """
+    from apps.config.integration_flags import (
+        ENABLE_WATI_SEND,
+        ENABLE_ZOHO_READ,
+        ENABLE_ZOHO_WRITE,
+        resolve_flag,
+    )
+
+    tid = getattr(tenant, "id", None)
+    zoho_on = resolve_flag(ENABLE_ZOHO_WRITE, tenant_id=tid) or resolve_flag(ENABLE_ZOHO_READ, tenant_id=tid)
+    wati_on = resolve_flag(ENABLE_WATI_SEND, tenant_id=tid)
+    return {"zoho_on": zoho_on, "wati_on": wati_on}
 
 
 @_staff_required
