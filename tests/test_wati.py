@@ -181,6 +181,32 @@ def test_live_send_template_post_shape(monkeypatch):
     assert payload["parameters"] == []            # no positional vars for this template
 
 
+def test_live_send_remaps_semantic_params_to_positional(monkeypatch):
+    """Wati matches template vars POSITIONALLY (customParams named "1","2","3"). Callers
+    pass semantic names; the adapter must remap them to "1","2",… by order, or Wati
+    rejects the send as blank-text (HTTP 400). This was the E2E prospect-send failure."""
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/1")
+    monkeypatch.setenv("WATI_API_TOKEN", "tok")
+    monkeypatch.setenv("WATI_ALLOW_ALL_RECIPIENTS", "true")
+    sent = {}
+
+    def transport(method, url, headers, body):
+        sent["params"] = json.loads(body.decode())["parameters"]
+        return 200, '{"result":true}'
+
+    adapter = LiveWatiAdapter(transport=transport)
+    adapter.send_template(to="917972672473", template="t", params={"template_params": [
+        {"name": "prospect_name", "value": "Abhay"},
+        {"name": "referrer_name", "value": "Ramesh"},
+        {"name": "office_number", "value": "+91 73888 82020"},
+    ]})
+    assert sent["params"] == [
+        {"name": "1", "value": "Abhay"},
+        {"name": "2", "value": "Ramesh"},
+        {"name": "3", "value": "+91 73888 82020"},
+    ]
+
+
 def test_live_send_blocked_for_non_allowlisted_recipient(monkeypatch):
     """Fail-closed: with allow-all off, a recipient NOT in WATI_TEST_RECIPIENTS is
     BLOCKED — no transport call, raw_status=blocked, not accepted."""
