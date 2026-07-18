@@ -153,6 +153,15 @@ class LiveWatiAdapter:
         tvars = params.get("template_params") if isinstance(params, dict) else None
         if not isinstance(tvars, list):
             tvars = []
+        # Wati matches template variables POSITIONALLY: its customParams are named
+        # "1","2","3" (the {{1}}/{{2}} placeholders). Our callers pass SEMANTIC names
+        # (prospect_name, office_number, …) so the code stays order-independent — but at
+        # the Wati boundary they MUST be remapped to positional "1","2",… by their order,
+        # or Wati can't fill the template and rejects the send as "blank text" (HTTP 400).
+        wati_params = [
+            {"name": str(i), "value": (p.get("value") if isinstance(p, dict) else "")}
+            for i, p in enumerate(tvars, start=1)
+        ]
         url = (
             f"{self.base_url}/api/v1/sendTemplateMessage"
             f"?whatsappNumber={urllib.parse.quote(number)}"
@@ -160,7 +169,7 @@ class LiveWatiAdapter:
         body = json.dumps({
             "template_name": template,
             "broadcast_name": template,
-            "parameters": tvars,
+            "parameters": wati_params,
         }).encode("utf-8")
 
         code, text = self._transport("POST", url, self._auth_headers(json_body=True), body)
