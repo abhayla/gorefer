@@ -1,6 +1,7 @@
 """M8 Phase-A hardening tests — cross-cutting ATP items (§G, §H, §I, §K, §L, §M)
 and regressions caught during hardening. Complements the per-mission suites.
 """
+import os
 import re
 from pathlib import Path
 
@@ -285,6 +286,55 @@ def test_m2_no_zerodha_named_symbols_in_code():
         if "Zerodha" in py.name:
             offenders.append(py.name)
     assert not offenders, f"Zerodha-named symbols/files: {offenders}"
+
+
+# --- H1: DEBUG/SECRET_KEY boot guard (secure-by-default) ------------------
+
+def test_h1_settings_secure_by_default_and_guarded():
+    """Fable5 H1: DEBUG defaults to false (secure) and a boot guard refuses
+    DEBUG=false + the public insecure default SECRET_KEY."""
+    src = (BASE_DIR / "gorefer" / "settings.py").read_text(encoding="utf-8")
+    # DEBUG default is false (a lost DJANGO_DEBUG env fails closed, no tracebacks).
+    assert 'os.environ.get("DJANGO_DEBUG", "false")' in src
+    # The guard exists and is fail-fast (mirrors the Postgres pattern).
+    assert "_DEFAULT_INSECURE_SECRET_KEY" in src
+    assert "SECRET_KEY == _DEFAULT_INSECURE_SECRET_KEY" in src
+
+
+def test_h1_boot_guard_raises_in_a_clean_prod_env(tmp_path):
+    """Importing settings with DEBUG=false and no SECRET_KEY must raise. Runs in a
+    subprocess from an EMPTY cwd with the local .env neutralised (an empty file at the
+    same path load_dotenv reads) so nothing re-injects the key, and a clean env — the
+    already-loaded settings module can't be re-imported in-process."""
+    import shutil
+    import subprocess
+    import sys
+
+    # Mirror the repo into tmp so BASE_DIR/.env is EMPTY (load_dotenv uses BASE_DIR/.env
+    # by absolute path; the real .env would otherwise re-inject a good SECRET_KEY).
+    pkg_dst = tmp_path / "gorefer"
+    shutil.copytree(BASE_DIR / "gorefer", pkg_dst)
+    (tmp_path / ".env").write_text("", encoding="utf-8")
+
+    env = {
+        k: v for k, v in os.environ.items()
+        if k not in {"DJANGO_DEBUG", "DJANGO_SECRET_KEY"}
+    }
+    env["DJANGO_DEBUG"] = "false"
+    env["PYTHONPATH"] = str(tmp_path)  # import the copied gorefer package
+    # Keep DB_* so the Postgres guard doesn't fire first; we want the SECRET_KEY guard.
+    code = (
+        "import os;"
+        "os.environ.setdefault('DJANGO_SETTINGS_MODULE','gorefer.settings');"
+        "from django.conf import settings;"
+        "settings._setup()"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code], cwd=str(tmp_path), env=env,
+        capture_output=True, text=True,
+    )
+    assert proc.returncode != 0, "boot should FAIL with DEBUG=false + default SECRET_KEY"
+    assert "DJANGO_SECRET_KEY is unset" in (proc.stderr + proc.stdout)
 
 
 # --- M10: PostgreSQL is the ONLY supported engine -------------------------
