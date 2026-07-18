@@ -2882,3 +2882,24 @@ All three are on the branch (commits `c977019`, `1cf63f3`) with tests. **NOT dep
 - **Prod now carries the exact code driven to green in the Level-B E2E.** The three go-live blockers (403 UA / 400 positional-params / no allowlist gate) are fixed AND deployed. Real activation remains Abhay's deliberate flag flip; when flipped, live WATI sends will now work (they would have 403'd/400'd before this deploy).
 
 No allowlist change, nothing activated, prod flags OFF. — Engineer
+
+---
+
+### 2026-07-18 — FROM ENGINEER — STATUS — mobile responsiveness audit + fix (all admin pages); deployed non-activating; ⚠️ caught + corrected prod flags that were ON
+
+**Full mobile audit (headless Chromium at 320/360/375/390/414px) across every user-facing page. Found + fixed horizontal overflow on all admin pages — 20 page/width combos → 0. Deployed `70152b5` + purged CF CSS. 414 tests pass. Public pages (home/login/landing/disclosure) were already clean.**
+
+#### Issues found + fixed (mobile-first, Variant-C look preserved)
+1. **Admin top-bar nav** — the pill nav (Dashboard/Explorer/Referral Profile/Preferences/Sign out + avatar) was one non-wrapping flex row that ran off every phone width (right edge ~541px on a 320-414 viewport). **Fix:** mobile-first — logo + avatar on the top row, pill nav scrolls horizontally below (`overflow-x-auto` + new `.no-scrollbar`, contained so it never widens the page), folds back to the inline desktop row at `sm+`. One partial → fixed dashboard/explorer/preferences/login at once.
+2. **Preferences form rows** — label+input side-by-side rows (reward claim, contact numbers, WhatsApp template names, OTP fields) overflowed; inputs had hard `min-w-[220px]`/`[180px]`/`w-[260px]`. **Fix:** rows stack `flex-col sm:flex-row`, inputs `w-full sm:w-auto` — nothing cut off (template names now fully visible).
+3. **BUG (would have shipped to prod on every admin page):** a multi-line `{# #}` comment in the topbar **leaked as visible text** — Django only strips single-line `{# #}`. Converted to `{% comment %}`.
+
+Verified 20→0 overflow on all GoRefer pages (headless re-measure). `/open` is a 302 to external `signup.zerodha.com` (not ours; excluded). Before/after screenshots: `review/mobile-audit-2026-07-18/`.
+
+#### Deploy — UI-only, non-activating
+`DEPLOYED_SHA = 70152b5`. No migration; collectstatic 8; check clean; services active; CF CSS purged (edge now serves `app.css?v=bd817e39`, MISS, `.no-scrollbar` present). Local throwaway audit admin (`mobaudit`) deleted; prod admin untouched.
+
+#### ⚠️ Flag correction (hard-limit guard)
+Post-deploy check found the 3 integration flags **ON** in prod (ConfigGlobal, updated 10:21Z — a residual from earlier-session test flips, not this deploy). Per the non-activating rule I **forced all 3 OFF immediately** and verified. Checked for damage: **0 prod leads / 0 notifications since 10:00Z** — prod had no traffic while briefly ON, so nothing was sent or written. Flags now all False (override). This is exactly why I re-verify flags after every deploy.
+
+Flags OFF, allowlist untouched, nothing activated, no real numbers touched. — Engineer
