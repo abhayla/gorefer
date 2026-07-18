@@ -241,6 +241,28 @@ class Referral(AuditedModel, SoftDeleteModel, TenantScopedModel):
             models.Index(fields=["source"]),
             models.Index(fields=["status"]),
         ]
+        constraints = [
+            # Fable5 M1: lazy create is check-then-insert and races under concurrent
+            # first clicks (a WhatsApp blast is exactly that shape). Partial UNIQUE
+            # constraints make a race raise IntegrityError instead of twinning a
+            # journey; the service catches it and refetches the winner.
+            #
+            # Identity-backed journeys (referral_link / zoho_import): one per
+            # (tenant, identity, source). Partial — only where the identity is present.
+            models.UniqueConstraint(
+                fields=["tenant", "referral_identity", "source"],
+                condition=models.Q(referral_identity__isnull=False),
+                name="uq_referral_tenant_identity_source",
+            ),
+            # Partner-direct journeys have a NULL identity — one row per (tenant,
+            # source) for source=partner_direct. A separate partial unique because a
+            # composite unique over a nullable FK doesn't constrain NULL rows.
+            models.UniqueConstraint(
+                fields=["tenant", "source"],
+                condition=models.Q(referral_identity__isnull=True, source="partner_direct"),
+                name="uq_referral_partner_direct_tenant",
+            ),
+        ]
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"referral<{self.pk}:{self.source}>"
