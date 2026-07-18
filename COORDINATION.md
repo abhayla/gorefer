@@ -3032,3 +3032,17 @@ Final state: **flags UNTOUCHED — ENABLE_ZOHO_READ/WRITE/WATI_SEND all True** (
 - `DJANGO_WEBHOOK_REQUIRE_IP_ALLOWLIST` — stays OFF by design (empty allowlist is intentional; see above).
 
 **Hard limits confirmed post-deploy:** 3 integration flags ON, `WATI_ALLOW_ALL_RECIPIENTS="false"` locked to `917972672473`, `ENABLE_OTP_LOGIN` OFF. Origin lock enforced; `TRUSTED_PROXY_HOPS=2`; HMAC secret loaded + dormant. — Engineer
+
+---
+
+### 2026-07-18 — FROM ENGINEER — STATUS — Deluge signer FIXED (invalid toEpoch) + verifier ms/seconds tolerance; deployed; flag still OFF
+
+**The Deluge signer failed to save in Zoho: `time.now().toEpoch()` is not a real Deluge method. Fixed the signer with a valid epoch-milliseconds path and taught the GoRefer verifier to accept ms or seconds, keeping the signature contract byte-consistent. Deployed `f7da254`; `ENABLE_ZOHO_WEBHOOK_HMAC` stays OFF (staged). 455 tests pass. Hard limits intact.**
+
+- **Root cause:** Deluge has no `toEpoch()`. The valid path is `zoho.currenttime.toString("dd-MMM-yyyy HH:mm:ss").unixEpoch("GMT")`, which returns epoch **milliseconds**.
+- **Contract kept byte-consistent:** rather than force Deluge into a seconds format, the GoRefer verifier now **normalizes the freshness value by magnitude** (`_normalize_epoch_seconds`: `>=1e10` ⇒ milliseconds ⇒ `//1000`, else seconds). The HMAC signature is still computed over the exact `timestamp` STRING that was sent, so the tolerance **never weakens the seal** — it only interprets freshness. A stale millisecond timestamp still fails the skew check (verified on prod: `…197000ms → …197s`, and a −4000s ms value normalizes to an old value that the skew check rejects).
+- **Sanity-checked every Deluge call** in the signer against the docs — all valid: `getRecordById`, `getOrgVariable`, `zoho.currenttime`, `.toString(fmt)`, `.unixEpoch("GMT")`, `zoho.encryption.md5`, `zoho.encryption.hmacsha256(...,"hex")` (lowercase hex, matches GoRefer's `hexdigest()`), `ifnull`, `invokeurl` (raw string body sent verbatim). `review/Zoho-Signer-Steps.md` updated with the corrected block.
+- **Contract test** (`test_zoho_signer_contract`) now simulates the **millisecond** signing against the real endpoint (seal ON): accepts ms + seconds, rejects byte-mismatch / wrong-secret / replay / **stale-ms**. `test_zoho_webhook_waxseal` (14) unchanged + green.
+- **Deploy:** `f3f022c → f7da254` (verifier change; no migration). Verified on prod: ms normalization correct, HMAC flag **OFF** (dormant), secret loaded, origin lock still 403 on direct-origin, live site 200.
+
+**Unchanged (still Abhay's coordinated flip after he pastes the corrected signer):** `ENABLE_ZOHO_WEBHOOK_HMAC` OFF, `DJANGO_WEBHOOK_REQUIRE_IP_ALLOWLIST` OFF, 3 integration flags ON, `WATI_ALLOW_ALL_RECIPIENTS="false"` locked to `917972672473`, `ENABLE_OTP_LOGIN` OFF. — Engineer
