@@ -76,12 +76,13 @@ secret = zoho.crm.getOrgVariable("gorefer_webhook_secret");
 payloadMap = Map();
 payloadMap.put("event_id", lead.get("id").toString());
 payloadMap.put("zoho_lead_id", lead.get("id").toString());
-payloadMap.put("opener_zerodha_account_id", ifnull(lead.get("Zerodha_Account_Id"), ""));
 payloadMap.put("opener_name", ifnull(lead.get("Full_Name"), ""));
-payloadMap.put("referrer_client_id", ifnull(lead.get("Referred_By_Client_Id"), ""));
+payloadMap.put("referrer_client_id", ifnull(lead.get("Referrer_Client_Id"), ""));
 payloadMap.put("status", ifnull(lead.get("Lead_Status"), "account opened"));
-payloadMap.put("account_opened_at", ifnull(lead.get("Account_Opened_On"), ""));
-payloadMap.put("reward_status", ifnull(lead.get("Reward_Status"), ""));
+payloadMap.put("account_opened_at", ifnull(lead.get("Converted_Date_Time"), ""));
+// Opener's Zerodha account number: no dedicated field on your Leads layout yet, so
+// this stays blank until one exists (add a text field + one more put() line later).
+payloadMap.put("opener_zerodha_account_id", "");
 
 // 4) Serialize ONCE to a string. This exact string is what we sign AND what we send —
 //    they must be byte-identical, so we never re-serialize the map again below.
@@ -121,15 +122,22 @@ response = invokeurl
 info response;
 ```
 
-**Field-name notes (adjust the right-hand side only if your Leads layout differs):**
-- `Zerodha_Account_Id` → your field holding the opened Zerodha account/client number.
-- `Referred_By_Client_Id` → the field holding the **referrer's** Zerodha client id (the `r=` value).
-- `Account_Opened_On` → the true account-opening date field (a plain date is fine).
-- `Lead_Status` → your status field; when it equals your "account opened" stage this fires.
-- `Reward_Status` → optional; leave the line as-is if you have no such field (it sends "").
+**Field mapping — already set to YOUR real Zoho Leads field names** (verified against your
+102-field Leads layout, so you should not need to change any of these):
+- `Referrer_Client_Id` → the **referrer's** Zerodha client id (the `r=` value). ⭐ the one
+  that actually credits the referrer — this must be right, and it is.
+- `Converted_Date_Time` → the true account-opening date/time.
+- `Lead_Status` → your status field (picklist). The "opened" value is **`Account Opened with Us`**.
+- `Full_Name` → the opener's name.
+- `opener_zerodha_account_id` → left **blank on purpose**: your Leads layout has no dedicated
+  field for the opened Zerodha account number yet. Add a text field for it later, then add one
+  `payloadMap.put("opener_zerodha_account_id", ifnull(lead.get("Your_Field_Api_Name"), ""));`
+  line — the webhook works fine without it (it's used only to disambiguate the opener; the
+  referrer credit comes from `Referrer_Client_Id`).
 
-If a field name is wrong, the webhook still *authenticates* — GoRefer just records blank
-for that field. So you can attach it first and fine-tune field names later.
+If any field name were wrong, the webhook still *authenticates* — GoRefer just records blank
+for that field (the HMAC signature is over the whole payload, not any single value). So this
+is safe to attach now and fine-tune later.
 
 ---
 
@@ -141,7 +149,9 @@ for that field. So you can attach it first and fine-tune field names later.
    - **Module:** `Leads`
    - **Rule Name:** `GoRefer — notify on account opened`
    - **When:** `On a record action → Edit` (or "Field update"), so it fires when the status changes.
-   - **Condition:** `Lead Status is <your account-opened stage>` (e.g. `Account Opened`).
+   - **Condition:** `Lead Status is Account Opened with Us` (that is your real "opened" picklist
+     value — verified). If you also want to capture accounts opened with other partners/brokers,
+     add those `Lead Status` values to the condition as well.
 3. Under **Instant Actions**, click **Functions → + New Function** (or attach existing) →
    pick **`GoRefer Webhook Signer`**.
 4. In the function's argument mapping, set **`leadId`** = the record's **Lead Id**
