@@ -116,8 +116,9 @@ response = invokeurl
 	headers : headerMap
 ];
 
-info response;  // shows in the function log; a healthy call returns applied:true
-return response;
+// A workflow-attached function is VOID and must NOT return a value — just log it.
+// A healthy call logs a response containing applied:true.
+info response;
 ```
 
 **Field-name notes (adjust the right-hand side only if your Leads layout differs):**
