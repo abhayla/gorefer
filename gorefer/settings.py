@@ -24,12 +24,17 @@ from pathlib import Path
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
-from gorefer.flags import flags
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load .env from repo root if present (no-op if absent / in CI with real env vars).
+# Load .env BEFORE importing the flags snapshot. `gorefer.flags.flags` is built once at
+# import time from os.environ, so it must not be imported until .env has populated the
+# environment — otherwise a flag whose value lives only in .env (e.g.
+# ENABLE_ZOHO_WEBHOOK_HMAC) is frozen at its default and a .env flip has no effect.
+# (The integration flags READ/WRITE/WATI_SEND resolve via the config cascade instead,
+# which is why only the .env-only flags were affected.)
 load_dotenv(BASE_DIR / ".env")
+
+from gorefer.flags import flags  # noqa: E402 — must follow load_dotenv (see above)
 
 # --- Core security / debug -------------------------------------------------
 # Secure by default (Fable5 H1): DEBUG defaults to FALSE and SECRET_KEY has a known
