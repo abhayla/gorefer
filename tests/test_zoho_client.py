@@ -12,7 +12,16 @@ from unittest import mock
 
 import pytest
 
+from apps.integrations.zoho import client as zoho_client
 from apps.integrations.zoho.client import ZohoCredentials, ZohoHttpClient
+
+
+@pytest.fixture(autouse=True)
+def _clear_token_cache():
+    # The access-token cache (M9) is process-wide; isolate tests from each other.
+    zoho_client._TOKEN_CACHE.clear()
+    yield
+    zoho_client._TOKEN_CACHE.clear()
 
 
 @pytest.fixture
@@ -52,6 +61,39 @@ def test_token_refresh_raises_when_zoho_returns_no_access_token(creds):
     with mock.patch.object(client, "_request", return_value={"error": "invalid_code"}):
         with pytest.raises(RuntimeError, match="no access_token"):
             client.access_token()
+
+
+def test_access_token_is_cached_across_calls(creds):
+    """Fable5 M9: a token is minted ONCE and reused within its expiry, not re-minted
+    per API call (which would hit Zoho's refresh throttle)."""
+    client = ZohoHttpClient()
+    calls = {"n": 0}
+
+    def fake_request(*a, **k):
+        calls["n"] += 1
+        return {"access_token": "tok-123", "expires_in": 3600}
+
+    with mock.patch.object(client, "_request", side_effect=fake_request):
+        t1 = client.access_token()
+        t2 = client.access_token()
+        t3 = client.access_token()
+    assert t1 == t2 == t3 == "tok-123"
+    assert calls["n"] == 1, "token should be minted once and cached, not per-call"
+
+
+def test_access_token_force_refresh_remints(creds):
+    """force_refresh (e.g. on a 401) bypasses the cache and mints a fresh token."""
+    client = ZohoHttpClient()
+    calls = {"n": 0}
+
+    def fake_request(*a, **k):
+        calls["n"] += 1
+        return {"access_token": f"tok-{calls['n']}", "expires_in": 3600}
+
+    with mock.patch.object(client, "_request", side_effect=fake_request):
+        client.access_token()
+        client.access_token(force_refresh=True)
+    assert calls["n"] == 2
 
 
 def test_http_error_surfaces_zohos_body_not_a_bare_status(creds):

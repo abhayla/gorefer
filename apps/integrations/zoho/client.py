@@ -32,6 +32,12 @@ logger = logging.getLogger("gorefer.zoho.client")
 
 HTTP_TIMEOUT_SECONDS = 15
 
+# Process-wide access-token cache keyed by refresh token: {refresh_token: (token, expiry_epoch)}
+# (Fable5 M9). In-process only; each gunicorn worker keeps its own — still cuts token
+# grants from once-per-call to roughly once-per-hour-per-worker, which is what avoids
+# the refresh throttle. Cleared implicitly on process restart.
+_TOKEN_CACHE: dict[str, tuple[str, float]] = {}
+
 
 @dataclass
 class ZohoCredentials:
@@ -83,7 +89,24 @@ class ZohoHttpClient:
 
     # --- auth --------------------------------------------------------------------
 
-    def access_token(self) -> str:
+    def access_token(self, *, force_refresh: bool = False) -> str:
+        """Return a valid access token, minting a new one only when needed (Fable5 M9).
+
+        Previously EVERY Zoho API call re-minted a token (two HTTP round trips per call),
+        and Zoho throttles refresh-token grants per window — profile-page enrichment
+        (several reads per view) plus write traffic could hit that throttle and surface
+        as spurious sync failures. We cache the token PROCESS-WIDE keyed by refresh
+        token, until shortly before its `expires_in`, and refresh on demand (or on a
+        401, via force_refresh)."""
+        import time
+
+        key = self.creds.refresh_token
+        now = time.time()
+        if not force_refresh:
+            cached = _TOKEN_CACHE.get(key)
+            if cached and cached[1] > now:
+                return cached[0]
+
         payload = urllib.parse.urlencode({
             "refresh_token": self.creds.refresh_token,
             "client_id": self.creds.client_id,
@@ -101,6 +124,12 @@ class ZohoHttpClient:
             # Zoho returns 200 + {"error": "invalid_code"} on a dead refresh token, so
             # a missing access_token is a real failure even on a 200.
             raise RuntimeError(f"Zoho token refresh returned no access_token: {data}")
+        # Cache until 60s before expiry (default 3600s if Zoho omits expires_in).
+        try:
+            ttl = int(data.get("expires_in", 3600))
+        except (TypeError, ValueError):
+            ttl = 3600
+        _TOKEN_CACHE[key] = (token, now + max(0, ttl - 60))
         return token
 
     def _auth_headers(self, extra: dict | None = None) -> dict:

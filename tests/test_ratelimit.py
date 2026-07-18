@@ -122,9 +122,7 @@ def test_login_counter_resets_on_success(settings, seeded):
     c.post("/admin-panel/login/", {"username": "admin@pifs.in", "password": "wrong"})
     ok = c.post("/admin-panel/login/", {"username": "admin@pifs.in", "password": "rightpw123!"})
     assert ok.status_code in (302, 200)  # logged in (redirect) — counter cleared
-    from django.core.cache import cache
-    from apps.common.ratelimit import client_ip
-    # Fresh request object not available here; assert the key is gone for the test IP.
+    # The per-IP failed-login counter for the test client IP is cleared on success.
     assert cache.get("login-fail:127.0.0.1") in (None, 0)
 
 
