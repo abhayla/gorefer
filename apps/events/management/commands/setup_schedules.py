@@ -25,6 +25,10 @@ SCHEDULES = {
     # Hourly (Fable5 H3): every /r/{id} hit mints a ClickNonce; without a purge the
     # click_nonces table grows unbounded under crawling. Only rows past TTL+grace go.
     "click_purge_expired_nonces": ("apps.events.nonces.purge_expired_nonces", 60),
+    # Every 15 min (Fable5 H4): re-poll WATI notifications stranded at ACCEPTED so a
+    # delivery that wasn't terminal at first read gets finalized (or expired), not left
+    # 'accepted' forever — otherwise the funnel silently under-reports delivery.
+    "wati_reconcile_pending": ("apps.integrations.wati.tasks.reconcile_pending_deliveries", 15),
 }
 
 

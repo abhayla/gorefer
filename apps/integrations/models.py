@@ -31,7 +31,14 @@ class Notification(TimestampedModel, TenantScopedModel):
         ("read", "read"),
         ("failed", "failed"),
         ("skipped", "skipped"),      # e.g. referrer phone unknown / opted out
+        # SIMULATED terminal status from the log-only (demo) adapter — NO real send
+        # happened. Excluded from real-delivery metrics (Fable5 M7).
+        ("simulated_delivered", "simulated_delivered"),
     ]
+    # Which adapter produced this row's terminal status, so a demo/log-only "delivery"
+    # is always distinguishable from a real Wati delivery (Fable5 M7). 'live' = real
+    # Wati API, 'log_only' = demo/no-network.
+    ADAPTER_CHOICES = [("live", "live"), ("log_only", "log_only")]
 
     referral = models.ForeignKey(
         "referrals.Referral", on_delete=models.CASCADE, null=True, blank=True, related_name="notifications"
@@ -47,7 +54,9 @@ class Notification(TimestampedModel, TenantScopedModel):
     # out of Event by construction). Empty for variable-free templates.
     template_params = models.JSONField(default=list, blank=True)
     idempotency_key = models.CharField(max_length=200, unique=True)
-    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="queued")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="queued")
+    # The adapter that handled the send (stamped at finalize). Blank until sent.
+    adapter_kind = models.CharField(max_length=10, choices=ADAPTER_CHOICES, blank=True, default="")
     provider_message_id = models.CharField(max_length=120, blank=True, default="")
     meta_error_code = models.IntegerField(null=True, blank=True)
     failure_classification = models.CharField(max_length=120, blank=True, default="")

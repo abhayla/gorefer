@@ -58,6 +58,8 @@ class LogOnlyWatiAdapter:
     HTTP 200" discipline works end-to-end offline.
     """
 
+    kind = "log_only"
+
     def send_template(self, *, to: str, template: str, params: dict) -> SendResult:
         logger.info("[demo] WATI send suppressed: to=%s template=%s params=%s", to, template, params)
         return SendResult(
@@ -68,8 +70,12 @@ class LogOnlyWatiAdapter:
 
     def get_message_status(self, *, provider_message_id: str, recipient_mobile: str | None = None,
                            template: str | None = None) -> DeliveryResult:
-        # Demo simulates a successful terminal delivery so the flow completes.
-        return DeliveryResult(status=status.STATUS_DELIVERED, meta_error_code=None, classification=None)
+        # Demo made NO network call, so this is a SIMULATED terminal status, reported as
+        # such (Fable5 M7) — never as a real 'delivered'. Delivery metrics exclude it,
+        # so a demo/degraded send can't be mistaken for a real delivery.
+        return DeliveryResult(
+            status=status.STATUS_SIMULATED_DELIVERED, meta_error_code=None, classification=None
+        )
 
 
 class LiveWatiAdapter:
@@ -85,6 +91,8 @@ class LiveWatiAdapter:
     Refuses to construct without a base + token so a flag flip against missing config
     fails LOUDLY here instead of silently degrading to a no-op.
     """
+
+    kind = "live"
 
     def __init__(self, *, transport=None):
         base = os.environ.get("WATI_API_ENDPOINT") or os.environ.get("WATI_BASE_URL") or ""
@@ -219,18 +227,20 @@ class LiveWatiAdapter:
             return DeliveryResult(status=status.STATUS_ACCEPTED, meta_error_code=None, classification=None)
 
         items = (((payload.get("messages") or {}).get("items")) or [])
+        # EXACT template match only (Fable5 M6): two templates to one number close
+        # together (office alert + prospect welcome to a shared household number; a
+        # retry) each have their own row, and taking the first row whose templateName
+        # is empty/None could read the OTHER message's delivered/failed status onto
+        # this one. So we require templateName == template. If the template can't be
+        # positively identified in any row yet, we stay honest and return the
+        # non-terminal 'accepted' (a later reconcile pass tries again).
         best = None
-        for it in items:
+        for it in items:  # newest-first
             if it.get("eventType") != "broadcastMessage":
                 continue
-            # Match the template when we can identify it in the row.
-            desc = f"{it.get('templateName', '')} {it.get('eventDescription', '')}"
-            if template and template not in desc and it.get("templateName") not in (template, None, ""):
-                # Not clearly this template; skip unless nothing else matches.
-                if it.get("templateName"):
-                    continue
-            best = it  # items are newest-first; take the first plausible match
-            break
+            if template and (it.get("templateName") or "") == template:
+                best = it
+                break
 
         if best is None:
             return DeliveryResult(status=status.STATUS_ACCEPTED, meta_error_code=None, classification=None)

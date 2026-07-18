@@ -13,10 +13,19 @@ STATUS_DELIVERED = "delivered"
 STATUS_READ = "read"
 STATUS_FAILED = "failed"
 STATUS_BLOCKED = "blocked"     # refused by the fail-closed recipient allowlist — never sent
+# Demo/log-only "delivery": the LogOnlyWatiAdapter made NO network call, so this is a
+# SIMULATED terminal status, not a real one (Fable5 M7). Kept distinct from
+# STATUS_DELIVERED so a demo/degraded send is never counted as a real delivery.
+STATUS_SIMULATED_DELIVERED = "simulated_delivered"
 
-# A terminal status is one the message will not move past.
-TERMINAL_STATUSES = frozenset({STATUS_DELIVERED, STATUS_READ, STATUS_FAILED})
-# Delivery is only proven by one of these (read implies delivered).
+# A terminal status is one the message will not move past. simulated_delivered is
+# terminal for the demo path (nothing further will happen) but excluded from the
+# real-delivery sets below.
+TERMINAL_STATUSES = frozenset(
+    {STATUS_DELIVERED, STATUS_READ, STATUS_FAILED, STATUS_SIMULATED_DELIVERED}
+)
+# Delivery is only proven by one of these (read implies delivered). simulated_delivered
+# is deliberately NOT here — a demo send must never register as a real delivery.
 DELIVERED_STATUSES = frozenset({STATUS_DELIVERED, STATUS_READ})
 
 # Meta failure codes we classify (doc-08 A3/A4).
