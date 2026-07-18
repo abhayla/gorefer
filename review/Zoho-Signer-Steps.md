@@ -87,16 +87,21 @@ payloadMap.put("reward_status", ifnull(lead.get("Reward_Status"), ""));
 //    they must be byte-identical, so we never re-serialize the map again below.
 bodyString = payloadMap.toString();
 
-// 5) Timestamp (epoch SECONDS as a string) + a one-time nonce.
-ts = time.now().toEpoch() / 1000;
-timestamp = ts.toString();
-nonce = zoho.encryption.md5(timestamp + bodyString + secret) + "-" + ts.toString();
+// 5) Timestamp = epoch MILLISECONDS as a string. Deluge has NO time.now().toEpoch();
+//    the valid path is: current time -> text -> .unixEpoch("GMT") (returns ms).
+//    GoRefer's verifier accepts a millisecond epoch (it normalizes ms/seconds).
+nowText = zoho.currenttime.toString("dd-MMM-yyyy HH:mm:ss");
+epochMillis = nowText.unixEpoch("GMT");
+timestamp = epochMillis.toString();
 
-// 6) Sign: HMAC-SHA256 over "timestamp.nonce.bodyString", lowercase HEX.
+// 6) One-time nonce: an md5 over time+body+secret keeps it unique per send.
+nonce = zoho.encryption.md5(timestamp + bodyString + secret);
+
+// 7) Sign: HMAC-SHA256 over "timestamp.nonce.bodyString", lowercase HEX.
 dataToSign = timestamp + "." + nonce + "." + bodyString;
 signature = zoho.encryption.hmacsha256(secret, dataToSign, "hex");
 
-// 7) POST the SAME bodyString as the raw body, with the three headers.
+// 8) POST the SAME bodyString as the raw body, with the three headers.
 headerMap = Map();
 headerMap.put("Content-Type", "application/json");
 headerMap.put("X-Zoho-Signature", signature);

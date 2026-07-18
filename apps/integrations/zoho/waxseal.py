@@ -64,6 +64,29 @@ def _max_skew() -> int:
     return int(getattr(settings, "ZOHO_WEBHOOK_MAX_SKEW_SECONDS", DEFAULT_MAX_SKEW_SECONDS))
 
 
+# A plain epoch-SECONDS value is ~1.0e9–2.0e9 (10 digits) through year 2033; a
+# millisecond value is ~1.0e12–2.0e12 (13 digits). Anything at/above this threshold is
+# treated as milliseconds and divided down. The gap between the two ranges is enormous,
+# so there is no realistic ambiguity for any near-current timestamp.
+_MILLIS_THRESHOLD = 10_000_000_000  # 1e10: above => milliseconds, below => seconds
+
+
+def _normalize_epoch_seconds(timestamp: str) -> int | None:
+    """Parse an epoch timestamp string as SECONDS, auto-scaling from milliseconds.
+
+    Returns integer epoch seconds, or None if the value isn't a number. Accepting both
+    units lets the Deluge signer (which emits milliseconds via unixEpoch) and a
+    seconds-based caller share one verifier without a format handshake.
+    """
+    try:
+        value = int(float(timestamp))
+    except (TypeError, ValueError):
+        return None
+    if abs(value) >= _MILLIS_THRESHOLD:
+        return value // 1000
+    return value
+
+
 def compute_signature(*, secret: str, timestamp: str, nonce: str, raw_body: bytes) -> str:
     """The canonical seal: HMAC-SHA256 over `timestamp.nonce.raw_body`.
 
@@ -113,10 +136,16 @@ def verify_seal(request, raw_body: bytes) -> None:
         raise SealRejected("missing signature/timestamp/nonce header")
 
     # --- freshness -------------------------------------------------------------
-    try:
-        sent_at = int(float(timestamp))
-    except (TypeError, ValueError) as exc:
-        raise SealRejected("timestamp not an epoch integer") from exc
+    # Accept the timestamp in epoch SECONDS or epoch MILLISECONDS. Deluge's native
+    # unit is milliseconds (`unixEpoch()` returns ms, and there is no `toEpoch()`),
+    # so the Zoho signer sends ms; other callers (and the tests) may send seconds.
+    # We normalize by magnitude — a ms epoch is ~1000x a seconds epoch (13 vs 10
+    # digits) — so the freshness/skew check stays meaningful either way. The SIGNATURE
+    # is still computed over the exact `timestamp` STRING that was sent, so this
+    # tolerance never weakens the seal: it only interprets the freshness value.
+    sent_at = _normalize_epoch_seconds(timestamp)
+    if sent_at is None:
+        raise SealRejected("timestamp not an epoch integer")
 
     skew = abs(int(time.time()) - sent_at)
     if skew > _max_skew():

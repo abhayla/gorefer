@@ -23,10 +23,17 @@ WEBHOOK = "/api/zoho/status-webhook"
 SECRET = "contract-test-secret-value-do-not-use-in-prod"
 
 
+def _deluge_now_millis() -> str:
+    """Mirror of the working Deluge timestamp: unixEpoch returns MILLISECONDS (there is
+    no toEpoch()). The signer sends the millisecond epoch as a string."""
+    return str(int(time.time() * 1000))
+
+
 def _deluge_equivalent_sign(*, secret: str, timestamp: str, nonce: str, body_str: str) -> str:
     """Mirror of the Deluge one-liner:
         data = timestamp + "." + nonce + "." + bodyString
         sig  = zoho.encryption.hmacsha256(secret, data, "hex")   # lowercase hex
+    `timestamp` is the millisecond epoch string the signer emits.
     """
     data = f"{timestamp}.{nonce}.{body_str}"
     return hmac.new(secret.encode("utf-8"), data.encode("utf-8"), hashlib.sha256).hexdigest()
@@ -46,7 +53,8 @@ def seal_on(settings, monkeypatch, db):
 
 
 def test_deluge_signed_request_is_accepted(seal_on):
-    """A request signed the way the Deluge signer signs it authenticates + ingests."""
+    """A request signed the way the Deluge signer signs it (MILLISECOND epoch, since
+    Deluge's unixEpoch returns ms) authenticates + ingests."""
     body_str = json.dumps({
         "event_id": "evt-contract-1",
         "opener_zerodha_account_id": "ZA-CONTRACT-1",
@@ -54,7 +62,7 @@ def test_deluge_signed_request_is_accepted(seal_on):
         "status": "account opened",
         "account_opened_at": "2026-07-18",
     })
-    ts = str(int(time.time()))
+    ts = _deluge_now_millis()  # milliseconds — the working Deluge timestamp
     nonce = "contract-nonce-1"
     sig = _deluge_equivalent_sign(secret=SECRET, timestamp=ts, nonce=nonce, body_str=body_str)
 
@@ -65,13 +73,42 @@ def test_deluge_signed_request_is_accepted(seal_on):
     assert resp.status_code == 200, resp.content
 
 
+def test_millisecond_and_second_timestamps_both_accepted(seal_on):
+    """The verifier accepts the Deluge millisecond epoch AND a seconds epoch — the
+    freshness value is normalized by magnitude while the signature stays over the exact
+    string sent."""
+    for ts in (_deluge_now_millis(), str(int(time.time()))):
+        body_str = '{"event_id":"e-%s","status":"account opened"}' % ts
+        nonce = f"n-{ts}"
+        sig = _deluge_equivalent_sign(secret=SECRET, timestamp=ts, nonce=nonce, body_str=body_str)
+        resp = Client().post(
+            WEBHOOK, data=body_str, content_type="application/json",
+            HTTP_X_ZOHO_SIGNATURE=sig, HTTP_X_ZOHO_TIMESTAMP=ts, HTTP_X_ZOHO_NONCE=nonce,
+        )
+        assert resp.status_code == 200, (ts, resp.content)
+
+
+def test_stale_millisecond_timestamp_is_rejected(seal_on):
+    """A millisecond timestamp well outside the skew window still fails freshness — the
+    ms/s tolerance must not neuter the freshness check."""
+    old_ms = str(int((time.time() - 4000) * 1000))
+    body_str = '{"event_id":"e-stale","status":"account opened"}'
+    nonce = "n-stale-ms"
+    sig = _deluge_equivalent_sign(secret=SECRET, timestamp=old_ms, nonce=nonce, body_str=body_str)
+    resp = Client().post(
+        WEBHOOK, data=body_str, content_type="application/json",
+        HTTP_X_ZOHO_SIGNATURE=sig, HTTP_X_ZOHO_TIMESTAMP=old_ms, HTTP_X_ZOHO_NONCE=nonce,
+    )
+    assert resp.status_code == 401
+
+
 def test_the_exact_signed_bytes_must_be_sent(seal_on):
     """If the signer signs one string but the body sent differs by even one byte
     (e.g. a re-serialization reordered keys / changed spacing), the seal MUST reject —
     this is why the steps tell Abhay to POST the SAME string variable that was signed."""
     signed = '{"event_id":"e","status":"account opened"}'
     sent_different = '{"status":"account opened","event_id":"e"}'  # same data, reordered
-    ts = str(int(time.time()))
+    ts = _deluge_now_millis()
     nonce = "contract-nonce-2"
     sig = _deluge_equivalent_sign(secret=SECRET, timestamp=ts, nonce=nonce, body_str=signed)
 
@@ -84,7 +121,7 @@ def test_the_exact_signed_bytes_must_be_sent(seal_on):
 
 def test_wrong_secret_from_signer_is_rejected(seal_on):
     body_str = '{"event_id":"e","status":"account opened"}'
-    ts = str(int(time.time()))
+    ts = _deluge_now_millis()
     nonce = "contract-nonce-3"
     sig = _deluge_equivalent_sign(secret="WRONG-SECRET", timestamp=ts, nonce=nonce, body_str=body_str)
     resp = Client().post(
@@ -97,7 +134,7 @@ def test_wrong_secret_from_signer_is_rejected(seal_on):
 def test_signer_replay_is_rejected(seal_on):
     """Re-POSTing the identical signed request (same nonce) is a replay → 401 on 2nd."""
     body_str = '{"event_id":"e-replay","status":"account opened"}'
-    ts = str(int(time.time()))
+    ts = _deluge_now_millis()
     nonce = "contract-nonce-replay"
     sig = _deluge_equivalent_sign(secret=SECRET, timestamp=ts, nonce=nonce, body_str=body_str)
     kw = dict(
