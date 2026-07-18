@@ -132,6 +132,58 @@ def test_single_use(service, otp_on):
     assert OtpChallenge.objects.get(id=result.challenge_id).status == OtpChallenge.STATUS_VERIFIED
 
 
+# ------------------------------------------------ (M4/M5) OTP vs the live Wati contract
+
+def test_otp_adapter_builds_ordered_template_params_and_reconciles(monkeypatch):
+    """Fable5 M4: the OTP adapter must pass an ORDERED template_params list (so the
+    live Wati adapter can place the code in {{1}}) AND reconcile terminal status by
+    mobile+template (the live ack has no id). Capture what send_template receives."""
+    from apps.integrations.wati.adapter import DeliveryResult as WatiDelivery
+    from apps.integrations.wati.adapter import SendResult
+    from apps.otp import adapters as otp_adapters
+
+    captured = {}
+
+    class _FakeWati:
+        def send_template(self, *, to, template, params):
+            captured["params"] = params
+            return SendResult(accepted=True, provider_message_id=None, raw_status="accepted")
+
+        def get_message_status(self, *, provider_message_id, recipient_mobile=None, template=None):
+            captured["status_call"] = {"mobile": recipient_mobile, "template": template}
+            from apps.integrations.wati import status as st
+            return WatiDelivery(status=st.STATUS_DELIVERED, meta_error_code=None, classification=None)
+
+    import apps.integrations.wati.adapter as wati_adapter_mod
+    monkeypatch.setattr(wati_adapter_mod, "get_wati_adapter", lambda: _FakeWati())
+    adapter = otp_adapters.WatiWhatsAppOtpAdapter()
+    res = adapter.send(recipient="917972672473", code="123456", ttl_seconds=300,
+                       context={"template": "gorefer_login_otp"})
+    # Ordered template_params carrying the code (not a bare {"code":...} dict).
+    tvars = captured["params"]["template_params"]
+    assert isinstance(tvars, list) and tvars and tvars[0]["value"] == "123456"
+    # Status reconciled with mobile + template, not the empty id alone.
+    assert captured["status_call"]["mobile"] == "917972672473"
+    assert captured["status_call"]["template"] == "gorefer_login_otp"
+    from apps.otp.ports import STATUS_DELIVERED
+    assert res.status == STATUS_DELIVERED
+
+
+def test_logonly_wati_adapter_redacts_param_values(caplog):
+    """Fable5 M5: with OTP on + WATI off, sends route through LogOnlyWatiAdapter, which
+    must log param NAMES only — never the OTP code value."""
+    from apps.integrations.wati.adapter import LogOnlyWatiAdapter
+
+    with caplog.at_level(logging.INFO, logger="gorefer.wati"):
+        LogOnlyWatiAdapter().send_template(
+            to="917972672473", template="gorefer_login_otp",
+            params={"template_params": [{"name": "code", "value": "654321"}]},
+        )
+    joined = "\n".join(r.getMessage() for r in caplog.records)
+    assert "654321" not in joined, "plaintext OTP code leaked from the log-only adapter"
+    assert "code" in joined  # the NAME is fine to log
+
+
 # ------------------------------------------------ (1) cascade on primary non-delivery
 
 

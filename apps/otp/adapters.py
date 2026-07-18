@@ -55,18 +55,28 @@ class WatiWhatsAppOtpAdapter:
             "OTP whatsapp_wati send: to=%s template=%s code_len=%d ttl=%ds",
             recipient, template, len(code), ttl_seconds,
         )
-        # AUTHENTICATION template params: the code goes to the body var AND the
-        # copy-code button (Meta requires both carry the same value). No PII logged.
+        # AUTHENTICATION template params must be an ORDERED template_params list — the
+        # same contract the notify path uses (Fable5 M4). The live adapter reads ONLY
+        # params["template_params"] and remaps them to positional {{1}},{{2}}; a bare
+        # {"code":…} dict is silently ignored and Wati rejects the send as "blank text".
+        # {{1}} = the OTP code (body var AND copy-code button carry the same value).
         result = adapter.send_template(
             to=recipient,
             template=template,
-            params={"code": code, "otp": code, "ttl_minutes": max(1, ttl_seconds // 60)},
+            params={"template_params": [{"name": "code", "value": code}]},
         )
         if not result.accepted:
             return DeliveryResult(status=STATUS_FAILED, provider_ref=None, error="wati not accepted")
 
         # HTTP-200/accepted is NOT delivery — verify the terminal status (doc-08 A3).
-        delivery = adapter.get_message_status(provider_message_id=result.provider_message_id or "")
+        # The live ack has NO message id, so status is reconciled by mobile + template
+        # (getMessages), NOT by id (Fable5 M4) — passing only the empty id would make
+        # every live OTP report non-terminal -> FAILED and cascade.
+        delivery = adapter.get_message_status(
+            provider_message_id=result.provider_message_id or "",
+            recipient_mobile=recipient,
+            template=template,
+        )
         if st.is_delivered(delivery.status):
             return DeliveryResult(status=STATUS_DELIVERED, provider_ref=result.provider_message_id)
         return DeliveryResult(

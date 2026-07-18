@@ -61,7 +61,14 @@ class LogOnlyWatiAdapter:
     kind = "log_only"
 
     def send_template(self, *, to: str, template: str, params: dict) -> SendResult:
-        logger.info("[demo] WATI send suppressed: to=%s template=%s params=%s", to, template, params)
+        # REDACT values (Fable5 M5): with OTP on + WATI off this log-only path handles
+        # OTP sends, and params carries the plaintext code under template_params. Log
+        # only the variable NAMES/positions + count, never the values — the OTP module's
+        # "the code is never logged" invariant must hold for the log-only adapter too.
+        logger.info(
+            "[demo] WATI send suppressed: to=%s template=%s param_names=%s",
+            to, template, _redact_param_names(params),
+        )
         return SendResult(
             accepted=True,
             provider_message_id=f"demo-{template}-{to}",
@@ -260,6 +267,21 @@ class LiveWatiAdapter:
             meta_code = _extract_meta_code(failed_detail)
             classification = status.classify_failure(meta_code)
         return DeliveryResult(status=mapped, meta_error_code=meta_code, classification=classification)
+
+
+def _redact_param_names(params: dict) -> str:
+    """Return only the template-variable NAMES/count from a params dict — never values.
+
+    OTP codes (and prospect PII) ride in params['template_params'] as {name,value}; the
+    log-only adapter must never print the values (Fable5 M5). Returns e.g. "['code'] (1)".
+    """
+    if not isinstance(params, dict):
+        return "()"
+    tvars = params.get("template_params")
+    if not isinstance(tvars, list):
+        return "()"
+    names = [str(p.get("name")) for p in tvars if isinstance(p, dict)]
+    return f"{names} ({len(names)})"
 
 
 def _extract_meta_code(failed_detail: str) -> int | None:
