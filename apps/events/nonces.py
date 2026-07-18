@@ -56,3 +56,20 @@ def consume_nonce(*, nonce: str, visitor_id: str) -> ClickNonce | None:
 def peek_nonce(*, nonce: str, visitor_id: str) -> ClickNonce | None:
     """Validate WITHOUT consuming (name-reveal reuses the beacon's nonce)."""
     return _live_nonce(nonce, visitor_id)
+
+
+# Retain expired/consumed nonces a little past their TTL for audit, then purge.
+NONCE_PURGE_GRACE = timedelta(hours=1)
+
+
+def purge_expired_nonces() -> int:
+    """Delete ClickNonce rows well past their usefulness (Fable5 H3).
+
+    Every /r/{id} hit mints a nonce (redirect_service), so the table grows unbounded
+    under crawling without this sweep — the Zoho wax-seal nonces had a purge; these
+    did not. Only rows already expired (or consumed) beyond a grace window are removed,
+    so an in-flight beacon/name-reveal nonce is never yanked. Scheduled hourly.
+    """
+    cutoff = timezone.now() - NONCE_PURGE_GRACE
+    deleted, _ = ClickNonce.objects.filter(expires_at__lt=cutoff).delete()
+    return deleted

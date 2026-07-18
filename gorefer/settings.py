@@ -188,6 +188,30 @@ if _resolved_engine != "django.db.backends.postgresql":
         "Set the DB_* env vars to a Postgres database — there is no SQLite fallback."
     )
 
+# --- Cache (DB-backed — NO Redis, per ADR-024) -----------------------------
+# Backs the edge rate limiter (apps/common/ratelimit.py) + login lockout. A DB cache
+# (not LocMemCache) so counters are shared across gunicorn workers — a per-process
+# LocMem limiter would let each worker grant the full quota. The `gorefer_cache` table
+# is created by `manage.py createcachetable` (run once after deploy; idempotent).
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "gorefer_cache",
+    }
+}
+
+# Rate-limit knobs (Fable5 H3). Per (key, window). Disabled entirely under DEBUG so
+# dev/CI test loops aren't throttled; enforced in prod. Values are req/window-seconds.
+RATELIMIT_ENABLED = os.environ.get(
+    "DJANGO_RATELIMIT_ENABLED", "false" if DEBUG else "true"
+).strip().lower() in {"1", "true", "yes", "on"}
+RATELIMIT_LOGIN_MAX = int(os.environ.get("DJANGO_RATELIMIT_LOGIN_MAX", "10"))       # failed logins
+RATELIMIT_LOGIN_WINDOW = int(os.environ.get("DJANGO_RATELIMIT_LOGIN_WINDOW", "900"))  # 15 min lockout
+RATELIMIT_LEADS_MAX = int(os.environ.get("DJANGO_RATELIMIT_LEADS_MAX", "10"))       # per min per IP
+RATELIMIT_SHARE_MAX = int(os.environ.get("DJANGO_RATELIMIT_SHARE_MAX", "30"))       # per min per IP
+RATELIMIT_CLICK_MAX = int(os.environ.get("DJANGO_RATELIMIT_CLICK_MAX", "60"))       # per min per IP
+RATELIMIT_API_WINDOW = int(os.environ.get("DJANGO_RATELIMIT_API_WINDOW", "60"))     # 1 min
+
 # --- Auth ------------------------------------------------------------------
 LOGIN_URL = "dashboard_login"
 LOGIN_REDIRECT_URL = "dashboard"

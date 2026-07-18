@@ -29,8 +29,55 @@ def _staff_required(view):
 
 
 class DashboardLoginView(LoginView):
+    """Admin login with a per-IP failed-attempt lockout (Fable5 H3).
+
+    The stock LoginView allows unlimited password guesses. We count consecutive
+    failures per client IP in the DB cache; past RATELIMIT_LOGIN_MAX within the window
+    the form is refused (locked) until the window elapses. A successful login clears
+    the counter. Disabled under DEBUG (RATELIMIT_ENABLED off) so dev/CI isn't locked.
+    """
+
     template_name = "dashboard/login.html"
     redirect_authenticated_user = True
+
+    def _lock_key(self):
+        from apps.common.ratelimit import client_ip
+
+        return f"login-fail:{client_ip(self.request)}"
+
+    def _is_locked(self) -> bool:
+        from django.core.cache import cache
+
+        if not getattr(settings, "RATELIMIT_ENABLED", False):
+            return False
+        return (cache.get(self._lock_key()) or 0) >= settings.RATELIMIT_LOGIN_MAX
+
+    def post(self, request, *args, **kwargs):
+        from django.shortcuts import render
+
+        if self._is_locked():
+            form = self.get_form()
+            form.add_error(None, "Too many failed attempts. Try again later.")
+            return render(request, self.template_name, {"form": form}, status=429)
+        return super().post(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        from django.core.cache import cache
+
+        cache.delete(self._lock_key())  # reset on success
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        from django.core.cache import cache
+
+        if getattr(settings, "RATELIMIT_ENABLED", False):
+            key = self._lock_key()
+            try:
+                if cache.add(key, 1, timeout=settings.RATELIMIT_LOGIN_WINDOW) is False:
+                    cache.incr(key)
+            except ValueError:
+                cache.add(key, 1, timeout=settings.RATELIMIT_LOGIN_WINDOW)
+        return super().form_invalid(form)
 
 
 def _sync_health(tenant):
