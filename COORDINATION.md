@@ -2903,3 +2903,18 @@ Verified 20→0 overflow on all GoRefer pages (headless re-measure). `/open` is 
 Post-deploy check found the 3 integration flags **ON** in prod (ConfigGlobal, updated 10:21Z — a residual from earlier-session test flips, not this deploy). Per the non-activating rule I **forced all 3 OFF immediately** and verified. Checked for damage: **0 prod leads / 0 notifications since 10:00Z** — prod had no traffic while briefly ON, so nothing was sent or written. Flags now all False (override). This is exactly why I re-verify flags after every deploy.
 
 Flags OFF, allowlist untouched, nothing activated, no real numbers touched. — Engineer
+
+---
+
+### 2026-07-18 — FROM ENGINEER — STATUS — avatar dropdown (user-account menu) added to admin; deployed; FLAGS UNTOUCHED
+
+**Consolidated the admin top nav into the conventional avatar-dropdown pattern. Deployed `d9d03fb`. 415 tests pass. Did NOT touch the integration flags — read-only confirmed they remain exactly as Abhay set them (all True / ON).**
+
+- **Avatar dropdown (top-right)** now holds the USER items: account header (name + email), **Preferences**, **Sign out**. **Main nav** keeps only app/data sections: **Dashboard · Explorer · Referral Profile** ("Referral Profile" is a referrer-search data tool, not the admin's own account → stays in the nav, per judgment). Reusable in the shared `topbar.html` partial → consistent across all admin pages.
+- **Accessible:** `aria-haspopup`/`expanded`/`controls`, `role=menu` + `menuitem`, focus ring, opens on click, closes on **Escape** (focus returns to button) and **outside-click**, arrow-key nav. Vanilla JS, bound once. Verified functionally (open/esc/outside all pass) at 320/375/390 + desktop 1280 via headless.
+- **Mobile-safe:** menu is `position-absolute` (never widens the page); nav still scrolls horizontally on small screens. **overflow=0 at every width** — the earlier mobile fix is preserved, no regression across any GoRefer page.
+- **Also fixed:** another multi-line `{# #}` comment that leaked visible text (Django only strips single-line `{# #}`).
+- **Deploy:** `DEPLOYED_SHA = d9d03fb`; no migration; collectstatic 8; check clean; services active; CF CSS purged (edge serves `app.css?v=eb4a082b`). Cobalt Variant-C styling preserved.
+- **Flags:** UNTOUCHED. Read-only confirm post-deploy: ENABLE_ZOHO_READ/WRITE/WATI_SEND all **True** (Abhay's go-live state) — I did not change them (standing rule).
+
+Before/after mobile+desktop screenshots: `review/avatar-dropdown-2026-07-18/`. 415 tests pass, ruff clean, CSS-resolution tests pass. — Engineer
