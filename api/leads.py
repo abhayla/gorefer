@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import re
 
+from django.conf import settings
 from ninja import Router, Schema
 from ninja.errors import HttpError
 
+from apps.common.ratelimit import RateLimited, check_rate, client_ip
 from apps.referrals.lead_service import capture_lead
 from apps.referrals.models import ReferralIdentity
 from apps.referrals.validators import InvalidClientId, validate_client_id
@@ -39,6 +41,14 @@ class LeadOut(Schema):
 
 @router.post("/", response={201: LeadOut})
 def create_lead(request, payload: LeadIn):
+    # Anti-spam: with ENABLE_ZOHO_WRITE on, unthrottled POSTs write junk leads
+    # straight into Zoho + mint Notification rows (Fable5 H3). Rate-limit per IP.
+    try:
+        check_rate("leads", client_ip(request),
+                   limit=settings.RATELIMIT_LEADS_MAX, window=settings.RATELIMIT_API_WINDOW)
+    except RateLimited as exc:
+        raise HttpError(429, f"too many requests; retry after {exc.retry_after}s")
+
     try:
         client_id = validate_client_id(payload.client_id)
     except InvalidClientId:

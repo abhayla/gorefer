@@ -6,9 +6,11 @@ number (config-driven); tapping it fires this endpoint AND opens WhatsApp.
 """
 from __future__ import annotations
 
+from django.conf import settings
 from ninja import Router, Schema
 from ninja.errors import HttpError
 
+from apps.common.ratelimit import RateLimited, check_rate, client_ip
 from apps.events import vocab
 from apps.events.models import Event
 from apps.referrals.models import ReferralIdentity
@@ -35,6 +37,14 @@ class ShareOut(Schema):
 
 @router.post("/", response={202: ShareOut})
 def record_share(request, payload: ShareIn):
+    # Unauthenticated attribution write — rate-limit per IP so it can't be flooded to
+    # inflate share_clicked counts (Fable5 H3 / L4).
+    try:
+        check_rate("share", client_ip(request),
+                   limit=settings.RATELIMIT_SHARE_MAX, window=settings.RATELIMIT_API_WINDOW)
+    except RateLimited as exc:
+        raise HttpError(429, f"too many requests; retry after {exc.retry_after}s")
+
     try:
         client_id = validate_client_id(payload.client_id)
     except InvalidClientId:

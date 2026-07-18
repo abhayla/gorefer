@@ -22,6 +22,9 @@ SCHEDULES = {
     # that old already fails the timestamp check), so purging them can't enable a
     # replay — it just stops the table growing forever.
     "zoho_purge_expired_nonces": ("apps.integrations.zoho.waxseal.purge_expired_nonces", 60),
+    # Hourly (Fable5 H3): every /r/{id} hit mints a ClickNonce; without a purge the
+    # click_nonces table grows unbounded under crawling. Only rows past TTL+grace go.
+    "click_purge_expired_nonces": ("apps.events.nonces.purge_expired_nonces", 60),
 }
 
 

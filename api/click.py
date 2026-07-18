@@ -4,7 +4,8 @@
   confirmed-human. Idempotent per nonce. 401 on a forged/expired/used nonce.
 - GET  /api/click/referrer/{client_id}?nonce= : return the referrer's first name
   ONLY to a request carrying a valid, fresh nonce — closing the id->name
-  enumeration hole (ADR-021). Rate-limited + bot-filtered at the edge of this view.
+  enumeration hole (ADR-021). Rate-limited (per-IP, apps.common.ratelimit) +
+  bot-filtered + nonce-gated at the edge of this view.
 
 M3 note: GoRefer has NO referrer *name* source yet (names arrive from Zoho in M6),
 so `first_name` is returned empty/null with `has_referrer=true`. We never fabricate
@@ -12,10 +13,12 @@ a name — the endpoint + nonce gate are what M3 delivers; the value fills in at
 """
 from __future__ import annotations
 
+from django.conf import settings
 from django.utils import timezone
 from ninja import Router, Schema
 from ninja.errors import HttpError
 
+from apps.common.ratelimit import RateLimited, check_rate, client_ip
 from apps.events import vocab
 from apps.events.bots import is_bot_user_agent
 from apps.events.models import Event
@@ -43,6 +46,11 @@ class ReferrerOut(Schema):
 @router.post("/confirm", response={202: ConfirmOut})
 def confirm_click(request, payload: ConfirmIn):
     """Verify + consume the nonce; mark the visitor's landing event confirmed-human."""
+    try:
+        check_rate("click", client_ip(request),
+                   limit=settings.RATELIMIT_CLICK_MAX, window=settings.RATELIMIT_API_WINDOW)
+    except RateLimited as exc:
+        raise HttpError(429, f"too many requests; retry after {exc.retry_after}s")
     row = consume_nonce(nonce=payload.nonce, visitor_id=payload.visitor_id or "")
     if row is None:
         raise HttpError(401, "invalid or expired nonce")
@@ -69,7 +77,12 @@ def confirm_click(request, payload: ConfirmIn):
 
 @router.get("/referrer/{client_id}", response=ReferrerOut)
 def reveal_referrer(request, client_id: str, nonce: str = ""):
-    """Beacon-gated name reveal. Requires a valid, fresh nonce; bot-filtered."""
+    """Beacon-gated name reveal. Requires a valid, fresh nonce; bot-filtered + rate-limited."""
+    try:
+        check_rate("click", client_ip(request),
+                   limit=settings.RATELIMIT_CLICK_MAX, window=settings.RATELIMIT_API_WINDOW)
+    except RateLimited as exc:
+        raise HttpError(429, f"too many requests; retry after {exc.retry_after}s")
     if is_bot_user_agent(request.META.get("HTTP_USER_AGENT", "")):
         raise HttpError(401, "unauthenticated")
     try:
