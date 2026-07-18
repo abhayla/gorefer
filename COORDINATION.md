@@ -2842,3 +2842,31 @@ The **repo** manifest (`apps/integrations/wati/wati-templates.json`) had the 7-v
 2. **Live sends 403 in prod** — Wati is behind Cloudflare, which blocks the default `Python-urllib/x` User-Agent (manual curl worked, the adapter's urllib didn't). Added a real UA (urllib→200 with UA, 403 without). **Without this fix, the WATI adapter would fail every live send in prod.**
 
 **Nothing left activated. Prod flags OFF. Real go-live remains Abhay's separate deliberate flip. Note: the branch (prod runs `1462cda`) does NOT yet include `c977019` — the gate + UA fix are committed but NOT deployed; they must ship before any real WATI go-live or sends will 403. — Engineer**
+
+---
+
+### 2026-07-18 — FROM ENGINEER — STATUS — Level-B FULL-APP E2E now FULLY GREEN (autonomous iterate-to-pass); 3 real WATI defects found + fixed; prod untouched (flags OFF)
+
+**Ran the full referral lifecycle autonomously to a green pass, debugging + fixing as I went — all on a LOCAL instance with the real WATI+Zoho adapters, allowlist locked to 917972672473, prod flags-OFF throughout. 414 tests pass. Zero Zoho residue. Rails never crossed.**
+
+**Flag state — PROD start AND end: all False.** Allowlist `WATI_ALLOW_ALL_RECIPIENTS="false"` / `WATI_TEST_RECIPIENTS="917972672473"` unchanged. Only 917972672473 ever received a message.
+
+#### Final green run (stage-by-stage)
+| Stage | Result | Evidence |
+|---|---|---|
+| Click/redirect | ✅ | `/r/{id}` 200 branded landing (AP2516003693 + market-risk present; ZMPHZC/zerodha-url NOT in body). `/continue` **302 → `…?c=ZMPHZC&r={id}`** — partner code in Location header ONLY |
+| Landing + capture | ✅ | form present; `POST /api/leads/` → **201** |
+| Lead saved GoRefer-FIRST + event | ✅ | lead present; `lead_captured` event; **no PII in event** |
+| Zoho REAL write | ✅ | `zoho_lead_id` set, `synced` (LiveZohoAdapter) |
+| Zoho read-back | ✅ | LiveZohoReadAdapter; COQL read-back OK; status not fabricated |
+| Zoho delete | ✅ | test lead deleted; **final COQL for Lead_Source=GoRefer → empty (zero residue)** |
+| WATI office alert | ✅ **BLOCKED** | → 917388882020 → `skipped: recipient not in WATI allowlist (fail-closed)` |
+| WATI referrer | ✅ skipped | `referrer phone unknown` |
+| **WATI prospect-welcome** | ✅ **DELIVERED** | to 917972672473; notification row `delivered`; **terminal DELIVERED via getMessages** (not the ack) |
+
+#### THREE real defects found + fixed (each would break prod go-live)
+1. **`c977019` — no allowlist gate on the live send path.** A real capture would have fired the office alert to 917388882020. Added a fail-closed gate to LiveWatiAdapter (block+log unless WATI_ALLOW_ALL_RECIPIENTS=true).
+2. **`c977019` — live sends 403.** Wati is behind Cloudflare, which blocks the default `Python-urllib` User-Agent. Added a real UA (urllib→200 with it, 403 without).
+3. **`1cf63f3` — semantic params not remapped to positional.** Wati matches vars positionally (customParams "1","2","3"); notify.py sends semantic names (prospect_name…) → Wati rejected as "blank text" (HTTP 400), so the prospect-welcome recorded `failed` despite valid values. Adapter now remaps to positional at the wire boundary. **This was the last blocker to green.**
+
+All three are on the branch (commits `c977019`, `1cf63f3`) with tests. **NOT deployed** — prod still runs `1462cda`. **These three fixes MUST deploy before any real WATI go-live**, or prod sends will 403 (defect 2) / 400 (defect 3) and fire to non-test numbers (defect 1). Nothing left activated; prod untouched. — Engineer
