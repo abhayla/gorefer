@@ -3059,3 +3059,25 @@ Final state: **flags UNTOUCHED — ENABLE_ZOHO_READ/WRITE/WATI_SEND all True** (
 - **Verified on prod:** `map_zoho_status("Account Opened with Us")==account_opened`, `"Contacted"==contacted`; HMAC flag OFF; live 200; origin lock still 403 on direct-origin.
 
 **Unchanged:** `ENABLE_ZOHO_WEBHOOK_HMAC` OFF (the one coordinated flip left, after Abhay confirms the signer + rule are active), 3 integration flags ON, `WATI_ALLOW_ALL_RECIPIENTS="false"` locked to `917972672473`, OTP OFF. — Engineer
+
+---
+
+### 2026-07-18 — FROM ENGINEER — STATUS — Zoho webhook trust chain LIVE: HMAC seal flipped ON + proven end-to-end. Also fixed a .env load-order bug.
+
+**Abhay confirmed the Deluge signer is pasted, the workflow rule is active, and the `gorefer_webhook_secret` Variable exists (it already held the correct secret — verified via the Zoho API, matches prod). Did the coordinated flip: `ENABLE_ZOHO_WEBHOOK_HMAC` is now ON and the seal is proven live end-to-end on prod. All other hard limits unchanged.** Deployed `a4f2c7f`. 458 tests pass.
+
+**Bug found + fixed during the flip:** setting `ENABLE_ZOHO_WEBHOOK_HMAC=true` in `.env` had no effect — the flag still resolved False. Root cause: `gorefer/settings.py` imported `from gorefer.flags import flags` (which builds the process-wide flags snapshot from `os.environ` at import time) **before** calling `load_dotenv()`, so any flag whose value lives only in `.env` was frozen at its default. (The integration flags READ/WRITE/WATI_SEND were unaffected — they resolve via the config cascade / ConfigGlobal, not `from_env`.) Fixed by moving `load_dotenv()` above the flags import; added a static load-order guard test + a functional subprocess test. Commit `a4f2c7f`.
+
+**Live end-to-end seal proof (on prod, through the local origin, ms-timestamp signing exactly like the Deluge signer):**
+| Case | Result |
+|---|---|
+| VALID signed request | **200 `applied:true`** ✅ |
+| TAMPERED body (same sig) | 401 ✅ |
+| WRONG secret | 401 ✅ |
+| REPLAY (reused nonce) | 401 ✅ |
+
+The one VALID call created test `conversion_id 3` (referrer RJ4521, opener TESTLEAD-SEAL); **tombstoned it via the designed reversal path** (`reversed:true`) → `is_reversed=True`, excluded from all counts (active conversions back to the demo baseline of 2). Zero residue.
+
+**Where the flag was created:** the `gorefer_webhook_secret` Variable is a Zoho CRM Variable; `ENABLE_ZOHO_WEBHOOK_HMAC` is a GoRefer feature flag (`gorefer/flags.py`), introduced in `a64640e` ("feat(DF-2): HMAC wax-seal + IP allowlist"), always default-OFF until this flip — not a Zoho setting, which is why Abhay couldn't find it in Zoho.
+
+**Final prod state:** `ENABLE_ZOHO_WEBHOOK_HMAC` **ON** (seal enforced); origin locked to Cloudflare (direct-origin 403); `TRUSTED_PROXY_HOPS=2`; 3 integration flags ON; `WATI_ALLOW_ALL_RECIPIENTS="false"` locked to `917972672473`; `ENABLE_OTP_LOGIN` OFF; `DEBUG` false. The Zoho→GoRefer conversion webhook is now cryptographically authenticated — a leaked static key can no longer fabricate a conversion. Trust chain complete. — Engineer
