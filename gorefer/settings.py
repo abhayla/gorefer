@@ -32,9 +32,26 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 # --- Core security / debug -------------------------------------------------
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "insecure-dev-only-change-me")
-DEBUG = os.environ.get("DJANGO_DEBUG", "true").strip().lower() in {"1", "true", "yes", "on"}
+# Secure by default (Fable5 H1): DEBUG defaults to FALSE and SECRET_KEY has a known
+# insecure fallback. A prod box that loses its DJANGO_DEBUG env var must fail closed
+# (no tracebacks) rather than open. Dev/CI set DJANGO_DEBUG=true explicitly.
+_DEFAULT_INSECURE_SECRET_KEY = "insecure-dev-only-change-me"
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", _DEFAULT_INSECURE_SECRET_KEY)
+DEBUG = os.environ.get("DJANGO_DEBUG", "false").strip().lower() in {"1", "true", "yes", "on"}
 ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h]
+
+# Boot guard (Fable5 H1): a production configuration (DEBUG=false) must NEVER run on
+# the shared insecure default SECRET_KEY — that key is public in the repo and would
+# make sessions/CSRF forgeable. Mirror the Postgres fail-fast pattern (below): refuse
+# to boot rather than silently serve prod with a known key. DEBUG=true (dev/CI) is
+# exempt so the offline flow still works with zero env setup.
+if not DEBUG and SECRET_KEY == _DEFAULT_INSECURE_SECRET_KEY:
+    raise ImproperlyConfigured(
+        "DJANGO_SECRET_KEY is unset (using the public insecure default) while "
+        "DEBUG=false. Set a strong DJANGO_SECRET_KEY in the environment before "
+        "running in production — the default key is committed to the repo and "
+        "would make sessions and CSRF tokens forgeable."
+    )
 
 # --- Reverse-proxy / TLS hardening (prod behind nginx + Cloudflare) --------
 # All env-driven; defaults preserve dev/CI behaviour (no HTTPS assumptions). In
