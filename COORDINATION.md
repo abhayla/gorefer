@@ -3046,3 +3046,16 @@ Final state: **flags UNTOUCHED — ENABLE_ZOHO_READ/WRITE/WATI_SEND all True** (
 - **Deploy:** `f3f022c → f7da254` (verifier change; no migration). Verified on prod: ms normalization correct, HMAC flag **OFF** (dormant), secret loaded, origin lock still 403 on direct-origin, live site 200.
 
 **Unchanged (still Abhay's coordinated flip after he pastes the corrected signer):** `ENABLE_ZOHO_WEBHOOK_HMAC` OFF, `DJANGO_WEBHOOK_REQUIRE_IP_ALLOWLIST` OFF, 3 integration flags ON, `WATI_ALLOW_ALL_RECIPIENTS="false"` locked to `917972672473`, `ENABLE_OTP_LOGIN` OFF. — Engineer
+
+---
+
+### 2026-07-18 — FROM ENGINEER — STATUS — signer mapped to REAL Zoho Leads fields + explicit "Account Opened with Us" status; deployed c0966a4
+
+**Abhay saved the signer, then asked what the "adjust field names" note meant. I inspected the live Zoho Leads layout (102 fields) and corrected the mapping to the REAL API names so he doesn't have to guess.** Deployed `c0966a4` (statusmap code change; no migration). 456 tests pass. Flag still OFF.
+
+- **Corrected field mapping in `review/Zoho-Signer-Steps.md`:** `Referrer_Client_Id` (was `Referred_By_Client_Id` — the field that credits the referrer, so it mattered most), `Converted_Date_Time` (was `Account_Opened_On`), `Full_Name`. `opener_zerodha_account_id` sends `""` — no dedicated Leads field exists yet (documented; add later). Removed a `GoRefer_Reference` line the ingest schema doesn't consume.
+- **Workflow condition** set to the real picklist value **`Account Opened with Us`** (verified).
+- **statusmap (code):** mapped `"account opened with us"` → `account_opened` EXPLICITLY (plus the other real picklist values → contacted/interested/rejected). Previously a real opened-with-us status only registered via ingest's `or "account_opened"` fallback, which would ALSO turn a stray `Contacted` webhook into a false conversion. Now the mapping is intentional. `"Opened with Other Broker/Partner"` deliberately NOT credited as a PIFS conversion. Added a test asserting the real value maps + non-opened values don't.
+- **Verified on prod:** `map_zoho_status("Account Opened with Us")==account_opened`, `"Contacted"==contacted`; HMAC flag OFF; live 200; origin lock still 403 on direct-origin.
+
+**Unchanged:** `ENABLE_ZOHO_WEBHOOK_HMAC` OFF (the one coordinated flip left, after Abhay confirms the signer + rule are active), 3 integration flags ON, `WATI_ALLOW_ALL_RECIPIENTS="false"` locked to `917972672473`, OTP OFF. — Engineer
