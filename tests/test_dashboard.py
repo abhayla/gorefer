@@ -81,6 +81,30 @@ def test_topbar_avatar_dropdown_holds_user_items(admin_client):
     assert "Scrolls horizontally" not in html
 
 
+def test_topbar_status_is_flag_driven(admin_client):
+    """The Zoho/WATI topbar indicators are FLAG-DRIVEN (green On / red Off), two states
+    only — NOT activity-based; green does not wait for a real sync/send."""
+    from apps.config.cascade import set_tenant
+    from apps.config.integration_flags import ENABLE_WATI_SEND, ENABLE_ZOHO_WRITE
+    from apps.tenants.resolve import get_current_tenant
+
+    t = get_current_tenant()
+    # flags OFF → both show Off (red), never the old "no sync yet" wording
+    set_tenant(ENABLE_ZOHO_WRITE, False, tenant_id=t.id)
+    set_tenant(ENABLE_WATI_SEND, False, tenant_id=t.id)
+    body = admin_client.get("/admin-panel/").content.decode()
+    assert "Zoho: <span" in body and "Off" in body
+    assert "no sync yet" not in body and "no sends yet" not in body
+    assert "bg-danger" in body  # red dot present when off
+
+    # flip a flag ON → that indicator goes green (On), immediately, no activity needed
+    set_tenant(ENABLE_ZOHO_WRITE, True, tenant_id=t.id)
+    set_tenant(ENABLE_WATI_SEND, True, tenant_id=t.id)
+    body = admin_client.get("/admin-panel/").content.decode()
+    assert "On" in body
+    assert "bg-positive" in body  # green dot present when on
+
+
 def test_dashboard_accounts_opened_is_zoho_count(admin_client):
     from apps.dashboard.queries import kpis
     from apps.integrations.models import Conversion

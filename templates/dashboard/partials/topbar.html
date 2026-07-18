@@ -52,26 +52,26 @@ screens; the menu is position-absolute so it never widens the page).
     </div>
   </div>
 
-  {# Sync-freshness bar (#19) #}
+  {# Integration status bar — FLAG-DRIVEN: green = switched ON, red = OFF (two states). #}
   <div class="bg-white border-t border-line">
     <div class="mx-auto max-w-[1140px] px-4 sm:px-5 py-1.5 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-ink-500">
       <span class="inline-flex items-center gap-1.5">
-        {% if sync_health.zoho_state == "healthy" %}
+        {% if sync_health.zoho_on %}
           <span class="h-1.5 w-1.5 rounded-full bg-positive"></span>
-          Zoho: synced {{ sync_health.zoho_last_sync|timesince }} ago <span class="text-positive">✓</span>
+          Zoho: <span class="text-positive font-semibold">On</span>
         {% else %}
-          <span class="h-1.5 w-1.5 rounded-full bg-pending"></span>
-          Zoho: no sync yet <span class="text-pending">⚠</span>
+          <span class="h-1.5 w-1.5 rounded-full bg-danger"></span>
+          Zoho: <span class="text-danger font-semibold">Off</span>
         {% endif %}
       </span>
       <span class="text-line">·</span>
       <span class="inline-flex items-center gap-1.5">
-        {% if sync_health.wati_state == "healthy" %}
+        {% if sync_health.wati_on %}
           <span class="h-1.5 w-1.5 rounded-full bg-positive"></span>
-          WATI: healthy <span class="text-positive">✓</span>
+          WATI: <span class="text-positive font-semibold">On</span>
         {% else %}
-          <span class="h-1.5 w-1.5 rounded-full bg-ink-300"></span>
-          WATI: no sends yet
+          <span class="h-1.5 w-1.5 rounded-full bg-danger"></span>
+          WATI: <span class="text-danger font-semibold">Off</span>
         {% endif %}
       </span>
     </div>
