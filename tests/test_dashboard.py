@@ -105,6 +105,19 @@ def test_topbar_status_is_flag_driven(admin_client):
     assert "bg-positive" in body  # green dot present when on
 
 
+def test_topbar_shows_worker_liveness_indicator(admin_client):
+    """The topbar carries a background-worker (qcluster) liveness light so a dead
+    worker is visible. In test/sync mode it renders the 'unknown' (—) state, never a
+    false red."""
+    html = admin_client.get("/admin-panel/").content.decode()
+    assert "Worker:" in html
+    # Sync/inline mode in tests → unknown state, grey dash (not a false 'Down').
+    assert "bg-ink-300" in html
+    # Never falsely alarm when there's no worker to be down: the red 'Down' LABEL span
+    # must be absent (substring 'Down' also appears in unrelated JS 'ArrowDown').
+    assert ">Down<" not in html
+
+
 def test_dashboard_accounts_opened_is_zoho_count(admin_client):
     from apps.dashboard.queries import kpis
     from apps.integrations.models import Conversion
