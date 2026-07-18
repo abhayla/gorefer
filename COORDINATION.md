@@ -2918,3 +2918,27 @@ Flags OFF, allowlist untouched, nothing activated, no real numbers touched. — 
 - **Flags:** UNTOUCHED. Read-only confirm post-deploy: ENABLE_ZOHO_READ/WRITE/WATI_SEND all **True** (Abhay's go-live state) — I did not change them (standing rule).
 
 Before/after mobile+desktop screenshots: `review/avatar-dropdown-2026-07-18/`. 415 tests pass, ruff clean, CSS-resolution tests pass. — Engineer
+
+---
+
+### 2026-07-18 — FROM ENGINEER — STATUS — flag-driven status colors deployed + PROD WATI GO-LIVE PROOF passed (real lead, real WhatsApp DELIVERED)
+
+**Part 1 (UI):** flag-driven Zoho/WATI status indicators deployed (green On / red Off, two states; SyncHealth color-dependency removed). Folded with the avatar dropdown. `DEPLOYED_SHA = 8002ceb`. 416 tests pass. Live topbar shows Zoho: On | WATI: On. Flags untouched. CF purged.
+
+**Part 2 (PROD WATI GO-LIVE PROOF):** pushed ONE real lead through the LIVE prod site with GoRefer's own live adapters. Allowlist locked to Abhay's test number only (`WATI_ALLOW_ALL_RECIPIENTS="false"` — NOT opened to all).
+
+Setup: added `WATI_TEST_RECIPIENTS="917972672473"` + `WATI_ALLOW_ALL_RECIPIENTS="false"` to prod `.env` (backed up; both were absent — which is why the gate blocked everything before), restarted the app.
+
+Real E2E on `gorefer.in` (client_id PRODWA01, prospect 7972672473):
+| Stage | Result |
+|---|---|
+| `GET /r/PRODWA01` (live) | 200 branded landing (form + AP2516003693); journey created |
+| `POST /api/leads/` (live) | **201, lead #8** |
+| **(a) Zoho REAL write** | ✅ synced, **`zoho_lead_id = 475281000041592002`** (real numeric id) |
+| **(b) Prospect-welcome WhatsApp** | ✅ **DELIVERED** to 917972672473 — **terminal via getMessages** (created 11:46:25Z, failedDetail empty), not the HTTP 200 |
+| **(c) Office alert** (→917388882020) | ✅ **BLOCKED** by the fail-closed gate (`recipient not in WATI allowlist`) — correct, only the test number is allowlisted |
+| **(d) Referrer** | ✅ skipped (`referrer phone unknown`) |
+
+Cleanup: **Zoho test lead 475281000041592002 DELETED** (re-query for 7972672473 → empty, zero residue). GoRefer journey/lead #8 left in place (its Zoho id is now stale, harmless).
+
+Final state: **flags UNTOUCHED — ENABLE_ZOHO_READ/WRITE/WATI_SEND all True** (as Abhay set). Allowlist locked to `917972672473`, `WATI_ALLOW_ALL_RECIPIENTS="false"` — **did NOT open to all** (that's Abhay's final call). The full live loop is proven end-to-end on prod: click → landing → capture → real Zoho write → real WhatsApp DELIVERED → office correctly blocked. — Engineer
