@@ -74,6 +74,25 @@ screens; the menu is position-absolute so it never widens the page).
           WATI: <span class="text-danger font-semibold">Off</span>
         {% endif %}
       </span>
+      {% comment %}
+      Background worker (qcluster) liveness — ACTIVITY/heartbeat-based, 3 states:
+      healthy=green Live, stale=red down (scheduled sweeps have silently stopped),
+      unknown=grey (inline/sync mode — no separate worker to be alive).
+      {% endcomment %}
+      <span class="text-line">·</span>
+      <span class="inline-flex items-center gap-1.5"
+            title="{{ sync_health.worker.detail }}{% if sync_health.worker.last_run %} · last run {{ sync_health.worker.last_run|timesince }} ago{% endif %}">
+        {% if sync_health.worker.state == 'healthy' %}
+          <span class="h-1.5 w-1.5 rounded-full bg-positive"></span>
+          Worker: <span class="text-positive font-semibold">Live</span>
+        {% elif sync_health.worker.state == 'stale' %}
+          <span class="h-1.5 w-1.5 rounded-full bg-danger"></span>
+          Worker: <span class="text-danger font-semibold">Down</span>
+        {% else %}
+          <span class="h-1.5 w-1.5 rounded-full bg-ink-300"></span>
+          Worker: <span class="text-ink-300 font-semibold">—</span>
+        {% endif %}
+      </span>
     </div>
   </div>
 </header>

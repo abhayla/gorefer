@@ -94,10 +94,14 @@ def _sync_health(tenant):
         resolve_flag,
     )
 
+    from .health import worker_health
+
     tid = getattr(tenant, "id", None)
     zoho_on = resolve_flag(ENABLE_ZOHO_WRITE, tenant_id=tid) or resolve_flag(ENABLE_ZOHO_READ, tenant_id=tid)
     wati_on = resolve_flag(ENABLE_WATI_SEND, tenant_id=tid)
-    return {"zoho_on": zoho_on, "wati_on": wati_on}
+    # Worker liveness is ACTIVITY-based (a heartbeat), unlike the flag-driven Zoho/WATI
+    # lights — a dead qcluster silently stops every scheduled sweep, so it must show.
+    return {"zoho_on": zoho_on, "wati_on": wati_on, "worker": worker_health()}
 
 
 @_staff_required
