@@ -57,6 +57,30 @@ def test_dashboard_renders_kpis_and_funnel(admin_client):
     assert "Account opened" in html  # funnel stage
 
 
+def test_topbar_avatar_dropdown_holds_user_items(admin_client):
+    """The avatar dropdown holds the USER items (Preferences, Sign out); the main nav
+    keeps only app/data sections (Dashboard, Explorer, Referral Profile)."""
+    html = admin_client.get("/admin-panel/").content.decode()
+    # accessible dropdown scaffolding
+    assert 'id="avatar-menu-btn"' in html
+    assert 'aria-haspopup="menu"' in html
+    assert 'role="menu"' in html
+    assert 'aria-controls="avatar-menu"' in html
+    # user items are menuitems inside the dropdown
+    assert 'role="menuitem"' in html
+    assert "Sign out" in html
+    assert "Preferences" in html
+    # each user item is rendered as a role=menuitem link (not a bare nav pill)
+    import re
+    menuitems = re.findall(r'role="menuitem"[^>]*>\s*(?:<span[^>]*>[^<]*</span>\s*)?([A-Za-z ]+)', html)
+    joined = " ".join(menuitems)
+    assert "Preferences" in joined and "Sign out" in joined
+    # main-nav app sections still present
+    assert "Dashboard" in html and "Explorer" in html and "Referral Profile" in html
+    # no leaked template comment text (the multi-line {# #} gotcha)
+    assert "Scrolls horizontally" not in html
+
+
 def test_dashboard_accounts_opened_is_zoho_count(admin_client):
     from apps.dashboard.queries import kpis
     from apps.integrations.models import Conversion
