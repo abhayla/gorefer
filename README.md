@@ -24,6 +24,18 @@ GoRefer is a **referral management & referral intelligence platform**: users man
 | Decision | Framework/Stack Decision & Synthesis (basis of ADR-024) | [review/Framework-Decision-Synthesis.md](review/Framework-Decision-Synthesis.md) |
 | Design | UI Mockups (landing, dashboard, components, journey, etc.) | [mockups/](mockups/) |
 | Source | Original ChatGPT/source & superseded drafts | [_source-archive/](_source-archive/) |
+| **Integration boundary** | **Zoho ⇄ GoRefer — contract** (webhook, HMAC seal, status→stage, upsert-by-mobile) | [Zoho-GoRefer/Zoho-Integration-Contract.md](Zoho-GoRefer/Zoho-Integration-Contract.md) |
+| **Integration boundary** | **Zoho ⇄ GoRefer — live state** (flags, what's proven, what's staged) | [Zoho-GoRefer/Zoho-GoRefer-State.md](Zoho-GoRefer/Zoho-GoRefer-State.md) |
+| **Integration boundary** | Zoho-side Deluge signer — paste-ready steps | [Zoho-GoRefer/Zoho-Signer-Steps.md](Zoho-GoRefer/Zoho-Signer-Steps.md) |
+| **Integration boundary** | **Wati ⇄ GoRefer — contract** (send shape, terminal-status rule, allowlist gate, reconcile sweep) | [Wati-GoRefer/Wati-Integration-Contract.md](Wati-GoRefer/Wati-Integration-Contract.md) |
+| **Integration boundary** | **Wati ⇄ GoRefer — templates** (elementNames, ids, categories, role→template map) | [Wati-GoRefer/Wati-GoRefer-Templates.md](Wati-GoRefer/Wati-GoRefer-Templates.md) |
+
+> **Sibling projects** (filed by the system that *owns and executes* the artifact):
+> **`C:\Abhay\5Wealths\Zoho-Project\`** — everything running inside Zoho (Deluge, workflow rules,
+> the WhatsApp Send Queue) → start at `ZOHO-KNOWLEDGE.md`.
+> **`C:\Abhay\5Wealths\Wati-Project\`** — the WhatsApp channel/platform (delivery health, template
+> catalogue, nightly report) → start at `WATI-KNOWLEDGE.md`.
+> The two `*-GoRefer/` folders above are **GoRefer's side** of each boundary.
 
 ## Running locally (Sprint 1 skeleton — M1)
 
