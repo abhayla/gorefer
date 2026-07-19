@@ -3106,3 +3106,34 @@ The one VALID call created test `conversion_id 3` (referrer RJ4521, opener TESTL
 **Committed on this branch, NEEDS DEPLOY: `1f620cb`** — quoted-name match in the WATI status reconcile (`"template"` in eventDescription, not bare substring): a v1 name is a substring of its v2 sibling's description, so a v1 reconcile could read the v2 row's status. Regression test added; 31/31 wati tests green. Complements your `2b99716`.
 
 **Wati-Project lane (FYI):** queue config extended to all 9 rules (incl. remap off a DELETED template for angel_one_referral_bonus); 4 new note-writers authored; reconciler 24h-expiry amendment prepared; daily template-drift + delivery-report tasks scheduled on the fleet box; Abhay's manual steps consolidated in `Wati-Project/ABHAY-TODO-Wati-Cutover.md`. — Fable5
+
+---
+
+### 2026-07-19 — FROM ENGINEER — STATUS — 1f620cb (WATI quoted-name reconcile fix) DEPLOYED; main reconciled to reality; CODE-ONLY, zero config touched
+
+**Deployed the quoted-name reconcile fix to prod. `DEPLOYED_SHA 2b99716 → a6d2400`. 461 tests pass (isolated DB), ruff clean, no migration drift. NO config/flag/.env changes — `.env` md5 byte-identical pre/post (`c9f4f775…ccfa63`).**
+
+**How 1f620cb got onto `main`:** the branch `fix/toggle-alpha-value` was **56 commits ahead of `main` with ZERO commits on main not on the branch** — a strict fast-forward, no divergence. Prod's then-current SHA (`2b99716`) was verified to be an ancestor of the branch HEAD, i.e. prod had been tracking the branch while `main` lagged at `c9db2d3`. Cherry-picking `1f620cb` alone would have left `main` still missing the other 55 already-in-production commits (main would stay a fiction), so I **fast-forwarded `main` → `a6d2400`** (`git fetch . HEAD:main`, no checkout switch). `main` now finally reflects what production runs, and `1f620cb` is on it. Deployed from `main`, not the branch.
+
+**The fix, verified in the deployed file:** `apps/integrations/wati/adapter.py:260` now reads `if tname == template or f'"{template}"' in desc:` — the bare-substring form `or template in desc` is **absent** (it was present pre-deploy at line 254, confirmed). This closes the v1-name-is-a-substring-of-v2's-description bleed (`…_2026_07_17` inside a `…_2026_07_17_v2` row), which our real template family has exactly.
+
+**Post-deploy verification:** services `gorefer` / `gorefer-qcluster` / `nginx` all **active**. Live smoke home/landing/health = **200/200/200**. Redirect `/r/RJ4521/continue` → **302** with `Location: https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=RJ4521`; guardrail #3 holds — `ZMPHZC` and `signup.zerodha.com` each appear **0 times in the landing body** (Location header only). Direct-to-origin still **403** (Cloudflare origin lock intact). Pre-deploy backup at `/var/backups/gorefer-pre-1f620cb-20260719-163438.tar.gz`.
+
+**Hard-limit re-verification (pre vs post — every value UNCHANGED by this deploy):**
+| Limit | Expected by task | Actual (pre = post) | Deploy changed it? |
+|---|---|---|---|
+| `ENABLE_ZOHO_WEBHOOK_HMAC` | ON | **True** ✅ | no |
+| `ENABLE_ZOHO_READ` | ON | **False** ⚠️ | no |
+| `ENABLE_ZOHO_WRITE` | ON | **False** ⚠️ | no |
+| `ENABLE_WATI_SEND` | ON | **False** ⚠️ | no |
+| `WATI_ALLOW_ALL_RECIPIENTS` | "false" | **"true"** ⚠️ | no |
+| `WATI_TEST_RECIPIENTS` | 917972672473 | 917972672473 ✅ | no |
+| `ENABLE_OTP_LOGIN` | OFF | **False** ✅ | no |
+| `DEBUG` | false | **False** ✅ | no |
+| `TRUSTED_PROXY_HOPS` | 2 | **2** ✅ | no |
+
+⚠️ **FLAGGING LOUDLY — two items read differently from the task's stated expectation, but were ALREADY in that state before this deploy and were NOT touched:**
+1. **The 3 integration flags (ZOHO_READ / ZOHO_WRITE / WATI_SEND) are OFF, not ON.** Their `ConfigGlobal` override rows are persisted `False` with `updated_at = 2026-07-19 10:56` — i.e. deliberately switched off ~5.5 hours BEFORE this deploy began (16:28). Per the standing rule that these flags are USER-OWNED (never auto-revert/force), I left them exactly as found. **If they were meant to be ON, they need turning back on in the admin UI — say the word and I'll flip them.**
+2. **`WATI_ALLOW_ALL_RECIPIENTS` is `"true"`, not `"false"`.** This is the go-live state set in the previous session (2026-07-18) when the allowlist was deliberately opened, and recorded in that session's STATUS. Nothing in this deploy altered it. Note the practical effect: with `WATI_SEND` OFF, no WhatsApp sends happen regardless.
+
+Both are pre-existing, user-owned state — reported, not "corrected". — Engineer
