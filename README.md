@@ -32,9 +32,9 @@ GoRefer is a **referral management & referral intelligence platform**: users man
 
 > **Sibling projects** (filed by the system that *owns and executes* the artifact):
 > **`C:\Abhay\5Wealths\Zoho-Project\`** — everything running inside Zoho (Deluge, workflow rules,
-> the WhatsApp Send Queue) → start at `ZOHO-KNOWLEDGE.md`.
+> the WhatsApp Send Queue) → start at `zoho-pifs-crm-state.md`.
 > **`C:\Abhay\5Wealths\Wati-Project\`** — the WhatsApp channel/platform (delivery health, template
-> catalogue, nightly report) → start at `WATI-KNOWLEDGE.md`.
+> catalogue, nightly report) → start at `wati-shared-platform-knowledge.md`.
 > The two `*-GoRefer/` folders above are **GoRefer's side** of each boundary.
 
 ## Running locally (Sprint 1 skeleton — M1)

@@ -36,6 +36,21 @@ jobs:
       TEST_DB_NAME: gorefer_test
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The contract-doc gate diffs against the merge base, so it needs history.
+          fetch-depth: 0
+
+      - name: Contract-doc drift gate
+        # An integration adapter and its contract doc must move together, or the doc
+        # rots into fiction the next person trusts. Escape hatch for genuinely
+        # doc-irrelevant changes: put [skip-contract-doc] in a commit message.
+        run: |
+          BASE="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            echo "contract-doc gate: no usable base ref (first push / new branch) — skipping."
+          else
+            python scripts/check_contract_docs.py --base "$BASE" --head "${{ github.sha }}"
+          fi
 
       - uses: actions/setup-python@v5
         with:

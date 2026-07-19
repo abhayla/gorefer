@@ -46,7 +46,7 @@ Each GoRefer user (sub-broker/tenant) has a **dedicated disclosure page** — e.
 
 ## 5. §4.4 disclosure determination (SETTLED — 2026-07-09)
 
-A referrer's forwarded WhatsApp message does NOT need the full SEBI/NSE AP identification block inline, PROVIDED a linked page (landing page and/or the per-user disclosure page) carries the full prescribed disclosures (NSE/COMP/55482 §4.4). The message keeps a short footer: brokerage-limit line (§4.8, when rates are quoted) + verbatim market-risk warning (§4.2). Grounding: Zerodha Client Referral T&C (`zerodha.com/tos/referrals`) + NSE §4.4. Full write-up: `C:\Abhay\5Wealths\Wati-Project\wati-automation-inventory.md` §5d. Remaining external gate: PIFS-authored creative on the AP code needs Zerodha written approval before scaling (T&C cl.8.vii + NSE §3.2).
+A referrer's forwarded WhatsApp message does NOT need the full SEBI/NSE AP identification block inline, PROVIDED a linked page (landing page and/or the per-user disclosure page) carries the full prescribed disclosures (NSE/COMP/55482 §4.4). The message keeps a short footer: brokerage-limit line (§4.8, when rates are quoted) + verbatim market-risk warning (§4.2). Grounding: Zerodha Client Referral T&C (`zerodha.com/tos/referrals`) + NSE §4.4. Full write-up: `C:\Abhay\5Wealths\Wati-Project\wati-shared-automation-inventory.md` §5d. Remaining external gate: PIFS-authored creative on the AP code needs Zerodha written approval before scaling (T&C cl.8.vii + NSE §3.2).
 
 ## 6. Open couplings to enforce in the build
 - `LANDING_MODE=direct` ⇒ message-disclosure link must point at a live `/d/{id}` (or carry full inline). Never a bypass link with no disclosure host.
@@ -176,6 +176,6 @@ Build the OTP delivery infrastructure as a **ports-and-adapters** unit, admin-sw
 
 ## 7. Related records (so nothing is siloed)
 - Architecture spine + tenancy + rule cascades: memory [[gorefer-architecture-layers]]; diagram `docs/architecture/gorefer-layered-architecture-diagram.html`.
-- Wati automation model + live inventory + the referral rebuild before/after: `Wati-Project/wati-automation-inventory.md`.
+- Wati automation model + live inventory + the referral rebuild before/after: `Wati-Project/wati-shared-automation-inventory.md`.
 - Config cascade: [[gorefer-config-hierarchy]] (ADR-022). Deploy target: [[gorefer-deploy-target]].
 - WhatsApp/Wati referral spec: `S2-02`. This doc extends it.
