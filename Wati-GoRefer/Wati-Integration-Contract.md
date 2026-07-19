@@ -1,0 +1,124 @@
+# Wati ⇄ GoRefer — Integration Contract
+
+> **Scope:** GoRefer's side of the Wati (WhatsApp) integration — how GoRefer sends, how it proves
+> delivery, and the gates around it. The **channel/platform** side (delivery health, template
+> catalogue + approvals, the nightly report, Wati account facts) lives in
+> `C:\Abhay\5Wealths\Wati-Project\`. Zoho's *own* direct-to-Wati sending lives in
+> `C:\Abhay\5Wealths\Zoho-Project\`.
+>
+> Wati tenant `105355` · business number `+91 70806 42020`. Last updated 2026-07-19.
+
+---
+
+## 1. The cardinal rule
+
+**HTTP 200 from Wati means "accepted", NOT "delivered."** Every send must be verified against the
+**terminal message status** read back from Wati (`delivered` / `read` / `failed`). Anything else is
+self-deception — this is the discipline the whole adapter is built around (doc-08 A3, Gap 12).
+
+---
+
+## 2. `LiveWatiAdapter.send_template` — the send shape
+
+`apps/integrations/wati/adapter.py`.
+
+- **Config from env only**, never inline: `WATI_API_ENDPOINT` (tenant base — the tenant id is IN
+  THE PATH, e.g. `https://live-mt-server.wati.io/105355`) and `WATI_API_TOKEN` (a leading
+  `Bearer ` is stripped; the code adds the scheme). The adapter **refuses to construct** without
+  both, so a flag flip against missing config fails loudly instead of silently no-opping.
+- **Endpoint:** `POST {base}/api/v1/sendTemplateMessage?whatsappNumber={digits}`.
+- **A real `User-Agent` is REQUIRED** — Wati sits behind Cloudflare, which 403s the default
+  `Python-urllib/x.y` signature. This is why manual `curl` worked while the adapter got 403.
+  We send `GoRefer/1.0 (+https://gorefer.in)`.
+- **Positional parameter remap.** Callers pass *semantic* names (`prospect_name`, `client_id`, …)
+  so the code stays order-independent, but Wati matches template variables **positionally** — its
+  `customParams` are named `"1"`, `"2"`, `"3"`. At the Wati boundary the adapter remaps by order:
+  `[{"name": str(i), "value": …} for i, p in enumerate(tvars, start=1)]`. Sending semantic names
+  makes Wati reject the send as "blank text" (HTTP 400).
+- **The ack carries NO message id** (`{"result": true}` only), so `provider_message_id` is
+  deliberately returned as `None` — never a fabricated id. That is *why* status reconciliation is
+  keyed by mobile + template rather than by id.
+- A failed send is a **recorded FAILED notification**, never an exception that strands the lead.
+
+## 3. The fail-closed allowlist gate
+
+Before any network call, `_recipient_allowed(number)`:
+
+- Returns True only if **`WATI_ALLOW_ALL_RECIPIENTS == "true"`** (exact string), **or** the number
+  (digits-only) is in **`WATI_TEST_RECIPIENTS`** (comma-separated).
+- An empty allowlist with allow-all off **blocks everything** — the safe default.
+- Env is read **on every call** (never cached) so the gate always reflects current config.
+- A blocked send makes **no network call**; the Notification is recorded `status="skipped"` with
+  `skip_reason="recipient not in WATI allowlist (fail-closed)"` — visible in the funnel, never
+  silently dropped, and never mistaken for a Meta delivery failure.
+
+This gate is what makes it safe to have `ENABLE_WATI_SEND` on while still not messaging real
+people. **Opening it (`="true"`) is a deliberate, human decision** — it is the difference between
+"the engine is on" and "real prospects are being messaged."
+
+## 4. Terminal-status verification + the reconcile sweep
+
+**Immediately after send:** `get_message_status(recipient_mobile, template)` reads
+`GET {base}/api/v1/getMessages/{mobile}?pageSize=10` and looks for this template's row.
+
+**Matching (two live bugs shaped this):**
+1. Wati returns **`templateName = null`** and names the template only inside **`eventDescription`**
+   (`'Broadcast message with using "<tmpl>" template …'`). Matching on `templateName` alone never
+   matched a real row, so genuinely-DELIVERED messages sat at `accepted` forever.
+2. A **bare substring** test then bleeds across versioned names — `…_2026_07_17` is a substring of
+   a `…_2026_07_17_v2` row's description, and our real template family has exactly that shape, so a
+   v1 send could read the v2 message's status.
+
+Final rule: match `templateName == template` **OR** the **quoted** full name `f'"{template}"'`
+inside `eventDescription`. Specific (the full quoted name is unique) and it works against the live
+API. If no row positively identifies this template, return the honest non-terminal `accepted` —
+never guess.
+
+**The scheduled sweep** — `reconcile_pending_deliveries`, registered every **15 min**
+(`setup_schedules`). Terminal status is read *instantly* after send, so anything not yet terminal
+would otherwise be stranded at `accepted` forever (there is no Wati delivery webhook). The sweep
+re-polls rows at `accepted` older than `RECONCILE_MIN_AGE_MINUTES` (3), finalizes them, and after
+`RECONCILE_EXPIRE_MINUTES` (24h) marks a still-unresolved row **FAILED** with
+`"no terminal status within reconcile window"` — so a silently-lost send becomes visible rather
+than hiding as "accepted".
+
+⚠️ Requires the **qcluster worker alive** (`Q_ASYNC=true` + `gorefer-qcluster.service`). A dead
+worker silently stops this sweep; the admin topbar carries a worker-liveness light for exactly that
+reason.
+
+## 5. Honest demo semantics — `adapter_kind` + `simulated_delivered`
+
+`LogOnlyWatiAdapter` (used when `ENABLE_WATI_SEND` resolves false) makes **no network call**, so it
+must not claim a real delivery. It returns **`simulated_delivered`** — terminal (nothing further
+will happen) but deliberately **excluded from `DELIVERED_STATUSES`**, so demo/degraded sends can
+never inflate real delivery metrics. Every Notification also stamps **`adapter_kind`**
+(`live` | `log_only`), so a demo "delivery" is always distinguishable after the fact.
+
+It also **redacts template params in its log** (names only, never values) — with OTP on and WATI
+off, sends route through this adapter and the payload would otherwise carry a plaintext OTP code.
+
+## 6. Config-driven template names
+
+Template names are **never hardcoded**. `apps/config/preferences.notify_template_name(role, lang=…)`
+resolves them through the ADR-022 cascade (tenant override → central default), and they are editable
+on the Settings screen **with no deploy**. Meta-name validation on save: `^[a-z0-9_]+$`.
+See [`Wati-GoRefer-Templates.md`](./Wati-GoRefer-Templates.md) for the current mapping.
+
+Notification *routing* (which of office / prospect / referrer fire) is likewise per-tenant config;
+a role turned off is recorded `skipped` with a reason, never silently dropped.
+
+## 7. Flags
+
+| Flag / setting | Gates |
+|---|---|
+| `ENABLE_WATI_SEND` | live adapter vs log-only. Resolved via the **config cascade** (ConfigGlobal override → env), not the frozen `flags` snapshot |
+| `WATI_ALLOW_ALL_RECIPIENTS` | the fail-closed recipient gate (§3) |
+| `WATI_TEST_RECIPIENTS` | the allowlist when allow-all is off |
+| `WATI_WEBHOOK_KEY` / `_IP_ALLOWLIST` | inbound assisted-capture webhook auth (fail-closed on a blank key) |
+
+## 8. Related
+
+- Channel health, template approvals, nightly report: `C:\Abhay\5Wealths\Wati-Project\`
+- Templates GoRefer uses: [`Wati-GoRefer-Templates.md`](./Wati-GoRefer-Templates.md)
+- Zoho's own direct-to-Wati rules (NOT GoRefer): `C:\Abhay\5Wealths\Zoho-Project\ZOHO-KNOWLEDGE.md`
+- Spec: `docs/integrations/08-Zoho-WATI-Integration.md` (Part A), Gap 12/13

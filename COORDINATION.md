@@ -3176,3 +3176,19 @@ Both are pre-existing, user-owned state — reported, not "corrected". — Engin
 | origin lock | direct-to-origin **403** ✅ |
 
 **Live effect right now:** Zoho READ/WRITE are fully active (real CRM reads + lead writes). WATI sending is active *in code* but every recipient except `917972672473` is refused by the fail-closed gate and recorded as `skipped`. **To message real prospects, Abhay says the word and I flip `WATI_ALLOW_ALL_RECIPIENTS` back to `"true"` — one setting, reversible; sent messages are not.** — Engineer
+
+---
+
+### 2026-07-19 — FROM ENGINEER — STATUS — docs reorganised by owning system; GoRefer integration-boundary folders added
+
+**Cross-project documentation reorg per Abhay's filing rule: file each artifact by the system that OWNS AND EXECUTES it, not by which project created it.** No live Zoho/Wati config touched, no sends, no GoRefer flag or allowlist changes. Code unchanged (`DEPLOYED_SHA` still `a6d2400`).
+
+**New in GoRefer — the integration-boundary folders:**
+- `Zoho-GoRefer/` — `Zoho-Integration-Contract.md` (Model-2 upsert-by-mobile, status→stage map incl. the real `Account Opened with Us` picklist, the webhook + HMAC wax-seal contract with the ms/seconds timestamp normalization, trusted-proxy caller-IP resolution, which flags gate what, and the `load_dotenv`-before-`flags` load-order gotcha), `Zoho-GoRefer-State.md` (live flag state, what's proven with the real lead ids `475281000041592002` / `475281000041538002`, what's staged, and the "GoRefer has sent nothing in 24h — live Wati traffic is Zoho's own `zoho_auto_*` rules" reality-check). `review/Zoho-Signer-Steps.md` moved here via `git mv`.
+- `Wati-GoRefer/` — `Wati-Integration-Contract.md` (send shape incl. the required real User-Agent and positional param remap, TERMINAL-status-never-HTTP-200, the fail-closed allowlist gate, the 15-min reconcile sweep with the quoted-name `eventDescription` match and both live bugs that shaped it, `adapter_kind`/`simulated_delivered`, config-driven template names), `Wati-GoRefer-Templates.md` (role→template mapping, all approved `gr_*` elementNames + waTemplateIds + categories, and the MARKETING-reclassification story behind `_v2`).
+
+**Moved OUT of Wati-Project INTO Zoho-Project** (they execute inside Zoho): `deluge/` (17 `.dg` + logic doc), `zoho-workflow-send-map.md`, `skills/manage-zoho-functions/`, `wati-send-queue-{design,BUILD}.md` → `send-queue/`, `officevisitor-conversion-spec.md`. Backup first: `C:\Abhay\5Wealths\_Backups\Wati-Project-pre-reorg-20260719-180359\`.
+
+**References fixed** in `review/Deferred-Features-Backlog.md` and `review/Zerodha-GoRefer-GoLive-Roadmap.md` (both link to the moved send-queue/send-map docs), plus 6 files in Wati-Project. **This COORDINATION log was deliberately NOT rewritten** — it is append-only history, and editing past STATUS entries to point at new paths would falsify the record. Historical entries above still reference `Wati-Project/deluge/…` and `Wati-Project/wati-send-queue-*.md`; **those artifacts now live under `Zoho-Project/`** (see `Wati-Project/MOVED-TO-ZOHO-PROJECT.md` for the full mapping).
+
+**New knowledge docs:** `Zoho-Project/ZOHO-KNOWLEDGE.md` (entry doc: CRM referral schema + key api_names incl. the `ClientId` vs `Client_Id` inconsistency, Send Queue architecture + midnight-fill timing, the Deluge/UI-only constraint + gotchas, the webhook signer, and **the `zoho_auto_*` rules that bypass the queue — ~137 sends/day ≈ 52% of volume, driving the 131049 cap failures — flagged as the top open problem**) and `Wati-Project/docs/wati-delivery-health.md` (52.29% vs >90% target, 131049 dominance, the stale `report-2026-07-19.json` baseline trap now parked in `out/stale/`, the nightly 9 PM task + its sandbox dependency). `docs/wati-template-learnings.md` updated with final approval outcomes + the cheap UTILITY swap still available for office/referrer. Index docs updated in all three projects. — Engineer

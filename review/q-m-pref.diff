@@ -1,0 +1,1495 @@
+diff --git a/COORDINATION.md b/COORDINATION.md
+index 5b9578f..5fbb921 100644
+--- a/COORDINATION.md
++++ b/COORDINATION.md
+@@ -1074,3 +1074,36 @@ Liveness unaffected: `/r/wa/RJ4521` 200, `/d/pifs` 200, `/r/RJ4521` 200. No unau
+ - Flags on the box: `WATI_WEBHOOK_KEY` **unset** (webhook fail-closed by default), `ENABLE_ZOHO_WRITE=false`, `ENABLE_WATI_SEND=false`, `ENABLE_ZOHO_READ=false`; `DEBUG=false`; Postgres-only (`gorefer_prod`).
+ 
+ **Track B is merged, deployed, and prod-stable on `main` (`7e51abc`).** Standing by for your **live-E2E call** — at which point you'll want me to (a) set `WATI_WEBHOOK_KEY` in the box `.env` for the positive-path webhook + assisted-capture E2E, and (b) toggle a `LANDING_MODE=direct` tenant override if you want to exercise the bypass path. Say the word and I'll do both. (Meta approval of `gorefer_zerodha_referral_2026_07_09` is the other gate, your/Wati side.) — Engineer
++
++---
++
++### 2026-07-09 — FROM DA → Engineer — MISSION Q-M-PREF — Preferences/Settings screen (APPROVED design) — set `LANDING_MODE` through the UI, not the backend
++
++Abhay **approved** the Preferences screen design (`mockups/preferences-screen-mockup.html`, Variant C). New decision that supersedes the earlier plan: **do NOT set `LANDING_MODE=direct` via a backend override** — PIFS goes `direct` only *through this screen*. Build on a **new feature branch** off `main`; full spec (controls → config keys, acceptance, ADR-034): **`docs/sprint2/S2-03` §14**.
++
++Scope:
++- **`/admin-panel/preferences`** (admin, tenant-scoped, server-rendered Django + HTMX) matching the approved mockup.
++- Wire each control to the USER/tenant tier of the config cascade (ADR-022), persisted on save: **Landing mode** (`LANDING_MODE=page|direct`); **Show referrer reward** (`SHARE_SHOW_REWARD`) + **reward claim text** (`REFERRER_REWARD_CLAIM`); **helpline** + **WhatsApp Business number**; **enabled share channels** (allow-list); **Allow "Refer directly"** (`ENABLE_ASSISTED_REFERRAL`); **Disclosure** = read-only link to `/d/{slug}` + **Active partnerships** management (add/activate/deactivate the `TenantPartnership` rows that drive `/d/{slug}`).
++- **Compliance coupling enforced at the screen (ADR-032):** selecting `direct` is only permitted when the tenant has a live `/d/{slug}`; otherwise the UI blocks it / forces `page`.
++- **Acceptance:** flipping **Landing mode → Direct via the screen** persists it AND live `/r/wa/{id}` then 302s straight to Zerodha (click still recorded, Location clean) — that IS the "direct via the preference screen" test Abhay wants; `direct` refused in the UI with no live `/d/{slug}`; each control persists + takes effect; admin-only, tenant-scoped, config-over-code, Postgres-only, demo offline; adding/removing a partnership changes `/d/{slug}`. Record **ADR-034**.
++- Guardrails unchanged. Post STATUS per usual; the independent tester verifies before merge (including flipping PIFS to `direct` through the screen as the acceptance). Keep write flags OFF. — DA
++
++---
++
++### 2026-07-10 — FROM ENGINEER — STATUS — Q-M-PREF: Preferences/Settings screen — DONE (branch `feature/q-m-pref-preferences-screen`)
++
++**Built to the mission + `S2-03` §14 against the approved mockup (Variant C · Cobalt). New feature branch off `main`. Full suite green — 257 pass / 0 skip; ruff clean; no migration drift (config is data, no schema change); verified LIVE in a browser (login → preferences → flip-to-direct → clean `/r/wa` 302 → refusal path). Write flags (`ENABLE_ZOHO_WRITE`/`ENABLE_WATI_SEND`) untouched (OFF). `LANDING_MODE=direct` is set ONLY through this screen — never a backend override.**
++
++**Build:**
++- **`GET/POST /admin-panel/preferences`** — staff-gated (`_staff_required`, admin-only Sprint 1), tenant-scoped (`get_current_tenant`), server-rendered Django + HTMX, matching the mockup section-for-section (`templates/dashboard/preferences.html` + partials `pref_toggle`, `pref_chip`, `landing_mode_callout`, `partnerships`). Nav pill added to the shared topbar.
++- **Each control → USER/tenant tier of the cascade (ADR-022), persisted on save** via a new `config.cascade.set_tenant()` (writes `ConfigGlobal`; **refuses compliance-locked keys** so a lower tier can never weaken a locked claim). Keys centralised in `apps/config/preferences.py` (config-over-code, no scattered literals): `landing_mode`, `share_show_reward`, `referrer_reward_claim`, `support_helpline_phone`, `wati_business_number`, `share_channels_allowlist`, `enable_assisted_referral`. Central baselines seeded in `seed_program` so behaviour is identical until a tenant overrides.
++- **Consumers wired** — the landing page now reads helpline + WhatsApp number + reward wording (+ show/hide) from the cascade, so a save takes effect immediately (verified live).
++- **Compliance coupling enforced AT THE SCREEN (ADR-032):** added `landing_mode.has_live_disclosure_page(tenant)` = disclosure page enabled **AND** ≥1 active `ReferralProgram` composing a real block. `direct` is only selectable (segment disabled otherwise) and only persistable when live; a POST asking for `direct` without a live `/d/{slug}` is forced back to `page` with a notice; deactivating the **last** active partnership while `direct` is refused. Partnership add/activate/deactivate operate on the tenant's `ReferralProgram` rows (the actual driver of `/d/{slug}`) via HTMX, with an OOB refresh of the callout.
++- **ADR-034 recorded** in `docs/architecture/02`.
++
++**Guardrail tests (`tests/test_qmpref_preferences.py`, 17):** flip-to-direct-via-screen persists `landing_mode=direct` at the tenant tier AND live `/r/wa/{id}` 302s clean to Zerodha (click recorded, no `s=`/`wa` in Location, landing skipped); `direct` refused + segment disabled with no live `/d/{slug}`; every control persists + takes effect (reward hide-on-landing, helpline/wa number rendered, channel allow-list, assisted toggle); admin-only (login + is_staff gates); tenant-scoped (a 2nd tenant sees no PIFS override); add partnership → its regulator block appears on `/d/pifs`, deactivate → drops off; `settings` carries no `LANDING_MODE` (config-over-code). Postgres-only; demo offline. Guardrail #3 holds (no partner code / raw Zerodha URL in any admin response — checked live).
++
++**QUESTION — Q-M-PREF-1 (surfaced, NON-blocking — I did NOT silently pick a table):**
++The mission + `S2-03` §10/§14 name a **`TenantPartnership`** model as the thing driving `/d/{slug}` and the "Active partnerships" manager. **That table does not exist** — the built B2/ADR-031 disclosure page composes from the tenant's **active `ReferralProgram` rows** (`disclosure_service.compose_disclosures`; `regulator`/`disclosure_template`/`disclosure_sequence` are columns on `ReferralProgram`). Rather than introduce a parallel table that would duplicate the composition source, **I wired the "Active partnerships" controls to those existing `ReferralProgram` rows** (add = new Partner+Program row; activate/deactivate = `status`). This is config-over-code and matches exactly what `/d/{slug}` already reads. **Recommendation: treat `TenantPartnership` as the conceptual name for "a tenant's active `ReferralProgram` rows" for Sprint 2** — no new table needed now; a dedicated join table can be introduced later (with per-partnership values like ARN/DSA) as a data-model refactor without changing this screen's contract. Flagging so the naming is reconciled in the spec; **not blocking** — the acceptance criteria (incl. "adding/removing a partnership changes `/d/{slug}`") are all met against the real model. Recorded as ADR-034 alt #2.
++
++Written to COORDINATION.md — ready for the DA / independent tester.
+diff --git a/apps/config/cascade.py b/apps/config/cascade.py
+index c68ee51..e8ef830 100644
+--- a/apps/config/cascade.py
++++ b/apps/config/cascade.py
+@@ -46,3 +46,29 @@ def resolve(
+     if default is _UNSET:
+         raise KeyError(f"config key not found and no default: {key!r}")
+     return default
++
++
++class ComplianceLockedKeyError(ValueError):
++    """Raised when a write targets a compliance-locked key at a lower tier."""
++
++
++def set_tenant(key: str, value: Any, *, tenant_id: int, user=None) -> None:
++    """Persist a config value at the GLOBAL (tenant) tier — the user/tenant tier the
++    Preferences screen writes to (ADR-022, ADR-034).
++
++    Refuses a compliance-locked key: those resolve straight from central and can
++    never be weakened by a lower tier, so persisting one here would be a silent no-op
++    that misleads an operator — we fail loud instead. `user` (optional) stamps
++    updated_by for the audit trail.
++    """
++    if key in COMPLIANCE_LOCKED_KEYS:
++        raise ComplianceLockedKeyError(
++            f"{key!r} is compliance-locked and cannot be set at the tenant tier "
++            "(it resolves from central only)."
++        )
++    defaults: dict[str, Any] = {"value": value}
++    if user is not None and getattr(user, "pk", None):
++        defaults["updated_by"] = user.pk
++    ConfigGlobal.objects.update_or_create(
++        tenant_id=tenant_id, key=key, defaults=defaults
++    )
+diff --git a/apps/config/preferences.py b/apps/config/preferences.py
+new file mode 100644
+index 0000000..f39e00b
+--- /dev/null
++++ b/apps/config/preferences.py
+@@ -0,0 +1,90 @@
++"""Preference config keys — the tenant-tier settings the Preferences screen owns.
++
++One home for the key NAMES + their central defaults (config-over-code: no scattered
++string literals in views/templates). Each key is a plain (unlocked) cascade key, so a
++tenant override at the GLOBAL tier wins over the central default (ADR-022, ADR-034).
++Compliance-locked keys (the incentive claim, AP disclosure block, NSE AP no.) are NOT
++here — they resolve from central only and the screen never writes them.
++
++`LANDING_MODE` is set THROUGH the Preferences screen, never a backend override
++(ADR-034). The ADR-032 disclosure coupling (`direct` only when a live /d/{slug}
++exists) is enforced at the screen (see apps/referrals/landing_mode.has_live_disclosure_page).
++"""
++from __future__ import annotations
++
++from django.conf import settings
++
++from .cascade import resolve
++
++# --- Key names (single source; referenced everywhere by constant, never literal) ---
++LANDING_MODE = "landing_mode"
++SHARE_SHOW_REWARD = "share_show_reward"
++REFERRER_REWARD_CLAIM = "referrer_reward_claim"
++SUPPORT_HELPLINE_PHONE = "support_helpline_phone"
++WATI_BUSINESS_NUMBER = "wati_business_number"
++SHARE_CHANNELS_ALLOWLIST = "share_channels_allowlist"
++ENABLE_ASSISTED_REFERRAL = "enable_assisted_referral"
++
++# The channel codes a tenant may enable (must match gorefer.flags.SHARE_CHANNEL_LABELS).
++# WhatsApp + Copy are the always-on defaults; the rest are opt-in per tenant.
++DEFAULT_SHARE_CHANNELS = ["wa", "copy"]
++
++
++def central_defaults() -> dict:
++    """Central baseline for the preference keys (seeded into config_central).
++
++    Values are the current settings/flags so behaviour is identical to today until a
++    tenant overrides one through the screen.
++    """
++    from gorefer.flags import flags
++
++    return {
++        LANDING_MODE: "page",
++        SHARE_SHOW_REWARD: True,
++        REFERRER_REWARD_CLAIM: flags.REFERRAL_INCENTIVE_CLAIM,
++        SUPPORT_HELPLINE_PHONE: getattr(settings, "SUPPORT_HELPLINE_PHONE", ""),
++        WATI_BUSINESS_NUMBER: settings.WATI_BUSINESS_NUMBER,
++        SHARE_CHANNELS_ALLOWLIST: DEFAULT_SHARE_CHANNELS,
++        ENABLE_ASSISTED_REFERRAL: False,
++    }
++
++
++def _as_bool(value) -> bool:
++    if isinstance(value, bool):
++        return value
++    if isinstance(value, str):
++        return value.strip().lower() in {"1", "true", "yes", "on"}
++    return bool(value)
++
++
++def get_preferences(tenant_id: int | None) -> dict:
++    """Resolve every preference key for a tenant through the cascade (typed).
++
++    This is what the Preferences screen renders and what consumers (landing page,
++    WhatsApp messages) read, so a saved override takes effect immediately.
++    """
++    defaults = central_defaults()
++    channels = resolve(
++        SHARE_CHANNELS_ALLOWLIST, tenant_id=tenant_id, default=defaults[SHARE_CHANNELS_ALLOWLIST]
++    )
++    if isinstance(channels, str):
++        channels = [c.strip() for c in channels.split(",") if c.strip()]
++    return {
++        LANDING_MODE: resolve(LANDING_MODE, tenant_id=tenant_id, default=defaults[LANDING_MODE]),
++        SHARE_SHOW_REWARD: _as_bool(
++            resolve(SHARE_SHOW_REWARD, tenant_id=tenant_id, default=defaults[SHARE_SHOW_REWARD])
++        ),
++        REFERRER_REWARD_CLAIM: resolve(
++            REFERRER_REWARD_CLAIM, tenant_id=tenant_id, default=defaults[REFERRER_REWARD_CLAIM]
++        ),
++        SUPPORT_HELPLINE_PHONE: resolve(
++            SUPPORT_HELPLINE_PHONE, tenant_id=tenant_id, default=defaults[SUPPORT_HELPLINE_PHONE]
++        ),
++        WATI_BUSINESS_NUMBER: resolve(
++            WATI_BUSINESS_NUMBER, tenant_id=tenant_id, default=defaults[WATI_BUSINESS_NUMBER]
++        ),
++        SHARE_CHANNELS_ALLOWLIST: list(channels),
++        ENABLE_ASSISTED_REFERRAL: _as_bool(
++            resolve(ENABLE_ASSISTED_REFERRAL, tenant_id=tenant_id, default=defaults[ENABLE_ASSISTED_REFERRAL])
++        ),
++    }
+diff --git a/apps/dashboard/preferences_service.py b/apps/dashboard/preferences_service.py
+new file mode 100644
+index 0000000..28e391b
+--- /dev/null
++++ b/apps/dashboard/preferences_service.py
+@@ -0,0 +1,245 @@
++"""Preferences screen service (Q-M-PREF / ADR-034).
++
++The UI home for the USER/tenant tier of the config cascade (ADR-022). Reads the
++current per-tenant preferences and PERSISTS a submitted form to the tenant (global)
++tier — critically, `LANDING_MODE` is set HERE, through the screen, never via a
++backend override.
++
++Compliance coupling enforced AT THE SCREEN (ADR-032): selecting `direct` is only
++allowed when the tenant has a LIVE /d/{slug} (has_live_disclosure_page). A POST that
++asks for `direct` without a live disclosure page is refused and the value forced to
++`page` — the same guard the backend enforces, surfaced in the UI.
++
++Partnerships that drive /d/{slug} composition ARE the tenant's ReferralProgram rows
++(there is no separate TenantPartnership table — see COORDINATION Q-M-PREF-1). Add /
++activate / deactivate operate on those rows; the disclosure page composes every
++ACTIVE program in regulator order.
++"""
++from __future__ import annotations
++
++from django.db import transaction
++from django.utils.text import slugify
++
++from apps.config import preferences as prefkeys
++from apps.config.cascade import set_tenant
++from apps.referrals.landing_mode import (
++    LANDING_MODE_DIRECT,
++    LANDING_MODE_PAGE,
++    has_live_disclosure_page,
++)
++from apps.referrals.models import Partner, ReferralProgram
++from gorefer.flags import SHARE_CHANNEL_LABELS
++
++# Regulators an operator may attach a partnership for (matches ReferralProgram).
++REGULATOR_CHOICES = ReferralProgram.REGULATOR_CHOICES
++_VALID_REGULATORS = {code for code, _ in REGULATOR_CHOICES}
++# Channel codes the screen exposes (config-driven from the flag map, never inline).
++SHARE_CHANNEL_CHOICES = list(SHARE_CHANNEL_LABELS.items())
++
++
++class PreferencesError(ValueError):
++    """A submitted preference/partnership action was invalid (surfaced in the UI)."""
++
++
++# --------------------------------------------------------------------------- read
++
++
++def current_view(tenant) -> dict:
++    """Everything the Preferences screen needs to render for `tenant`."""
++    tenant_id = getattr(tenant, "id", None)
++    prefs = prefkeys.get_preferences(tenant_id)
++    live_disclosure = has_live_disclosure_page(tenant)
++    return {
++        "prefs": prefs,
++        "slug": getattr(tenant, "slug", ""),
++        "live_disclosure": live_disclosure,
++        # `direct` may only be *chosen* when a live /d/{slug} exists (ADR-032).
++        "direct_allowed": live_disclosure,
++        "channel_choices": SHARE_CHANNEL_CHOICES,
++        "regulator_choices": REGULATOR_CHOICES,
++        "partnerships": list_partnerships(tenant),
++    }
++
++
++def list_partnerships(tenant) -> list[dict]:
++    """The tenant's programs (the rows that drive /d/{slug}), ordered as the page composes them."""
++    programs = (
++        ReferralProgram.objects.filter(tenant=tenant, deleted_at__isnull=True)
++        .select_related("partner")
++        .order_by("disclosure_sequence", "id")
++    )
++    reg_label = dict(REGULATOR_CHOICES)
++    rows = []
++    for p in programs:
++        rows.append(
++            {
++                "id": p.id,
++                "name": p.display_name or p.name,
++                "regulator": p.regulator,
++                "regulator_label": reg_label.get(p.regulator, p.regulator),
++                "active": p.status == "active",
++            }
++        )
++    return rows
++
++
++# -------------------------------------------------------------------------- write
++
++
++@transaction.atomic
++def save_preferences(tenant, data, *, user=None) -> list[str]:
++    """Persist the submitted preference form to the tenant tier. Returns notices.
++
++    `data` is a request.POST-like mapping. Every control maps to a cascade key at the
++    GLOBAL (tenant) tier. Enforces the ADR-032 coupling: `direct` is forced back to
++    `page` (with a notice) when no live /d/{slug} exists.
++    """
++    tenant_id = tenant.id
++    notices: list[str] = []
++
++    # --- Landing mode (LANDING_MODE) + the ADR-032 compliance coupling -----------
++    requested_mode = (data.get("landing_mode") or LANDING_MODE_PAGE).strip().lower()
++    if requested_mode == LANDING_MODE_DIRECT and not has_live_disclosure_page(tenant):
++        requested_mode = LANDING_MODE_PAGE
++        notices.append(
++            "“Direct to Zerodha” needs a live disclosure page (/d/{slug}) first — "
++            "add an active partnership, then you can switch to Direct. Kept “Show landing page”."
++        )
++    if requested_mode not in {LANDING_MODE_PAGE, LANDING_MODE_DIRECT}:
++        requested_mode = LANDING_MODE_PAGE
++    set_tenant(prefkeys.LANDING_MODE, requested_mode, tenant_id=tenant_id, user=user)
++
++    # --- Rewards -----------------------------------------------------------------
++    set_tenant(
++        prefkeys.SHARE_SHOW_REWARD,
++        _checkbox(data, "share_show_reward"),
++        tenant_id=tenant_id,
++        user=user,
++    )
++    set_tenant(
++        prefkeys.REFERRER_REWARD_CLAIM,
++        (data.get("referrer_reward_claim") or "").strip(),
++        tenant_id=tenant_id,
++        user=user,
++    )
++
++    # --- Contact numbers ---------------------------------------------------------
++    set_tenant(
++        prefkeys.SUPPORT_HELPLINE_PHONE,
++        (data.get("support_helpline_phone") or "").strip(),
++        tenant_id=tenant_id,
++        user=user,
++    )
++    set_tenant(
++        prefkeys.WATI_BUSINESS_NUMBER,
++        (data.get("wati_business_number") or "").strip(),
++        tenant_id=tenant_id,
++        user=user,
++    )
++
++    # --- Share channels allow-list ----------------------------------------------
++    submitted = data.getlist("share_channels") if hasattr(data, "getlist") else data.get("share_channels", [])
++    channels = [c for c in submitted if c in SHARE_CHANNEL_LABELS]
++    # WhatsApp + Copy are always available (the primary CTAs); never empty the list.
++    for always_on in prefkeys.DEFAULT_SHARE_CHANNELS:
++        if always_on not in channels:
++            channels.append(always_on)
++    set_tenant(prefkeys.SHARE_CHANNELS_ALLOWLIST, channels, tenant_id=tenant_id, user=user)
++
++    # --- Allow "Refer directly" (assisted) --------------------------------------
++    set_tenant(
++        prefkeys.ENABLE_ASSISTED_REFERRAL,
++        _checkbox(data, "enable_assisted_referral"),
++        tenant_id=tenant_id,
++        user=user,
++    )
++    return notices
++
++
++# ---------------------------------------------------------------- partnerships
++
++
++@transaction.atomic
++def add_partnership(tenant, *, name: str, regulator: str, user=None) -> ReferralProgram:
++    """Add a partnership (Partner + ReferralProgram) that will compose on /d/{slug}.
++
++    Config-over-code: a new partner/regulator is a data row, never a code change
++    (ADR-031). The new program is created ACTIVE so its block appears immediately.
++    """
++    name = (name or "").strip()
++    regulator = (regulator or "").strip().lower()
++    if not name:
++        raise PreferencesError("Partnership name is required.")
++    if regulator not in _VALID_REGULATORS:
++        raise PreferencesError("Unknown regulator.")
++
++    code = _unique_partner_code(name)
++    partner = Partner.objects.create(
++        tenant=tenant,
++        name=name,
++        code=code,
++        status="active",
++        created_by=getattr(user, "pk", None),
++    )
++    # Sequence after existing programs so regulator order stays deterministic.
++    next_seq = 10 * (
++        ReferralProgram.objects.filter(tenant=tenant, deleted_at__isnull=True).count() + 2
++    )
++    program = ReferralProgram.objects.create(
++        tenant=tenant,
++        partner=partner,
++        name=name,
++        display_name=name,
++        status="active",
++        regulator=regulator,
++        disclosure_sequence=next_seq,
++        created_by=getattr(user, "pk", None),
++    )
++    return program
++
++
++@transaction.atomic
++def set_partnership_active(tenant, *, program_id: int, active: bool, user=None) -> None:
++    """Activate/deactivate a partnership. Deactivating drops its block from /d/{slug}.
++
++    Refuses to deactivate the LAST active partnership while LANDING_MODE=direct — that
++    would strand a `direct` bypass with no disclosure host (ADR-032 coupling).
++    """
++    program = ReferralProgram.objects.filter(
++        tenant=tenant, id=program_id, deleted_at__isnull=True
++    ).first()
++    if program is None:
++        raise PreferencesError("Partnership not found.")
++
++    if not active:
++        remaining = (
++            ReferralProgram.objects.filter(tenant=tenant, status="active", deleted_at__isnull=True)
++            .exclude(id=program_id)
++            .exists()
++        )
++        current_mode = prefkeys.get_preferences(tenant.id)[prefkeys.LANDING_MODE]
++        if not remaining and current_mode == LANDING_MODE_DIRECT:
++            raise PreferencesError(
++                "Can’t deactivate the last active partnership while landing mode is "
++                "“Direct to Zerodha” — the disclosure page would have nothing to show. "
++                "Switch to “Show landing page” first."
++            )
++
++    program.status = "active" if active else "inactive"
++    program.updated_by = getattr(user, "pk", None)
++    program.save(update_fields=["status", "updated_by", "updated_at"])
++
++
++def _checkbox(data, name: str) -> bool:
++    return (data.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
++
++
++def _unique_partner_code(name: str) -> str:
++    """A stable, unique partner code derived from the name (Partner.code is unique)."""
++    base = (slugify(name).upper().replace("-", "") or "PARTNER")[:40]
++    code = base
++    n = 1
++    while Partner.objects.filter(code=code).exists():
++        n += 1
++        code = f"{base[:38]}{n}"
++    return code
+diff --git a/apps/dashboard/urls.py b/apps/dashboard/urls.py
+index 3d37a2a..44563a0 100644
+--- a/apps/dashboard/urls.py
++++ b/apps/dashboard/urls.py
+@@ -15,4 +15,11 @@ urlpatterns = [
+     # Referral Profile / User Referral Screen (M9).
+     path("referrers/", views.referrer_search, name="dashboard_referrer_search"),
+     path("referrer/<str:client_id>/", views.referrer_profile, name="dashboard_referrer"),
++    # Preferences / Settings screen (Q-M-PREF / ADR-034).
++    path("preferences", views.preferences, name="dashboard_preferences"),
++    path(
++        "preferences/partnership",
++        views.preferences_partnership,
++        name="dashboard_preferences_partnership",
++    ),
+ ]
+diff --git a/apps/dashboard/views.py b/apps/dashboard/views.py
+index b1e6b38..e2ef70f 100644
+--- a/apps/dashboard/views.py
++++ b/apps/dashboard/views.py
+@@ -11,14 +11,14 @@ from django.contrib.auth.decorators import login_required, user_passes_test
+ from django.contrib.auth.views import LoginView
+ from django.http import Http404
+ from django.shortcuts import redirect, render
+-from django.views.decorators.http import require_GET
++from django.views.decorators.http import require_GET, require_http_methods
+ 
+ from apps.events.models import SyncHealth
+ from apps.referrals.models import Referral
+ from apps.referrals.validators import InvalidClientId, validate_client_id
+ from apps.tenants.resolve import get_current_tenant
+ 
+-from . import profile, queries
++from . import preferences_service, profile, queries
+ 
+ 
+ def _staff_required(view):
+@@ -171,5 +171,71 @@ def referrer_profile(request, client_id: str):
+     return render(request, "dashboard/referrer_profile.html", ctx)
+ 
+ 
++@_staff_required
++@require_http_methods(["GET", "POST"])
++def preferences(request):
++    """GET/POST /admin-panel/preferences — the per-tenant Preferences screen (Q-M-PREF).
++
++    Admin-only, tenant-scoped. GET renders the current tenant config; POST persists
++    each control to the USER/tenant tier of the cascade (ADR-022, ADR-034). LANDING_MODE
++    is set HERE, not via a backend override; the ADR-032 `direct`-needs-live-/d/{slug}
++    coupling is enforced at this screen.
++    """
++    tenant = get_current_tenant(request)
++    notices: list[str] = []
++    saved = False
++    if request.method == "POST":
++        notices = preferences_service.save_preferences(tenant, request.POST, user=request.user)
++        saved = True
++    ctx = preferences_service.current_view(tenant)
++    ctx.update(
++        {
++            "sync_health": _sync_health(tenant),
++            "nav_active": "preferences",
++            "notices": notices,
++            "saved": saved,
++        }
++    )
++    return render(request, "dashboard/preferences.html", ctx)
++
++
++@_staff_required
++@require_http_methods(["POST"])
++def preferences_partnership(request):
++    """HTMX: add / activate / deactivate a partnership, then re-render the list.
++
++    These rows drive /d/{slug} composition (ADR-031). After any change we re-render
++    the partnerships partial (which includes the disclosure-status callout) so the
++    screen reflects the new live-disclosure state immediately.
++    """
++    tenant = get_current_tenant(request)
++    action = request.POST.get("action", "")
++    error = None
++    try:
++        if action == "add":
++            preferences_service.add_partnership(
++                tenant,
++                name=request.POST.get("name", ""),
++                regulator=request.POST.get("regulator", ""),
++                user=request.user,
++            )
++        elif action in {"activate", "deactivate"}:
++            preferences_service.set_partnership_active(
++                tenant,
++                program_id=int(request.POST.get("program_id") or 0),
++                active=(action == "activate"),
++                user=request.user,
++            )
++        else:
++            error = "Unknown action."
++    except preferences_service.PreferencesError as exc:
++        error = str(exc)
++    except (TypeError, ValueError):
++        error = "Invalid partnership request."
++    ctx = preferences_service.current_view(tenant)
++    ctx["partnership_error"] = error
++    return render(request, "dashboard/partials/partnerships.html", ctx)
++
++
+ # Expose whether the dashboard is enabled (feature flag) to urls.
+ DASHBOARD_ENABLED = getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_ADMIN_DASHBOARD", True)
+diff --git a/apps/referrals/landing_mode.py b/apps/referrals/landing_mode.py
+index b3afb09..5fb701a 100644
+--- a/apps/referrals/landing_mode.py
++++ b/apps/referrals/landing_mode.py
+@@ -54,6 +54,26 @@ def has_live_disclosure_host(tenant) -> bool:
+     return bool(enabled)
+ 
+ 
++def has_live_disclosure_page(tenant) -> bool:
++    """True only if the tenant has a LIVE, non-empty /d/{slug} disclosure page.
++
++    Stronger than has_live_disclosure_host: `direct` mode is a compliance-sensitive
++    bypass (ADR-032), so the disclosure host must not merely be *enabled* — it must
++    actually RENDER a block. That requires the page enabled AND at least one active
++    ReferralProgram for the tenant (compose_disclosures excludes inactive/soft-deleted
++    programs). This is the screen-level guard for "direct only when a live /d/{slug}
++    exists" (Q-M-PREF / ADR-034).
++    """
++    if tenant is None or not has_live_disclosure_host(tenant):
++        return False
++    # Local import avoids a cycle (models import is cheap at call time).
++    from .models import ReferralProgram
++
++    return ReferralProgram.objects.filter(
++        tenant=tenant, status="active", deleted_at__isnull=True
++    ).exists()
++
++
+ def resolve_message_disclosure_level(tenant) -> str:
+     """DERIVED §4.4 message-disclosure level for the tenant.
+ 
+diff --git a/apps/referrals/management/commands/seed_program.py b/apps/referrals/management/commands/seed_program.py
+index 047409c..51c3cbd 100644
+--- a/apps/referrals/management/commands/seed_program.py
++++ b/apps/referrals/management/commands/seed_program.py
+@@ -52,6 +52,8 @@ class Command(BaseCommand):
+         return tenant
+ 
+     def _seed_central_config(self):
++        from apps.config.preferences import central_defaults
++
+         baseline = {
+             "referral_incentive_claim": flags.REFERRAL_INCENTIVE_CLAIM,
+             "nse_ap_no": getattr(settings, "NSE_AP_NO", ""),
+@@ -62,6 +64,9 @@ class Command(BaseCommand):
+             "wati_business_number": settings.WATI_BUSINESS_NUMBER,
+             "privacy_policy_url": "https://gorefer.in/privacy",
+         }
++        # Preference-screen keys (Q-M-PREF / ADR-034): central baselines so behaviour
++        # is unchanged until a tenant overrides one through the Preferences screen.
++        baseline.update(central_defaults())
+         for key, value in baseline.items():
+             ConfigCentral.objects.get_or_create(key=key, defaults={"value": value})
+         self.stdout.write("  central config: baseline ensured")
+diff --git a/apps/referrals/views.py b/apps/referrals/views.py
+index 04e4207..44df97d 100644
+--- a/apps/referrals/views.py
++++ b/apps/referrals/views.py
+@@ -116,15 +116,27 @@ def _landing_context(request, tenant, client_id: str, nonce: str | None):
+     config-driven WATI business number + the referral id + whatever the prospect
+     typed into the form (name/phone/email), so only the number is passed here.
+     """
++    from apps.config import preferences as prefkeys
++
+     tenant_id = tenant.id if tenant is not None else None
+-    wa_number = resolve("wati_business_number", tenant_id=tenant_id, default="")
++    prefs = prefkeys.get_preferences(tenant_id)
++    wa_number = prefs[prefkeys.WATI_BUSINESS_NUMBER]
++    # Reward wording is tenant-configurable via the Preferences screen (Q-M-PREF): the
++    # tenant's REFERRER_REWARD_CLAIM when "show referrer reward" is on, else hidden. The
++    # compliance-LOCKED incentive claim (flags) remains the central fallback / audit copy.
++    show_reward = prefs[prefkeys.SHARE_SHOW_REWARD]
++    reward_claim = prefs[prefkeys.REFERRER_REWARD_CLAIM] or flags.REFERRAL_INCENTIVE_CLAIM
+     ctx = {
+         "client_id": client_id,
+         "nonce": nonce or "",
+         "wati_business_number": wa_number,
++        # Override the context-processor globals with the tenant's configured helpline
++        # (Preferences screen wins over the settings default). tel: form strips spaces.
++        "SUPPORT_HELPLINE_PHONE": prefs[prefkeys.SUPPORT_HELPLINE_PHONE],
++        "SUPPORT_HELPLINE_TEL": (prefs[prefkeys.SUPPORT_HELPLINE_PHONE] or "").replace(" ", ""),
+         "privacy_policy_url": resolve("privacy_policy_url", tenant_id=tenant_id, default="#"),
+-        "REFERRAL_INCENTIVE_CLAIM": flags.REFERRAL_INCENTIVE_CLAIM,
+-        "show_incentive": True,  # a valid referrer -> show the referral-benefit panel
++        "REFERRAL_INCENTIVE_CLAIM": reward_claim if show_reward else "",
++        "show_incentive": show_reward,  # tenant may hide the referral-benefit panel
+     }
+     ctx.update(_og_context(request, client_id))
+     return ctx
+diff --git a/docs/architecture/02-Architecture-Decisions-ADR.md b/docs/architecture/02-Architecture-Decisions-ADR.md
+index 55a8f47..7b6b754 100644
+--- a/docs/architecture/02-Architecture-Decisions-ADR.md
++++ b/docs/architecture/02-Architecture-Decisions-ADR.md
+@@ -339,4 +339,15 @@ COMPLIANCE LOCK: SEBI/NSE disclosure + market-risk warning are locked at CENTRAL
+ - **Status:** Locked (2026-07-09).
+ - **Context:** The referrer "Refer directly (we'll assist)" branch captures a prospect's Name + Mobile (Email optional) so Ashok can follow up — third-party PII with a DPDP consent obligation. The old multi-broker flow's version of this had a consent gap.
+ - **Decision:** The Wati flow POSTs `{client_id (referrer), name, mobile, email?, consent?}` to **`POST /api/wati/webhook`** (auth: static key + IP allowlist, HMAC wax-seal deferred DF-2). GoRefer lazily resolves/creates the referrer identity+referral, then creates **one Zoho lead** through the **same capture-first pipeline** as the landing form (`capture_lead`, behind `ENABLE_ZOHO_WRITE` — log-only in demo), marked `lead_source=whatsapp_assisted`, `submitted_by=referrer`, with `consent` + `consent_captured_at` (DPDP). **Never a password** (credential-shaped fields rejected at the edge and in the service); **deduped** on (referral, prospect mobile); PII stays on the erasable Prospect/Lead, never in the immutable event log; status never set here (Zoho only, guardrail #2).
+-- **Consequences:** one lead pipeline (not two); assisted referrals re-added with the consent guardrail; "forward the link" stays the primary CTA.
+\ No newline at end of file
++- **Consequences:** one lead pipeline (not two); assisted referrals re-added with the consent guardrail; "forward the link" stays the primary CTA.
++
++## ADR-034 (Q-M-PREF) — Preferences screen as the UI surface for the user-tier config cascade
++
++- **Status:** Locked (2026-07-10). Design approved by Abhay 2026-07-09 (`mockups/preferences-screen-mockup.html`, Variant C · Cobalt). Basis: `S2-03` §14. Depends on ADR-022 (config cascade), ADR-031 (`/d/{slug}`), ADR-032 (`LANDING_MODE` coupling).
++- **Context / Problem:** Per-tenant config (landing mode, reward wording, contact numbers, share channels, assisted-referral toggle, partnerships) had no operator surface — values were only settable by seeding/DB edits. Critically, `LANDING_MODE=direct` is a compliance-sensitive bypass (ADR-032): it must be chosen deliberately by the operator **through a screen that enforces the disclosure coupling**, never flipped by a backend override where the coupling could be bypassed.
++- **Alternatives Considered:**
++  1. **Backend/env override for `LANDING_MODE`** — rejected: divorces the flip from the ADR-032 guard (a live `/d/{slug}` must exist) and from an audit trail; Abhay explicitly ruled it out ("PIFS goes `direct` only through this screen").
++  2. **A separate `TenantPartnership` table** (as `S2-03` §10 sketched) to drive `/d/{slug}` — rejected for Sprint 1: the built system already composes the disclosure page from the tenant's **active `ReferralProgram` rows** (ADR-031, `disclosure_service.compose_disclosures`). Introducing a parallel table would duplicate the composition source. The screen manages those existing rows instead (add/activate/deactivate). Reconciliation logged as COORDINATION Q-M-PREF-1.
++- **Decision:** A **`GET/POST /admin-panel/preferences`** screen (admin-only in Sprint 1, staff-gated, tenant-scoped; becomes the sub-broker's self-serve settings when `ENABLE_CUSTOMER_LOGIN` lands), server-rendered Django + HTMX, matching the approved Variant-C mockup. Each control persists to the **GLOBAL (tenant) tier** of the cascade via a new `config.cascade.set_tenant()` helper (which refuses compliance-locked keys). Keys: `landing_mode`, `share_show_reward`, `referrer_reward_claim`, `support_helpline_phone`, `wati_business_number`, `share_channels_allowlist`, `enable_assisted_referral` (names centralised in `apps/config/preferences.py`; central baselines seeded so behaviour is unchanged until overridden). **The ADR-032 coupling is enforced AT THE SCREEN:** `direct` is only selectable/persistable when the tenant has a **live** `/d/{slug}` — defined as the disclosure page enabled **AND** at least one active `ReferralProgram` composing a real block (`landing_mode.has_live_disclosure_page`). A POST requesting `direct` without a live disclosure page is forced back to `page` with a notice; the segment is disabled in the UI; and deactivating the last active partnership while `direct` is refused. Partnerships that drive `/d/{slug}` are the tenant's `ReferralProgram` rows (add = new Partner+Program row, config-over-code per ADR-031).
++- **Reasoning:** one UI home for the user-tier cascade; the most compliance-sensitive setting (`direct`) can only be turned on where the disclosure host is proven live, closing the ADR-032 gap at the exact surface an operator uses; no new table when the existing composition source suffices; `LANDING_MODE` never a backend flag (a test asserts `settings` carries no `LANDING_MODE`).
++- **Consequences:** saved values take effect immediately (landing page reads helpline/WhatsApp number/reward wording from the cascade); the incentive-claim compliance lock is untouched (the reward *claim text* is a separate, unlocked tenant field, while the locked central `referral_incentive_claim` remains the audit/fallback copy); write flags (`ENABLE_ZOHO_WRITE`/`ENABLE_WATI_SEND`) stay OFF; Postgres-only, demo works offline.
+\ No newline at end of file
+diff --git a/docs/sprint2/S2-03-Referral-UX-and-Disclosure-Architecture.md b/docs/sprint2/S2-03-Referral-UX-and-Disclosure-Architecture.md
+index a3da63b..1238714 100644
+--- a/docs/sprint2/S2-03-Referral-UX-and-Disclosure-Architecture.md
++++ b/docs/sprint2/S2-03-Referral-UX-and-Disclosure-Architecture.md
+@@ -99,6 +99,28 @@ Partner-level (taxonomy) config: each `ReferralProgram`/partner carries a `discl
+ - **Q-M-MENU** — referrer 3-branch menu (Wati flow: menu node + 3 branches; branches 1–2 send-message; wiring for branch 3).
+ - **Q-M-ASSIST** — assisted-referral capture (Wati capture steps) → `POST /api/wati/webhook` → Zoho lead + consent flag. Depends on Q-M-MENU + `ENABLE_ZOHO_WRITE`.
+ 
++## 14. Preferences / Settings screen (APPROVED 2026-07-09 → BUILD as Q-M-PREF)
++
++**Design APPROVED by Abhay 2026-07-09.** Visual truth: `mockups/preferences-screen-mockup.html` (Variant C · Cobalt). This is the UI home for per-tenant config — critically, `LANDING_MODE` is set HERE (through the screen), not via a backend override. Admin-only in Sprint 1; becomes the sub-broker's self-serve settings when `ENABLE_CUSTOMER_LOGIN` lands.
++
++**Route:** `GET/POST /admin-panel/preferences` (admin, tenant-scoped). Server-rendered Django + HTMX, matches the approved mockup.
++
++**Controls → config keys (all USER/tenant tier of the ADR-022 cascade; save persists to the tenant config):**
++- **Landing mode** (segmented: Show landing page ↔ Direct to Zerodha) → `LANDING_MODE = page|direct`. **Compliance guard:** selecting `direct` is only allowed when a live `/d/{slug}` exists for the tenant (else the UI blocks it / forces `page`) — the ADR-032 coupling, enforced at the screen, not just the backend.
++- **Show referrer reward** (toggle) → `SHARE_SHOW_REWARD`; **Reward claim text** (input) → `REFERRER_REWARD_CLAIM`.
++- **Helpline** (input) → helpline number; **WhatsApp Business number** (input) → the `wa.me` deep-link number.
++- **Enabled share channels** (chips) → the channel allow-list (`?s`/path channels).
++- **Allow "Refer directly" (assisted)** (toggle) → `ENABLE_ASSISTED_REFERRAL`.
++- **Disclosure:** read-only link to the tenant's `/d/{slug}`; **Active partnerships** list (Zerodha · SEBI/NSE now) with **+ Add partnership** → manages the `TenantPartnership` rows that drive `/d/{slug}` composition (add/activate/deactivate a partner).
++
++**Acceptance (guardrail tests):**
++- Flipping **Landing mode → Direct via the screen** persists `LANDING_MODE=direct` for the tenant AND live `/r/wa/{id}` then 302s straight to Zerodha (click still recorded, Location clean) — the exact "direct via the preference screen, not the backend" requirement.
++- `direct` is **refused in the UI** when the tenant has no live `/d/{slug}` (coupling enforced at the screen).
++- Each control persists + takes effect; admin-only (auth-gated); tenant-scoped (no cross-tenant leakage); config-over-code (no inline literals); Postgres-only; demo works offline.
++- Adding a partnership makes its block appear on `/d/{slug}`; deactivating removes it.
++
++**ADR-034** — Preferences screen as the UI surface for the user-tier config cascade; `LANDING_MODE` (and the ADR-032 disclosure coupling) is set here, admin-only in Sprint 1, self-serve post customer-login.
++
+ ## 7. Related records (so nothing is siloed)
+ - Architecture spine + tenancy + rule cascades: memory [[gorefer-architecture-layers]]; diagram `docs/architecture/gorefer-layered-architecture-diagram.html`.
+ - Wati automation model + live inventory + the referral rebuild before/after: `Wati-Project/wati-automation-inventory.md`.
+diff --git a/mockups/preferences-screen-mockup.html b/mockups/preferences-screen-mockup.html
+new file mode 100644
+index 0000000..8f2f4f0
+--- /dev/null
++++ b/mockups/preferences-screen-mockup.html
+@@ -0,0 +1,146 @@
++<!DOCTYPE html>
++<html lang="en">
++<head>
++<meta charset="UTF-8">
++<meta name="viewport" content="width=device-width, initial-scale=1.0">
++<title>GoRefer — Preferences (Variant C · mockup)</title>
++<style>
++  :root{
++    --cobalt:#2F5BFF; --cobalt-dark:#1E3AAF; --cobalt-050:#EEF3FF; --cobalt-100:#DDE6FF; --cobalt-200:#C2D2FF;
++    --ink:#0F1729; --muted:#5A6478; --line:#E6EAF2; --surface:#FFFFFF; --bg:#F5F7FB;
++    --green:#1FA971; --green-050:#E7F7F0; --amber-050:#FBF3E0; --amber-line:#EAD9AE; --amber-ink:#7A5A12;
++    --radius:16px; --shadow:0 2px 10px rgba(20,35,80,.06),0 1px 3px rgba(20,35,80,.05);
++  }
++  *{box-sizing:border-box}
++  body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.45;padding:26px 16px 60px}
++  .wrap{max-width:760px;margin:0 auto}
++  .mock-note{background:var(--amber-050);border:1px solid var(--amber-line);color:var(--amber-ink);border-radius:10px;padding:8px 12px;font-size:12.5px;margin-bottom:18px;font-weight:500}
++  .top{display:flex;align-items:center;gap:12px;margin-bottom:4px}
++  .logo{width:40px;height:40px;border-radius:11px;background:var(--cobalt);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px}
++  h1{font-size:22px;margin:0;letter-spacing:-.02em}
++  .sub{color:var(--muted);font-size:13px;margin:2px 0 20px 52px}
++  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px 20px;margin-bottom:16px}
++  .card h3{margin:0 0 3px;font-size:15px}
++  .card .desc{color:var(--muted);font-size:12.5px;margin:0 0 14px}
++  .row{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:11px 0;border-top:1px solid var(--line)}
++  .row:first-of-type{border-top:0}
++  .row .l{flex:1}
++  .row .l .t{font-size:13.5px;font-weight:600}
++  .row .l .h{font-size:11.5px;color:var(--muted);margin-top:2px}
++  /* segmented */
++  .seg{display:inline-flex;background:var(--cobalt-050);border:1px solid var(--cobalt-200);border-radius:10px;padding:3px;flex:none}
++  .seg button{border:0;background:transparent;font:inherit;font-size:12.5px;font-weight:600;color:var(--cobalt-dark);padding:7px 13px;border-radius:8px;cursor:pointer;white-space:nowrap}
++  .seg button.on{background:var(--cobalt);color:#fff;box-shadow:0 1px 3px rgba(47,91,255,.35)}
++  /* toggle */
++  .tg{width:44px;height:26px;border-radius:20px;background:#D3D9E6;position:relative;flex:none;cursor:pointer;transition:.15s}
++  .tg.on{background:var(--cobalt)}
++  .tg::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.15s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
++  .tg.on::after{left:21px}
++  /* input */
++  .inp{border:1.5px solid var(--line);border-radius:9px;padding:8px 11px;font:inherit;font-size:13px;width:260px;max-width:50vw;background:#fff}
++  .inp:focus{outline:none;border-color:var(--cobalt)}
++  /* chips */
++  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
++  .chip{border:1.5px solid var(--line);border-radius:9px;padding:6px 12px;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;user-select:none}
++  .chip.on{border-color:var(--cobalt);background:var(--cobalt-050);color:var(--cobalt-dark)}
++  .link{color:var(--cobalt);font-weight:600;text-decoration:none;font-size:12.5px}
++  .pill{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--green-050);color:#0B6B47;margin-left:6px}
++  .callout{background:var(--cobalt-050);border:1px solid var(--cobalt-200);border-radius:10px;padding:9px 12px;font-size:11.5px;color:var(--cobalt-dark);margin-top:10px}
++  .partner{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line);font-size:13px}
++  .partner:first-child{border-top:0}
++  .reg{font-size:10.5px;color:var(--muted);background:#F0F2F7;border-radius:6px;padding:1px 7px}
++  .add{border:1.5px dashed var(--cobalt-200);color:var(--cobalt);background:#fff;border-radius:9px;padding:7px 12px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;margin-top:8px}
++  .foot{display:flex;justify-content:flex-end;gap:10px;margin-top:6px}
++  .btn{border:0;border-radius:10px;padding:10px 20px;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer}
++  .btn.primary{background:var(--cobalt);color:#fff;box-shadow:0 2px 6px rgba(47,91,255,.3)}
++  .btn.ghost{background:#fff;border:1.5px solid var(--line);color:var(--ink)}
++  .sec-tag{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:22px 0 8px 4px}
++</style>
++</head>
++<body>
++<div class="wrap">
++  <div class="mock-note">MOCKUP for approval · Variant C · Cobalt — not built yet. Values shown are PIFS's current settings for illustration.</div>
++
++  <div class="top">
++    <div class="logo">P</div>
++    <div>
++      <h1>Preferences</h1>
++    </div>
++  </div>
++  <div class="sub">PIFS · Zerodha Authorised Person · these settings apply to your referral links & messages</div>
++
++  <div class="sec-tag">Referral routing</div>
++  <div class="card">
++    <div class="row">
++      <div class="l">
++        <div class="t">When someone taps your referral link</div>
++        <div class="h">"Show landing page" captures the prospect's name/email/phone as a lead first. "Direct to Zerodha" sends them straight to signup — frictionless, but no lead captured from the click.</div>
++      </div>
++      <div class="seg">
++        <button>Show landing page</button>
++        <button class="on">Direct to Zerodha</button>
++      </div>
++    </div>
++    <div class="callout">✓ Safe to use "Direct" — your disclosure page <b>gorefer.in/d/pifs</b> is live, so the required SEBI/NSE disclosures are still one tap away from every message.</div>
++  </div>
++
++  <div class="sec-tag">Rewards</div>
++  <div class="card">
++    <div class="row">
++      <div class="l"><div class="t">Show the referrer reward in messages</div><div class="h">Whether "earn 10% brokerage share + 300 reward points" appears. Off = service-only wording.</div></div>
++      <div class="tg on"></div>
++    </div>
++    <div class="row">
++      <div class="l"><div class="t">Reward claim text</div><div class="h">Shown to the referrer only (private). Flip the toggle above to hide it.</div></div>
++      <input class="inp" value="10% brokerage share + 300 reward points">
++    </div>
++  </div>
++
++  <div class="sec-tag">Contact</div>
++  <div class="card">
++    <div class="row">
++      <div class="l"><div class="t">Assisted-opening helpline</div><div class="h">The "Call or WhatsApp us" number in your messages.</div></div>
++      <input class="inp" value="+91 73888 82020">
++    </div>
++    <div class="row">
++      <div class="l"><div class="t">WhatsApp Business number</div><div class="h">Where "Share on WhatsApp" deep-links.</div></div>
++      <input class="inp" value="+91 70806 42020">
++    </div>
++  </div>
++
++  <div class="sec-tag">Sharing & channels</div>
++  <div class="card">
++    <div class="row" style="flex-direction:column;align-items:stretch">
++      <div class="l"><div class="t">Enabled share channels</div><div class="h">Which channels a share can be attributed to.</div></div>
++      <div class="chips">
++        <span class="chip on">WhatsApp</span><span class="chip on">Copy link</span>
++        <span class="chip">Facebook</span><span class="chip">X</span><span class="chip">LinkedIn</span>
++        <span class="chip">Telegram</span><span class="chip">Instagram</span><span class="chip">Email</span>
++      </div>
++    </div>
++    <div class="row">
++      <div class="l"><div class="t">Allow "Refer directly" (assisted)</div><div class="h">Referrer hands you a prospect's name & mobile → creates a lead for follow-up (with consent).</div></div>
++      <div class="tg on"></div>
++    </div>
++  </div>
++
++  <div class="sec-tag">Disclosure</div>
++  <div class="card">
++    <div class="row">
++      <div class="l"><div class="t">Your disclosure page</div><div class="h">Auto-composed from your active partnerships below. Linked from every message (NSE §4.4).</div></div>
++      <a class="link" href="#">gorefer.in/d/pifs ↗</a>
++    </div>
++    <div style="border-top:1px solid var(--line);padding-top:12px;margin-top:4px">
++      <div class="h" style="color:var(--muted);font-size:11.5px;margin-bottom:6px">Active partnerships (drive the disclosure page)</div>
++      <div class="partner">Zerodha <span class="reg">SEBI / NSE</span> <span class="pill">active</span></div>
++      <button class="add">+ Add partnership (Insurance · Loan · …)</button>
++    </div>
++  </div>
++
++  <div class="foot">
++    <button class="btn ghost">Cancel</button>
++    <button class="btn primary">Save preferences</button>
++  </div>
++</div>
++</body>
++</html>
+diff --git a/static/css/app.css b/static/css/app.css
+index 96eb0c5..623819c 100644
+--- a/static/css/app.css
++++ b/static/css/app.css
+@@ -1 +1 @@
+-*,:after,:before{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/*! tailwindcss v3.4.19 | MIT License | https://tailwindcss.com*/*,:after,:before{box-sizing:border-box;border:0 solid #e5e7eb}:after,:before{--tw-content:""}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;-o-tab-size:4;tab-size:4;font-family:Inter,system-ui,Segoe UI,sans-serif;font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0}fieldset,legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::-moz-placeholder,textarea::-moz-placeholder{opacity:1;color:#9ca3af}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.card{box-shadow:0 1px 2px rgba(16,23,41,.04),0 8px 24px -12px rgba(16,23,41,.12)}.sortable{cursor:pointer;-webkit-user-select:none;-moz-user-select:none;user-select:none}.sortable:hover{color:var(--c-cobalt-600)}.chip{border:1px solid var(--c-line);border-radius:999px;padding:.2rem .8rem;color:var(--c-ink-500);background:#fff;font-weight:500}.chip-on{background:var(--c-cobalt-600);border-color:var(--c-cobalt-600);color:#fff;font-weight:600}.ring-card{background:#fff;border:1px solid var(--c-line);border-radius:16px;padding:.5rem .75rem;display:flex;flex-direction:column;align-items:center;min-width:84px}.static{position:static}.absolute{position:absolute}.relative{position:relative}.sticky{position:sticky}.-left-1\.5{left:-.375rem}.top-0{top:0}.z-20{z-index:20}.mx-auto{margin-left:auto;margin-right:auto}.mb-1{margin-bottom:.25rem}.mb-2{margin-bottom:.5rem}.mb-2\.5{margin-bottom:.625rem}.mb-3{margin-bottom:.75rem}.mb-4{margin-bottom:1rem}.mb-5{margin-bottom:1.25rem}.mb-6{margin-bottom:1.5rem}.ml-2{margin-left:.5rem}.ml-4{margin-left:1rem}.ml-auto{margin-left:auto}.mr-1{margin-right:.25rem}.mt-0\.5{margin-top:.125rem}.mt-1{margin-top:.25rem}.mt-1\.5{margin-top:.375rem}.mt-2{margin-top:.5rem}.mt-2\.5{margin-top:.625rem}.mt-3{margin-top:.75rem}.mt-4{margin-top:1rem}.mt-5{margin-top:1.25rem}.mt-6{margin-top:1.5rem}.block{display:block}.inline-block{display:inline-block}.inline{display:inline}.flex{display:flex}.inline-flex{display:inline-flex}.table{display:table}.grid{display:grid}.hidden{display:none}.h-1\.5{height:.375rem}.h-11{height:2.75rem}.h-14{height:3.5rem}.h-16{height:4rem}.h-2{height:.5rem}.h-3{height:.75rem}.h-3\.5{height:.875rem}.h-4{height:1rem}.h-5{height:1.25rem}.h-6{height:1.5rem}.h-7{height:1.75rem}.h-8{height:2rem}.h-\[60px\]{height:60px}.h-fit{height:-moz-fit-content;height:fit-content}.h-full{height:100%}.min-h-\[15px\]{min-height:15px}.min-h-screen{min-height:100vh}.w-1\.5{width:.375rem}.w-10{width:2.5rem}.w-11{width:2.75rem}.w-14{width:3.5rem}.w-16{width:4rem}.w-2{width:.5rem}.w-28{width:7rem}.w-3{width:.75rem}.w-3\.5{width:.875rem}.w-36{width:9rem}.w-4{width:1rem}.w-5{width:1.25rem}.w-6{width:1.5rem}.w-7{width:1.75rem}.w-72{width:18rem}.w-8{width:2rem}.w-full{width:100%}.min-w-\[240px\]{min-width:240px}.min-w-\[560px\]{min-width:560px}.min-w-\[720px\]{min-width:720px}.min-w-\[760px\]{min-width:760px}.min-w-\[900px\]{min-width:900px}.max-w-\[1140px\]{max-width:1140px}.max-w-md{max-width:28rem}.max-w-sm{max-width:24rem}.max-w-xl{max-width:36rem}.flex-1{flex:1 1 0%}.flex-none{flex:none}.shrink-0{flex-shrink:0}.transform{transform:translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.cursor-pointer{cursor:pointer}.resize{resize:both}.grid-cols-1{grid-template-columns:repeat(1,minmax(0,1fr))}.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}.items-start{align-items:flex-start}.items-end{align-items:flex-end}.items-center{align-items:center}.justify-end{justify-content:flex-end}.justify-center{justify-content:center}.justify-between{justify-content:space-between}.gap-1{gap:.25rem}.gap-1\.5{gap:.375rem}.gap-2{gap:.5rem}.gap-2\.5{gap:.625rem}.gap-3{gap:.75rem}.gap-4{gap:1rem}.gap-5{gap:1.25rem}.gap-x-5{-moz-column-gap:1.25rem;column-gap:1.25rem}.gap-y-1{row-gap:.25rem}.space-y-1\.5>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.375rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.375rem*var(--tw-space-y-reverse))}.space-y-2>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.5rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.5rem*var(--tw-space-y-reverse))}.space-y-2\.5>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.625rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.625rem*var(--tw-space-y-reverse))}.space-y-3>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.75rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.75rem*var(--tw-space-y-reverse))}.space-y-4>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(1rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(1rem*var(--tw-space-y-reverse))}.divide-y>:not([hidden])~:not([hidden]){--tw-divide-y-reverse:0;border-top-width:calc(1px*(1 - var(--tw-divide-y-reverse)));border-bottom-width:calc(1px*var(--tw-divide-y-reverse))}.divide-line>:not([hidden])~:not([hidden]){border-color:var(--c-line)}.overflow-hidden{overflow:hidden}.overflow-x-auto{overflow-x:auto}.whitespace-nowrap{white-space:nowrap}.rounded{border-radius:.25rem}.rounded-2xl{border-radius:1rem}.rounded-full{border-radius:9999px}.rounded-lg{border-radius:.5rem}.rounded-xl{border-radius:.75rem}.border{border-width:1px}.border-2{border-width:2px}.border-b{border-bottom-width:1px}.border-l{border-left-width:1px}.border-r{border-right-width:1px}.border-t{border-top-width:1px}.border-amber-100{--tw-border-opacity:1;border-color:rgb(254 243 199/var(--tw-border-opacity,1))}.border-amber-200{--tw-border-opacity:1;border-color:rgb(253 230 138/var(--tw-border-opacity,1))}.border-amber-300{--tw-border-opacity:1;border-color:rgb(252 211 77/var(--tw-border-opacity,1))}.border-amber-400{--tw-border-opacity:1;border-color:rgb(251 191 36/var(--tw-border-opacity,1))}.border-amber-50{--tw-border-opacity:1;border-color:rgb(255 251 235/var(--tw-border-opacity,1))}.border-amber-500{--tw-border-opacity:1;border-color:rgb(245 158 11/var(--tw-border-opacity,1))}.border-amber-600{--tw-border-opacity:1;border-color:rgb(217 119 6/var(--tw-border-opacity,1))}.border-amber-700{--tw-border-opacity:1;border-color:rgb(180 83 9/var(--tw-border-opacity,1))}.border-bg{border-color:var(--c-bg)}.border-cobalt-50{border-color:var(--c-cobalt-50)}.border-cobalt-500{border-color:var(--c-cobalt-500)}.border-cobalt-600{border-color:var(--c-cobalt-600)}.border-danger{border-color:var(--c-danger)}.border-emerald-100{--tw-border-opacity:1;border-color:rgb(209 250 229/var(--tw-border-opacity,1))}.border-emerald-200{--tw-border-opacity:1;border-color:rgb(167 243 208/var(--tw-border-opacity,1))}.border-emerald-300{--tw-border-opacity:1;border-color:rgb(110 231 183/var(--tw-border-opacity,1))}.border-emerald-400{--tw-border-opacity:1;border-color:rgb(52 211 153/var(--tw-border-opacity,1))}.border-emerald-50{--tw-border-opacity:1;border-color:rgb(236 253 245/var(--tw-border-opacity,1))}.border-emerald-500{--tw-border-opacity:1;border-color:rgb(16 185 129/var(--tw-border-opacity,1))}.border-emerald-600{--tw-border-opacity:1;border-color:rgb(5 150 105/var(--tw-border-opacity,1))}.border-emerald-700{--tw-border-opacity:1;border-color:rgb(4 120 87/var(--tw-border-opacity,1))}.border-green-100{--tw-border-opacity:1;border-color:rgb(220 252 231/var(--tw-border-opacity,1))}.border-green-200{--tw-border-opacity:1;border-color:rgb(187 247 208/var(--tw-border-opacity,1))}.border-green-300{--tw-border-opacity:1;border-color:rgb(134 239 172/var(--tw-border-opacity,1))}.border-green-400{--tw-border-opacity:1;border-color:rgb(74 222 128/var(--tw-border-opacity,1))}.border-green-50{--tw-border-opacity:1;border-color:rgb(240 253 244/var(--tw-border-opacity,1))}.border-green-500{--tw-border-opacity:1;border-color:rgb(34 197 94/var(--tw-border-opacity,1))}.border-green-600{--tw-border-opacity:1;border-color:rgb(22 163 74/var(--tw-border-opacity,1))}.border-green-700{--tw-border-opacity:1;border-color:rgb(21 128 61/var(--tw-border-opacity,1))}.border-indigo-100{--tw-border-opacity:1;border-color:rgb(224 231 255/var(--tw-border-opacity,1))}.border-indigo-200{--tw-border-opacity:1;border-color:rgb(199 210 254/var(--tw-border-opacity,1))}.border-indigo-300{--tw-border-opacity:1;border-color:rgb(165 180 252/var(--tw-border-opacity,1))}.border-indigo-400{--tw-border-opacity:1;border-color:rgb(129 140 248/var(--tw-border-opacity,1))}.border-indigo-50{--tw-border-opacity:1;border-color:rgb(238 242 255/var(--tw-border-opacity,1))}.border-indigo-500{--tw-border-opacity:1;border-color:rgb(99 102 241/var(--tw-border-opacity,1))}.border-indigo-600{--tw-border-opacity:1;border-color:rgb(79 70 229/var(--tw-border-opacity,1))}.border-indigo-700{--tw-border-opacity:1;border-color:rgb(67 56 202/var(--tw-border-opacity,1))}.border-ink-300{border-color:var(--c-ink-300)}.border-ink-500{border-color:var(--c-ink-500)}.border-ink-700{border-color:var(--c-ink-700)}.border-line{border-color:var(--c-line)}.border-pending{border-color:var(--c-pending)}.border-positive{border-color:var(--c-positive)}.border-red-400{--tw-border-opacity:1;border-color:rgb(248 113 113/var(--tw-border-opacity,1))}.border-rose-100{--tw-border-opacity:1;border-color:rgb(255 228 230/var(--tw-border-opacity,1))}.border-rose-200{--tw-border-opacity:1;border-color:rgb(254 205 211/var(--tw-border-opacity,1))}.border-rose-300{--tw-border-opacity:1;border-color:rgb(253 164 175/var(--tw-border-opacity,1))}.border-rose-400{--tw-border-opacity:1;border-color:rgb(251 113 133/var(--tw-border-opacity,1))}.border-rose-50{--tw-border-opacity:1;border-color:rgb(255 241 242/var(--tw-border-opacity,1))}.border-rose-500{--tw-border-opacity:1;border-color:rgb(244 63 94/var(--tw-border-opacity,1))}.border-rose-600{--tw-border-opacity:1;border-color:rgb(225 29 72/var(--tw-border-opacity,1))}.border-rose-700{--tw-border-opacity:1;border-color:rgb(190 18 60/var(--tw-border-opacity,1))}.border-sky-100{--tw-border-opacity:1;border-color:rgb(224 242 254/var(--tw-border-opacity,1))}.border-sky-200{--tw-border-opacity:1;border-color:rgb(186 230 253/var(--tw-border-opacity,1))}.border-sky-300{--tw-border-opacity:1;border-color:rgb(125 211 252/var(--tw-border-opacity,1))}.border-sky-400{--tw-border-opacity:1;border-color:rgb(56 189 248/var(--tw-border-opacity,1))}.border-sky-50{--tw-border-opacity:1;border-color:rgb(240 249 255/var(--tw-border-opacity,1))}.border-sky-500{--tw-border-opacity:1;border-color:rgb(14 165 233/var(--tw-border-opacity,1))}.border-sky-600{--tw-border-opacity:1;border-color:rgb(2 132 199/var(--tw-border-opacity,1))}.border-sky-700{--tw-border-opacity:1;border-color:rgb(3 105 161/var(--tw-border-opacity,1))}.border-slate-100{--tw-border-opacity:1;border-color:rgb(241 245 249/var(--tw-border-opacity,1))}.border-slate-200{--tw-border-opacity:1;border-color:rgb(226 232 240/var(--tw-border-opacity,1))}.border-slate-300{--tw-border-opacity:1;border-color:rgb(203 213 225/var(--tw-border-opacity,1))}.border-slate-400{--tw-border-opacity:1;border-color:rgb(148 163 184/var(--tw-border-opacity,1))}.border-slate-50{--tw-border-opacity:1;border-color:rgb(248 250 252/var(--tw-border-opacity,1))}.border-slate-500{--tw-border-opacity:1;border-color:rgb(100 116 139/var(--tw-border-opacity,1))}.border-slate-600{--tw-border-opacity:1;border-color:rgb(71 85 105/var(--tw-border-opacity,1))}.border-slate-700{--tw-border-opacity:1;border-color:rgb(51 65 85/var(--tw-border-opacity,1))}.bg-amber-100{--tw-bg-opacity:1;background-color:rgb(254 243 199/var(--tw-bg-opacity,1))}.bg-amber-200{--tw-bg-opacity:1;background-color:rgb(253 230 138/var(--tw-bg-opacity,1))}.bg-amber-300{--tw-bg-opacity:1;background-color:rgb(252 211 77/var(--tw-bg-opacity,1))}.bg-amber-400{--tw-bg-opacity:1;background-color:rgb(251 191 36/var(--tw-bg-opacity,1))}.bg-amber-50{--tw-bg-opacity:1;background-color:rgb(255 251 235/var(--tw-bg-opacity,1))}.bg-amber-500{--tw-bg-opacity:1;background-color:rgb(245 158 11/var(--tw-bg-opacity,1))}.bg-amber-500\/10{background-color:rgba(245,158,11,.1)}.bg-amber-600{--tw-bg-opacity:1;background-color:rgb(217 119 6/var(--tw-bg-opacity,1))}.bg-amber-700{--tw-bg-opacity:1;background-color:rgb(180 83 9/var(--tw-bg-opacity,1))}.bg-bg{background-color:var(--c-bg)}.bg-cobalt-50{background-color:var(--c-cobalt-50)}.bg-cobalt-500{background-color:var(--c-cobalt-500)}.bg-cobalt-600{background-color:var(--c-cobalt-600)}.bg-danger{background-color:var(--c-danger)}.bg-emerald-100{--tw-bg-opacity:1;background-color:rgb(209 250 229/var(--tw-bg-opacity,1))}.bg-emerald-200{--tw-bg-opacity:1;background-color:rgb(167 243 208/var(--tw-bg-opacity,1))}.bg-emerald-300{--tw-bg-opacity:1;background-color:rgb(110 231 183/var(--tw-bg-opacity,1))}.bg-emerald-400{--tw-bg-opacity:1;background-color:rgb(52 211 153/var(--tw-bg-opacity,1))}.bg-emerald-50{--tw-bg-opacity:1;background-color:rgb(236 253 245/var(--tw-bg-opacity,1))}.bg-emerald-500{--tw-bg-opacity:1;background-color:rgb(16 185 129/var(--tw-bg-opacity,1))}.bg-emerald-600{--tw-bg-opacity:1;background-color:rgb(5 150 105/var(--tw-bg-opacity,1))}.bg-emerald-700{--tw-bg-opacity:1;background-color:rgb(4 120 87/var(--tw-bg-opacity,1))}.bg-green-100{--tw-bg-opacity:1;background-color:rgb(220 252 231/var(--tw-bg-opacity,1))}.bg-green-200{--tw-bg-opacity:1;background-color:rgb(187 247 208/var(--tw-bg-opacity,1))}.bg-green-300{--tw-bg-opacity:1;background-color:rgb(134 239 172/var(--tw-bg-opacity,1))}.bg-green-400{--tw-bg-opacity:1;background-color:rgb(74 222 128/var(--tw-bg-opacity,1))}.bg-green-50{--tw-bg-opacity:1;background-color:rgb(240 253 244/var(--tw-bg-opacity,1))}.bg-green-500{--tw-bg-opacity:1;background-color:rgb(34 197 94/var(--tw-bg-opacity,1))}.bg-green-600{--tw-bg-opacity:1;background-color:rgb(22 163 74/var(--tw-bg-opacity,1))}.bg-green-700{--tw-bg-opacity:1;background-color:rgb(21 128 61/var(--tw-bg-opacity,1))}.bg-indigo-100{--tw-bg-opacity:1;background-color:rgb(224 231 255/var(--tw-bg-opacity,1))}.bg-indigo-200{--tw-bg-opacity:1;background-color:rgb(199 210 254/var(--tw-bg-opacity,1))}.bg-indigo-300{--tw-bg-opacity:1;background-color:rgb(165 180 252/var(--tw-bg-opacity,1))}.bg-indigo-400{--tw-bg-opacity:1;background-color:rgb(129 140 248/var(--tw-bg-opacity,1))}.bg-indigo-50{--tw-bg-opacity:1;background-color:rgb(238 242 255/var(--tw-bg-opacity,1))}.bg-indigo-500{--tw-bg-opacity:1;background-color:rgb(99 102 241/var(--tw-bg-opacity,1))}.bg-indigo-600{--tw-bg-opacity:1;background-color:rgb(79 70 229/var(--tw-bg-opacity,1))}.bg-indigo-700{--tw-bg-opacity:1;background-color:rgb(67 56 202/var(--tw-bg-opacity,1))}.bg-ink-300{background-color:var(--c-ink-300)}.bg-ink-500{background-color:var(--c-ink-500)}.bg-ink-700{background-color:var(--c-ink-700)}.bg-line{background-color:var(--c-line)}.bg-pending{background-color:var(--c-pending)}.bg-positive{background-color:var(--c-positive)}.bg-rose-100{--tw-bg-opacity:1;background-color:rgb(255 228 230/var(--tw-bg-opacity,1))}.bg-rose-200{--tw-bg-opacity:1;background-color:rgb(254 205 211/var(--tw-bg-opacity,1))}.bg-rose-300{--tw-bg-opacity:1;background-color:rgb(253 164 175/var(--tw-bg-opacity,1))}.bg-rose-400{--tw-bg-opacity:1;background-color:rgb(251 113 133/var(--tw-bg-opacity,1))}.bg-rose-50{--tw-bg-opacity:1;background-color:rgb(255 241 242/var(--tw-bg-opacity,1))}.bg-rose-500{--tw-bg-opacity:1;background-color:rgb(244 63 94/var(--tw-bg-opacity,1))}.bg-rose-600{--tw-bg-opacity:1;background-color:rgb(225 29 72/var(--tw-bg-opacity,1))}.bg-rose-700{--tw-bg-opacity:1;background-color:rgb(190 18 60/var(--tw-bg-opacity,1))}.bg-sky-100{--tw-bg-opacity:1;background-color:rgb(224 242 254/var(--tw-bg-opacity,1))}.bg-sky-200{--tw-bg-opacity:1;background-color:rgb(186 230 253/var(--tw-bg-opacity,1))}.bg-sky-300{--tw-bg-opacity:1;background-color:rgb(125 211 252/var(--tw-bg-opacity,1))}.bg-sky-400{--tw-bg-opacity:1;background-color:rgb(56 189 248/var(--tw-bg-opacity,1))}.bg-sky-50{--tw-bg-opacity:1;background-color:rgb(240 249 255/var(--tw-bg-opacity,1))}.bg-sky-500{--tw-bg-opacity:1;background-color:rgb(14 165 233/var(--tw-bg-opacity,1))}.bg-sky-600{--tw-bg-opacity:1;background-color:rgb(2 132 199/var(--tw-bg-opacity,1))}.bg-sky-700{--tw-bg-opacity:1;background-color:rgb(3 105 161/var(--tw-bg-opacity,1))}.bg-slate-100{--tw-bg-opacity:1;background-color:rgb(241 245 249/var(--tw-bg-opacity,1))}.bg-slate-200{--tw-bg-opacity:1;background-color:rgb(226 232 240/var(--tw-bg-opacity,1))}.bg-slate-300{--tw-bg-opacity:1;background-color:rgb(203 213 225/var(--tw-bg-opacity,1))}.bg-slate-400{--tw-bg-opacity:1;background-color:rgb(148 163 184/var(--tw-bg-opacity,1))}.bg-slate-50{--tw-bg-opacity:1;background-color:rgb(248 250 252/var(--tw-bg-opacity,1))}.bg-slate-500{--tw-bg-opacity:1;background-color:rgb(100 116 139/var(--tw-bg-opacity,1))}.bg-slate-600{--tw-bg-opacity:1;background-color:rgb(71 85 105/var(--tw-bg-opacity,1))}.bg-slate-700{--tw-bg-opacity:1;background-color:rgb(51 65 85/var(--tw-bg-opacity,1))}.bg-transparent{background-color:transparent}.bg-white{--tw-bg-opacity:1;background-color:rgb(255 255 255/var(--tw-bg-opacity,1))}.bg-white\/90{background-color:hsla(0,0%,100%,.9)}.bg-gradient-to-b{background-image:linear-gradient(to bottom,var(--tw-gradient-stops))}.from-cobalt-50{--tw-gradient-from:var(--c-cobalt-50) var(--tw-gradient-from-position);--tw-gradient-to:hsla(0,0%,100%,0) var(--tw-gradient-to-position);--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to)}.to-bg{--tw-gradient-to:var(--c-bg) var(--tw-gradient-to-position)}.p-3{padding:.75rem}.p-4{padding:1rem}.p-5{padding:1.25rem}.p-6{padding:1.5rem}.p-8{padding:2rem}.px-1{padding-left:.25rem;padding-right:.25rem}.px-1\.5{padding-left:.375rem;padding-right:.375rem}.px-2{padding-left:.5rem;padding-right:.5rem}.px-2\.5{padding-left:.625rem;padding-right:.625rem}.px-3{padding-left:.75rem;padding-right:.75rem}.px-3\.5{padding-left:.875rem;padding-right:.875rem}.px-4{padding-left:1rem;padding-right:1rem}.px-5{padding-left:1.25rem;padding-right:1.25rem}.py-0\.5{padding-top:.125rem;padding-bottom:.125rem}.py-1{padding-top:.25rem;padding-bottom:.25rem}.py-1\.5{padding-top:.375rem;padding-bottom:.375rem}.py-10{padding-top:2.5rem;padding-bottom:2.5rem}.py-2{padding-top:.5rem;padding-bottom:.5rem}.py-2\.5{padding-top:.625rem;padding-bottom:.625rem}.py-3{padding-top:.75rem;padding-bottom:.75rem}.py-3\.5{padding-top:.875rem;padding-bottom:.875rem}.py-4{padding-top:1rem;padding-bottom:1rem}.py-5{padding-top:1.25rem;padding-bottom:1.25rem}.py-6{padding-top:1.5rem;padding-bottom:1.5rem}.py-8{padding-top:2rem;padding-bottom:2rem}.pb-1{padding-bottom:.25rem}.pb-10{padding-bottom:2.5rem}.pb-2{padding-bottom:.5rem}.pb-6{padding-bottom:1.5rem}.pr-1{padding-right:.25rem}.pr-2\.5{padding-right:.625rem}.pt-1{padding-top:.25rem}.pt-3{padding-top:.75rem}.pt-4{padding-top:1rem}.pt-5{padding-top:1.25rem}.pt-6{padding-top:1.5rem}.pt-8{padding-top:2rem}.text-left{text-align:left}.text-center{text-align:center}.text-right{text-align:right}.align-super{vertical-align:super}.font-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace}.font-sans{font-family:Inter,system-ui,Segoe UI,sans-serif}.text-2xl{font-size:1.5rem;line-height:2rem}.text-\[10\.5px\]{font-size:10.5px}.text-\[10px\]{font-size:10px}.text-\[11\.5px\]{font-size:11.5px}.text-\[11px\]{font-size:11px}.text-\[12\.5px\]{font-size:12.5px}.text-\[12px\]{font-size:12px}.text-\[13px\]{font-size:13px}.text-\[19px\]{font-size:19px}.text-\[22px\]{font-size:22px}.text-\[9\.5px\]{font-size:9.5px}.text-\[9px\]{font-size:9px}.text-base{font-size:1rem;line-height:1.5rem}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:.875rem;line-height:1.25rem}.text-xs{font-size:.75rem;line-height:1rem}.font-bold{font-weight:700}.font-extrabold{font-weight:800}.font-medium{font-weight:500}.font-semibold{font-weight:600}.uppercase{text-transform:uppercase}.italic{font-style:italic}.tabular-nums{--tw-numeric-spacing:tabular-nums;font-variant-numeric:var(--tw-ordinal) var(--tw-slashed-zero) var(--tw-numeric-figure) var(--tw-numeric-spacing) var(--tw-numeric-fraction)}.leading-relaxed{line-height:1.625}.leading-snug{line-height:1.375}.leading-tight{line-height:1.25}.tracking-tight{letter-spacing:-.025em}.tracking-wide{letter-spacing:.025em}.tracking-wider{letter-spacing:.05em}.text-amber-100{--tw-text-opacity:1;color:rgb(254 243 199/var(--tw-text-opacity,1))}.text-amber-200{--tw-text-opacity:1;color:rgb(253 230 138/var(--tw-text-opacity,1))}.text-amber-300{--tw-text-opacity:1;color:rgb(252 211 77/var(--tw-text-opacity,1))}.text-amber-400{--tw-text-opacity:1;color:rgb(251 191 36/var(--tw-text-opacity,1))}.text-amber-50{--tw-text-opacity:1;color:rgb(255 251 235/var(--tw-text-opacity,1))}.text-amber-500{--tw-text-opacity:1;color:rgb(245 158 11/var(--tw-text-opacity,1))}.text-amber-600{--tw-text-opacity:1;color:rgb(217 119 6/var(--tw-text-opacity,1))}.text-amber-700{--tw-text-opacity:1;color:rgb(180 83 9/var(--tw-text-opacity,1))}.text-bg{color:var(--c-bg)}.text-cobalt-50{color:var(--c-cobalt-50)}.text-cobalt-500{color:var(--c-cobalt-500)}.text-cobalt-600{color:var(--c-cobalt-600)}.text-danger{color:var(--c-danger)}.text-emerald-100{--tw-text-opacity:1;color:rgb(209 250 229/var(--tw-text-opacity,1))}.text-emerald-200{--tw-text-opacity:1;color:rgb(167 243 208/var(--tw-text-opacity,1))}.text-emerald-300{--tw-text-opacity:1;color:rgb(110 231 183/var(--tw-text-opacity,1))}.text-emerald-400{--tw-text-opacity:1;color:rgb(52 211 153/var(--tw-text-opacity,1))}.text-emerald-50{--tw-text-opacity:1;color:rgb(236 253 245/var(--tw-text-opacity,1))}.text-emerald-500{--tw-text-opacity:1;color:rgb(16 185 129/var(--tw-text-opacity,1))}.text-emerald-600{--tw-text-opacity:1;color:rgb(5 150 105/var(--tw-text-opacity,1))}.text-emerald-700{--tw-text-opacity:1;color:rgb(4 120 87/var(--tw-text-opacity,1))}.text-green-100{--tw-text-opacity:1;color:rgb(220 252 231/var(--tw-text-opacity,1))}.text-green-200{--tw-text-opacity:1;color:rgb(187 247 208/var(--tw-text-opacity,1))}.text-green-300{--tw-text-opacity:1;color:rgb(134 239 172/var(--tw-text-opacity,1))}.text-green-400{--tw-text-opacity:1;color:rgb(74 222 128/var(--tw-text-opacity,1))}.text-green-50{--tw-text-opacity:1;color:rgb(240 253 244/var(--tw-text-opacity,1))}.text-green-500{--tw-text-opacity:1;color:rgb(34 197 94/var(--tw-text-opacity,1))}.text-green-600{--tw-text-opacity:1;color:rgb(22 163 74/var(--tw-text-opacity,1))}.text-green-700{--tw-text-opacity:1;color:rgb(21 128 61/var(--tw-text-opacity,1))}.text-indigo-100{--tw-text-opacity:1;color:rgb(224 231 255/var(--tw-text-opacity,1))}.text-indigo-200{--tw-text-opacity:1;color:rgb(199 210 254/var(--tw-text-opacity,1))}.text-indigo-300{--tw-text-opacity:1;color:rgb(165 180 252/var(--tw-text-opacity,1))}.text-indigo-400{--tw-text-opacity:1;color:rgb(129 140 248/var(--tw-text-opacity,1))}.text-indigo-50{--tw-text-opacity:1;color:rgb(238 242 255/var(--tw-text-opacity,1))}.text-indigo-500{--tw-text-opacity:1;color:rgb(99 102 241/var(--tw-text-opacity,1))}.text-indigo-600{--tw-text-opacity:1;color:rgb(79 70 229/var(--tw-text-opacity,1))}.text-indigo-700{--tw-text-opacity:1;color:rgb(67 56 202/var(--tw-text-opacity,1))}.text-ink-300{color:var(--c-ink-300)}.text-ink-500{color:var(--c-ink-500)}.text-ink-700{color:var(--c-ink-700)}.text-ink-900{color:var(--c-ink-900)}.text-line{color:var(--c-line)}.text-pending{color:var(--c-pending)}.text-positive{color:var(--c-positive)}.text-red-500{--tw-text-opacity:1;color:rgb(239 68 68/var(--tw-text-opacity,1))}.text-rose-100{--tw-text-opacity:1;color:rgb(255 228 230/var(--tw-text-opacity,1))}.text-rose-200{--tw-text-opacity:1;color:rgb(254 205 211/var(--tw-text-opacity,1))}.text-rose-300{--tw-text-opacity:1;color:rgb(253 164 175/var(--tw-text-opacity,1))}.text-rose-400{--tw-text-opacity:1;color:rgb(251 113 133/var(--tw-text-opacity,1))}.text-rose-50{--tw-text-opacity:1;color:rgb(255 241 242/var(--tw-text-opacity,1))}.text-rose-500{--tw-text-opacity:1;color:rgb(244 63 94/var(--tw-text-opacity,1))}.text-rose-600{--tw-text-opacity:1;color:rgb(225 29 72/var(--tw-text-opacity,1))}.text-rose-700{--tw-text-opacity:1;color:rgb(190 18 60/var(--tw-text-opacity,1))}.text-sky-100{--tw-text-opacity:1;color:rgb(224 242 254/var(--tw-text-opacity,1))}.text-sky-200{--tw-text-opacity:1;color:rgb(186 230 253/var(--tw-text-opacity,1))}.text-sky-300{--tw-text-opacity:1;color:rgb(125 211 252/var(--tw-text-opacity,1))}.text-sky-400{--tw-text-opacity:1;color:rgb(56 189 248/var(--tw-text-opacity,1))}.text-sky-50{--tw-text-opacity:1;color:rgb(240 249 255/var(--tw-text-opacity,1))}.text-sky-500{--tw-text-opacity:1;color:rgb(14 165 233/var(--tw-text-opacity,1))}.text-sky-600{--tw-text-opacity:1;color:rgb(2 132 199/var(--tw-text-opacity,1))}.text-sky-700{--tw-text-opacity:1;color:rgb(3 105 161/var(--tw-text-opacity,1))}.text-slate-100{--tw-text-opacity:1;color:rgb(241 245 249/var(--tw-text-opacity,1))}.text-slate-200{--tw-text-opacity:1;color:rgb(226 232 240/var(--tw-text-opacity,1))}.text-slate-300{--tw-text-opacity:1;color:rgb(203 213 225/var(--tw-text-opacity,1))}.text-slate-400{--tw-text-opacity:1;color:rgb(148 163 184/var(--tw-text-opacity,1))}.text-slate-50{--tw-text-opacity:1;color:rgb(248 250 252/var(--tw-text-opacity,1))}.text-slate-500{--tw-text-opacity:1;color:rgb(100 116 139/var(--tw-text-opacity,1))}.text-slate-600{--tw-text-opacity:1;color:rgb(71 85 105/var(--tw-text-opacity,1))}.text-slate-700{--tw-text-opacity:1;color:rgb(51 65 85/var(--tw-text-opacity,1))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255/var(--tw-text-opacity,1))}.underline{text-decoration-line:underline}.underline-offset-2{text-underline-offset:2px}.antialiased{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}.opacity-50{opacity:.5}.ring{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(3px + var(--tw-ring-offset-width)) var(--tw-ring-color)}.ring,.ring-2{box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow,0 0 #0000)}.ring-2{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color)}.ring-4{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(4px + var(--tw-ring-offset-width)) var(--tw-ring-color);box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow,0 0 #0000)}.ring-amber-100{--tw-ring-opacity:1;--tw-ring-color:rgb(254 243 199/var(--tw-ring-opacity,1))}.ring-amber-200{--tw-ring-opacity:1;--tw-ring-color:rgb(253 230 138/var(--tw-ring-opacity,1))}.ring-amber-300{--tw-ring-opacity:1;--tw-ring-color:rgb(252 211 77/var(--tw-ring-opacity,1))}.ring-amber-400{--tw-ring-opacity:1;--tw-ring-color:rgb(251 191 36/var(--tw-ring-opacity,1))}.ring-amber-50{--tw-ring-opacity:1;--tw-ring-color:rgb(255 251 235/var(--tw-ring-opacity,1))}.ring-amber-500{--tw-ring-opacity:1;--tw-ring-color:rgb(245 158 11/var(--tw-ring-opacity,1))}.ring-amber-600{--tw-ring-opacity:1;--tw-ring-color:rgb(217 119 6/var(--tw-ring-opacity,1))}.ring-amber-700{--tw-ring-opacity:1;--tw-ring-color:rgb(180 83 9/var(--tw-ring-opacity,1))}.ring-cobalt-50{--tw-ring-color:var(--c-cobalt-50)}.ring-cobalt-500{--tw-ring-color:var(--c-cobalt-500)}.ring-cobalt-600{--tw-ring-color:var(--c-cobalt-600)}.ring-emerald-100{--tw-ring-opacity:1;--tw-ring-color:rgb(209 250 229/var(--tw-ring-opacity,1))}.ring-emerald-200{--tw-ring-opacity:1;--tw-ring-color:rgb(167 243 208/var(--tw-ring-opacity,1))}.ring-emerald-300{--tw-ring-opacity:1;--tw-ring-color:rgb(110 231 183/var(--tw-ring-opacity,1))}.ring-emerald-400{--tw-ring-opacity:1;--tw-ring-color:rgb(52 211 153/var(--tw-ring-opacity,1))}.ring-emerald-400\/25{--tw-ring-color:rgba(52,211,153,.25)}.ring-emerald-50{--tw-ring-opacity:1;--tw-ring-color:rgb(236 253 245/var(--tw-ring-opacity,1))}.ring-emerald-500{--tw-ring-opacity:1;--tw-ring-color:rgb(16 185 129/var(--tw-ring-opacity,1))}.ring-emerald-600{--tw-ring-opacity:1;--tw-ring-color:rgb(5 150 105/var(--tw-ring-opacity,1))}.ring-emerald-700{--tw-ring-opacity:1;--tw-ring-color:rgb(4 120 87/var(--tw-ring-opacity,1))}.ring-green-100{--tw-ring-opacity:1;--tw-ring-color:rgb(220 252 231/var(--tw-ring-opacity,1))}.ring-green-200{--tw-ring-opacity:1;--tw-ring-color:rgb(187 247 208/var(--tw-ring-opacity,1))}.ring-green-300{--tw-ring-opacity:1;--tw-ring-color:rgb(134 239 172/var(--tw-ring-opacity,1))}.ring-green-400{--tw-ring-opacity:1;--tw-ring-color:rgb(74 222 128/var(--tw-ring-opacity,1))}.ring-green-50{--tw-ring-opacity:1;--tw-ring-color:rgb(240 253 244/var(--tw-ring-opacity,1))}.ring-green-500{--tw-ring-opacity:1;--tw-ring-color:rgb(34 197 94/var(--tw-ring-opacity,1))}.ring-green-600{--tw-ring-opacity:1;--tw-ring-color:rgb(22 163 74/var(--tw-ring-opacity,1))}.ring-green-700{--tw-ring-opacity:1;--tw-ring-color:rgb(21 128 61/var(--tw-ring-opacity,1))}.ring-indigo-100{--tw-ring-opacity:1;--tw-ring-color:rgb(224 231 255/var(--tw-ring-opacity,1))}.ring-indigo-200{--tw-ring-opacity:1;--tw-ring-color:rgb(199 210 254/var(--tw-ring-opacity,1))}.ring-indigo-300{--tw-ring-opacity:1;--tw-ring-color:rgb(165 180 252/var(--tw-ring-opacity,1))}.ring-indigo-400{--tw-ring-opacity:1;--tw-ring-color:rgb(129 140 248/var(--tw-ring-opacity,1))}.ring-indigo-50{--tw-ring-opacity:1;--tw-ring-color:rgb(238 242 255/var(--tw-ring-opacity,1))}.ring-indigo-500{--tw-ring-opacity:1;--tw-ring-color:rgb(99 102 241/var(--tw-ring-opacity,1))}.ring-indigo-600{--tw-ring-opacity:1;--tw-ring-color:rgb(79 70 229/var(--tw-ring-opacity,1))}.ring-indigo-700{--tw-ring-opacity:1;--tw-ring-color:rgb(67 56 202/var(--tw-ring-opacity,1))}.ring-ink-300{--tw-ring-color:var(--c-ink-300)}.ring-ink-500{--tw-ring-color:var(--c-ink-500)}.ring-ink-700{--tw-ring-color:var(--c-ink-700)}.ring-red-400\/25{--tw-ring-color:hsla(0,91%,71%,.25)}.ring-rose-100{--tw-ring-opacity:1;--tw-ring-color:rgb(255 228 230/var(--tw-ring-opacity,1))}.ring-rose-200{--tw-ring-opacity:1;--tw-ring-color:rgb(254 205 211/var(--tw-ring-opacity,1))}.ring-rose-300{--tw-ring-opacity:1;--tw-ring-color:rgb(253 164 175/var(--tw-ring-opacity,1))}.ring-rose-400{--tw-ring-opacity:1;--tw-ring-color:rgb(251 113 133/var(--tw-ring-opacity,1))}.ring-rose-50{--tw-ring-opacity:1;--tw-ring-color:rgb(255 241 242/var(--tw-ring-opacity,1))}.ring-rose-500{--tw-ring-opacity:1;--tw-ring-color:rgb(244 63 94/var(--tw-ring-opacity,1))}.ring-rose-600{--tw-ring-opacity:1;--tw-ring-color:rgb(225 29 72/var(--tw-ring-opacity,1))}.ring-rose-700{--tw-ring-opacity:1;--tw-ring-color:rgb(190 18 60/var(--tw-ring-opacity,1))}.ring-sky-100{--tw-ring-opacity:1;--tw-ring-color:rgb(224 242 254/var(--tw-ring-opacity,1))}.ring-sky-200{--tw-ring-opacity:1;--tw-ring-color:rgb(186 230 253/var(--tw-ring-opacity,1))}.ring-sky-300{--tw-ring-opacity:1;--tw-ring-color:rgb(125 211 252/var(--tw-ring-opacity,1))}.ring-sky-400{--tw-ring-opacity:1;--tw-ring-color:rgb(56 189 248/var(--tw-ring-opacity,1))}.ring-sky-50{--tw-ring-opacity:1;--tw-ring-color:rgb(240 249 255/var(--tw-ring-opacity,1))}.ring-sky-500{--tw-ring-opacity:1;--tw-ring-color:rgb(14 165 233/var(--tw-ring-opacity,1))}.ring-sky-600{--tw-ring-opacity:1;--tw-ring-color:rgb(2 132 199/var(--tw-ring-opacity,1))}.ring-sky-700{--tw-ring-opacity:1;--tw-ring-color:rgb(3 105 161/var(--tw-ring-opacity,1))}.ring-slate-100{--tw-ring-opacity:1;--tw-ring-color:rgb(241 245 249/var(--tw-ring-opacity,1))}.ring-slate-200{--tw-ring-opacity:1;--tw-ring-color:rgb(226 232 240/var(--tw-ring-opacity,1))}.ring-slate-300{--tw-ring-opacity:1;--tw-ring-color:rgb(203 213 225/var(--tw-ring-opacity,1))}.ring-slate-400{--tw-ring-opacity:1;--tw-ring-color:rgb(148 163 184/var(--tw-ring-opacity,1))}.ring-slate-50{--tw-ring-opacity:1;--tw-ring-color:rgb(248 250 252/var(--tw-ring-opacity,1))}.ring-slate-500{--tw-ring-opacity:1;--tw-ring-color:rgb(100 116 139/var(--tw-ring-opacity,1))}.ring-slate-600{--tw-ring-opacity:1;--tw-ring-color:rgb(71 85 105/var(--tw-ring-opacity,1))}.ring-slate-700{--tw-ring-opacity:1;--tw-ring-color:rgb(51 65 85/var(--tw-ring-opacity,1))}.ring-white{--tw-ring-opacity:1;--tw-ring-color:rgb(255 255 255/var(--tw-ring-opacity,1))}.blur{--tw-blur:blur(8px)}.blur,.filter{filter:var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow)}.backdrop-blur{--tw-backdrop-blur:blur(8px);-webkit-backdrop-filter:var(--tw-backdrop-blur) var(--tw-backdrop-brightness) var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate) var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate) var(--tw-backdrop-sepia);backdrop-filter:var(--tw-backdrop-blur) var(--tw-backdrop-brightness) var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate) var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate) var(--tw-backdrop-sepia)}.transition{transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,-webkit-backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter,-webkit-backdrop-filter;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}.transition-colors{transition-property:color,background-color,border-color,text-decoration-color,fill,stroke;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}:root{--c-bg:#f4f6fb;--c-line:#e9edf3;--c-ink-900:#0f1729;--c-ink-700:#334155;--c-ink-500:#64748b;--c-ink-300:#94a3b8;--c-cobalt-600:#2f5bff;--c-cobalt-500:#4b70ff;--c-cobalt-50:#eef2ff;--c-positive:#16a34a;--c-pending:#f59e0b;--c-danger:#f43f5e}:root[data-theme=dark]{--c-bg:#0b1120;--c-line:#1e293b;--c-ink-900:#f1f5f9;--c-ink-700:#cbd5e1;--c-ink-500:#94a3b8;--c-ink-300:#64748b;--c-cobalt-50:#172554}@media (min-width:768px){.md\:card{box-shadow:0 1px 2px rgba(16,23,41,.04),0 8px 24px -12px rgba(16,23,41,.12)}}.placeholder\:text-ink-300::-moz-placeholder{color:var(--c-ink-300)}.placeholder\:text-ink-300::placeholder{color:var(--c-ink-300)}.focus-within\:border-cobalt-500:focus-within{border-color:var(--c-cobalt-500)}.focus-within\:ring-2:focus-within{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow,0 0 #0000)}.hover\:bg-cobalt-50:hover{background-color:var(--c-cobalt-50)}.hover\:bg-cobalt-500:hover{background-color:var(--c-cobalt-500)}.hover\:text-cobalt-500:hover{color:var(--c-cobalt-500)}.hover\:text-cobalt-600:hover{color:var(--c-cobalt-600)}.hover\:underline:hover{text-decoration-line:underline}.focus\:border-cobalt-500:focus{border-color:var(--c-cobalt-500)}.focus\:outline-none:focus{outline:2px solid transparent;outline-offset:2px}.focus\:ring-2:focus{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow,0 0 #0000)}.focus\:ring-cobalt-500:focus{--tw-ring-color:var(--c-cobalt-500)}@media (min-width:640px){.sm\:inline{display:inline}}@media (min-width:768px){.md\:my-6{margin-top:1.5rem;margin-bottom:1.5rem}.md\:max-w-lg{max-width:32rem}.md\:grid-cols-5{grid-template-columns:repeat(5,minmax(0,1fr))}.md\:rounded-2xl{border-radius:1rem}.md\:border{border-width:1px}.md\:border-line{border-color:var(--c-line)}}@media (min-width:1024px){.lg\:col-span-2{grid-column:span 2/span 2}.lg\:col-span-3{grid-column:span 3/span 3}.lg\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}.lg\:grid-cols-5{grid-template-columns:repeat(5,minmax(0,1fr))}.lg\:flex-row{flex-direction:row}.lg\:items-center{align-items:center}}
+\ No newline at end of file
++*,:after,:before{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/*! tailwindcss v3.4.19 | MIT License | https://tailwindcss.com*/*,:after,:before{box-sizing:border-box;border:0 solid #e5e7eb}:after,:before{--tw-content:""}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;-o-tab-size:4;tab-size:4;font-family:Inter,system-ui,Segoe UI,sans-serif;font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0}fieldset,legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::-moz-placeholder,textarea::-moz-placeholder{opacity:1;color:#9ca3af}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.card{box-shadow:0 1px 2px rgba(16,23,41,.04),0 8px 24px -12px rgba(16,23,41,.12)}.sortable{cursor:pointer;-webkit-user-select:none;-moz-user-select:none;user-select:none}.sortable:hover{color:var(--c-cobalt-600)}.chip{border:1px solid var(--c-line);border-radius:999px;padding:.2rem .8rem;color:var(--c-ink-500);background:#fff;font-weight:500}.chip-on{background:var(--c-cobalt-600);border-color:var(--c-cobalt-600);color:#fff;font-weight:600}.ring-card{background:#fff;border:1px solid var(--c-line);border-radius:16px;padding:.5rem .75rem;display:flex;flex-direction:column;align-items:center;min-width:84px}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border-width:0}.static{position:static}.absolute{position:absolute}.relative{position:relative}.sticky{position:sticky}.-left-1\.5{left:-.375rem}.left-0\.5{left:.125rem}.top-0{top:0}.top-0\.5{top:.125rem}.z-20{z-index:20}.mx-auto{margin-left:auto;margin-right:auto}.mb-1{margin-bottom:.25rem}.mb-2{margin-bottom:.5rem}.mb-2\.5{margin-bottom:.625rem}.mb-3{margin-bottom:.75rem}.mb-4{margin-bottom:1rem}.mb-5{margin-bottom:1.25rem}.mb-6{margin-bottom:1.5rem}.ml-1{margin-left:.25rem}.ml-2{margin-left:.5rem}.ml-4{margin-left:1rem}.ml-auto{margin-left:auto}.mr-1{margin-right:.25rem}.mt-0\.5{margin-top:.125rem}.mt-1{margin-top:.25rem}.mt-1\.5{margin-top:.375rem}.mt-2{margin-top:.5rem}.mt-2\.5{margin-top:.625rem}.mt-3{margin-top:.75rem}.mt-4{margin-top:1rem}.mt-5{margin-top:1.25rem}.mt-6{margin-top:1.5rem}.block{display:block}.inline-block{display:inline-block}.inline{display:inline}.flex{display:flex}.inline-flex{display:inline-flex}.table{display:table}.grid{display:grid}.hidden{display:none}.h-1\.5{height:.375rem}.h-11{height:2.75rem}.h-14{height:3.5rem}.h-16{height:4rem}.h-2{height:.5rem}.h-3{height:.75rem}.h-3\.5{height:.875rem}.h-4{height:1rem}.h-5{height:1.25rem}.h-6{height:1.5rem}.h-7{height:1.75rem}.h-8{height:2rem}.h-\[60px\]{height:60px}.h-fit{height:-moz-fit-content;height:fit-content}.h-full{height:100%}.min-h-\[15px\]{min-height:15px}.min-h-screen{min-height:100vh}.w-1\.5{width:.375rem}.w-10{width:2.5rem}.w-11{width:2.75rem}.w-14{width:3.5rem}.w-16{width:4rem}.w-2{width:.5rem}.w-28{width:7rem}.w-3{width:.75rem}.w-3\.5{width:.875rem}.w-36{width:9rem}.w-4{width:1rem}.w-40{width:10rem}.w-48{width:12rem}.w-5{width:1.25rem}.w-6{width:1.5rem}.w-7{width:1.75rem}.w-72{width:18rem}.w-8{width:2rem}.w-\[260px\]{width:260px}.w-full{width:100%}.min-w-\[240px\]{min-width:240px}.min-w-\[560px\]{min-width:560px}.min-w-\[720px\]{min-width:720px}.min-w-\[760px\]{min-width:760px}.min-w-\[900px\]{min-width:900px}.max-w-\[1140px\]{max-width:1140px}.max-w-\[50vw\]{max-width:50vw}.max-w-\[760px\]{max-width:760px}.max-w-md{max-width:28rem}.max-w-sm{max-width:24rem}.max-w-xl{max-width:36rem}.flex-1{flex:1 1 0%}.flex-none{flex:none}.shrink-0{flex-shrink:0}.transform{transform:translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.cursor-default{cursor:default}.cursor-not-allowed{cursor:not-allowed}.cursor-pointer{cursor:pointer}.select-none{-webkit-user-select:none;-moz-user-select:none;user-select:none}.resize{resize:both}.grid-cols-1{grid-template-columns:repeat(1,minmax(0,1fr))}.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}.items-start{align-items:flex-start}.items-end{align-items:flex-end}.items-center{align-items:center}.justify-end{justify-content:flex-end}.justify-center{justify-content:center}.justify-between{justify-content:space-between}.gap-1{gap:.25rem}.gap-1\.5{gap:.375rem}.gap-2{gap:.5rem}.gap-2\.5{gap:.625rem}.gap-3{gap:.75rem}.gap-4{gap:1rem}.gap-5{gap:1.25rem}.gap-x-5{-moz-column-gap:1.25rem;column-gap:1.25rem}.gap-y-1{row-gap:.25rem}.space-y-1>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.25rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.25rem*var(--tw-space-y-reverse))}.space-y-1\.5>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.375rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.375rem*var(--tw-space-y-reverse))}.space-y-2>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.5rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.5rem*var(--tw-space-y-reverse))}.space-y-2\.5>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.625rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.625rem*var(--tw-space-y-reverse))}.space-y-3>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.75rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.75rem*var(--tw-space-y-reverse))}.space-y-4>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(1rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(1rem*var(--tw-space-y-reverse))}.divide-y>:not([hidden])~:not([hidden]){--tw-divide-y-reverse:0;border-top-width:calc(1px*(1 - var(--tw-divide-y-reverse)));border-bottom-width:calc(1px*var(--tw-divide-y-reverse))}.divide-line>:not([hidden])~:not([hidden]){border-color:var(--c-line)}.overflow-hidden{overflow:hidden}.overflow-x-auto{overflow-x:auto}.whitespace-nowrap{white-space:nowrap}.rounded{border-radius:.25rem}.rounded-2xl{border-radius:1rem}.rounded-full{border-radius:9999px}.rounded-lg{border-radius:.5rem}.rounded-md{border-radius:.375rem}.rounded-xl{border-radius:.75rem}.border{border-width:1px}.border-2{border-width:2px}.border-b{border-bottom-width:1px}.border-l{border-left-width:1px}.border-r{border-right-width:1px}.border-t{border-top-width:1px}.border-dashed{border-style:dashed}.border-amber-100{--tw-border-opacity:1;border-color:rgb(254 243 199/var(--tw-border-opacity,1))}.border-amber-200{--tw-border-opacity:1;border-color:rgb(253 230 138/var(--tw-border-opacity,1))}.border-amber-300{--tw-border-opacity:1;border-color:rgb(252 211 77/var(--tw-border-opacity,1))}.border-amber-400{--tw-border-opacity:1;border-color:rgb(251 191 36/var(--tw-border-opacity,1))}.border-amber-50{--tw-border-opacity:1;border-color:rgb(255 251 235/var(--tw-border-opacity,1))}.border-amber-500{--tw-border-opacity:1;border-color:rgb(245 158 11/var(--tw-border-opacity,1))}.border-amber-600{--tw-border-opacity:1;border-color:rgb(217 119 6/var(--tw-border-opacity,1))}.border-amber-700{--tw-border-opacity:1;border-color:rgb(180 83 9/var(--tw-border-opacity,1))}.border-bg{border-color:var(--c-bg)}.border-cobalt-50{border-color:var(--c-cobalt-50)}.border-cobalt-500{border-color:var(--c-cobalt-500)}.border-cobalt-600{border-color:var(--c-cobalt-600)}.border-danger{border-color:var(--c-danger)}.border-emerald-100{--tw-border-opacity:1;border-color:rgb(209 250 229/var(--tw-border-opacity,1))}.border-emerald-200{--tw-border-opacity:1;border-color:rgb(167 243 208/var(--tw-border-opacity,1))}.border-emerald-300{--tw-border-opacity:1;border-color:rgb(110 231 183/var(--tw-border-opacity,1))}.border-emerald-400{--tw-border-opacity:1;border-color:rgb(52 211 153/var(--tw-border-opacity,1))}.border-emerald-50{--tw-border-opacity:1;border-color:rgb(236 253 245/var(--tw-border-opacity,1))}.border-emerald-500{--tw-border-opacity:1;border-color:rgb(16 185 129/var(--tw-border-opacity,1))}.border-emerald-600{--tw-border-opacity:1;border-color:rgb(5 150 105/var(--tw-border-opacity,1))}.border-emerald-700{--tw-border-opacity:1;border-color:rgb(4 120 87/var(--tw-border-opacity,1))}.border-green-100{--tw-border-opacity:1;border-color:rgb(220 252 231/var(--tw-border-opacity,1))}.border-green-200{--tw-border-opacity:1;border-color:rgb(187 247 208/var(--tw-border-opacity,1))}.border-green-300{--tw-border-opacity:1;border-color:rgb(134 239 172/var(--tw-border-opacity,1))}.border-green-400{--tw-border-opacity:1;border-color:rgb(74 222 128/var(--tw-border-opacity,1))}.border-green-50{--tw-border-opacity:1;border-color:rgb(240 253 244/var(--tw-border-opacity,1))}.border-green-500{--tw-border-opacity:1;border-color:rgb(34 197 94/var(--tw-border-opacity,1))}.border-green-600{--tw-border-opacity:1;border-color:rgb(22 163 74/var(--tw-border-opacity,1))}.border-green-700{--tw-border-opacity:1;border-color:rgb(21 128 61/var(--tw-border-opacity,1))}.border-indigo-100{--tw-border-opacity:1;border-color:rgb(224 231 255/var(--tw-border-opacity,1))}.border-indigo-200{--tw-border-opacity:1;border-color:rgb(199 210 254/var(--tw-border-opacity,1))}.border-indigo-300{--tw-border-opacity:1;border-color:rgb(165 180 252/var(--tw-border-opacity,1))}.border-indigo-400{--tw-border-opacity:1;border-color:rgb(129 140 248/var(--tw-border-opacity,1))}.border-indigo-50{--tw-border-opacity:1;border-color:rgb(238 242 255/var(--tw-border-opacity,1))}.border-indigo-500{--tw-border-opacity:1;border-color:rgb(99 102 241/var(--tw-border-opacity,1))}.border-indigo-600{--tw-border-opacity:1;border-color:rgb(79 70 229/var(--tw-border-opacity,1))}.border-indigo-700{--tw-border-opacity:1;border-color:rgb(67 56 202/var(--tw-border-opacity,1))}.border-ink-300{border-color:var(--c-ink-300)}.border-ink-500{border-color:var(--c-ink-500)}.border-ink-700{border-color:var(--c-ink-700)}.border-line{border-color:var(--c-line)}.border-pending{border-color:var(--c-pending)}.border-positive{border-color:var(--c-positive)}.border-red-400{--tw-border-opacity:1;border-color:rgb(248 113 113/var(--tw-border-opacity,1))}.border-rose-100{--tw-border-opacity:1;border-color:rgb(255 228 230/var(--tw-border-opacity,1))}.border-rose-200{--tw-border-opacity:1;border-color:rgb(254 205 211/var(--tw-border-opacity,1))}.border-rose-300{--tw-border-opacity:1;border-color:rgb(253 164 175/var(--tw-border-opacity,1))}.border-rose-400{--tw-border-opacity:1;border-color:rgb(251 113 133/var(--tw-border-opacity,1))}.border-rose-50{--tw-border-opacity:1;border-color:rgb(255 241 242/var(--tw-border-opacity,1))}.border-rose-500{--tw-border-opacity:1;border-color:rgb(244 63 94/var(--tw-border-opacity,1))}.border-rose-600{--tw-border-opacity:1;border-color:rgb(225 29 72/var(--tw-border-opacity,1))}.border-rose-700{--tw-border-opacity:1;border-color:rgb(190 18 60/var(--tw-border-opacity,1))}.border-sky-100{--tw-border-opacity:1;border-color:rgb(224 242 254/var(--tw-border-opacity,1))}.border-sky-200{--tw-border-opacity:1;border-color:rgb(186 230 253/var(--tw-border-opacity,1))}.border-sky-300{--tw-border-opacity:1;border-color:rgb(125 211 252/var(--tw-border-opacity,1))}.border-sky-400{--tw-border-opacity:1;border-color:rgb(56 189 248/var(--tw-border-opacity,1))}.border-sky-50{--tw-border-opacity:1;border-color:rgb(240 249 255/var(--tw-border-opacity,1))}.border-sky-500{--tw-border-opacity:1;border-color:rgb(14 165 233/var(--tw-border-opacity,1))}.border-sky-600{--tw-border-opacity:1;border-color:rgb(2 132 199/var(--tw-border-opacity,1))}.border-sky-700{--tw-border-opacity:1;border-color:rgb(3 105 161/var(--tw-border-opacity,1))}.border-slate-100{--tw-border-opacity:1;border-color:rgb(241 245 249/var(--tw-border-opacity,1))}.border-slate-200{--tw-border-opacity:1;border-color:rgb(226 232 240/var(--tw-border-opacity,1))}.border-slate-300{--tw-border-opacity:1;border-color:rgb(203 213 225/var(--tw-border-opacity,1))}.border-slate-400{--tw-border-opacity:1;border-color:rgb(148 163 184/var(--tw-border-opacity,1))}.border-slate-50{--tw-border-opacity:1;border-color:rgb(248 250 252/var(--tw-border-opacity,1))}.border-slate-500{--tw-border-opacity:1;border-color:rgb(100 116 139/var(--tw-border-opacity,1))}.border-slate-600{--tw-border-opacity:1;border-color:rgb(71 85 105/var(--tw-border-opacity,1))}.border-slate-700{--tw-border-opacity:1;border-color:rgb(51 65 85/var(--tw-border-opacity,1))}.bg-amber-100{--tw-bg-opacity:1;background-color:rgb(254 243 199/var(--tw-bg-opacity,1))}.bg-amber-200{--tw-bg-opacity:1;background-color:rgb(253 230 138/var(--tw-bg-opacity,1))}.bg-amber-300{--tw-bg-opacity:1;background-color:rgb(252 211 77/var(--tw-bg-opacity,1))}.bg-amber-400{--tw-bg-opacity:1;background-color:rgb(251 191 36/var(--tw-bg-opacity,1))}.bg-amber-50{--tw-bg-opacity:1;background-color:rgb(255 251 235/var(--tw-bg-opacity,1))}.bg-amber-500{--tw-bg-opacity:1;background-color:rgb(245 158 11/var(--tw-bg-opacity,1))}.bg-amber-500\/10{background-color:rgba(245,158,11,.1)}.bg-amber-600{--tw-bg-opacity:1;background-color:rgb(217 119 6/var(--tw-bg-opacity,1))}.bg-amber-700{--tw-bg-opacity:1;background-color:rgb(180 83 9/var(--tw-bg-opacity,1))}.bg-bg{background-color:var(--c-bg)}.bg-cobalt-50{background-color:var(--c-cobalt-50)}.bg-cobalt-500{background-color:var(--c-cobalt-500)}.bg-cobalt-600{background-color:var(--c-cobalt-600)}.bg-danger{background-color:var(--c-danger)}.bg-emerald-100{--tw-bg-opacity:1;background-color:rgb(209 250 229/var(--tw-bg-opacity,1))}.bg-emerald-200{--tw-bg-opacity:1;background-color:rgb(167 243 208/var(--tw-bg-opacity,1))}.bg-emerald-300{--tw-bg-opacity:1;background-color:rgb(110 231 183/var(--tw-bg-opacity,1))}.bg-emerald-400{--tw-bg-opacity:1;background-color:rgb(52 211 153/var(--tw-bg-opacity,1))}.bg-emerald-50{--tw-bg-opacity:1;background-color:rgb(236 253 245/var(--tw-bg-opacity,1))}.bg-emerald-500{--tw-bg-opacity:1;background-color:rgb(16 185 129/var(--tw-bg-opacity,1))}.bg-emerald-600{--tw-bg-opacity:1;background-color:rgb(5 150 105/var(--tw-bg-opacity,1))}.bg-emerald-700{--tw-bg-opacity:1;background-color:rgb(4 120 87/var(--tw-bg-opacity,1))}.bg-green-100{--tw-bg-opacity:1;background-color:rgb(220 252 231/var(--tw-bg-opacity,1))}.bg-green-200{--tw-bg-opacity:1;background-color:rgb(187 247 208/var(--tw-bg-opacity,1))}.bg-green-300{--tw-bg-opacity:1;background-color:rgb(134 239 172/var(--tw-bg-opacity,1))}.bg-green-400{--tw-bg-opacity:1;background-color:rgb(74 222 128/var(--tw-bg-opacity,1))}.bg-green-50{--tw-bg-opacity:1;background-color:rgb(240 253 244/var(--tw-bg-opacity,1))}.bg-green-500{--tw-bg-opacity:1;background-color:rgb(34 197 94/var(--tw-bg-opacity,1))}.bg-green-600{--tw-bg-opacity:1;background-color:rgb(22 163 74/var(--tw-bg-opacity,1))}.bg-green-700{--tw-bg-opacity:1;background-color:rgb(21 128 61/var(--tw-bg-opacity,1))}.bg-indigo-100{--tw-bg-opacity:1;background-color:rgb(224 231 255/var(--tw-bg-opacity,1))}.bg-indigo-200{--tw-bg-opacity:1;background-color:rgb(199 210 254/var(--tw-bg-opacity,1))}.bg-indigo-300{--tw-bg-opacity:1;background-color:rgb(165 180 252/var(--tw-bg-opacity,1))}.bg-indigo-400{--tw-bg-opacity:1;background-color:rgb(129 140 248/var(--tw-bg-opacity,1))}.bg-indigo-50{--tw-bg-opacity:1;background-color:rgb(238 242 255/var(--tw-bg-opacity,1))}.bg-indigo-500{--tw-bg-opacity:1;background-color:rgb(99 102 241/var(--tw-bg-opacity,1))}.bg-indigo-600{--tw-bg-opacity:1;background-color:rgb(79 70 229/var(--tw-bg-opacity,1))}.bg-indigo-700{--tw-bg-opacity:1;background-color:rgb(67 56 202/var(--tw-bg-opacity,1))}.bg-ink-300{background-color:var(--c-ink-300)}.bg-ink-500{background-color:var(--c-ink-500)}.bg-ink-700{background-color:var(--c-ink-700)}.bg-line{background-color:var(--c-line)}.bg-pending{background-color:var(--c-pending)}.bg-positive{background-color:var(--c-positive)}.bg-rose-100{--tw-bg-opacity:1;background-color:rgb(255 228 230/var(--tw-bg-opacity,1))}.bg-rose-200{--tw-bg-opacity:1;background-color:rgb(254 205 211/var(--tw-bg-opacity,1))}.bg-rose-300{--tw-bg-opacity:1;background-color:rgb(253 164 175/var(--tw-bg-opacity,1))}.bg-rose-400{--tw-bg-opacity:1;background-color:rgb(251 113 133/var(--tw-bg-opacity,1))}.bg-rose-50{--tw-bg-opacity:1;background-color:rgb(255 241 242/var(--tw-bg-opacity,1))}.bg-rose-500{--tw-bg-opacity:1;background-color:rgb(244 63 94/var(--tw-bg-opacity,1))}.bg-rose-600{--tw-bg-opacity:1;background-color:rgb(225 29 72/var(--tw-bg-opacity,1))}.bg-rose-700{--tw-bg-opacity:1;background-color:rgb(190 18 60/var(--tw-bg-opacity,1))}.bg-sky-100{--tw-bg-opacity:1;background-color:rgb(224 242 254/var(--tw-bg-opacity,1))}.bg-sky-200{--tw-bg-opacity:1;background-color:rgb(186 230 253/var(--tw-bg-opacity,1))}.bg-sky-300{--tw-bg-opacity:1;background-color:rgb(125 211 252/var(--tw-bg-opacity,1))}.bg-sky-400{--tw-bg-opacity:1;background-color:rgb(56 189 248/var(--tw-bg-opacity,1))}.bg-sky-50{--tw-bg-opacity:1;background-color:rgb(240 249 255/var(--tw-bg-opacity,1))}.bg-sky-500{--tw-bg-opacity:1;background-color:rgb(14 165 233/var(--tw-bg-opacity,1))}.bg-sky-600{--tw-bg-opacity:1;background-color:rgb(2 132 199/var(--tw-bg-opacity,1))}.bg-sky-700{--tw-bg-opacity:1;background-color:rgb(3 105 161/var(--tw-bg-opacity,1))}.bg-slate-100{--tw-bg-opacity:1;background-color:rgb(241 245 249/var(--tw-bg-opacity,1))}.bg-slate-200{--tw-bg-opacity:1;background-color:rgb(226 232 240/var(--tw-bg-opacity,1))}.bg-slate-300{--tw-bg-opacity:1;background-color:rgb(203 213 225/var(--tw-bg-opacity,1))}.bg-slate-400{--tw-bg-opacity:1;background-color:rgb(148 163 184/var(--tw-bg-opacity,1))}.bg-slate-50{--tw-bg-opacity:1;background-color:rgb(248 250 252/var(--tw-bg-opacity,1))}.bg-slate-500{--tw-bg-opacity:1;background-color:rgb(100 116 139/var(--tw-bg-opacity,1))}.bg-slate-600{--tw-bg-opacity:1;background-color:rgb(71 85 105/var(--tw-bg-opacity,1))}.bg-slate-700{--tw-bg-opacity:1;background-color:rgb(51 65 85/var(--tw-bg-opacity,1))}.bg-transparent{background-color:transparent}.bg-white{--tw-bg-opacity:1;background-color:rgb(255 255 255/var(--tw-bg-opacity,1))}.bg-white\/90{background-color:hsla(0,0%,100%,.9)}.bg-gradient-to-b{background-image:linear-gradient(to bottom,var(--tw-gradient-stops))}.from-cobalt-50{--tw-gradient-from:var(--c-cobalt-50) var(--tw-gradient-from-position);--tw-gradient-to:hsla(0,0%,100%,0) var(--tw-gradient-to-position);--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to)}.to-bg{--tw-gradient-to:var(--c-bg) var(--tw-gradient-to-position)}.p-1{padding:.25rem}.p-3{padding:.75rem}.p-4{padding:1rem}.p-5{padding:1.25rem}.p-6{padding:1.5rem}.p-8{padding:2rem}.px-1{padding-left:.25rem;padding-right:.25rem}.px-1\.5{padding-left:.375rem;padding-right:.375rem}.px-2{padding-left:.5rem;padding-right:.5rem}.px-2\.5{padding-left:.625rem;padding-right:.625rem}.px-3{padding-left:.75rem;padding-right:.75rem}.px-3\.5{padding-left:.875rem;padding-right:.875rem}.px-4{padding-left:1rem;padding-right:1rem}.px-5{padding-left:1.25rem;padding-right:1.25rem}.py-0\.5{padding-top:.125rem;padding-bottom:.125rem}.py-1{padding-top:.25rem;padding-bottom:.25rem}.py-1\.5{padding-top:.375rem;padding-bottom:.375rem}.py-10{padding-top:2.5rem;padding-bottom:2.5rem}.py-2{padding-top:.5rem;padding-bottom:.5rem}.py-2\.5{padding-top:.625rem;padding-bottom:.625rem}.py-3{padding-top:.75rem;padding-bottom:.75rem}.py-3\.5{padding-top:.875rem;padding-bottom:.875rem}.py-4{padding-top:1rem;padding-bottom:1rem}.py-5{padding-top:1.25rem;padding-bottom:1.25rem}.py-6{padding-top:1.5rem;padding-bottom:1.5rem}.py-8{padding-top:2rem;padding-bottom:2rem}.pb-1{padding-bottom:.25rem}.pb-10{padding-bottom:2.5rem}.pb-2{padding-bottom:.5rem}.pb-6{padding-bottom:1.5rem}.pr-1{padding-right:.25rem}.pr-2\.5{padding-right:.625rem}.pt-1{padding-top:.25rem}.pt-2{padding-top:.5rem}.pt-3{padding-top:.75rem}.pt-4{padding-top:1rem}.pt-5{padding-top:1.25rem}.pt-6{padding-top:1.5rem}.pt-8{padding-top:2rem}.text-left{text-align:left}.text-center{text-align:center}.text-right{text-align:right}.align-super{vertical-align:super}.font-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace}.font-sans{font-family:Inter,system-ui,Segoe UI,sans-serif}.text-2xl{font-size:1.5rem;line-height:2rem}.text-\[10\.5px\]{font-size:10.5px}.text-\[10px\]{font-size:10px}.text-\[11\.5px\]{font-size:11.5px}.text-\[11px\]{font-size:11px}.text-\[12\.5px\]{font-size:12.5px}.text-\[12px\]{font-size:12px}.text-\[13\.5px\]{font-size:13.5px}.text-\[13px\]{font-size:13px}.text-\[19px\]{font-size:19px}.text-\[20px\]{font-size:20px}.text-\[22px\]{font-size:22px}.text-\[9\.5px\]{font-size:9.5px}.text-\[9px\]{font-size:9px}.text-base{font-size:1rem;line-height:1.5rem}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:.875rem;line-height:1.25rem}.text-xs{font-size:.75rem;line-height:1rem}.font-bold{font-weight:700}.font-extrabold{font-weight:800}.font-medium{font-weight:500}.font-semibold{font-weight:600}.uppercase{text-transform:uppercase}.italic{font-style:italic}.tabular-nums{--tw-numeric-spacing:tabular-nums;font-variant-numeric:var(--tw-ordinal) var(--tw-slashed-zero) var(--tw-numeric-figure) var(--tw-numeric-spacing) var(--tw-numeric-fraction)}.leading-relaxed{line-height:1.625}.leading-snug{line-height:1.375}.leading-tight{line-height:1.25}.tracking-tight{letter-spacing:-.025em}.tracking-wide{letter-spacing:.025em}.tracking-wider{letter-spacing:.05em}.text-amber-100{--tw-text-opacity:1;color:rgb(254 243 199/var(--tw-text-opacity,1))}.text-amber-200{--tw-text-opacity:1;color:rgb(253 230 138/var(--tw-text-opacity,1))}.text-amber-300{--tw-text-opacity:1;color:rgb(252 211 77/var(--tw-text-opacity,1))}.text-amber-400{--tw-text-opacity:1;color:rgb(251 191 36/var(--tw-text-opacity,1))}.text-amber-50{--tw-text-opacity:1;color:rgb(255 251 235/var(--tw-text-opacity,1))}.text-amber-500{--tw-text-opacity:1;color:rgb(245 158 11/var(--tw-text-opacity,1))}.text-amber-600{--tw-text-opacity:1;color:rgb(217 119 6/var(--tw-text-opacity,1))}.text-amber-700{--tw-text-opacity:1;color:rgb(180 83 9/var(--tw-text-opacity,1))}.text-bg{color:var(--c-bg)}.text-cobalt-50{color:var(--c-cobalt-50)}.text-cobalt-500{color:var(--c-cobalt-500)}.text-cobalt-600{color:var(--c-cobalt-600)}.text-danger{color:var(--c-danger)}.text-emerald-100{--tw-text-opacity:1;color:rgb(209 250 229/var(--tw-text-opacity,1))}.text-emerald-200{--tw-text-opacity:1;color:rgb(167 243 208/var(--tw-text-opacity,1))}.text-emerald-300{--tw-text-opacity:1;color:rgb(110 231 183/var(--tw-text-opacity,1))}.text-emerald-400{--tw-text-opacity:1;color:rgb(52 211 153/var(--tw-text-opacity,1))}.text-emerald-50{--tw-text-opacity:1;color:rgb(236 253 245/var(--tw-text-opacity,1))}.text-emerald-500{--tw-text-opacity:1;color:rgb(16 185 129/var(--tw-text-opacity,1))}.text-emerald-600{--tw-text-opacity:1;color:rgb(5 150 105/var(--tw-text-opacity,1))}.text-emerald-700{--tw-text-opacity:1;color:rgb(4 120 87/var(--tw-text-opacity,1))}.text-green-100{--tw-text-opacity:1;color:rgb(220 252 231/var(--tw-text-opacity,1))}.text-green-200{--tw-text-opacity:1;color:rgb(187 247 208/var(--tw-text-opacity,1))}.text-green-300{--tw-text-opacity:1;color:rgb(134 239 172/var(--tw-text-opacity,1))}.text-green-400{--tw-text-opacity:1;color:rgb(74 222 128/var(--tw-text-opacity,1))}.text-green-50{--tw-text-opacity:1;color:rgb(240 253 244/var(--tw-text-opacity,1))}.text-green-500{--tw-text-opacity:1;color:rgb(34 197 94/var(--tw-text-opacity,1))}.text-green-600{--tw-text-opacity:1;color:rgb(22 163 74/var(--tw-text-opacity,1))}.text-green-700{--tw-text-opacity:1;color:rgb(21 128 61/var(--tw-text-opacity,1))}.text-indigo-100{--tw-text-opacity:1;color:rgb(224 231 255/var(--tw-text-opacity,1))}.text-indigo-200{--tw-text-opacity:1;color:rgb(199 210 254/var(--tw-text-opacity,1))}.text-indigo-300{--tw-text-opacity:1;color:rgb(165 180 252/var(--tw-text-opacity,1))}.text-indigo-400{--tw-text-opacity:1;color:rgb(129 140 248/var(--tw-text-opacity,1))}.text-indigo-50{--tw-text-opacity:1;color:rgb(238 242 255/var(--tw-text-opacity,1))}.text-indigo-500{--tw-text-opacity:1;color:rgb(99 102 241/var(--tw-text-opacity,1))}.text-indigo-600{--tw-text-opacity:1;color:rgb(79 70 229/var(--tw-text-opacity,1))}.text-indigo-700{--tw-text-opacity:1;color:rgb(67 56 202/var(--tw-text-opacity,1))}.text-ink-300{color:var(--c-ink-300)}.text-ink-500{color:var(--c-ink-500)}.text-ink-700{color:var(--c-ink-700)}.text-ink-900{color:var(--c-ink-900)}.text-line{color:var(--c-line)}.text-pending{color:var(--c-pending)}.text-positive{color:var(--c-positive)}.text-red-500{--tw-text-opacity:1;color:rgb(239 68 68/var(--tw-text-opacity,1))}.text-rose-100{--tw-text-opacity:1;color:rgb(255 228 230/var(--tw-text-opacity,1))}.text-rose-200{--tw-text-opacity:1;color:rgb(254 205 211/var(--tw-text-opacity,1))}.text-rose-300{--tw-text-opacity:1;color:rgb(253 164 175/var(--tw-text-opacity,1))}.text-rose-400{--tw-text-opacity:1;color:rgb(251 113 133/var(--tw-text-opacity,1))}.text-rose-50{--tw-text-opacity:1;color:rgb(255 241 242/var(--tw-text-opacity,1))}.text-rose-500{--tw-text-opacity:1;color:rgb(244 63 94/var(--tw-text-opacity,1))}.text-rose-600{--tw-text-opacity:1;color:rgb(225 29 72/var(--tw-text-opacity,1))}.text-rose-700{--tw-text-opacity:1;color:rgb(190 18 60/var(--tw-text-opacity,1))}.text-sky-100{--tw-text-opacity:1;color:rgb(224 242 254/var(--tw-text-opacity,1))}.text-sky-200{--tw-text-opacity:1;color:rgb(186 230 253/var(--tw-text-opacity,1))}.text-sky-300{--tw-text-opacity:1;color:rgb(125 211 252/var(--tw-text-opacity,1))}.text-sky-400{--tw-text-opacity:1;color:rgb(56 189 248/var(--tw-text-opacity,1))}.text-sky-50{--tw-text-opacity:1;color:rgb(240 249 255/var(--tw-text-opacity,1))}.text-sky-500{--tw-text-opacity:1;color:rgb(14 165 233/var(--tw-text-opacity,1))}.text-sky-600{--tw-text-opacity:1;color:rgb(2 132 199/var(--tw-text-opacity,1))}.text-sky-700{--tw-text-opacity:1;color:rgb(3 105 161/var(--tw-text-opacity,1))}.text-slate-100{--tw-text-opacity:1;color:rgb(241 245 249/var(--tw-text-opacity,1))}.text-slate-200{--tw-text-opacity:1;color:rgb(226 232 240/var(--tw-text-opacity,1))}.text-slate-300{--tw-text-opacity:1;color:rgb(203 213 225/var(--tw-text-opacity,1))}.text-slate-400{--tw-text-opacity:1;color:rgb(148 163 184/var(--tw-text-opacity,1))}.text-slate-50{--tw-text-opacity:1;color:rgb(248 250 252/var(--tw-text-opacity,1))}.text-slate-500{--tw-text-opacity:1;color:rgb(100 116 139/var(--tw-text-opacity,1))}.text-slate-600{--tw-text-opacity:1;color:rgb(71 85 105/var(--tw-text-opacity,1))}.text-slate-700{--tw-text-opacity:1;color:rgb(51 65 85/var(--tw-text-opacity,1))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255/var(--tw-text-opacity,1))}.underline{text-decoration-line:underline}.underline-offset-2{text-underline-offset:2px}.antialiased{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}.opacity-40{opacity:.4}.opacity-50{opacity:.5}.shadow{--tw-shadow:0 1px 3px 0 rgba(0,0,0,.1),0 1px 2px -1px rgba(0,0,0,.1);--tw-shadow-colored:0 1px 3px 0 var(--tw-shadow-color),0 1px 2px -1px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow,0 0 #0000),var(--tw-ring-shadow,0 0 #0000),var(--tw-shadow)}.ring{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(3px + var(--tw-ring-offset-width)) var(--tw-ring-color)}.ring,.ring-2{box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow,0 0 #0000)}.ring-2{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color)}.ring-4{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(4px + var(--tw-ring-offset-width)) var(--tw-ring-color);box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow,0 0 #0000)}.ring-amber-100{--tw-ring-opacity:1;--tw-ring-color:rgb(254 243 199/var(--tw-ring-opacity,1))}.ring-amber-200{--tw-ring-opacity:1;--tw-ring-color:rgb(253 230 138/var(--tw-ring-opacity,1))}.ring-amber-300{--tw-ring-opacity:1;--tw-ring-color:rgb(252 211 77/var(--tw-ring-opacity,1))}.ring-amber-400{--tw-ring-opacity:1;--tw-ring-color:rgb(251 191 36/var(--tw-ring-opacity,1))}.ring-amber-50{--tw-ring-opacity:1;--tw-ring-color:rgb(255 251 235/var(--tw-ring-opacity,1))}.ring-amber-500{--tw-ring-opacity:1;--tw-ring-color:rgb(245 158 11/var(--tw-ring-opacity,1))}.ring-amber-600{--tw-ring-opacity:1;--tw-ring-color:rgb(217 119 6/var(--tw-ring-opacity,1))}.ring-amber-700{--tw-ring-opacity:1;--tw-ring-color:rgb(180 83 9/var(--tw-ring-opacity,1))}.ring-cobalt-50{--tw-ring-color:var(--c-cobalt-50)}.ring-cobalt-500{--tw-ring-color:var(--c-cobalt-500)}.ring-cobalt-600{--tw-ring-color:var(--c-cobalt-600)}.ring-emerald-100{--tw-ring-opacity:1;--tw-ring-color:rgb(209 250 229/var(--tw-ring-opacity,1))}.ring-emerald-200{--tw-ring-opacity:1;--tw-ring-color:rgb(167 243 208/var(--tw-ring-opacity,1))}.ring-emerald-300{--tw-ring-opacity:1;--tw-ring-color:rgb(110 231 183/var(--tw-ring-opacity,1))}.ring-emerald-400{--tw-ring-opacity:1;--tw-ring-color:rgb(52 211 153/var(--tw-ring-opacity,1))}.ring-emerald-400\/25{--tw-ring-color:rgba(52,211,153,.25)}.ring-emerald-50{--tw-ring-opacity:1;--tw-ring-color:rgb(236 253 245/var(--tw-ring-opacity,1))}.ring-emerald-500{--tw-ring-opacity:1;--tw-ring-color:rgb(16 185 129/var(--tw-ring-opacity,1))}.ring-emerald-600{--tw-ring-opacity:1;--tw-ring-color:rgb(5 150 105/var(--tw-ring-opacity,1))}.ring-emerald-700{--tw-ring-opacity:1;--tw-ring-color:rgb(4 120 87/var(--tw-ring-opacity,1))}.ring-green-100{--tw-ring-opacity:1;--tw-ring-color:rgb(220 252 231/var(--tw-ring-opacity,1))}.ring-green-200{--tw-ring-opacity:1;--tw-ring-color:rgb(187 247 208/var(--tw-ring-opacity,1))}.ring-green-300{--tw-ring-opacity:1;--tw-ring-color:rgb(134 239 172/var(--tw-ring-opacity,1))}.ring-green-400{--tw-ring-opacity:1;--tw-ring-color:rgb(74 222 128/var(--tw-ring-opacity,1))}.ring-green-50{--tw-ring-opacity:1;--tw-ring-color:rgb(240 253 244/var(--tw-ring-opacity,1))}.ring-green-500{--tw-ring-opacity:1;--tw-ring-color:rgb(34 197 94/var(--tw-ring-opacity,1))}.ring-green-600{--tw-ring-opacity:1;--tw-ring-color:rgb(22 163 74/var(--tw-ring-opacity,1))}.ring-green-700{--tw-ring-opacity:1;--tw-ring-color:rgb(21 128 61/var(--tw-ring-opacity,1))}.ring-indigo-100{--tw-ring-opacity:1;--tw-ring-color:rgb(224 231 255/var(--tw-ring-opacity,1))}.ring-indigo-200{--tw-ring-opacity:1;--tw-ring-color:rgb(199 210 254/var(--tw-ring-opacity,1))}.ring-indigo-300{--tw-ring-opacity:1;--tw-ring-color:rgb(165 180 252/var(--tw-ring-opacity,1))}.ring-indigo-400{--tw-ring-opacity:1;--tw-ring-color:rgb(129 140 248/var(--tw-ring-opacity,1))}.ring-indigo-50{--tw-ring-opacity:1;--tw-ring-color:rgb(238 242 255/var(--tw-ring-opacity,1))}.ring-indigo-500{--tw-ring-opacity:1;--tw-ring-color:rgb(99 102 241/var(--tw-ring-opacity,1))}.ring-indigo-600{--tw-ring-opacity:1;--tw-ring-color:rgb(79 70 229/var(--tw-ring-opacity,1))}.ring-indigo-700{--tw-ring-opacity:1;--tw-ring-color:rgb(67 56 202/var(--tw-ring-opacity,1))}.ring-ink-300{--tw-ring-color:var(--c-ink-300)}.ring-ink-500{--tw-ring-color:var(--c-ink-500)}.ring-ink-700{--tw-ring-color:var(--c-ink-700)}.ring-red-400\/25{--tw-ring-color:hsla(0,91%,71%,.25)}.ring-rose-100{--tw-ring-opacity:1;--tw-ring-color:rgb(255 228 230/var(--tw-ring-opacity,1))}.ring-rose-200{--tw-ring-opacity:1;--tw-ring-color:rgb(254 205 211/var(--tw-ring-opacity,1))}.ring-rose-300{--tw-ring-opacity:1;--tw-ring-color:rgb(253 164 175/var(--tw-ring-opacity,1))}.ring-rose-400{--tw-ring-opacity:1;--tw-ring-color:rgb(251 113 133/var(--tw-ring-opacity,1))}.ring-rose-50{--tw-ring-opacity:1;--tw-ring-color:rgb(255 241 242/var(--tw-ring-opacity,1))}.ring-rose-500{--tw-ring-opacity:1;--tw-ring-color:rgb(244 63 94/var(--tw-ring-opacity,1))}.ring-rose-600{--tw-ring-opacity:1;--tw-ring-color:rgb(225 29 72/var(--tw-ring-opacity,1))}.ring-rose-700{--tw-ring-opacity:1;--tw-ring-color:rgb(190 18 60/var(--tw-ring-opacity,1))}.ring-sky-100{--tw-ring-opacity:1;--tw-ring-color:rgb(224 242 254/var(--tw-ring-opacity,1))}.ring-sky-200{--tw-ring-opacity:1;--tw-ring-color:rgb(186 230 253/var(--tw-ring-opacity,1))}.ring-sky-300{--tw-ring-opacity:1;--tw-ring-color:rgb(125 211 252/var(--tw-ring-opacity,1))}.ring-sky-400{--tw-ring-opacity:1;--tw-ring-color:rgb(56 189 248/var(--tw-ring-opacity,1))}.ring-sky-50{--tw-ring-opacity:1;--tw-ring-color:rgb(240 249 255/var(--tw-ring-opacity,1))}.ring-sky-500{--tw-ring-opacity:1;--tw-ring-color:rgb(14 165 233/var(--tw-ring-opacity,1))}.ring-sky-600{--tw-ring-opacity:1;--tw-ring-color:rgb(2 132 199/var(--tw-ring-opacity,1))}.ring-sky-700{--tw-ring-opacity:1;--tw-ring-color:rgb(3 105 161/var(--tw-ring-opacity,1))}.ring-slate-100{--tw-ring-opacity:1;--tw-ring-color:rgb(241 245 249/var(--tw-ring-opacity,1))}.ring-slate-200{--tw-ring-opacity:1;--tw-ring-color:rgb(226 232 240/var(--tw-ring-opacity,1))}.ring-slate-300{--tw-ring-opacity:1;--tw-ring-color:rgb(203 213 225/var(--tw-ring-opacity,1))}.ring-slate-400{--tw-ring-opacity:1;--tw-ring-color:rgb(148 163 184/var(--tw-ring-opacity,1))}.ring-slate-50{--tw-ring-opacity:1;--tw-ring-color:rgb(248 250 252/var(--tw-ring-opacity,1))}.ring-slate-500{--tw-ring-opacity:1;--tw-ring-color:rgb(100 116 139/var(--tw-ring-opacity,1))}.ring-slate-600{--tw-ring-opacity:1;--tw-ring-color:rgb(71 85 105/var(--tw-ring-opacity,1))}.ring-slate-700{--tw-ring-opacity:1;--tw-ring-color:rgb(51 65 85/var(--tw-ring-opacity,1))}.ring-white{--tw-ring-opacity:1;--tw-ring-color:rgb(255 255 255/var(--tw-ring-opacity,1))}.blur{--tw-blur:blur(8px)}.blur,.filter{filter:var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow)}.backdrop-blur{--tw-backdrop-blur:blur(8px);-webkit-backdrop-filter:var(--tw-backdrop-blur) var(--tw-backdrop-brightness) var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate) var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate) var(--tw-backdrop-sepia);backdrop-filter:var(--tw-backdrop-blur) var(--tw-backdrop-brightness) var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate) var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate) var(--tw-backdrop-sepia)}.transition{transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,-webkit-backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter,-webkit-backdrop-filter;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}.transition-colors{transition-property:color,background-color,border-color,text-decoration-color,fill,stroke;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}.transition-transform{transition-property:transform;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}:root{--c-bg:#f4f6fb;--c-line:#e9edf3;--c-ink-900:#0f1729;--c-ink-700:#334155;--c-ink-500:#64748b;--c-ink-300:#94a3b8;--c-cobalt-600:#2f5bff;--c-cobalt-500:#4b70ff;--c-cobalt-50:#eef2ff;--c-positive:#16a34a;--c-pending:#f59e0b;--c-danger:#f43f5e}:root[data-theme=dark]{--c-bg:#0b1120;--c-line:#1e293b;--c-ink-900:#f1f5f9;--c-ink-700:#cbd5e1;--c-ink-500:#94a3b8;--c-ink-300:#64748b;--c-cobalt-50:#172554}@media (min-width:768px){.md\:card{box-shadow:0 1px 2px rgba(16,23,41,.04),0 8px 24px -12px rgba(16,23,41,.12)}}.placeholder\:text-ink-300::-moz-placeholder{color:var(--c-ink-300)}.placeholder\:text-ink-300::placeholder{color:var(--c-ink-300)}.focus-within\:border-cobalt-500:focus-within{border-color:var(--c-cobalt-500)}.focus-within\:ring-2:focus-within{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow,0 0 #0000)}.hover\:bg-cobalt-50:hover{background-color:var(--c-cobalt-50)}.hover\:bg-cobalt-500:hover{background-color:var(--c-cobalt-500)}.hover\:text-cobalt-500:hover{color:var(--c-cobalt-500)}.hover\:text-cobalt-600:hover{color:var(--c-cobalt-600)}.hover\:text-danger:hover{color:var(--c-danger)}.hover\:underline:hover{text-decoration-line:underline}.focus\:border-cobalt-500:focus{border-color:var(--c-cobalt-500)}.focus\:outline-none:focus{outline:2px solid transparent;outline-offset:2px}.focus\:ring-2:focus{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow,0 0 #0000)}.focus\:ring-cobalt-500:focus{--tw-ring-color:var(--c-cobalt-500)}.peer:checked~.peer-checked\:translate-x-5{--tw-translate-x:1.25rem;transform:translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.peer:checked~.peer-checked\:bg-cobalt-600{background-color:var(--c-cobalt-600)}@media (min-width:640px){.sm\:inline{display:inline}}@media (min-width:768px){.md\:my-6{margin-top:1.5rem;margin-bottom:1.5rem}.md\:max-w-lg{max-width:32rem}.md\:grid-cols-5{grid-template-columns:repeat(5,minmax(0,1fr))}.md\:rounded-2xl{border-radius:1rem}.md\:border{border-width:1px}.md\:border-line{border-color:var(--c-line)}}@media (min-width:1024px){.lg\:col-span-2{grid-column:span 2/span 2}.lg\:col-span-3{grid-column:span 3/span 3}.lg\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}.lg\:grid-cols-5{grid-template-columns:repeat(5,minmax(0,1fr))}.lg\:flex-row{flex-direction:row}.lg\:items-center{align-items:center}}
+\ No newline at end of file
+diff --git a/templates/dashboard/partials/landing_mode_callout.html b/templates/dashboard/partials/landing_mode_callout.html
+new file mode 100644
+index 0000000..221861d
+--- /dev/null
++++ b/templates/dashboard/partials/landing_mode_callout.html
+@@ -0,0 +1,18 @@
++{% comment %}
++Landing-mode compliance callout (Q-M-PREF / ADR-032). Rendered inline on GET and
++re-rendered via HTMX when the segment toggles. `live_disclosure` = the tenant has a
++live /d/{slug}; `requested_mode` (HTMX only) = the segment the user just clicked.
++{% endcomment %}
++{% if live_disclosure %}
++  <div class="mt-3 rounded-xl bg-cobalt-50 border border-cobalt-200 px-3 py-2.5 text-[11.5px] text-cobalt-600">
++    ✓ Safe to use “Direct” — your disclosure page
++    <b>gorefer.in/d/{{ slug }}</b> is live, so the required SEBI/NSE disclosures are
++    still one tap away from every message.
++  </div>
++{% else %}
++  <div class="mt-3 rounded-xl bg-pending/10 border border-pending/40 px-3 py-2.5 text-[11.5px] text-ink-700">
++    ⚠ “Direct to Zerodha” is unavailable until you have a live disclosure page
++    (<b>/d/{{ slug }}</b>). Add an active partnership below, then you can switch to
++    Direct. Until then, links show the landing page (which hosts the disclosures).
++  </div>
++{% endif %}
+diff --git a/templates/dashboard/partials/partnerships.html b/templates/dashboard/partials/partnerships.html
+new file mode 100644
+index 0000000..3ae4bd7
+--- /dev/null
++++ b/templates/dashboard/partials/partnerships.html
+@@ -0,0 +1,77 @@
++{% comment %}
++Active partnerships list (Q-M-PREF). These ReferralProgram rows drive /d/{slug}
++composition (ADR-031). Add / activate / deactivate post via HTMX and swap this whole
++partial back in — so the disclosure-status callout above reflects the new live state.
++Wrapped in #partnerships so the HTMX target is stable.
++{% endcomment %}
++<div id="partnerships" hx-target="this" hx-swap="outerHTML">
++  <div class="text-[11.5px] text-ink-500 mb-2">Active partnerships (drive the disclosure page)</div>
++
++  {% if partnership_error %}
++    <div class="mb-2 rounded-lg bg-danger/10 border border-danger/40 px-3 py-2 text-[11.5px] text-danger">
++      {{ partnership_error }}
++    </div>
++  {% endif %}
++
++  <div class="divide-y divide-line">
++    {% for p in partnerships %}
++      <div class="flex items-center gap-2.5 py-2.5 text-[13px]">
++        <span class="font-semibold text-ink-900">{{ p.name }}</span>
++        <span class="text-[10.5px] text-ink-500 bg-bg rounded-md px-1.5 py-0.5">{{ p.regulator_label }}</span>
++        {% if p.active %}
++          <span class="text-[10px] font-bold text-positive bg-positive/10 rounded-full px-2 py-0.5">active</span>
++        {% else %}
++          <span class="text-[10px] font-bold text-ink-300 bg-bg rounded-full px-2 py-0.5">inactive</span>
++        {% endif %}
++        <div class="ml-auto">
++          {% if p.active %}
++            <button type="button" class="text-[11.5px] font-semibold text-ink-500 hover:text-danger"
++                    hx-post="{% url 'dashboard_preferences_partnership' %}"
++                    hx-vals='{"action": "deactivate", "program_id": "{{ p.id }}"}'
++                    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>Deactivate</button>
++          {% else %}
++            <button type="button" class="text-[11.5px] font-semibold text-cobalt-600 hover:text-cobalt-500"
++                    hx-post="{% url 'dashboard_preferences_partnership' %}"
++                    hx-vals='{"action": "activate", "program_id": "{{ p.id }}"}'
++                    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>Activate</button>
++          {% endif %}
++        </div>
++      </div>
++    {% empty %}
++      <div class="py-3 text-[12px] text-ink-300">No partnerships yet — add one below.</div>
++    {% endfor %}
++  </div>
++
++  {# Add partnership — a new partner/regulator is a data row, never a code change (ADR-031). #}
++  <details class="mt-3">
++    <summary class="inline-block cursor-pointer rounded-lg border border-dashed border-cobalt-200 text-cobalt-600 px-3 py-1.5 text-[12.5px] font-semibold select-none">
++      + Add partnership (Insurance · Loan · …)
++    </summary>
++    <div class="mt-2 flex flex-wrap items-end gap-2">
++      <label class="text-[11px] text-ink-500">
++        Name
++        <input name="name" class="mt-0.5 block w-48 rounded-lg border border-line px-2.5 py-1.5 text-[13px] focus:border-cobalt-500 focus:outline-none" placeholder="e.g. HDFC Life">
++      </label>
++      <label class="text-[11px] text-ink-500">
++        Regulator
++        <select name="regulator" class="mt-0.5 block w-40 rounded-lg border border-line px-2.5 py-1.5 text-[13px] bg-white focus:border-cobalt-500 focus:outline-none">
++          {% for code, label in regulator_choices %}
++            <option value="{{ code }}">{{ label }}</option>
++          {% endfor %}
++        </select>
++      </label>
++      <button type="button"
++              class="rounded-lg bg-cobalt-600 text-white px-3.5 py-1.5 text-[12.5px] font-semibold"
++              hx-post="{% url 'dashboard_preferences_partnership' %}"
++              hx-include="closest div"
++              hx-vals='{"action": "add"}'
++              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>Add</button>
++    </div>
++  </details>
++</div>
++
++{% comment %}Out-of-band: refresh the landing-mode compliance callout so it reflects the
++new live-disclosure state immediately after a partnership add/activate/deactivate.{% endcomment %}
++<div id="landing_mode_callout" hx-swap-oob="true">
++  {% include "dashboard/partials/landing_mode_callout.html" %}
++</div>
+diff --git a/templates/dashboard/partials/pref_chip.html b/templates/dashboard/partials/pref_chip.html
+new file mode 100644
+index 0000000..ffae271
+--- /dev/null
++++ b/templates/dashboard/partials/pref_chip.html
+@@ -0,0 +1,22 @@
++{% comment %}
++Reusable share-channel chip. A checkbox styled as a pill (name=share_channels,
++value=code) so the enabled set submits natively as a multi-value field. WhatsApp +
++Copy are always-on (the primary CTAs) — shown checked and locked. Params: code, label,
++allowlist (the enabled codes). {% endcomment %}
++{% if code == "wa" or code == "copy" %}
++  <label class="inline-flex items-center rounded-lg border border-cobalt-200 bg-cobalt-50 text-cobalt-600 px-3 py-1.5 text-[12.5px] font-semibold cursor-default">
++    <input type="checkbox" name="share_channels" value="{{ code }}" class="sr-only" checked>
++    {{ label }}
++  </label>
++{% else %}
++  <label class="pref-chip inline-flex items-center rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold cursor-pointer select-none
++                {% if code in allowlist %}border-cobalt-200 bg-cobalt-50 text-cobalt-600{% else %}border-line text-ink-500{% endif %}">
++    <input type="checkbox" name="share_channels" value="{{ code }}" class="peer sr-only" {% if code in allowlist %}checked{% endif %}
++           onchange="this.closest('label').classList.toggle('border-cobalt-200', this.checked);
++                     this.closest('label').classList.toggle('bg-cobalt-50', this.checked);
++                     this.closest('label').classList.toggle('text-cobalt-600', this.checked);
++                     this.closest('label').classList.toggle('border-line', !this.checked);
++                     this.closest('label').classList.toggle('text-ink-500', !this.checked);">
++    {{ label }}
++  </label>
++{% endif %}
+diff --git a/templates/dashboard/partials/pref_toggle.html b/templates/dashboard/partials/pref_toggle.html
+new file mode 100644
+index 0000000..22e96bd
+--- /dev/null
++++ b/templates/dashboard/partials/pref_toggle.html
+@@ -0,0 +1,9 @@
++{% comment %}
++Reusable Variant-C toggle. A real checkbox (name=…, value="on") so it submits with the
++form natively — `on`=checked. peer-checked drives the visual switch. Params: name, on.
++{% endcomment %}
++<label class="relative inline-flex flex-none items-center cursor-pointer">
++  <input type="checkbox" name="{{ name }}" value="on" class="peer sr-only" {% if on %}checked{% endif %}>
++  <span class="w-11 h-6 rounded-full bg-ink-300/50 peer-checked:bg-cobalt-600 transition-colors"></span>
++  <span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5"></span>
++</label>
+diff --git a/templates/dashboard/partials/topbar.html b/templates/dashboard/partials/topbar.html
+index 83b2ff0..a4b7573 100644
+--- a/templates/dashboard/partials/topbar.html
++++ b/templates/dashboard/partials/topbar.html
+@@ -16,6 +16,8 @@ active pill; a missing value just leaves all inactive (no dead UI).
+          class="px-3 py-1.5 rounded-full {% if nav_active == 'explorer' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Explorer</a>
+       <a href="{% url 'dashboard_referrer_search' %}"
+          class="px-3 py-1.5 rounded-full {% if nav_active == 'referrer' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Referral Profile</a>
++      <a href="{% url 'dashboard_preferences' %}"
++         class="px-3 py-1.5 rounded-full {% if nav_active == 'preferences' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Preferences</a>
+       <a href="{% url 'dashboard_logout' %}" class="px-3 py-1.5 rounded-full text-ink-300 hover:bg-cobalt-50">Sign out</a>
+       <span class="ml-2 h-7 w-7 rounded-full bg-cobalt-600 text-white flex items-center justify-center text-[11px] font-bold">AK</span>
+     </nav>
+diff --git a/templates/dashboard/preferences.html b/templates/dashboard/preferences.html
+new file mode 100644
+index 0000000..9e3588d
+--- /dev/null
++++ b/templates/dashboard/preferences.html
+@@ -0,0 +1,175 @@
++{% extends "dashboard/base.html" %}
++{% load static %}
++{% block title %}GoRefer Admin — Preferences{% endblock %}
++{% block content %}
++
++{% comment %}Preferences / Settings screen (Q-M-PREF · Variant C · ADR-034). The UI home
++for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backend override.{% endcomment %}
++
++<div class="max-w-[760px] mx-auto space-y-4">
++
++  <div class="flex items-start justify-between gap-4">
++    <div>
++      <h1 class="text-[20px] font-extrabold tracking-tight">Preferences</h1>
++      <p class="text-[12.5px] text-ink-500 mt-0.5">
++        {{ sub_broker_name|default:"Your" }} · these settings apply to your referral links &amp; messages
++      </p>
++    </div>
++    {# Top Save — submits the same preferences form as the bottom Save (form="prefs_form"). #}
++    <button type="submit" form="prefs_form"
++            class="flex-none rounded-xl bg-cobalt-600 text-white px-5 py-2.5 text-[13.5px] font-semibold card">
++      Save preferences
++    </button>
++  </div>
++
++  {% if saved %}
++    <div class="rounded-xl bg-positive/10 border border-positive/40 px-3 py-2.5 text-[12px] text-ink-700">
++      ✓ Preferences saved.
++      {% for n in notices %}<div class="mt-1 text-ink-500">{{ n }}</div>{% endfor %}
++    </div>
++  {% endif %}
++
++  <form id="prefs_form" method="post" action="{% url 'dashboard_preferences' %}" class="space-y-4">
++    {% csrf_token %}
++
++    {# ---- Referral routing (LANDING_MODE) --------------------------------- #}
++    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 mt-2 ml-1">Referral routing</div>
++    <div class="rounded-2xl bg-white border border-line card p-5">
++      <div class="flex items-start justify-between gap-4">
++        <div class="flex-1">
++          <div class="text-[13.5px] font-semibold">Show landing page when someone taps your referral link?</div>
++          <div class="text-[11.5px] text-ink-500 mt-0.5">
++            <b>Yes</b> = show the landing page first (captures the prospect’s name/email/phone
++            as a lead). <b>No</b> = send them straight to Zerodha signup — frictionless, but no
++            lead captured from the click.
++          </div>
++        </div>
++        {# Yes/No control → hidden landing_mode input. Yes=page, No=direct. No disabled without a live /d/{slug}. #}
++        <div class="inline-flex flex-none rounded-xl bg-cobalt-50 border border-cobalt-200 p-1">
++          <button type="button" data-mode="page"
++                  class="seg-btn text-[12.5px] font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap
++                         {% if prefs.landing_mode != 'direct' %}bg-cobalt-600 text-white{% else %}text-cobalt-600{% endif %}">
++            Yes
++          </button>
++          <button type="button" data-mode="direct"
++                  class="seg-btn text-[12.5px] font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap
++                         {% if prefs.landing_mode == 'direct' %}bg-cobalt-600 text-white{% else %}text-cobalt-600{% endif %}
++                         {% if not direct_allowed %}opacity-40 cursor-not-allowed{% endif %}"
++                  {% if not direct_allowed %}disabled title="Needs a live disclosure page first"{% endif %}>
++            No
++          </button>
++        </div>
++      </div>
++      <input type="hidden" name="landing_mode" id="landing_mode_input" value="{{ prefs.landing_mode }}">
++      {# Compliance callout — re-rendered by HTMX on segment change (ADR-032 coupling). #}
++      <div id="landing_mode_callout">
++        {% include "dashboard/partials/landing_mode_callout.html" %}
++      </div>
++    </div>
++
++    {# ---- Rewards --------------------------------------------------------- #}
++    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Rewards</div>
++    <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">
++      <div class="flex items-start justify-between gap-4 py-1.5">
++        <div class="flex-1">
++          <div class="text-[13.5px] font-semibold">Show the referrer reward in messages</div>
++          <div class="text-[11.5px] text-ink-500 mt-0.5">Whether the reward wording appears. Off = service-only wording.</div>
++        </div>
++        {% include "dashboard/partials/pref_toggle.html" with name="share_show_reward" on=prefs.share_show_reward %}
++      </div>
++      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
++        <div class="flex-1">
++          <div class="text-[13.5px] font-semibold">Reward claim text</div>
++          <div class="text-[11.5px] text-ink-500 mt-0.5">Shown to the referrer only (private). Flip the toggle above to hide it.</div>
++        </div>
++        <input name="referrer_reward_claim" value="{{ prefs.referrer_reward_claim }}"
++               class="flex-none w-[260px] max-w-[50vw] rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none">
++      </div>
++    </div>
++
++    {# ---- Contact -------------------------------------------------------- #}
++    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Contact</div>
++    <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">
++      <div class="flex items-start justify-between gap-4 py-1.5">
++        <div class="flex-1">
++          <div class="text-[13.5px] font-semibold">Assisted-opening helpline</div>
++          <div class="text-[11.5px] text-ink-500 mt-0.5">The “Call or WhatsApp us” number in your messages.</div>
++        </div>
++        <input name="support_helpline_phone" value="{{ prefs.support_helpline_phone }}"
++               class="flex-none w-[260px] max-w-[50vw] rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none">
++      </div>
++      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
++        <div class="flex-1">
++          <div class="text-[13.5px] font-semibold">WhatsApp Business number</div>
++          <div class="text-[11.5px] text-ink-500 mt-0.5">Where “Share on WhatsApp” deep-links.</div>
++        </div>
++        <input name="wati_business_number" value="{{ prefs.wati_business_number }}"
++               class="flex-none w-[260px] max-w-[50vw] rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none">
++      </div>
++    </div>
++
++    {# ---- Sharing & channels --------------------------------------------- #}
++    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Sharing &amp; channels</div>
++    <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">
++      <div class="py-1.5">
++        <div class="text-[13.5px] font-semibold">Enabled share channels</div>
++        <div class="text-[11.5px] text-ink-500 mt-0.5">Which channels a share can be attributed to.</div>
++        <div class="flex flex-wrap gap-2 mt-2.5">
++          {% for code, label in channel_choices %}
++            {% include "dashboard/partials/pref_chip.html" with code=code label=label allowlist=prefs.share_channels_allowlist %}
++          {% endfor %}
++        </div>
++      </div>
++      <div class="flex items-start justify-between gap-4 py-1.5 border-t border-line">
++        <div class="flex-1">
++          <div class="text-[13.5px] font-semibold">Allow “Refer directly” (assisted)</div>
++          <div class="text-[11.5px] text-ink-500 mt-0.5">Referrer hands you a prospect’s name &amp; mobile → creates a lead for follow-up (with consent).</div>
++        </div>
++        {% include "dashboard/partials/pref_toggle.html" with name="enable_assisted_referral" on=prefs.enable_assisted_referral %}
++      </div>
++    </div>
++
++    {# ---- Disclosure + partnerships (drive /d/{slug}) -------------------- #}
++    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Disclosure</div>
++    <div class="rounded-2xl bg-white border border-line card p-5">
++      <div class="flex items-start justify-between gap-4 py-1.5">
++        <div class="flex-1">
++          <div class="text-[13.5px] font-semibold">Your disclosure page</div>
++          <div class="text-[11.5px] text-ink-500 mt-0.5">Auto-composed from your active partnerships below. Linked from every message (NSE §4.4).</div>
++        </div>
++        <a class="flex-none text-[12.5px] font-semibold text-cobalt-600 hover:text-cobalt-500" target="_blank"
++           href="{% url 'disclosure_page' slug %}">gorefer.in/d/{{ slug }} ↗</a>
++      </div>
++      <div class="border-t border-line pt-3 mt-1">
++        {% include "dashboard/partials/partnerships.html" %}
++      </div>
++    </div>
++
++    <div class="flex justify-end gap-2.5 pt-1">
++      <a href="{% url 'dashboard' %}" class="rounded-xl bg-white border border-line text-ink-900 px-5 py-2.5 text-[13.5px] font-semibold">Cancel</a>
++      <button type="submit" class="rounded-xl bg-cobalt-600 text-white px-5 py-2.5 text-[13.5px] font-semibold card">Save preferences</button>
++    </div>
++  </form>
++</div>
++
++{# Segmented landing-mode control: sync the hidden input + fetch the live callout on change. #}
++<script>
++(function () {
++  var input = document.getElementById("landing_mode_input");
++  var btns = document.querySelectorAll(".seg-btn");
++  btns.forEach(function (btn) {
++    btn.addEventListener("click", function () {
++      if (btn.disabled) return;
++      var mode = btn.getAttribute("data-mode");
++      input.value = mode;
++      btns.forEach(function (b) {
++        var on = b.getAttribute("data-mode") === mode;
++        b.classList.toggle("bg-cobalt-600", on);
++        b.classList.toggle("text-white", on);
++        b.classList.toggle("text-cobalt-600", !on);
++      });
++    });
++  });
++})();
++</script>
++{% endblock %}
+diff --git a/tests/test_qmpref_preferences.py b/tests/test_qmpref_preferences.py
+new file mode 100644
+index 0000000..62567b8
+--- /dev/null
++++ b/tests/test_qmpref_preferences.py
+@@ -0,0 +1,308 @@
++"""Q-M-PREF — Preferences / Settings screen (ADR-034).
++
++The UI home for the per-tenant config cascade. Critically, LANDING_MODE is set HERE,
++through the screen (POST /admin-panel/preferences), NOT via a backend override. The
++ADR-032 compliance coupling — `direct` only when a live /d/{slug} exists — is enforced
++AT THE SCREEN. Admin-only, tenant-scoped, config-over-code, Postgres-only, demo offline.
++
++Acceptance (S2-03 §14):
++  - Flip Landing mode → Direct via the screen persists landing_mode=direct AND live
++    /r/wa/{id} then 302s straight to Zerodha (click recorded, Location clean).
++  - `direct` refused in the UI when the tenant has no live /d/{slug}.
++  - Each control persists + takes effect; admin-only; tenant-scoped; add/remove a
++    partnership changes /d/{slug}.
++"""
++import pytest
++from django.contrib.auth import get_user_model
++from django.core.management import call_command
++from django.test import Client
++
++from apps.config import preferences as prefkeys
++from apps.config.cascade import resolve
++from apps.config.models import ConfigGlobal
++from apps.events.models import Event
++from apps.referrals.models import Partner, ReferralProgram
++from apps.tenants.models import Tenant
++
++PREFS_URL = "/admin-panel/preferences"
++HUMAN = {"HTTP_USER_AGENT": "Mozilla/5.0 (Android)", "REMOTE_ADDR": "203.0.113.7"}
++
++
++# --------------------------------------------------------------------------- fixtures
++
++
++@pytest.fixture
++def seeded(db):
++    call_command("seed_program")
++    return Tenant.objects.get(slug="pifs")
++
++
++@pytest.fixture
++def admin_client(seeded):
++    User = get_user_model()
++    User.objects.create_user(
++        username="admin@pifs.in", email="admin@pifs.in", password="pw12345!", is_staff=True
++    )
++    c = Client()
++    c.login(username="admin@pifs.in", password="pw12345!")
++    return c
++
++
++def _tenant():
++    return Tenant.objects.get(slug="pifs")
++
++
++def _base_form(**overrides):
++    """A full preferences POST body (all controls) with sensible defaults."""
++    data = {
++        "landing_mode": "page",
++        "referrer_reward_claim": "10% brokerage share + 300 reward points",
++        "support_helpline_phone": "+91 73888 82020",
++        "wati_business_number": "917080642020",
++        "share_channels": ["wa", "copy"],
++        # checkboxes: present == on, absent == off
++        "share_show_reward": "on",
++        "enable_assisted_referral": "on",
++    }
++    data.update(overrides)
++    return data
++
++
++# --------------------------------------------------------------- admin-only + render
++
++
++def test_preferences_requires_login(seeded):
++    resp = Client().get(PREFS_URL)
++    assert resp.status_code == 302
++    assert "/admin-panel/login/" in resp.headers["Location"]
++
++
++def test_preferences_requires_staff(seeded):
++    User = get_user_model()
++    User.objects.create_user(username="joe", password="pw12345!", is_staff=False)
++    c = Client()
++    c.login(username="joe", password="pw12345!")
++    resp = c.get(PREFS_URL)
++    assert resp.status_code == 302  # bounced to login
++
++
++def test_preferences_renders_variant_c(admin_client):
++    resp = admin_client.get(PREFS_URL)
++    assert resp.status_code == 200
++    body = resp.content.decode()
++    # Matches the approved mockup's sections.
++    assert "Preferences" in body
++    # Landing mode is framed as a Yes/No question (Yes=page, No=direct).
++    assert "Show landing page when someone taps your referral link?" in body
++    # The two options are Yes (=page) and No (=direct), rendered as segmented buttons.
++    assert 'data-mode="page"' in body and 'data-mode="direct"' in body
++    seg = body.split('data-mode="page"', 1)[1]
++    assert "Yes" in seg.split("</button>", 1)[0]
++    assert "No" in seg.split('data-mode="direct"', 1)[1].split("</button>", 1)[0]
++    assert "Enabled share channels" in body
++    assert "gorefer.in/d/pifs" in body
++
++
++def test_top_save_button_submits_the_preferences_form(admin_client):
++    resp = admin_client.get(PREFS_URL)
++    body = resp.content.decode()
++    # The form carries an id, and there is a top (header) Save that targets it via form=…,
++    # in addition to the bottom submit — both post the same preferences form.
++    assert 'id="prefs_form"' in body
++    assert 'form="prefs_form"' in body
++    # Two "Save preferences" submit buttons (top + bottom).
++    assert body.count("Save preferences") >= 2
++
++
++# ---------------------------------------- ACCEPTANCE: flip to Direct THROUGH the screen
++
++
++def test_flip_to_direct_via_screen_persists_and_takes_effect(
++    admin_client, client_unused=None, django_capture_on_commit_callbacks=None
++):
++    # PIFS is seeded with an active Zerodha program => a live /d/pifs exists => Direct allowed.
++    resp = admin_client.post(PREFS_URL, _base_form(landing_mode="direct"))
++    assert resp.status_code == 200
++
++    # Persisted at the TENANT (global) tier — through the screen, not a backend override.
++    assert resolve(prefkeys.LANDING_MODE, tenant_id=_tenant().id) == "direct"
++    assert ConfigGlobal.objects.filter(tenant=_tenant(), key="landing_mode", value="direct").exists()
++
++
++@pytest.mark.django_db
++def test_direct_set_via_screen_makes_wa_redirect_clean(admin_client, django_capture_on_commit_callbacks):
++    # Flip to Direct through the screen...
++    admin_client.post(PREFS_URL, _base_form(landing_mode="direct"))
++    # ...then a live /r/wa/{id} 302s straight to Zerodha, click recorded, Location clean.
++    visitor = Client()
++    with django_capture_on_commit_callbacks(execute=True):
++        resp = visitor.get("/r/wa/RJ4521", **HUMAN)
++    assert resp.status_code == 302
++    assert resp.headers["Location"] == "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=RJ4521"
++    loc = resp.headers["Location"]
++    assert "s=" not in loc and "wa" not in loc.rsplit("r=", 1)[0]
++    assert Event.objects.filter(event_type="click").exists()
++    assert not Event.objects.filter(event_type="landing_viewed").exists()
++
++
++# --------------------------------------- ACCEPTANCE: Direct REFUSED without a live /d/
++
++
++def _tenant_without_live_disclosure():
++    """Deactivate PIFS's only program → /d/pifs composes nothing → not 'live'."""
++    ReferralProgram.objects.filter(tenant=_tenant()).update(status="inactive")
++
++
++def test_direct_refused_when_no_live_disclosure_page(admin_client):
++    _tenant_without_live_disclosure()
++    resp = admin_client.post(PREFS_URL, _base_form(landing_mode="direct"))
++    assert resp.status_code == 200
++    # Refused at the screen — forced back to page, NOT persisted as direct.
++    assert resolve(prefkeys.LANDING_MODE, tenant_id=_tenant().id, default="page") == "page"
++    # And the UI told the user why.
++    assert b"disclosure page" in resp.content.lower()
++
++
++def test_direct_segment_disabled_in_ui_without_live_disclosure(admin_client):
++    _tenant_without_live_disclosure()
++    resp = admin_client.get(PREFS_URL)
++    body = resp.content.decode()
++    # The Direct button is rendered disabled (cannot be chosen).
++    assert "disabled" in body
++    assert "unavailable until you have a live disclosure page" in body
++
++
++# --------------------------------------------------- each control persists + takes effect
++
++
++def test_reward_controls_persist_and_hide_on_landing(admin_client):
++    # Turn the reward OFF + change the claim text.
++    admin_client.post(
++        PREFS_URL,
++        _base_form(referrer_reward_claim="Flat 15% share"),  # share_show_reward omitted below
++    )
++    # First save keeps it on; now explicitly turn it off (absent checkbox).
++    form = _base_form(referrer_reward_claim="Flat 15% share")
++    form.pop("share_show_reward")
++    admin_client.post(PREFS_URL, form)
++    assert resolve(prefkeys.SHARE_SHOW_REWARD, tenant_id=_tenant().id) is False
++    assert resolve(prefkeys.REFERRER_REWARD_CLAIM, tenant_id=_tenant().id) == "Flat 15% share"
++
++    # Landing page reflects it: reward panel hidden.
++    visitor = Client()
++    resp = visitor.get("/r/RJ4521", **HUMAN)
++    assert resp.status_code == 200
++    assert b"Flat 15% share" not in resp.content  # hidden when show_reward is off
++
++
++def test_reward_claim_shows_on_landing_when_on(admin_client):
++    admin_client.post(PREFS_URL, _base_form(referrer_reward_claim="Earn 12% brokerage share"))
++    visitor = Client()
++    resp = visitor.get("/r/RJ4521", **HUMAN)
++    assert b"Earn 12% brokerage share" in resp.content
++
++
++def test_helpline_and_wati_number_persist_and_take_effect(admin_client):
++    admin_client.post(
++        PREFS_URL,
++        _base_form(support_helpline_phone="+91 90000 11111", wati_business_number="919000022222"),
++    )
++    assert resolve(prefkeys.SUPPORT_HELPLINE_PHONE, tenant_id=_tenant().id) == "+91 90000 11111"
++    assert resolve(prefkeys.WATI_BUSINESS_NUMBER, tenant_id=_tenant().id) == "919000022222"
++    # Landing page renders the configured helpline + wa number.
++    resp = Client().get("/r/RJ4521", **HUMAN)
++    body = resp.content.decode()
++    assert "+91 90000 11111" in body
++    assert "919000022222" in body
++
++
++def test_share_channels_allowlist_persists(admin_client):
++    admin_client.post(PREFS_URL, _base_form(share_channels=["fb", "li"]))
++    channels = resolve(prefkeys.SHARE_CHANNELS_ALLOWLIST, tenant_id=_tenant().id)
++    assert "fb" in channels and "li" in channels
++    # WhatsApp + Copy stay always-on even if not submitted.
++    assert "wa" in channels and "copy" in channels
++
++
++def test_assisted_referral_toggle_persists(admin_client):
++    form = _base_form()
++    form.pop("enable_assisted_referral")  # off
++    admin_client.post(PREFS_URL, form)
++    assert resolve(prefkeys.ENABLE_ASSISTED_REFERRAL, tenant_id=_tenant().id) is False
++    admin_client.post(PREFS_URL, _base_form(enable_assisted_referral="on"))
++    assert resolve(prefkeys.ENABLE_ASSISTED_REFERRAL, tenant_id=_tenant().id) is True
++
++
++# ------------------------------------------------ partnerships change /d/{slug}
++
++
++def test_add_partnership_appears_on_disclosure_page(admin_client):
++    admin_client.post(
++        f"{PREFS_URL}/partnership",
++        {"action": "add", "name": "HDFC Life", "regulator": "irdai"},
++    )
++    prog = ReferralProgram.objects.filter(tenant=_tenant(), name="HDFC Life").first()
++    assert prog is not None and prog.status == "active"
++    # The new block now composes on /d/pifs.
++    resp = Client().get("/d/pifs")
++    assert resp.status_code == 200
++    assert b"IRDAI" in resp.content
++
++
++def test_deactivate_partnership_removes_block_from_disclosure_page(admin_client):
++    # Add a second (so PIFS keeps a live disclosure host) then deactivate it.
++    admin_client.post(
++        f"{PREFS_URL}/partnership",
++        {"action": "add", "name": "Bajaj Finserv", "regulator": "rbi"},
++    )
++    prog = ReferralProgram.objects.get(tenant=_tenant(), name="Bajaj Finserv")
++    assert b"RBI" in Client().get("/d/pifs").content
++    admin_client.post(
++        f"{PREFS_URL}/partnership",
++        {"action": "deactivate", "program_id": str(prog.id)},
++    )
++    prog.refresh_from_db()
++    assert prog.status == "inactive"
++    # Its regulator block drops off /d/pifs (RBI gone; Zerodha SEBI/NSE remains).
++    body = Client().get("/d/pifs").content
++    assert b"RBI" not in body
++
++
++def test_cannot_deactivate_last_partnership_while_direct(admin_client):
++    # Go Direct (allowed — PIFS has a live disclosure page), then try to strand it.
++    admin_client.post(PREFS_URL, _base_form(landing_mode="direct"))
++    zerodha = ReferralProgram.objects.get(tenant=_tenant(), name="Zerodha")
++    resp = admin_client.post(
++        f"{PREFS_URL}/partnership",
++        {"action": "deactivate", "program_id": str(zerodha.id)},
++    )
++    zerodha.refresh_from_db()
++    assert zerodha.status == "active"  # refused
++    assert b"last active partnership" in resp.content.lower()
++
++
++# ------------------------------------------------------- tenant isolation
++
++
++def test_tenant_scoped_no_cross_tenant_write(admin_client):
++    # A second tenant with its own program.
++    other = Tenant.objects.create(name="Other Broker", slug="other")
++    partner = Partner.objects.create(tenant=other, name="Other", code="OTHERX", status="active")
++    ReferralProgram.objects.create(
++        tenant=other, partner=partner, name="OtherProg", status="active", regulator="sebi_nse"
++    )
++    # Saving PIFS preferences writes ONLY PIFS's tenant tier.
++    admin_client.post(PREFS_URL, _base_form(support_helpline_phone="+91 88888 88888"))
++    assert not ConfigGlobal.objects.filter(tenant=other, key="support_helpline_phone").exists()
++    # `other` still resolves the central default, unaffected by PIFS's override.
++    assert resolve(prefkeys.SUPPORT_HELPLINE_PHONE, tenant_id=other.id) != "+91 88888 88888"
++
++
++# ------------------------------------------------------- config-over-code / no backend flip
++
++
++def test_landing_mode_is_not_a_settings_flag(seeded):
++    # ADR-034: landing_mode lives in the cascade, not a Django setting/env flag.
++    from django.conf import settings
++
++    assert not hasattr(settings, "LANDING_MODE")

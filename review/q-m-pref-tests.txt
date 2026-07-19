@@ -1,0 +1,30 @@
+=== Q-M-PREF pre-deploy test pack ===
+Branch: feature/q-m-pref-preferences-screen (vs main)
+Flags: ENABLE_ZOHO_WRITE=false  ENABLE_WATI_SEND=false
+Generated: 2026-07-10
+
+=== pytest -v tests/test_qmpref_preferences.py ===
+============================= test session starts =============================
+tests/test_qmpref_preferences.py::test_preferences_requires_login PASSED [  5%]
+tests/test_qmpref_preferences.py::test_preferences_requires_staff PASSED [ 11%]
+tests/test_qmpref_preferences.py::test_preferences_renders_variant_c PASSED [ 16%]
+tests/test_qmpref_preferences.py::test_top_save_button_submits_the_preferences_form PASSED [ 22%]
+tests/test_qmpref_preferences.py::test_flip_to_direct_via_screen_persists_and_takes_effect PASSED [ 27%]
+tests/test_qmpref_preferences.py::test_direct_set_via_screen_makes_wa_redirect_clean PASSED [ 33%]
+tests/test_qmpref_preferences.py::test_direct_refused_when_no_live_disclosure_page PASSED [ 38%]
+tests/test_qmpref_preferences.py::test_direct_segment_disabled_in_ui_without_live_disclosure PASSED [ 44%]
+tests/test_qmpref_preferences.py::test_reward_controls_persist_and_hide_on_landing PASSED [ 50%]
+tests/test_qmpref_preferences.py::test_reward_claim_shows_on_landing_when_on PASSED [ 55%]
+tests/test_qmpref_preferences.py::test_helpline_and_wati_number_persist_and_take_effect PASSED [ 61%]
+tests/test_qmpref_preferences.py::test_share_channels_allowlist_persists PASSED [ 66%]
+tests/test_qmpref_preferences.py::test_assisted_referral_toggle_persists PASSED [ 72%]
+tests/test_qmpref_preferences.py::test_add_partnership_appears_on_disclosure_page PASSED [ 77%]
+tests/test_qmpref_preferences.py::test_deactivate_partnership_removes_block_from_disclosure_page PASSED [ 83%]
+tests/test_qmpref_preferences.py::test_cannot_deactivate_last_partnership_while_direct PASSED [ 88%]
+tests/test_qmpref_preferences.py::test_tenant_scoped_no_cross_tenant_write PASSED [ 94%]
+tests/test_qmpref_preferences.py::test_landing_mode_is_not_a_settings_flag PASSED [100%]
+======================== 18 passed in 95.39s (0:01:35) ========================
+
+=== Full suite summary (python -m pytest -q) ===
+242 passed in 202.81s (0:03:22)
+ENABLE_WATI_SEND=false  ENABLE_ZOHO_WRITE=false
