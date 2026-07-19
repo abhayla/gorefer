@@ -316,6 +316,41 @@ def test_live_status_exact_template_match_only(monkeypatch):
     assert not st.is_delivered(d.status)
 
 
+def test_live_status_matches_template_in_eventdescription(monkeypatch):
+    """WATI's real getMessages leaves templateName=null and names the template inside
+    eventDescription. The reconcile must match there too, or genuinely-DELIVERED
+    messages get stranded at 'accepted' (found live, 2026-07-19)."""
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/1")
+    monkeypatch.setenv("WATI_API_TOKEN", "tok")
+    tpl = "gr_brokers_zerodha_prospect_welcome_en_2026_07_17_v2"
+    body = json.dumps({"messages": {"items": [
+        {"eventType": "broadcastMessage", "templateName": None,
+         "eventDescription": f'Broadcast message with using "{tpl}"',
+         "statusString": "DELIVERED"},
+    ]}})
+    adapter = LiveWatiAdapter(transport=lambda *a: (200, body))
+    d = adapter.get_message_status(
+        provider_message_id="", recipient_mobile="917972672473", template=tpl,
+    )
+    assert d.status == st.STATUS_DELIVERED
+
+
+def test_live_status_eventdescription_of_other_template_not_matched(monkeypatch):
+    """An eventDescription naming a DIFFERENT template must NOT match ours."""
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/1")
+    monkeypatch.setenv("WATI_API_TOKEN", "tok")
+    body = json.dumps({"messages": {"items": [
+        {"eventType": "broadcastMessage", "templateName": None,
+         "eventDescription": 'Broadcast message with using "some_other_template"',
+         "statusString": "DELIVERED"},
+    ]}})
+    adapter = LiveWatiAdapter(transport=lambda *a: (200, body))
+    d = adapter.get_message_status(
+        provider_message_id="", recipient_mobile="917972672473", template="gr_ours",
+    )
+    assert d.status == st.STATUS_ACCEPTED  # not ours -> stay honest
+
+
 def test_live_status_picks_the_matching_template_among_several(monkeypatch):
     """When several templates went to one number, read THIS template's row, exactly."""
     monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/1")
