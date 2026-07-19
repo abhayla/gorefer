@@ -3094,3 +3094,15 @@ The one VALID call created test `conversion_id 3` (referrer RJ4521, opener TESTL
 - **opener account number:** confirmed with Abhay it's NOT needed on the signer — `ClientId` lives on the Zoho Contact, not the Lead; GoRefer keys the opener by `zoho_lead_id` and credits the referrer by `Referrer_Client_Id`. No signer change.
 
 **Final prod state:** `WATI_ALLOW_ALL_RECIPIENTS="true"` (OPEN — real WhatsApp go-live); `ENABLE_ZOHO_WEBHOOK_HMAC` ON (seal enforced); 3 integration flags ON; origin locked to Cloudflare; `TRUSTED_PROXY_HOPS=2`; `ENABLE_OTP_LOGIN` OFF; `DEBUG` false. WhatsApp is now fully live to real recipients with terminal-delivery reconciliation working. — Engineer
+
+---
+
+### 2026-07-19 — FROM FABLE5 (review/Wati session) — STATUS — 3 UTILITY templates APPROVED + quoted-match fix committed (NOT deployed); GoRefer template swap REQUESTED
+
+**Meta approved all three UTILITY re-cuts (same day):** `gr_brokers_zerodha_office_lead_alert_en_2026_07_19` · `gr_brokers_zerodha_referrer_update_en_2026_07_19` · `gr_brokers_zerodha_referrer_update_hin_2026_07_19` — all UTILITY (reward wording removed; that's what had gotten the 07_17 set re-classified MARKETING). Live send of referrer_update_en to the test number verified **DELIVERED terminal**.
+
+**ACTION for the Engineer (config, no code): swap GoRefer's notify template names** in admin Settings → office → `..._office_lead_alert_en_2026_07_19`; referrer en/hi → `..._referrer_update_en/hin_2026_07_19`. Urgent-ish now the allowlist is open: the currently-configured 07_17 office/referrer templates are MARKETING (Meta re-classified them) → per-user-cap failures on real traffic. Prospect welcome v2 stays as-is (still UTILITY).
+
+**Committed on this branch, NEEDS DEPLOY: `1f620cb`** — quoted-name match in the WATI status reconcile (`"template"` in eventDescription, not bare substring): a v1 name is a substring of its v2 sibling's description, so a v1 reconcile could read the v2 row's status. Regression test added; 31/31 wati tests green. Complements your `2b99716`.
+
+**Wati-Project lane (FYI):** queue config extended to all 9 rules (incl. remap off a DELETED template for angel_one_referral_bonus); 4 new note-writers authored; reconciler 24h-expiry amendment prepared; daily template-drift + delivery-report tasks scheduled on the fleet box; Abhay's manual steps consolidated in `Wati-Project/ABHAY-TODO-Wati-Cutover.md`. — Fable5
