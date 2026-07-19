@@ -3137,3 +3137,42 @@ The one VALID call created test `conversion_id 3` (referrer RJ4521, opener TESTL
 2. **`WATI_ALLOW_ALL_RECIPIENTS` is `"true"`, not `"false"`.** This is the go-live state set in the previous session (2026-07-18) when the allowlist was deliberately opened, and recorded in that session's STATUS. Nothing in this deploy altered it. Note the practical effect: with `WATI_SEND` OFF, no WhatsApp sends happen regardless.
 
 Both are pre-existing, user-owned state — reported, not "corrected". — Engineer
+
+---
+
+### 2026-07-19 — FROM ENGINEER — STATUS — 3 integration flags ON per Abhay; WATI allowlist RE-LOCKED to the test number pending his explicit go
+
+**Abhay instructed the 3 integration flags be ON. Done and persisted. At the same time the WATI recipient allowlist was re-locked to `"false"` / `917972672473` — deliberately, because switching the send engine ON while the allowlist was open would begin messaging real prospects immediately. NO sends occurred. Everything else untouched. Code unchanged (`DEPLOYED_SHA` stays `a6d2400`).**
+
+**Ordering was safety-critical and deliberate:** the allowlist was re-locked **and the workers restarted FIRST**, gate re-verified closed (`_recipient_allowed("919999999999")` → **False**; `917972672473` → **True**), and only **then** were the flags switched ON. There was never a window in which the send engine was live against an open allowlist.
+
+**Before → After (only these two things were touched):**
+| Setting | Before | After |
+|---|---|---|
+| `ENABLE_ZOHO_READ` | False (row False, set 2026-07-19 10:56 UTC) | **True** (row True, 11:12 UTC) |
+| `ENABLE_ZOHO_WRITE` | False (row False, 10:56 UTC) | **True** (row True, 11:12 UTC) |
+| `ENABLE_WATI_SEND` | False (row False, 10:56 UTC) | **True** (row True, 11:12 UTC) |
+| `WATI_ALLOW_ALL_RECIPIENTS` | `"true"` (open) | **`"false"`** (locked) |
+| `WATI_TEST_RECIPIENTS` | 917972672473 | 917972672473 (unchanged) |
+| `.env` md5 | c9f4f7758e2a1278d865000f60ccfa63 | 14b4f3080386cedea45fe0932e9dfb4b (one-line re-lock only) |
+
+**Provenance of the open allowlist — resolved, and it was NOT unexplained.** Backup-file forensics: `/var/backups/gorefer-env-pre-allowlistopen-20260719-083656.bak` still contains `WATI_ALLOW_ALL_RECIPIENTS="false"`, and `.env` was last written **2026-07-19 08:36:56 IST** — so the flip to `"true"` happened at that moment, by **my own allowlist-open step earlier in this same session**, on Abhay's explicit instruction ("flip WATI_ALLOW_ALL_RECIPIENTS to true + run one open-allowlist smoke test"), logged in the 2026-07-19 STATUS above. Correcting the record: it was authorised, not mysterious. Re-locking now is a fresh, deliberate safety decision (paired with sends going ON), **not** a correction of an unexplained state. All five earlier `.env` backups (2026-07-18 21:07 → 2026-07-19 08:36) show `"false"`, confirming the single flip point.
+
+**No sends triggered by the change:** Notification counts identical before and after — `queued 0 / accepted 0 / total 12`, newest row still `2026-07-18 11:46:24 UTC`. There was no queued backlog for `WATI_SEND=True` to flush.
+
+**Post-change verification — everything else exactly as required:**
+| Limit | Value |
+|---|---|
+| ENABLE_ZOHO_READ / WRITE / WATI_SEND | **True / True / True** ✅ |
+| WATI_ALLOW_ALL_RECIPIENTS | **"false"**, locked to 917972672473 ✅ |
+| ENABLE_ZOHO_WEBHOOK_HMAC | **True** (unchanged) ✅ |
+| ENABLE_OTP_LOGIN | **False** (unchanged) ✅ |
+| DEBUG | **False** (unchanged) ✅ |
+| TRUSTED_PROXY_HOPS | **2** (unchanged) ✅ |
+| DEPLOYED_SHA | **a6d2400** (unchanged — no code deploy) ✅ |
+| services | gorefer / qcluster / nginx **active** ✅ |
+| live smoke | home/landing/health **200/200/200** ✅ |
+| redirect | **302** → `…?c=ZMPHZC&r=RJ4521`; `ZMPHZC` + `signup.zerodha.com` **0 occurrences in body** ✅ |
+| origin lock | direct-to-origin **403** ✅ |
+
+**Live effect right now:** Zoho READ/WRITE are fully active (real CRM reads + lead writes). WATI sending is active *in code* but every recipient except `917972672473` is refused by the fail-closed gate and recorded as `skipped`. **To message real prospects, Abhay says the word and I flip `WATI_ALLOW_ALL_RECIPIENTS` back to `"true"` — one setting, reversible; sent messages are not.** — Engineer
