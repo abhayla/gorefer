@@ -3081,3 +3081,16 @@ The one VALID call created test `conversion_id 3` (referrer RJ4521, opener TESTL
 **Where the flag was created:** the `gorefer_webhook_secret` Variable is a Zoho CRM Variable; `ENABLE_ZOHO_WEBHOOK_HMAC` is a GoRefer feature flag (`gorefer/flags.py`), introduced in `a64640e` ("feat(DF-2): HMAC wax-seal + IP allowlist"), always default-OFF until this flip — not a Zoho setting, which is why Abhay couldn't find it in Zoho.
 
 **Final prod state:** `ENABLE_ZOHO_WEBHOOK_HMAC` **ON** (seal enforced); origin locked to Cloudflare (direct-origin 403); `TRUSTED_PROXY_HOPS=2`; 3 integration flags ON; `WATI_ALLOW_ALL_RECIPIENTS="false"` locked to `917972672473`; `ENABLE_OTP_LOGIN` OFF; `DEBUG` false. The Zoho→GoRefer conversion webhook is now cryptographically authenticated — a leaked static key can no longer fabricate a conversion. Trust chain complete. — Engineer
+
+---
+
+### 2026-07-19 — FROM ENGINEER — STATUS — WATI allowlist OPENED (go-live) + smoke test passed; fixed a live reconcile bug (templateName null → match eventDescription)
+
+**Abhay authorized opening WhatsApp to all recipients. Flipped `WATI_ALLOW_ALL_RECIPIENTS="true"`, restarted, and proved one open-allowlist smoke test end-to-end: a real approved template DELIVERED to the test number through the now-open gate. Along the way I found + fixed a real delivery-reconcile bug.** Deployed `2b99716`. All other hard limits unchanged.
+
+- **Allowlist opened:** `WATI_ALLOW_ALL_RECIPIENTS="true"` in prod `.env` (backed up). Verified the gate the way the app resolves it (`_recipient_allowed("919999999999")` → True): a NON-allowlisted number is now allowed. WhatsApp sends now reach real prospects (welcome) + the office alert, not just the test number.
+- **Smoke test:** sent the approved `gr_brokers_zerodha_prospect_welcome_en_2026_07_17_v2` to `917972672473` via the live adapter → **WhatsApp DELIVERED** (terminal, via getMessages — not HTTP 200).
+- **Live reconcile bug found + fixed:** the first status poll stuck at `accepted` even though the message DELIVERED. Root cause: WATI's getMessages returns `templateName = null` and names the template only inside `eventDescription` ('Broadcast message with using "gr_..._v2"'), so the M6 "exact templateName only" match never matched a real row and stranded delivered messages at `accepted`. Fixed `get_message_status` to match the full template name against `templateName` OR `eventDescription` (still specific — the full name is unique, no cross-message bleed). Added tests for the real WATI shape + an other-template negative case. After deploy, re-reconciled the same message → **`delivered`** ✅. This also un-breaks the scheduled `reconcile_pending_deliveries` sweep for real sends.
+- **opener account number:** confirmed with Abhay it's NOT needed on the signer — `ClientId` lives on the Zoho Contact, not the Lead; GoRefer keys the opener by `zoho_lead_id` and credits the referrer by `Referrer_Client_Id`. No signer change.
+
+**Final prod state:** `WATI_ALLOW_ALL_RECIPIENTS="true"` (OPEN — real WhatsApp go-live); `ENABLE_ZOHO_WEBHOOK_HMAC` ON (seal enforced); 3 integration flags ON; origin locked to Cloudflare; `TRUSTED_PROXY_HOPS=2`; `ENABLE_OTP_LOGIN` OFF; `DEBUG` false. WhatsApp is now fully live to real recipients with terminal-delivery reconciliation working. — Engineer
