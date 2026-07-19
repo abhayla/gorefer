@@ -234,18 +234,24 @@ class LiveWatiAdapter:
             return DeliveryResult(status=status.STATUS_ACCEPTED, meta_error_code=None, classification=None)
 
         items = (((payload.get("messages") or {}).get("items")) or [])
-        # EXACT template match only (Fable5 M6): two templates to one number close
-        # together (office alert + prospect welcome to a shared household number; a
-        # retry) each have their own row, and taking the first row whose templateName
-        # is empty/None could read the OTHER message's delivered/failed status onto
-        # this one. So we require templateName == template. If the template can't be
-        # positively identified in any row yet, we stay honest and return the
-        # non-terminal 'accepted' (a later reconcile pass tries again).
+        # POSITIVE, SPECIFIC template match (Fable5 M6, refined for WATI's real shape).
+        # Two templates to one number close together must not read each other's status,
+        # so we still require a positive identification of THIS template. But WATI's
+        # getMessages leaves `templateName` = null and instead names the template inside
+        # `eventDescription` (e.g. 'Broadcast message with using "gr_..._v2"'). Matching
+        # ONLY on templateName therefore never matched, stranding delivered messages at
+        # 'accepted'. We now match the FULL template name against templateName OR
+        # eventDescription — the full name is a unique string, so this stays specific
+        # (no cross-message bleed) while actually working against the live API.
         best = None
         for it in items:  # newest-first
             if it.get("eventType") != "broadcastMessage":
                 continue
-            if template and (it.get("templateName") or "") == template:
+            if not template:
+                continue
+            tname = (it.get("templateName") or "")
+            desc = (it.get("eventDescription") or "")
+            if tname == template or template in desc:
                 best = it
                 break
 
