@@ -4,7 +4,7 @@
 > every remaining task, grouped by phase, with the dependency chain that dictates the order.
 > **Owner:** Abhay / PIFS. **Created:** 2026-07-14. **Companion docs:**
 > [`Deferred-Features-Backlog.md`](./Deferred-Features-Backlog.md) (DF-* items),
-> [`../../Zoho-Project/send-queue/wati-send-queue-BUILD.md`](../../Zoho-Project/send-queue/wati-send-queue-BUILD.md) (queue build),
+> [`../../Zoho-Project/send-queue/zoho-pifs-sendqueue-build.md`](../../Zoho-Project/send-queue/zoho-pifs-sendqueue-build.md) (queue build),
 > [`../COORDINATION.md`](../COORDINATION.md) (DA⇆Engineer log). GoRefer app = Django M1–M8 (built + verified).
 >
 > **Status legend:** ✅ done · 🔧 built-not-live · ⏳ next · 🔒 gated (blocked by a dependency) · ⬜ later.

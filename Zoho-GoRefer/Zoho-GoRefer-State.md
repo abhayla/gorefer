@@ -66,7 +66,7 @@ Totals all-time: 12 notifications, 6 leads, 3 conversions.
 
 If live WhatsApp traffic is observed in the Wati console, it is almost certainly **Zoho's own
 `zoho_auto_*` workflow rules sending directly to Wati** — independent of GoRefer's flags, and the
-top open problem documented in `Zoho-Project/ZOHO-KNOWLEDGE.md`. GoRefer's topbar indicators
+top open problem documented in `Zoho-Project/zoho-pifs-crm-state.md`. GoRefer's topbar indicators
 (`Zoho: On/Off · WATI: On/Off`) are **flag-driven, not activity-driven** by design (Abhay,
 2026-07-18): green means "the switch is on", not "a message just went".
 

@@ -120,5 +120,5 @@ a role turned off is recorded `skipped` with a reason, never silently dropped.
 
 - Channel health, template approvals, nightly report: `C:\Abhay\5Wealths\Wati-Project\`
 - Templates GoRefer uses: [`Wati-GoRefer-Templates.md`](./Wati-GoRefer-Templates.md)
-- Zoho's own direct-to-Wati rules (NOT GoRefer): `C:\Abhay\5Wealths\Zoho-Project\ZOHO-KNOWLEDGE.md`
+- Zoho's own direct-to-Wati rules (NOT GoRefer): `C:\Abhay\5Wealths\Zoho-Project\zoho-pifs-crm-state.md`
 - Spec: `docs/integrations/08-Zoho-WATI-Integration.md` (Part A), Gap 12/13

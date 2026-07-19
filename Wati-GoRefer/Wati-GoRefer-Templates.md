@@ -96,5 +96,5 @@ operational record, deliberately not the immutable event log.
 
 - Send/verify mechanics: [`Wati-Integration-Contract.md`](./Wati-Integration-Contract.md)
 - Full account catalogue + approval history: `Wati-Project/docs/wati-templates.json`,
-  `Wati-Project/docs/wati-template-learnings.md`
+  `Wati-Project/docs/wati-shared-template-category-rules.md`
 - Delivery health (52.29% and the 131049 story): `Wati-Project/docs/`

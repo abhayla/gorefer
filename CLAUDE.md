@@ -120,6 +120,21 @@ The architecture supports these, but **do not implement** them in Sprint 1 — t
 
 ---
 
+## 6b. Integration contract docs — change code and doc TOGETHER (CI-enforced)
+
+GoRefer's side of each vendor boundary is documented next to the code, in a folder whose contents a GoRefer code change can invalidate:
+
+| If you change… | You must also update… |
+|---|---|
+| `apps/integrations/wati/**` | `Wati-GoRefer/**` — chiefly `Wati-Integration-Contract.md` (send shape, terminal-status rule, allowlist gate, reconcile matching) and `Wati-GoRefer-Templates.md` (role→template map) |
+| `apps/integrations/zoho/**` | `Zoho-GoRefer/**` — chiefly `Zoho-Integration-Contract.md` (webhook + HMAC seal, status→stage map, upsert, flag gating) |
+
+**This is enforced in CI** by `scripts/check_contract_docs.py` (a diff against the merge base). Adapter code changing with no matching doc change **fails the build**, with a message naming the doc to update.
+
+**Escape hatch:** for a change that genuinely cannot affect the external contract (a typo, a pure internal refactor), put **`[skip-contract-doc]`** in the commit message. Use it deliberately — it is recorded in history and reviewable. Reaching for it routinely means the gate is telling you something true.
+
+**Why:** a stale contract doc is worse than no doc — it sounds confident and the next person (or the next session) trusts it. The two live bugs behind the Wati reconcile matching both came from reality drifting away from what we believed. Filing rule: *vendor changed it, or it's reusable vendor know-how* → the platform folder (`Wati-Project` / `Zoho-Project`); *a GoRefer code change can invalidate it* → here, next to the code. **Adapter code itself does NOT move** — swappability comes from the adapter interface (LiveWatiAdapter / LogOnlyWatiAdapter already swap by config), not from folder location.
+
 ## 7. Definition of Done + expectations
 
 Reference `implementation/10-Claude-Code-Implementation-Guide.md` (§3 standards, §6 tests, §7 git, §8 migrations, §9 DoD, §10 demo mode). A mission is **done** only when all hold:

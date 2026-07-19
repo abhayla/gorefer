@@ -42,7 +42,7 @@ GoRefer is the **referral intelligence layer** that sits between WATI and Zerodh
 
 ### A2. WATI account facts (settled — do not re-ask)
 
-[Certain] (`wati-capabilities-audit.md`, `WATI-ZOHO-INTEGRATION-MAP.md` §1.)
+[Certain] (`wati-shared-capabilities-audit.md`, `WATI-ZOHO-INTEGRATION-MAP.md` §1.)
 
 | Field | Value |
 |---|---|
@@ -57,7 +57,7 @@ GoRefer is the **referral intelligence layer** that sits between WATI and Zerodh
 
 ### A3. ⚠️ THE CRITICAL COWORK REALITY — ~33% delivery failure (funnel leaks at step zero)
 
-[Certain] (`wati-message-failure-fix.md`, `wati-capabilities-audit.md`, `WATI-ZOHO-INTEGRATION-MAP.md` §1.)
+[Certain] (`wati-shared-delivery-failure-rca.md`, `wati-shared-capabilities-audit.md`, `WATI-ZOHO-INTEGRATION-MAP.md` §1.)
 
 **The current WATI campaign failure rate is ~33% over a rolling 30 days (5,402 attempts), spiking to ~60% in bad 7-day windows.** This is not a cosmetic problem — **it is the funnel leaking at step zero.** GoRefer can build the most elegant referral engine in the world, but if one in three campaign messages never arrives, one in three referral loops never even starts. **This MUST be fixed before or in parallel with GoRefer launch, not after.**
 
@@ -168,7 +168,7 @@ When a GoRefer-sourced lead ages without converting (e.g. approaching Zerodha's 
 
 ### B4. Zoho modules and the join keys
 
-[Certain] (`WATI-ZOHO-INTEGRATION-MAP.md` §2, `wati-message-failure-fix.md` §5a.) Zoho CRM Plus — tenant `passiveincomesolutions`, org id `60019670093`.
+[Certain] (`WATI-ZOHO-INTEGRATION-MAP.md` §2, `wati-shared-delivery-failure-rca.md` §5a.) Zoho CRM Plus — tenant `passiveincomesolutions`, org id `60019670093`.
 
 | Module (API name) | Approx size | Role for GoRefer |
 |---|---|---|
