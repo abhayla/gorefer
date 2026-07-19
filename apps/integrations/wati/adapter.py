@@ -251,7 +251,13 @@ class LiveWatiAdapter:
                 continue
             tname = (it.get("templateName") or "")
             desc = (it.get("eventDescription") or "")
-            if tname == template or template in desc:
+            # QUOTED match on the description: eventDescription names the template in
+            # double quotes ('… with using "<tmpl>" template …'). A bare substring test
+            # bleeds across versioned names — "…_2026_07_17" is a substring of a
+            # "…_2026_07_17_v2" row's description, so reconciling a v1 send could read
+            # the v2 message's status (our real template family has exactly this shape).
+            # The closing quote makes the match exact-name-only.
+            if tname == template or f'"{template}"' in desc:
                 best = it
                 break
 

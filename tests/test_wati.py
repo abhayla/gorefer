@@ -538,3 +538,29 @@ def test_no_stale_lead_nudge_function_exists():
     for mod in (notify, tasks):
         names = [n.lower() for n in dir(mod)]
         assert not any("nudge" in n or "stale" in n for n in names)
+
+
+def test_live_status_versioned_prefix_name_does_not_bleed(monkeypatch):
+    """A v1 template name is a SUBSTRING of its v2 sibling's eventDescription
+    ("…_2026_07_17" ⊂ "…_2026_07_17_v2") — the quoted-name match must not let a
+    v1 reconcile read the v2 row's status (found live, 2026-07-19). The v1 row
+    further down the list must be the one matched."""
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/1")
+    monkeypatch.setenv("WATI_API_TOKEN", "tok")
+    v1 = "gr_brokers_zerodha_prospect_welcome_en_2026_07_17"
+    v2 = v1 + "_v2"
+    body = json.dumps({"messages": {"items": [
+        # newest first: the v2 send FAILED...
+        {"eventType": "broadcastMessage", "templateName": None,
+         "eventDescription": f'Broadcast message with using "{v2}" template',
+         "statusString": "FAILED", "failedDetail": "131049"},
+        # ...the older v1 send was DELIVERED.
+        {"eventType": "broadcastMessage", "templateName": None,
+         "eventDescription": f'Broadcast message with using "{v1}" template',
+         "statusString": "DELIVERED"},
+    ]}})
+    adapter = LiveWatiAdapter(transport=lambda *a: (200, body))
+    d = adapter.get_message_status(
+        provider_message_id="", recipient_mobile="917972672473", template=v1,
+    )
+    assert d.status == st.STATUS_DELIVERED  # v1 must match ITS row, not the v2 failure
