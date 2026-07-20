@@ -1,11 +1,18 @@
 # 13 — Partner Hierarchy & Vendor Independence (Target Architecture)
 
-> **Status: VISION / CONSOLIDATION — not locked.** Captured from Abhay (owner) verbally on
-> **2026-07-19**, consolidating the 2026-07-09 discussion-draft diagram
-> (`gorefer-layered-architecture-diagram.html`, same folder) and S2-03 §"Category→Partner→Sub-broker".
-> Nothing here is scheduled; the Sprint-1 build is untouched. The Design Authority must ratify
-> the OPEN decisions in §6 into ADRs before any of this is built. Engineer-authored as a faithful
-> record of the owner's stated architecture — flagged in `COORDINATION.md` (2026-07-19).
+> **Status: RATIFIED AS MODEL-ONLY (DA, 2026-07-20) — still NOT scheduled.** Every decision in this
+> doc is now carried by a locked ADR: **ADR-036…041** in
+> [`02-Architecture-Decisions-ADR.md`](./02-Architecture-Decisions-ADR.md), with amendment
+> annotations appended under **ADR-014** and **ADR-025**. See **§9** for the item→ADR map.
+> Ratified means *decided and recorded*, **not** *scheduled to build*: per §5 this remains model-only,
+> the Sprint-1 build is untouched, and nothing here is constructed until the multi-AP mission opens —
+> at which point these ADRs bind it.
+>
+> *Provenance:* captured from Abhay (owner) verbally on **2026-07-19**, consolidating the 2026-07-09
+> discussion-draft diagram (`gorefer-layered-architecture-diagram.html`, same folder) and
+> S2-03 §"Category→Partner→Sub-broker"; engineer-authored as a faithful record of the owner's stated
+> architecture — flagged in `COORDINATION.md` (2026-07-19). All §6 OPEN decisions and §7 gaps were
+> owner-dispositioned 2026-07-19 and are now ADR-carried; **nothing in this doc is open.**
 
 ---
 
@@ -102,9 +109,17 @@ contract doc — but it is **not a per-AP choice**.
 | Port (role) | Binding | Decision |
 |---|---|---|
 | **CRM of record** | **One shared CRM for the whole platform — Zoho today.** | **Per-AP CRM option DROPPED** (owner, 2026-07-19, supersedes the earlier same-day capture). Every new AP onboards into the platform CRM. (A Google Sheet is not a CRM in any case — same-day decision.) |
-| **WhatsApp BSP** | **One BSP (WATI today); the shared business number is the standard posture "as of now".** | Own-number remains an *optional* path (earlier same-day decision, not revoked): an AP who insists on their own number owns getting their template set approved on that WABA; GoRefer tracks per-number approval and gates sends on it. |
+| **WhatsApp BSP** | **One BSP (WATI today); ~~the shared business number is the standard posture "as of now"~~ → SUPERSEDED by §7 G-1: each AP gets their OWN number, all under the platform's WABA.** | **Per-AP own number is the standard posture** (§7 G-1, owner 2026-07-19; ratified as ADR-040). Templates approve once at WABA level and serve every number; Meta's quality rating is per number, so one AP's misbehaviour throttles only that AP. The **AP-owned-WABA** path remains a separate *optional* branch: an AP who insists on their own WABA/branding owns getting their template set approved on it; GoRefer tracks per-number approval and gates sends on it. |
 | **Email** | (future port) | Per-AP formats/templates are plain config-cascade keys at tenant tier — no new machinery. |
 | **Partner program** | `ReferralProgram` row per partner | Already config — add `partner_group`. |
+
+> **SUPERSESSION NOTE (DA, 2026-07-20 — ruling 3 of the ratification pass).** This section was
+> written before the §7 dispositions and originally recorded *"the shared business number is the
+> standard posture"*. **§7 G-1 supersedes that**: the messaging topology is **one number per AP,
+> all under the platform's WABA**. The BSP-level decision in this section is otherwise unchanged
+> (one platform BSP, not a per-AP choice). The table row above has been corrected so this doc no
+> longer contradicts itself; the authoritative statement of the topology is **§7 G-1**, ratified as
+> **ADR-040**.
 
 **Future-proofing requirement (owner, 2026-07-19 — same session, clarifying the above):**
 platform-standard is today's *posture*, not a structural commitment. The architecture must keep
@@ -145,7 +160,7 @@ already enforced in Sprint 1, and any replacement adapter must honor them):
 | Partner + program | `Partner`, `ReferralProgram` models (provider-agnostic) | No `PartnerGroup`/category model; no regulator/rule tables |
 | Config cascade | 3-tier `resolve()` + compliance-locked keys | Missing group + partner tiers; no tighten-only compliance resolver |
 | Vendor binding | Adapters are process-global, chosen by flag | **None — platform-standard stack keeps this exactly as built** (owner, 2026-07-19). No per-tenant adapter registry, no per-tenant CRM credentials needed. |
-| Per-AP WhatsApp identity | One WABA (`WATI_BUSINESS_NUMBER`), one template set | Only for the *optional* own-number path: per-number template-approval tracking + send gating (naming convention `gr_<group>_<partner>_…` already anticipates it) |
+| Per-AP WhatsApp identity | One WABA (`WATI_BUSINESS_NUMBER`), one number, one template set | **Per §7 G-1 / ADR-040:** one number **per AP**, all under the platform's WABA — needs per-AP number registration + routing of replies to the owning AP. Templates still approve **once at WABA level**, so no per-number approval tracking is needed here; that is required **only** for the *optional* AP-owned-WABA path (naming convention `gr_<group>_<partner>_…` already anticipates it) |
 | Per-AP timings/formats | — | Plain config-cascade keys at tenant tier (no new machinery) |
 
 ## 5. Explicitly NOT being built now
@@ -156,7 +171,18 @@ ratified) happens later, on its own branch, after the current sprint is producti
 speculatively built. The cheap, non-speculative step available *now* is keeping new schema
 provider-agnostic (already policy) — everything else waits for partner #2 / AP #2 to be real.
 
-## 6. OPEN decisions for the Design Authority (must become ADRs before build)
+## 6. ~~OPEN~~ RATIFIED decisions (kept verbatim as the record of what was open)
+
+> **DA note (2026-07-20):** nothing in this section is open any more — all of it is owner-decided
+> and now ADR-carried (see **§9**). The wording below is left **as originally written** so the
+> record of what was asked is intact. Two phrasings here predate the §7 dispositions and are
+> superseded: **D-13-3's** "for an AP who opts out of the shared number" should be read as *"for an
+> AP who takes the optional **AP-owned-WABA** path"* (under G-1/ADR-040 every AP already has their
+> own number, under the platform's WABA — so there is no shared number to opt out of, and
+> per-number template-approval tracking applies only to that optional branch); and **D-13-2's**
+> "tighten-only merge semantics (union of restrictions), and its resolver being *separate*" was
+> **decided differently** — §7 settles it as **one resolver with per-key `locked_at_tier`**, where
+> tighten-only is a hard stop at the locked tier, **not** a union merge (ADR-037).
 
 - **D-13-1 Taxonomy schema:** `PartnerGroup` model + `Partner.partner_group` FK; where regulator
   rules live (rows vs. code vs. locked config keys).
@@ -246,6 +272,47 @@ the (tenant, mobile) upsert-key change as part of the first multi-AP migration (
 - **O-5 Ops maturity as a platform obligation.** Before APs depend on the platform: verified
   nightly Postgres backups, a TESTED restore, and a stated recovery expectation (RPO/RTO) in the
   AP agreement. One VPS serving 50 APs' businesses is a promise, not just a server.
+
+## 9. DA ratification (2026-07-20)
+
+Every decision, gap and open requirement in this doc is now carried by a locked ADR in
+[`02-Architecture-Decisions-ADR.md`](./02-Architecture-Decisions-ADR.md). All six new ADRs carry
+**Status: Locked (2026-07-20, DA ratification of doc 13)** and are **model-only — not scheduled;
+they bind the multi-AP mission when it starts** (per §5).
+
+| Item (this doc) | Now carried by | Note |
+|---|---|---|
+| **D-13-1** Taxonomy schema (`PartnerGroup` + FK; where regulator rules live) | **ADR-036** | Five-level tree; rules-as-data at the group tier |
+| **NSE isolation mandate** (§1) | **ADR-036** | The reason tenant = AP |
+| **D-13-6** Multi-login UX for two broker-APs | **ADR-036** | No cross-view, no combined dashboard — stated requirement |
+| **O-1** AP onboarding verification (reg. no. + partner code) | **ADR-036** | Precondition of activation |
+| **D-13-2** Cascade extension → **one cascade + per-key `locked_at_tier`** (§7) | **ADR-037** | Tighten-only = a hard stop at the locked tier, not a merge |
+| **§2** Enforcement mode: ADVISORY for AP-authored content | **ADR-038** | + 4-part popup, immutable audit record |
+| **§2** Scope boundary (platform surfaces / behaviours / DPDP stay hard) | **ADR-038** (DA Ruling 2) | Confirmed **as drawn** |
+| *(new)* Render boundary — injected block hard, AP claims advisory | **ADR-038** (DA Ruling 1) | Resolves an ADR-014 ambiguity |
+| **O-3** Rule-library ownership + review cadence + source circular ref | **ADR-038** | Owner: Abhay/DA until delegated |
+| **O-4** Platform–AP agreement mirrors the popup | **ADR-038** | Legal task, tracked |
+| **§2** ⚠ ADR reconciliation needed | **ADR-014 + ADR-025 amendments** | Appended as `**AMENDED 2026-07-20 (ADR-038):**` blocks; locked text untouched |
+| **D-13-5** One shared platform CRM (per-AP CRM **dropped**) | **ADR-039** | |
+| **D-13-3** Own-number path (narrowed — CRM half gone) | **ADR-039** + **ADR-040** | Per-number approval tracking applies only to the optional AP-owned-WABA path |
+| **D-13-4** Credential custody (narrowed) | **ADR-039** (DA Ruling 4) | **Narrowed further:** per-AP WABA creds arise ONLY in the AP-owned-WABA path |
+| **D-13-7** Rename vendor-named ports to role names | **ADR-039** | At refactor time; naming-only coupling today |
+| **§3** Portability: new CRM adapter; BSP swap preserving the WABA | **ADR-039** | Incl. the corollary that BSP-native extras must never become load-bearing |
+| **§3** Five role-level invariants | **ADR-039** | Any replacement adapter must honor them |
+| **G-1** Per-AP own number under the platform WABA | **ADR-040** | **Supersedes** §3's "shared number" posture (corrected inline, DA Ruling 3) |
+| **G-3** Inbound conversation ownership | **ADR-040** | **Dissolved** by G-1 — replies land on the owning AP's number |
+| **G-4** Opt-out scope: per-AP + explicit platform kill-switch | **ADR-040** | Stop-confirmation must explain the distinction |
+| **G-6** Metering half — per-AP counters from day one | **ADR-040** | Counting only; *invoicing can be retroactive, counting cannot* |
+| **G-6** Approval half | **ADR-038** | Superseded by advisory mode — no blocking approval workflow |
+| **O-2** AP lifecycle active → suspended → exited | **ADR-040** | No number recycling; suspended = links resolve, sending stops |
+| **§8 LOCKED CORRECTION** — partner code belongs to the (AP, partner) pair | **ADR-041** | Template stays partner-level; code moves to the AP–partner link |
+| **G-2** Upsert key `(tenant, mobile)` | **ADR-041** | FIRST migration of any multi-AP mission |
+| **G-5** Off-platform referrer → holding tenant, admin-assigned | **ADR-041** | One `client_id` → one tenant per partner |
+| **O-5** Ops maturity (backups, tested restore, RPO/RTO) | *not an ADR* | An **operational obligation**, not an architecture decision — no design choice to lock. Tracked as a platform prerequisite before APs depend on the platform. |
+
+**Corrections applied to this doc in the same pass:** §3's shared-number posture superseded by
+G-1 (table row + inline supersession note); §4's per-AP WhatsApp-identity gap row updated to match;
+the status banner flipped from *VISION / CONSOLIDATION — not locked* to *ratified as model-only*.
 
 ---
 
