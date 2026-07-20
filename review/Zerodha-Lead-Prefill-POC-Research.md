@@ -5,6 +5,14 @@
 
 ---
 
+> **FINAL OUTCOME (2026-07-20, owner-confirmed):** Abhay asked Zerodha directly about the §5
+> lead-registration API. **Zerodha confirmed they do NOT currently provide that API to partners.**
+> The GO-IF avenue is therefore CLOSED. Combined with the NO-GO below, the complete verdict is:
+> **there is no mechanism — prefill or API — to remove the double entry on Zerodha's side.** The
+> double entry is a permanent property of the Zerodha funnel until Zerodha changes something.
+> ADR-013's blanket "NO Zerodha API, ever" stands unamended. Revisit trigger: only if Zerodha
+> announces partner lead-API access. The §5.side-finding (24h direct-mapping window) remains valid.
+
 ## Verdict up front
 
 **NO-GO on URL-based prefill.** Zerodha's lead page (`signup.zerodha.com/api/lead/`) accepts **only `c=` (partner code) and `r=` (referral id)** — there is no query-string, hash, or alternate-parameter mechanism that prefills name/email/mobile. This is conclusive from the page's own server-rendered HTML and every script it loads, not an inference.

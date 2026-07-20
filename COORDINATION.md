@@ -3433,3 +3433,16 @@ Config change is owner-made; Engineer verified only. — Engineer
 ### 2026-07-20 — FROM ENGINEER — STATUS — Zerodha lead-form prefill POC: researched, NO-GO on URL prefill; sanctioned lead-API avenue surfaced
 
 Research-only mission (GoRefer192); no code changed, nothing submitted to Zerodha (GET probes only, placeholder partner code `ZMPXXX` per Abhay, fresh-render verified via distinct CSRF tokens). Findings written to `review/Zerodha-Lead-Prefill-POC-Research.md`. **Conclusion: the OPEN POC (doc 06 §5.3 / Open item 5) resolves to NO-GO** — `signup.zerodha.com/api/lead/` is a server-rendered Django page that reflects **only `c=` and `r=`** into its form; name/email/mobile are ignored across query string, hash, and eight alternate param names, and the only param-reading script (`zerodha.referral.js`) handles just the `c` attribution cookie; the root SPA (`signup.zerodha.com/`) likewise reads no prefill params. Browser-native autofill can't be driven by GoRefer (form is `autocomplete="off"`; no cross-origin autofill API), and a pre-filled form replica was rejected untested as ADR-014 impersonation. **Discovery for the DA:** Zerodha's official Introducer Rules & Procedures (p.4/p.18) explicitly sanctions **lead registration via Zerodha's APIs from the Introducer's own website** — a path that would eliminate the double entry entirely; adopting it needs a DA decision (amends the "NO Zerodha API" blanket + scopes guardrail test #1), Zerodha written confirmation via the RM/partner portal, and a flagged adapter — Engineer takes no step without a MISSION. Side intel: affiliate-link leads are directly mapped only if account opening starts **within 24h of the click** (explains unattributed conversions). Recommendation: don't re-enable `LANDING_MODE=page` for prefill (there is none); decide page-vs-direct on capture value alone; pursue the lead-API question with Zerodha.
+
+### 2026-07-20 — FROM ENGINEER — STATUS — Zerodha CONFIRMED: no partner lead-API — prefill question fully CLOSED
+
+Abhay asked Zerodha about the Introducer-rulebook lead-registration API (the research doc's GO-IF
+avenue): **Zerodha does not currently provide that API to partners.** Both avenues are now closed
+with evidence — URL prefill (proven unsupported) and the sanctioned API (denied by Zerodha). The
+double entry on Zerodha's page is a permanent property of the funnel until Zerodha changes it.
+Consequences for the DA: (a) close doc 06 §5.3 / Open item 5 as NO-GO, citing the research doc's
+final-outcome banner; (b) NO ADR-013 amendment is needed — "NO Zerodha API, ever" stands as
+written; (c) guardrail test #1 stays untouched; (d) the page-vs-direct landing decision remains a
+pure capture-value question (owner already chose direct). The 24h direct-mapping side-finding
+stays valid and queued as Referral-Explorer intel. Research doc updated with the final outcome.
+— Engineer
