@@ -3350,3 +3350,43 @@ coordinated flip needed if/while ENABLE_ZOHO_WEBHOOK_HMAC is ON. Engineer will n
    + restart (one minute). Flags remain user-owned; Engineer will not re-lock unbidden.
 Remaining from the "what's next" queue: DA ratification relay (prompt handed to Abhay) and the
 HMAC secret rotation (steps handed to Abhay; execution on his go). — Engineer
+
+### 2026-07-20 — FROM ENGINEER — STATUS — DA ratification pass: doc 13 ratified as ADR-036..041 (docs only)
+
+Commit `3f59f8c`. Documentation only: no code, no config, no flags, no sends. 475 passed,
+ruff clean, contract-doc gate 0 violations (no `apps/integrations/**` touched).
+
+**Six new ADRs**, all *Status: Locked (2026-07-20, DA ratification of doc 13)* and all explicitly
+**model-only — not scheduled; they bind the multi-AP mission when it starts** (doc 13 section 5):
+
+- **ADR-036** five-level hierarchy, **tenant = AP** (D-13-1 + NSE isolation + D-13-6 + O-1)
+- **ADR-037** dual cascade, **one resolver + per-key `locked_at_tier`** (D-13-2 as decided)
+- **ADR-038** **ADVISORY** enforcement for AP-authored content + acknowledged, audited bypass
+  (4-part popup, immutable record, O-3, O-4)
+- **ADR-039** platform-standard vendor stack, role-ports, portability invariants
+  (D-13-5 per-AP CRM dropped; D-13-3/4 narrowed; D-13-7)
+- **ADR-040** per-AP number under the platform WABA, opt-out scope, metering
+  (G-1, G-3 dissolved, G-4, G-6 metering half, O-2)
+- **ADR-041** partner code belongs to the **(AP, partner)** pair; upsert key `(tenant, mobile)`
+  (section-8 LOCKED CORRECTION, G-2, G-5)
+
+**Two amendments** — locked text NOT rewritten; an `**AMENDED 2026-07-20 (ADR-038):**` block is
+appended under each: **ADR-014** (hard gate stands for platform-rendered surfaces + generated
+assets; AP-authored content becomes advisory) and **ADR-025** (same softening, plus the ruling
+that its premise generalizes — a public share carrying *the AP own* partner code is *that AP*
+advertisement, so the wording is no longer PIFS/ZMPHZC-specific).
+
+**Four DA rulings** written in explicitly: (1) the render boundary — injected disclosure block is
+HARD and never bypassable, AP claims within the same artifact are ADVISORY; (2) doc 13 section 2
+scope boundary confirmed as drawn, DPDP opt-out can never be acknowledged away; (3) doc 13
+**internal contradiction fixed** — section 3 said shared business number was the standard posture
+while section 7 G-1 supersedes it (table row corrected + inline supersession note; section 4 gap
+row updated; section 6 stale phrasings annotated, kept verbatim); (4) D-13-4 narrows further —
+per-AP WABA credentials arise ONLY in the optional AP-owned-WABA path.
+
+Doc 13 gains **section 9 (DA ratification)** mapping every item to its ADR, and its banner flips
+to *ratified as model-only*. **O-5** (ops maturity: backups, tested restore, RPO/RTO) deliberately
+did NOT become an ADR — it is an operational obligation, not an architecture decision.
+
+**Nothing is scheduled by this pass.** Sprint 1 behaviour is unchanged.
+
