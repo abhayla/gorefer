@@ -40,6 +40,64 @@ When docs 11 and 12 both speak to an edge case, **doc 12 (resolved gaps) wins**.
 
 ---
 
+## 2b. Development commands
+
+Python 3.11+ in `.venv`; **PostgreSQL is the only engine** (settings fail-fast on anything else — no SQLite path exists). Env comes from the gitignored `.env` (template: `.env.example`); DB setup details are in `README.md` §"Running locally".
+
+```bash
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py seed_program        # idempotent: tenant + central config + partner + program
+python manage.py seed_demo           # optional demo journeys/events (conversions go via the Zoho ingest path)
+python manage.py bootstrap_admin     # from ADMIN_EMAIL + ADMIN_PASSWORD_HASH env (idempotent)
+python manage.py runserver
+
+# Tests — need Postgres; the runner creates/drops TEST_DB_NAME (default gorefer_test)
+python -m pytest -q                                    # serial (~6 min)
+python -m pytest -q -n 4                               # parallel (~2 min); xdist gives each worker its own DB
+python -m pytest tests/test_redirect.py -q             # one file
+python -m pytest tests/test_redirect.py::test_name -q  # one test
+# NEVER run two pytest invocations concurrently on the same TEST_DB_NAME — the
+# "database already exists / is being accessed" failure is a collision, not a
+# regression. Concurrent run: TEST_DB_NAME=gorefer_test_mine python -m pytest -q
+# A killed run can strand the test DB — drop it or pass --create-db next time.
+
+# Lint + static gates (same set CI runs)
+ruff check .
+python manage.py check
+python manage.py makemigrations --check --dry-run      # schema drift fails CI
+
+# Tailwind — compiled and COMMITTED (no CDN runtime). CI fails if app.css is stale.
+npm run build:css      # rerun after ANY template/CSS change; commit static/css/app.css
+npm run watch:css
+
+# Operator / background (prod worker only when Q_ASYNC=true; default runs tasks inline)
+python manage.py golive_smoke --referrer EKU497 --mobile 9876543210 [--json]   # full capture loop, honors live flags
+python manage.py set_landing_mode page|direct
+python manage.py recompute_rollups
+python manage.py setup_schedules && python manage.py qcluster
+python manage.py createcachetable    # once per deploy — DB cache backs the rate limiter
+```
+
+CI (`.github/workflows/ci.yml`, Postgres 16 service): contract-doc drift gate → Tailwind freshness → ruff → `manage.py check` → migration drift → migrate → pytest.
+
+## 2c. Code map
+
+- `gorefer/` — project package. `settings.py` (loads `.env` **before** importing flags; Postgres fail-fast; canonical byte-exact compliance strings `AP_DISCLOSURE_BLOCK`/`MARKET_RISK_WARNING`). `flags.py` is the **single source of every feature flag**, frozen from env at import — code imports `flags` and reads attributes, never `os.environ`, for a flag. `urls.py`: home, `/open`, `/d/{slug}`, `/r/[{channel}/]{client_id}[/continue]`, `/api/` mount, flag-gated `/admin-panel/` + `/django-admin/`. `context_processors.py` auto-injects the compliance block into every page.
+- `api/` — Django Ninja routers, aggregated by `api/router.py` and mounted at `/api/` (click, leads, share, analytics, wati + zoho webhooks, health).
+- `apps/tenants/` — Tenant/Domain registry + `TenantResolutionMiddleware`; single-schema isolation via tenant-scoped managers + composite unique constraints.
+- `apps/config/` — ADR-022 config cascade: `cascade.resolve(key)` walks user → tenant-global → central → default; **compliance-locked keys resolve from central only** (lower tiers can't weaken a claim). Also integration-flag persistence and the Preferences screen backend.
+- `apps/referrals/` — core domain: `redirect_service.py` (lazy referrer/journey creation + 302), `lead_service.py` (save lead first, then redirect), `landing_mode.py`, `validators.py` (client_id format check), views, and the seed/smoke management commands.
+- `apps/events/` — immutable event stream (PII excluded by design), `bots.py` (preview/bot UA filter — a bot never creates a journey), `analytics.py` + `rollups.py` (dirty-day daily/monthly recompute).
+- `apps/integrations/` — the adapter boundary. `wati/` (adapter, `notify.py`, terminal-status polling, webhook, queue tasks) and `zoho/` (adapter, client, `ingest.py` — **the only code path that writes account status**, `statusmap.py`, `waxseal.py` HMAC, webhook, `read.py` enrichment). Live vs log-only adapters swap by flag, so demo mode works with everything off. **Any change here must update `Wati-GoRefer/` / `Zoho-GoRefer/` contract docs — CI-enforced (§6b).**
+- `apps/otp/` — pluggable OTP delivery port (behind `ENABLE_OTP_LOGIN`); codes stored hashed + peppered, never plaintext.
+- `apps/dashboard/` — M7 admin dashboard + M9 referral profile served at `/admin-panel/`.
+- `apps/common/` — `phone.py` (the one canonical phone normalization), `ratelimit.py` (DB-cache-backed so counters are shared across gunicorn workers), `netaddr.py` (trusted-proxy-hops X-Forwarded-For resolution for webhook IP allowlists).
+- `tests/` — single flat pytest-django suite (`pytest.ini` → `gorefer.settings`); the three guardrail tests live in `tests/test_guardrails.py`, third-party-origin ban in `tests/test_no_third_party_origin.py`.
+- `templates/` + `static/` — server-rendered pages; HTMX vendored at `static/js/htmx.min.js`, Inter self-hosted; **public pages load no third-party origin at all** (test-enforced).
+
+---
+
 ## 3. Your role
 
 You are the software **ENGINEER**, not the architect. Implement **exactly** what the spec says. **Never invent features, and never change the architecture.** Architectural decisions belong to the Design Authority. If you find an inconsistency, an OPEN decision, or a source conflict, **report it** (surface options + a recommendation) — do not guess and build on a silent pick. **Report via `COORDINATION.md`**: append a STATUS entry when you open a mission PR, and log any surfaced inconsistency/ambiguity there as a QUESTION (then pause on that point). The Design Authority answers there; Abhay relays between the two sessions.
