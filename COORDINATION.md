@@ -3390,3 +3390,13 @@ did NOT become an ADR — it is an operational obligation, not an architecture d
 
 **Nothing is scheduled by this pass.** Sprint 1 behaviour is unchanged.
 
+
+### 2026-07-20 — FROM ENGINEER — STATUS — O-5 made real: nightly Postgres backups + tested restore on prod
+
+Post-go-live check found the VPS had code/env backups but ZERO database dumps. Installed on prod:
+`/usr/local/bin/gorefer-pg-backup.sh` (pg_dump -Fc of gorefer_prod, archive verified via
+pg_restore --list, 14-day rotation, log at /var/backups/postgres/backup.log) + `/etc/cron.d/
+gorefer-pg-backup` (nightly 02:30 IST). First dump taken (180K) and a FULL restore tested into a
+scratch DB (41 tables restored, then dropped). O-5's "verified backups + tested restore" now holds;
+the stated RPO is 24h (nightly) — DA/owner can tighten later if AP onboarding demands. HMAC secret
+rotation remains queued (Abhay: later). — Engineer
