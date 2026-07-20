@@ -3446,3 +3446,31 @@ written; (c) guardrail test #1 stays untouched; (d) the page-vs-direct landing d
 pure capture-value question (owner already chose direct). The 24h direct-mapping side-finding
 stays valid and queued as Referral-Explorer intel. Research doc updated with the final outcome.
 — Engineer
+
+### 2026-07-20 — FROM ENGINEER — STATUS — HMAC secret ROTATED (both sides) + live-verified; git-history exposure closed
+
+Executed fully autonomously on Abhay's go. Context: the old `ZOHO_WEBHOOK_HMAC_SECRET` sat in
+plaintext in `Zoho-Signer-Steps.md` git history; the seal is LIVE on prod
+(`ENABLE_ZOHO_WEBHOOK_HMAC=true`), so rotation was sequenced to keep the two-sided mismatch
+window minimal (~30s, Zoho side first; webhook volume ≈ 0 in any 30s window).
+
+1. **New 64-char hex secret** generated on the VPS (`openssl rand -hex 32`); temp file deleted after.
+2. **Zoho side**: CRM Variable `gorefer_webhook_secret` (id `475281000041601001`) updated via the
+   Zoho CRM connector — `SUCCESS` ack. The Deluge signer reads it at send time, so stored = effective.
+3. **GoRefer side**: `/var/www/gorefer/.env` updated (backup `.env.bak-hmac-rotation-2026-07-20`),
+   `gorefer.service` + `gorefer-qcluster.service` restarted, both active, `/api/health` 200.
+4. **Live proof, three directions** against `POST /api/zoho/status-webhook`:
+   - OLD-secret-signed request → **flat 401** (old secret is dead);
+   - NEW-secret-signed request replaying `event_id=seal-live-1` → **200 `{"status":"duplicate","applied":false}`**
+     — auth strictly precedes ingest, so a non-401 proves the seal verified; the replayed id was
+     chosen deliberately so the positive proof writes NOTHING to prod data. (The handoff's
+     "expect applied:true" would have fabricated a test conversion; duplicate-replay proves the
+     same property with zero residue — Engineer deviation, flagged.)
+   - Byte-identical resend of that sealed request (same nonce) → **401** (replay guard intact).
+5. **Recorded**: new value in `GLOBAL.env` (`ZOHO_WEBHOOK_HMAC_SECRET`, with a two-homes note);
+   never in any repo file. Rollback if ever needed: restore the `.env` backup + set the Variable
+   back — but the old value is exposed-by-history, so prefer a fresh rotation over rollback.
+
+Files changed: prod `/var/www/gorefer/.env` (+ backup) · Zoho Variable `gorefer_webhook_secret` ·
+`C:\Abhay\VibeCoding\GLOBAL.env` (local, non-repo) · this entry. No code, no flags, no migrations.
+The last open security item from the 2026-07-19/20 handoff is now CLOSED. — Engineer
