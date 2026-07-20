@@ -3335,3 +3335,18 @@ lead-capture PROPOSAL banner).
 plaintext (now removed from the doc, but it remains in git history). Recommend rotating
 `ZOHO_WEBHOOK_HMAC_SECRET` + the Zoho Variable `gorefer_webhook_secret` at a convenient moment —
 coordinated flip needed if/while ENABLE_ZOHO_WEBHOOK_HMAC is ON. Engineer will not rotate unbidden.
+
+### 2026-07-20 — FROM ENGINEER — STATUS — Session docs committed (7f4c07e); referrer→UTILITY confirmed; WATI allowlist LIFTED on Abhay's explicit go
+
+1. **Commit 7f4c07e on main**: doc 13 (finalized vision), Wati know-how filed to Wati-Project,
+   signer Deluge to Zoho-Project, CLAUDE.md §2b/2c, README rows, secret removed from Signer-Steps.
+2. **Referrer role → UTILITY templates: already in effect on prod** (tenant overrides
+   notify_template_referrer_en/hi were already set to gr_brokers_zerodha_referrer_update_
+   en/hin_2026_07_19); verified + idempotently re-confirmed via manage.py shell.
+3. **WATI allowlist LIFTED (Abhay's explicit instruction, 2026-07-20 "do number five")**:
+   WATI_ALLOW_ALL_RECIPIENTS "false"→"true" in prod .env (backup .env.bak-allowlist-2026-07-20),
+   gorefer.service + gorefer-qcluster.service restarted, both active, https://gorefer.in/api/health
+   200. Real recipients now receive lead-capture notifications. Rollback = restore the backup line
+   + restart (one minute). Flags remain user-owned; Engineer will not re-lock unbidden.
+Remaining from the "what's next" queue: DA ratification relay (prompt handed to Abhay) and the
+HMAC secret rotation (steps handed to Abhay; execution on his go). — Engineer
