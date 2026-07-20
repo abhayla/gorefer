@@ -3419,3 +3419,13 @@ Sequence executed with iterative fixes:
    (guards: allowlist/referrer-phone-unknown/dedup) · 2 failed (both = the pre-config era's
    nonexistent template names, 07-17, already fixed by config-driven names). Zero unexplained
    failures. Next week's health check compares against this.
+
+### 2026-07-20 — FROM ENGINEER — STATUS — Owner flipped LANDING_MODE to direct; verified live + compliant
+
+Abhay disabled "Show landing page" on Preferences (LANDING_MODE page→direct, ADR-032). Verified on
+prod: `GET /r/EKU497` → 302 straight to `https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=EKU497`
+(code injected server-side, click still logged), and the ADR-031 disclosure host `/d/pifs` → 200,
+so the §4.4 compliance coupling holds (the toggle enforces it). Noted implication: the landing
+capture form is bypassed on click-through — prospect leads now originate via the WhatsApp/assisted
+path (or Zoho-manual), not the form; prospect-welcome sends fire only for leads that ARE captured.
+Config change is owner-made; Engineer verified only. — Engineer
