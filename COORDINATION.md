@@ -3400,3 +3400,22 @@ gorefer-pg-backup` (nightly 02:30 IST). First dump taken (180K) and a FULL resto
 scratch DB (41 tables restored, then dropped). O-5's "verified backups + tested restore" now holds;
 the stated RPO is 24h (nightly) — DA/owner can tighten later if AP onboarding demands. HMAC secret
 rotation remains queued (Abhay: later). — Engineer
+
+### 2026-07-20 — FROM ENGINEER — STATUS — All 4 queue items done; flags restored ON (Abhay); pipeline live-proven TODAY
+
+Sequence executed with iterative fixes:
+1. **ROADMAP-STATUS.md committed** (082d9dc) and **main pushed to origin** (through fabe3af→082d9dc).
+2. **Root cause of the log-only smoke:** all 3 integration flags were OFF via persisted ConfigGlobal
+   overrides — contradicting the 07-18 "ON per Abhay" record (unknown re-lock). Surfaced to Abhay;
+   **he selected "flip all 3 ON"** — ENABLE_ZOHO_WRITE / ENABLE_ZOHO_READ / ENABLE_WATI_SEND now
+   True (override tier). With yesterday's allowlist lift, the pipeline is now FULLY OPEN.
+3. **Live proof, today:** golive_smoke re-run showed dedup guards working (existing lead → no
+   re-send, no duplicate Zoho upsert — correct behaviour, not a bug). Direct proofs then run:
+   **Zoho live auth+read OK** (real lead visible; the old test-lead ids return 204 — cleaned up in
+   CRM, harmless); **WATI live send accepted AND terminal-status DELIVERED** (prospect_welcome_v2
+   to the test number, verified via getMessages, not the ack). Two intermediate 400s were Engineer
+   API-usage errors (params shape), fixed iteratively — no system defect found.
+4. **Delivery baseline (day-1 fully-open), Notification ledger all-time:** 5 delivered · 5 skipped
+   (guards: allowlist/referrer-phone-unknown/dedup) · 2 failed (both = the pre-config era's
+   nonexistent template names, 07-17, already fixed by config-driven names). Zero unexplained
+   failures. Next week's health check compares against this.
