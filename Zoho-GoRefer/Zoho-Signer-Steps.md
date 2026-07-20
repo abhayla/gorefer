@@ -25,10 +25,8 @@ Total time: ~10 minutes. Steps 1–5 are all inside Zoho CRM's Setup.
    - **Variable Group:** `General`
    - **Type:** `Text`
    - **Value:** *(leave blank — I'll set it for you via the API once it exists)*
-     **OR**, if you prefer to paste it yourself, use exactly:
-     ```
-     opHRFwCNpTa1TYiPMzYOqJDo416qmW1WbZW1_yt2e1O-feEqpdkA-_-r0LtysFey
-     ```
+     **OR**, if you prefer to paste it yourself, ask the Engineer for the value
+     (`ZOHO_WEBHOOK_HMAC_SECRET` — a secret; it is deliberately NOT written in this doc).
 4. **Save.**
 
 ➡️ **After saving, just tell me "the variable exists"** and I'll set its value via the Zoho API
@@ -49,78 +47,15 @@ no need to tell me.
 4. In the argument mapping (the "Arguments" / "Edit Arguments" panel), add ONE argument:
    - **Name:** `leadId`  → **Type:** `String`  → map it to the workflow's record id
      (in a workflow-triggered function this is usually offered as `${Leads.Lead Id}` — pick that).
-5. Paste **the entire code block below** into the function body, replacing anything there.
+5. Paste **the entire contents of the canonical function file** into the function body,
+   replacing anything there:
+
+   > **`C:\Abhay\5Wealths\Zoho-Project\deluge\gorefer_webhook_signer.dg`**
+   > (moved there 2026-07-19 — Deluge code is filed by its owning system, with its 17 siblings.
+   > The signing contract in its header must stay byte-compatible with GoRefer's verifier
+   > `apps/integrations/zoho/waxseal.py`; if the seal changes, the `.dg` and this doc change too.)
+
 6. Click **Save**, then **Save** again on the function.
-
-```javascript
-// GoRefer Webhook Signer — signs the account-status payload with HMAC-SHA256 so
-// GoRefer can prove the request came from Zoho and was not tampered with in flight.
-// The shared secret is read from the CRM Variable `gorefer_webhook_secret` — it is
-// NEVER written in this code. Attach this to the workflow that fires on account-open.
-//
-// Contract (must match GoRefer's verifier exactly):
-//   dataToSign = timestamp + "." + nonce + "." + <exact JSON body string>
-//   signature  = hmacsha256(secret, dataToSign, "hex")   // lowercase hex
-//   headers:  X-Zoho-Signature, X-Zoho-Timestamp, X-Zoho-Nonce
-//   The SAME body string that was signed is POSTed as the raw body.
-
-// 1) Load the lead whose status changed.
-lead = zoho.crm.getRecordById("Leads", leadId.toLong());
-
-// 2) Read the shared secret from the CRM Variable (not hardcoded).
-secret = zoho.crm.getOrgVariable("gorefer_webhook_secret");
-
-// 3) Build the payload. Only send fields GoRefer ingests; keep it a FLAT object of
-//    strings. Adjust the right-hand field API names if yours differ (see the notes
-//    under the code). Empty values are fine — send "" rather than null.
-payloadMap = Map();
-payloadMap.put("event_id", lead.get("id").toString());
-payloadMap.put("zoho_lead_id", lead.get("id").toString());
-payloadMap.put("opener_name", ifnull(lead.get("Full_Name"), ""));
-payloadMap.put("referrer_client_id", ifnull(lead.get("Referrer_Client_Id"), ""));
-payloadMap.put("status", ifnull(lead.get("Lead_Status"), "account opened"));
-payloadMap.put("account_opened_at", ifnull(lead.get("Converted_Date_Time"), ""));
-// Opener's Zerodha account number: no dedicated field on your Leads layout yet, so
-// this stays blank until one exists (add a text field + one more put() line later).
-payloadMap.put("opener_zerodha_account_id", "");
-
-// 4) Serialize ONCE to a string. This exact string is what we sign AND what we send —
-//    they must be byte-identical, so we never re-serialize the map again below.
-bodyString = payloadMap.toString();
-
-// 5) Timestamp = epoch MILLISECONDS as a string. Deluge has NO time.now().toEpoch();
-//    the valid path is: current time -> text -> .unixEpoch("GMT") (returns ms).
-//    GoRefer's verifier accepts a millisecond epoch (it normalizes ms/seconds).
-nowText = zoho.currenttime.toString("dd-MMM-yyyy HH:mm:ss");
-epochMillis = nowText.unixEpoch("GMT");
-timestamp = epochMillis.toString();
-
-// 6) One-time nonce: an md5 over time+body+secret keeps it unique per send.
-nonce = zoho.encryption.md5(timestamp + bodyString + secret);
-
-// 7) Sign: HMAC-SHA256 over "timestamp.nonce.bodyString", lowercase HEX.
-dataToSign = timestamp + "." + nonce + "." + bodyString;
-signature = zoho.encryption.hmacsha256(secret, dataToSign, "hex");
-
-// 8) POST the SAME bodyString as the raw body, with the three headers.
-headerMap = Map();
-headerMap.put("Content-Type", "application/json");
-headerMap.put("X-Zoho-Signature", signature);
-headerMap.put("X-Zoho-Timestamp", timestamp);
-headerMap.put("X-Zoho-Nonce", nonce);
-
-response = invokeurl
-[
-	url : "https://gorefer.in/api/zoho/status-webhook"
-	type : POST
-	parameters : bodyString
-	headers : headerMap
-];
-
-// A workflow-attached function is VOID and must NOT return a value — just log it.
-// A healthy call logs a response containing applied:true.
-info response;
-```
 
 **Field mapping — already set to YOUR real Zoho Leads field names** (verified against your
 102-field Leads layout, so you should not need to change any of these):

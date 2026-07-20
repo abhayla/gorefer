@@ -3192,3 +3192,146 @@ Both are pre-existing, user-owned state — reported, not "corrected". — Engin
 **References fixed** in `review/Deferred-Features-Backlog.md` and `review/Zerodha-GoRefer-GoLive-Roadmap.md` (both link to the moved send-queue/send-map docs), plus 6 files in Wati-Project. **This COORDINATION log was deliberately NOT rewritten** — it is append-only history, and editing past STATUS entries to point at new paths would falsify the record. Historical entries above still reference `Wati-Project/deluge/…` and `Wati-Project/wati-send-queue-*.md`; **those artifacts now live under `Zoho-Project/`** (see `Wati-Project/MOVED-TO-ZOHO-PROJECT.md` for the full mapping).
 
 **New knowledge docs:** `Zoho-Project/ZOHO-KNOWLEDGE.md` (entry doc: CRM referral schema + key api_names incl. the `ClientId` vs `Client_Id` inconsistency, Send Queue architecture + midnight-fill timing, the Deluge/UI-only constraint + gotchas, the webhook signer, and **the `zoho_auto_*` rules that bypass the queue — ~137 sends/day ≈ 52% of volume, driving the 131049 cap failures — flagged as the top open problem**) and `Wati-Project/docs/wati-delivery-health.md` (52.29% vs >90% target, 131049 dominance, the stale `report-2026-07-19.json` baseline trap now parked in `out/stale/`, the nightly 9 PM task + its sandbox dependency). `docs/wati-template-learnings.md` updated with final approval outcomes + the cheap UTILITY swap still available for office/referrer. Index docs updated in all three projects. — Engineer
+
+### 2026-07-19 — FROM ENGINEER — STATUS + QUESTION — Partner-hierarchy vision documented as doc 13; DA ratification needed
+
+**What happened.** Abhay stated (verbally, in the Engineer session) the full target hierarchy:
+Regulator → Partner Group (brokers/insurance/loans) → Partner (Zerodha/AngelOne/…) → Authorized
+Partner (= tenant; own links, own numbers, **own CRM and own WhatsApp BSP per AP**, own
+templates/timings/formats), with rules cascading tighten-only from regulator downward and config
+resolving nearest-wins. He asked whether this was properly documented and, if not, to document it.
+
+**What I found.** Partially documented: `docs/architecture/gorefer-layered-architecture-diagram.html`
+(draft v1, 2026-07-09) has the taxonomy + the two-cascade model; S2-03 references it (via a
+`[[gorefer-architecture-layers]]` memory link that no longer resolves). NOT documented anywhere:
+per-AP vendor bindings (each AP brings their own CRM — Zoho/HubSpot/Sheets — and own BSP + WABA
+numbers), per-tenant credential custody, or the per-WABA template-approval consequence.
+
+**What I did (documentation only — zero code, zero schema).** Wrote
+`docs/architecture/13-Partner-Hierarchy-and-Vendor-Independence.md` as a consolidation clearly
+marked **VISION / not locked**, mapping each element to what Sprint-1 code already has vs. the gap,
+restating the role-level invariants (CRM-of-record truth, terminal-status, never-auto-submit), and
+listing OPEN decisions **D-13-1 … D-13-7** for DA ratification (taxonomy schema, 5-tier cascade +
+tighten-only resolver, per-tenant adapter registry, credential custody, minimum bar for a CRM
+adapter, NSE multi-login UX, role-naming of ports). Added the doc-map row in README.
+
+**QUESTION for DA:** please review doc 13 and either ratify the D-13-* items into ADRs (or amend/
+reject). Until then the Engineer treats all of §6 as OPEN and builds none of it. — Engineer
+
+### 2026-07-19 — FROM ENGINEER — STATUS — Owner clarifications folded into doc 13 (two D-13 items narrowed)
+
+Abhay clarified, same session: (1) **a Google Sheet is NOT acceptable as CRM of record** — proper
+CRMs only (narrows D-13-5; the DA still formalizes the adapter-certification checklist);
+(2) **per-AP WhatsApp is the AP's choice** — use the existing shared number with already-approved
+templates, or bring their own number and then their own template approvals are on them; GoRefer
+tracks approval per AP/number and gates sends on it (shapes D-13-3's messaging half). Doc 13
+updated in place (it is a vision record, not a locked ADR). — Engineer
+
+### 2026-07-19 — FROM ENGINEER — STATUS — Owner revision: platform-standard vendor stack (per-AP CRM choice DROPPED)
+
+Abhay revised the vendor-binding part of the hierarchy vision, same session, superseding the
+earlier same-day capture: **all APs use the platform's shared stack** — one CRM (Zoho) for
+everyone (no per-AP CRM option at all), and the shared WATI number as the standard posture "as
+of now" (the own-number option stands, as an optional path the AP pays for in approval effort).
+Doc 13 updated in place: §3 reframed as platform-standard stack, D-13-3/D-13-4 narrowed to the
+own-number path only, **D-13-5 RESOLVED** (single platform CRM). Net effect for the DA: the
+per-tenant adapter registry + per-tenant CRM credential custody are OFF the table; the remaining
+open surface is taxonomy (D-13-1), the two-cascade extension (D-13-2), the own-number tracking
+path (D-13-3/4), NSE multi-login UX (D-13-6), and port role-naming (D-13-7). — Engineer
+
+### 2026-07-19 — FROM ENGINEER — STATUS — Owner clarification: swap-must-stay-cheap is a permanent requirement
+
+Abhay clarified the platform-standard decision: single CRM/BSP is today's posture, NOT a
+structural commitment — adding a new CRM later must stay a one-adapter job, and swapping the
+WhatsApp BSP must stay cheap because template approvals live at the Meta/WABA level (same
+WABA + number → approved templates carry to a new provider; only the API surface changes).
+Doc 13 §3 updated with the requirement + two enforcement corollaries: (a) vendor vocabulary
+stays quarantined in the adapter package (already CI-gated), (b) **BSP-native extras (chatbots,
+CDP, campaign tooling) must never become load-bearing in GoRefer** — the dependency surface
+stays send-template + terminal status + webhook, per the contract docs. — Engineer
+
+### 2026-07-19 — FROM ENGINEER — QUESTION — Doc 13 §7: six gaps (G-1…G-6) + a cascade simplification for DA disposition
+
+On Abhay's request for a review of the hierarchy discussion, the Engineer surfaced six gaps —
+now in doc 13 §7: G-1 shared-WABA blast radius (per-AP send budgets/quality gating needed),
+G-2 Zoho upsert key must become (tenant, mobile) — FIRST migration of any multi-AP mission,
+G-3 inbound conversation ownership rule on the shared number, G-4 person-level opt-out registry
+across numbers, G-5 referrer→tenant resolution by link (off-platform referrers' home), G-6
+creative-approval queue + per-AP cost metering. Plus a simplification proposal for D-13-2: one
+cascade with per-key `locked_at_tier` (generalizing COMPLIANCE_LOCKED_KEYS to 5 tiers) instead
+of a second tighten-only rules engine. G-1…G-3 need DA answers before any second AP onboards;
+none block Sprint-1 work. — Engineer
+
+### 2026-07-19 — FROM ENGINEER — STATUS + QUESTION — Owner dispositioned ALL doc-13 gaps; advisory enforcement mode needs ADR-014/025 reconciliation
+
+Abhay reviewed options + recommendations per item and decided (doc 13 §2/§7 updated):
+1. **WA topology (supersedes same-day "shared number" posture): one number PER AP, all under the
+   platform WABA** — templates approved once serve all numbers; per-number quality isolation;
+   Wati per-number cost accepted; AP-owned WABA stays the optional path. G-1 and G-3 dissolve.
+2. **G-2: Zoho upsert key = (tenant, mobile)** — first migration of any multi-AP mission.
+3. **D-13-2: ONE cascade + per-key locked_at_tier** (COMPLIANCE_LOCKED_KEYS generalized to 5
+   tiers); no second rules engine.
+4. **G-4: per-AP opt-out + explicit platform-wide kill-switch escalation.**
+5. **G-5: unassigned holding tenant + auditable admin assignment; one client_id → one tenant
+   per partner.**
+6. **Enforcement mode (MAJOR): rules ADVISE, never bind, for AP-authored comms** — rule-check
+   verdict + AP's explicit recorded acknowledgment to bypass ("proper disclosure"); immutable
+   audit log. Engineer drew the scope boundary (platform-rendered surfaces, platform behaviours,
+   and DPDP opt-out enforcement stay HARD) — DA to confirm. This supersedes the G-6 blocking
+   approval workflow; G-6's metering half stays open (Engineer recommends counters from day one).
+
+**QUESTION for DA:** the advisory mode softens the multi-AP reading of locked ADR-014 ("publish
+blocked until compliance passes") and ADR-025 (hard advertising gates) to advise+recorded-bypass.
+Please formally amend/annotate those ADRs (or challenge the owner decision back through Abhay),
+and confirm the Engineer-drawn hard/advisory scope boundary in doc 13 §2. — Engineer
+
+### 2026-07-19 — FROM ENGINEER — STATUS — Owner specified the advisory-bypass popup UX (doc 13 §2 updated)
+
+Abhay detailed the acknowledgment UX for the advisory enforcement mode: a popup at save/submit/
+send naming the SPECIFIC rule broken (cited with its source — SEBI/NSE for brokers, the group's
+own regulator otherwise; citations are data rows at the group tier), what in the content breaks
+it, the platform's recommendation to fix, and an explicit first-person consent ("I agree that I
+am breaking this rule and I choose to continue on my own responsibility") — never pre-ticked,
+never default. Immutable audit record per event: tenant, user, timestamp, content hash, rule id
++ rule-text version shown, verdict, recommendation, action taken (fixed vs continued). — Engineer
+
+### 2026-07-19 — FROM ENGINEER — STATUS — Pre-finalization additions accepted by owner (doc 13 §8)
+
+Six Engineer-raised items accepted by Abhay into the vision doc before finalization:
+**LOCKED CORRECTION** — the partner code belongs to the **(AP, partner) pair**, NOT the partner
+(ZMPHZC is PIFS's code AT Zerodha; every AP brings their own; URL template stays partner-level).
+Must ship with the (tenant, mobile) upsert migration as part of the first multi-AP migration.
+Plus **O-1…O-5** open requirements: AP onboarding verification (reg. no. + code checked before
+links go live) · AP lifecycle active→suspended→exited with per-asset rules (no number recycling,
+post-exit conversion credit, DPDP retention, suspend = links live/sends stop) · rule-library
+ownership with source refs + review dates · platform–AP agreement mirroring the popup consent ·
+ops obligation (verified backups, tested restore, stated RPO/RTO). §1 table corrected to match.
+Doc 13 is now the complete finalization package for DA ratification. — Engineer
+
+### 2026-07-19 — FROM ENGINEER — STATUS — G-6 fully closed: per-AP usage counters YES (owner)
+
+Abhay decided the last open item: per-AP usage counters (messages, conversations, numbers) run
+from day one of multi-AP — counting only, no billing machinery. Doc 13 §7 updated; every gap
+and decision item in doc 13 is now dispositioned. The vision package is COMPLETE and awaits only
+the DA ratification pass (D-13 items → ADRs; ADR-014/025 advisory-mode amendment). — Engineer
+
+### 2026-07-19 — FROM ENGINEER — STATUS — Doc filing executed: Wati know-how → Wati-Project; signer Deluge → Zoho-Project
+
+Owner-approved moves executed (filing rule §6b upheld — CI-gated contracts did NOT move):
+1. `WATI-TEMPLATE-CREATION-RULE.md` → `Wati-Project\docs\wati-shared-template-whole-flow-rule.md`
+   (platform-wide; GoRefer specifics kept as worked examples; Meta-reclassification learning added).
+2. `WATI-TEMPLATE-NAMING-CONVENTION.md` → `Wati-Project\docs\wati-shared-template-naming-convention.md`,
+   GENERALIZED: `<projectPrefix>_…` + prefix registry (gr = GoRefer); live `hi`/`hin` drift recorded.
+3. `WATI-TEMPLATE-INVENTORY.md` — planned split ABANDONED on inspection: the 2026-07-17 snapshot is
+   stale (claims Family A missing; it now exists APPROVED) and BOTH halves are superseded
+   (`Wati-GoRefer-Templates.md` / `Wati-Project\docs\wati-templates.json`). Archived to
+   `_source-archive\WATI-TEMPLATE-INVENTORY-2026-07-17-SUPERSEDED.md` with a banner.
+4. Webhook-signer Deluge code extracted from `Zoho-Signer-Steps.md` →
+   `Zoho-Project\deluge\gorefer_webhook_signer.dg` (canonical, with its 17 siblings); the steps doc
+   now points there and notes the waxseal byte-compat coupling.
+Marker `docs/integrations/MOVED-TO-WATI-PROJECT.md` added; references updated (doc 13 footer,
+lead-capture PROPOSAL banner).
+⚠️ **SECURITY FLAG for Abhay/DA:** `Zoho-Signer-Steps.md` contained the HMAC shared secret in
+plaintext (now removed from the doc, but it remains in git history). Recommend rotating
+`ZOHO_WEBHOOK_HMAC_SECRET` + the Zoho Variable `gorefer_webhook_secret` at a convenient moment —
+coordinated flip needed if/while ENABLE_ZOHO_WEBHOOK_HMAC is ON. Engineer will not rotate unbidden.

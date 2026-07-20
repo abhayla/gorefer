@@ -1,5 +1,10 @@
 # PROPOSAL — the 3 lead-capture WATI templates (for Abhay's review)
 
+> **Historical note (2026-07-19):** the companion docs this proposal cites have moved — creation
+> rule + naming convention now live in `Wati-Project\docs\` (`wati-shared-template-whole-flow-rule.md`,
+> `wati-shared-template-naming-convention.md`); the inventory is archived as superseded (the Family-A
+> templates were since created and APPROVED — see `Wati-GoRefer\Wati-GoRefer-Templates.md`).
+
 > **Status: DRAFT for review — NOTHING submitted to Meta.** These are the 3 transactional
 > notifications GoRefer fires on every lead capture (Family A in `WATI-TEMPLATE-INVENTORY.md`), which
 > currently DON'T EXIST in Wati. Reviewed end-to-end per `WATI-TEMPLATE-CREATION-RULE.md`.

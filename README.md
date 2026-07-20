@@ -12,6 +12,7 @@ GoRefer is a **referral management & referral intelligence platform**: users man
 | Foundation | Constitution | [docs/foundation/03-GoRefer-Constitution.md](docs/foundation/03-GoRefer-Constitution.md) |
 | Architecture | Architecture Decisions (ADR) | [docs/architecture/02-Architecture-Decisions-ADR.md](docs/architecture/02-Architecture-Decisions-ADR.md) |
 | Architecture | System Architecture | [docs/architecture/04-System-Architecture.md](docs/architecture/04-System-Architecture.md) |
+| Architecture | Partner Hierarchy & Vendor Independence (target/vision — not locked) | [docs/architecture/13-Partner-Hierarchy-and-Vendor-Independence.md](docs/architecture/13-Partner-Hierarchy-and-Vendor-Independence.md) |
 | Database | Database Design | [docs/database/05-Database-Design.md](docs/database/05-Database-Design.md) |
 | API | API Specification | [docs/api/06-API-Specification.md](docs/api/06-API-Specification.md) |
 | UI/UX | UI/UX Specification | [docs/ui-ux/07-UI-UX-Specification.md](docs/ui-ux/07-UI-UX-Specification.md) |

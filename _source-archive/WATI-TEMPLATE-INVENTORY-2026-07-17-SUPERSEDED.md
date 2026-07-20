@@ -1,3 +1,8 @@
+> ⚠️ **SUPERSEDED — archived 2026-07-19.** This 2026-07-17 snapshot predates the Family-A template
+> creation: the lead-capture templates NOW EXIST and are APPROVED, and notify.py resolves names via
+> config. Current truth: `Wati-GoRefer/Wati-GoRefer-Templates.md` (GoRefer side) + `Wati-Project\docs\
+> wati-templates.json` (account catalogue). Kept for provenance only — do NOT act on its "gap".
+
 # GoRefer — WATI Template Inventory & Gap (AUTHORITATIVE)
 
 > **Read this before touching WhatsApp sends.** It is the single reconciled picture of
