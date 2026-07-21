@@ -3580,3 +3580,15 @@ Two owner-directed refinements to the O-6a report engine (5Wealths repo, commits
    (UTILITY, internal, per design-skill checklist) gives each reason line its own variable.
    Submitted → APPROVED by Meta same morning → live-verified DELIVERED to the owner's
    allowlisted number. daily_report.py auto-selects v2/v1 by approval status. — Engineer
+
+---
+
+### 2026-07-21 — FROM ENGINEER — STATUS — Zoho feed fn LIVE: report is fully two-sided
+
+Owner pasted `wa_queue_day_summary` + exposed REST + filled the zapikey. Verified: the
+DEPLOYED fn returned 291 rows for Business_Date 2026-07-20, matching fresh COQL exactly
+per-status (113 SENT / 72 FAILED / 67 DRYRUN / 35 PENDING / 4 SUPPRESSED_CAPPED); the
+two-sided HTML renders (hierarchy table + flags), no degrade note. Two box-specific fixes
+en route (5Wealths `966ecb4`, `9c58040`): GLOBAL.env candidate paths (this server has it
+on C:, not D:) and utf-8 HTML write. The O-6a pipeline is now complete end-to-end; tonight's
+21:30 IST run is the first fully-automated two-sided report. — Engineer
