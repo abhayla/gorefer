@@ -33,9 +33,10 @@ via `OTP_WHATSAPP_TEMPLATE` (settings/env default → per-tenant Preferences ove
 **NAMED** (owner rule 2026-07-21, never positional): `{{otp_code}}` then `{{expiry_minutes}}` — the
 exact ordered `template_params` the OTP adapter sends (`apps/otp/adapters.py`; expiry derived from
 the live TTL config at send time). Staged in
-`apps/integrations/wati/wati-templates.json` on **HOLD — drafted, NOT yet submitted to Meta**;
-submission happens only on Abhay's explicit review-go (M13 owner decision 2026-07-21). Until it is
-APPROVED, `ENABLE_OTP_LOGIN` must stay off in prod (the send would fail template-not-found).
+`apps/integrations/wati/wati-templates.json` — **APPROVED by Meta 2026-07-21** (submitted on
+Abhay's review-go the same day; `waTemplateId 27564734539863645`; live-verified DELIVERED to the
+owner's allowlisted number via terminal status). The OTP door's template precondition is met;
+`ENABLE_OTP_LOGIN` may go on once the M13 code is deployed.
 
 ---
 
