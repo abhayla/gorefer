@@ -31,21 +31,27 @@ def _clear_ratelimit_cache(request):
     around each DB-touching test keeps counters test-local without changing
     any rate-limit behavior itself.
     """
-    db_fixture_name = (
-        "db" if "db" in request.fixturenames
-        else "transactional_db" if "transactional_db" in request.fixturenames
-        else None
+    needs_db = (
+        request.node.get_closest_marker("django_db") is not None
+        or "db" in request.fixturenames
+        or "transactional_db" in request.fixturenames
     )
-    if db_fixture_name:
-        # Force the db fixture to actually set up now (this autouse fixture has
-        # no dependency edge to it, so instantiation order isn't guaranteed —
-        # without this, cache.clear() can run before db access is unblocked).
-        request.getfixturevalue(db_fixture_name)
-        from django.core.cache import cache
+    if not needs_db:
+        yield
+        return
 
+    # Tests reach db access either via an explicit "db"/"transactional_db"/
+    # "seeded(db)" fixture argument (present in request.fixturenames) or via
+    # the bare `@pytest.mark.django_db(...)` marker (which grants access
+    # internally without adding anything to request.fixturenames). Either
+    # way, `django_db_blocker` — pytest-django's public API for touching the
+    # database from outside a test's own db fixture — works regardless of
+    # which path this test used and isn't sensitive to fixture setup order.
+    django_db_blocker = request.getfixturevalue("django_db_blocker")
+    from django.core.cache import cache
+
+    with django_db_blocker.unblock():
         cache.clear()
     yield
-    if db_fixture_name:
-        from django.core.cache import cache
-
+    with django_db_blocker.unblock():
         cache.clear()
