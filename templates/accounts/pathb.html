@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Verify ownership — GoRefer{% endblock %}
+{% block content %}
+  <section class="rounded-2xl bg-white border border-line card p-8">
+    <h1 class="text-xl font-extrabold tracking-tight text-ink-900">Verify your Client ID</h1>
+    <p class="mt-1.5 text-sm text-ink-500">
+      We don't have a number on file for this Client ID yet. Upload a screenshot of your
+      <b>logged-in Zerodha console</b> showing your <b>Client ID and registered name together</b> —
+      our team reviews it, usually within a day.
+    </p>
+    {% if error %}<p class="mt-4 text-[12px] font-semibold text-red-600">{{ error }}</p>{% endif %}
+    <form method="post" action="{% url 'referrer_pathb' %}" enctype="multipart/form-data" class="mt-5 space-y-4">
+      {% csrf_token %}
+      <div>
+        <label class="block text-[12px] font-semibold text-ink-500" for="client_id">Your Zerodha Client ID</label>
+        <input id="client_id" name="client_id" type="text" required autocomplete="off" maxlength="20"
+               value="{{ client_id }}" placeholder="e.g. RJ4521"
+               class="mt-1 w-full rounded-xl border border-line px-4 py-2.5 font-mono text-[14px] uppercase tracking-wide focus:outline-none focus:border-cobalt-500">
+      </div>
+      <div>
+        <label class="block text-[12px] font-semibold text-ink-500" for="registered_name">Registered name (exactly as in the console)</label>
+        <input id="registered_name" name="registered_name" type="text" required maxlength="160"
+               value="{{ registered_name }}"
+               class="mt-1 w-full rounded-xl border border-line px-4 py-2.5 text-[14px] focus:outline-none focus:border-cobalt-500">
+      </div>
+      <div>
+        <label class="block text-[12px] font-semibold text-ink-500" for="mobile">Mobile number (for our team to reach you)</label>
+        <input id="mobile" name="mobile" type="tel" maxlength="16" placeholder="98765 43210"
+               class="mt-1 w-full rounded-xl border border-line px-4 py-2.5 text-[14px] focus:outline-none focus:border-cobalt-500">
+      </div>
+      <div>
+        <label class="block text-[12px] font-semibold text-ink-500" for="evidence">Console screenshot (JPEG/PNG/WebP, max 5&nbsp;MB)</label>
+        <input id="evidence" name="evidence" type="file" required accept="image/jpeg,image/png,image/webp"
+               class="mt-1 w-full text-[12px] text-ink-500 file:mr-3 file:rounded-full file:border-0 file:bg-cobalt-50 file:px-4 file:py-2 file:text-[12px] file:font-bold file:text-cobalt-600">
+        <p class="mt-1 text-[11px] text-ink-300">Used only to verify ownership and deleted after review. Please crop out balances or holdings.</p>
+      </div>
+      <button type="submit"
+              class="w-full rounded-full bg-cobalt-600 hover:bg-cobalt-500 transition-colors px-5 py-2.5 text-sm font-bold text-white card">
+        Submit for review
+      </button>
+    </form>
+  </section>
+{% endblock %}

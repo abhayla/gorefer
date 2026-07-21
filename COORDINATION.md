@@ -3687,6 +3687,49 @@ receives the 302 destination by design (B3: "creates nothing and still gets the 
 the human control still 302s with the code server-side. The 24 historical rows stay in the
 immutable log; downstream consumers (R-DRR incl.) must classify bots by UA-match at read time,
 not the stored `is_bot`, for rows predating this deploy. — Engineer
+### 2026-07-21 — FROM ENGINEER — STATUS — M13 referrer login BUILT (OAuth-primary + OTP + Path B); Q-M-OTP-2 CLOSED (PR `mission-13-referrer-login`)
+
+Owner opened the mission this session via a live Q&A (decisions recorded in
+`docs/sprint2/S2-05-M13-Referrer-Login-Goal-Contract.md`): full scope; **both doors** (Google
+OAuth primary + OTP fallback); Path B in full; ADR-026 template reuse for the self view; owner
+creates the OAuth client; the OTP template draft is shown to the owner BEFORE any Meta submission.
+
+**Built (500/500 tests, 25 new; ruff clean; migration `accounts.0001`; Tailwind rebuilt):**
+1. **Q-M-OTP-2 CLOSED** — `recipient._from_zoho` wired to the M9 READ adapter
+   (`ClientId → Mobile/Phone`, normalized, resolved-flag-gated, degrade-to-Path-B on outage).
+   READ field-set extended with `Mobile/Phone/Email` (contract doc §3 updated; fields feed ONLY
+   the OTP resolver + OAuth auto-bind, never rendered).
+2. **OTP door (ADR-035 Path A)** — `/login/` → Client-ID-only form (any typed phone field is
+   REJECTED, tested) → OTP to the on-file channel via the existing Q-M-OTP engine → session bound
+   to `(tenant_id, client_id)`. Unknown id → Path B, never a guessed number.
+3. **Google OAuth door (ADR-027)** — stdlib server-side auth-code + PKCE (NO Google JS/resource;
+   third-party-origin guardrail intact); verified-email claims via userinfo; first-login bind
+   screen; **auto-bind iff Google email OR entered mobile matches on-file** (Customer → Zoho);
+   mismatch → pending-verification queue (never a silent bind); returning account skips bind.
+4. **Path B (evidence)** — capped image upload (5MB, JPEG/PNG/WebP) held ERASABLY in DB →
+   staff-only queue at `/admin-panel/verifications/` (approve/reject) → approve binds the account,
+   creates the local `Customer` row (future logins = Path A), and upserts a Zoho **Contact**
+   (new `upsert_referrer_contact`, dedup on ClientId, identity fields only — guardrail #2
+   untouched; contract doc §2 updated) → **evidence purged on approve AND reject** (DPDP, tested).
+5. **My Referrals (ADR-026)** — `/my/referrals` renders the SAME `referrer_profile.html` with
+   role=referrer: own-record-only (structural — no id in the URL), `PII_MASK_FOR_CUSTOMER_VIEW`
+   applied at data level (IP masked, admin view stays full — both tested), admin chrome hidden,
+   prominent copy-link + WhatsApp-share (via `/r/wa/{id}` + `/d/pifs`, ADR-030/031).
+6. **Gating** — every URL mounted ONLY when `ENABLE_CUSTOMER_LOGIN` is on (verification queue
+   incl.); OTP endpoints additionally 404 while `ENABLE_OTP_LOGIN` is off; home login button
+   flag-gated; the settings screen still exposes only the 3 integration flags. Both login flags
+   remain OFF — nothing is reachable in prod until the go-live steps below.
+
+**Template naming:** the staged AUTHENTICATION draft renamed to the current convention →
+`gr_platform_gorefer_login_otp_en_2026_07_21` (manifest still HOLD; `OTP_WHATSAPP_TEMPLATE`
+default updated in settings/.env.example; Wati contract doc updated). NOT submitted to Meta —
+awaiting the owner's review-go per his rule.
+
+**GO-LIVE dependencies (owner):** D1 Google OAuth client → `GOOGLE_OAUTH_CLIENT_ID/SECRET` in
+prod `.env` (redirect URI `https://gorefer.in/login/google/callback`); D2 template review-go →
+Engineer submits + tracks to APPROVED + live-verifies; D3 flip `ENABLE_CUSTOMER_LOGIN` (+
+`ENABLE_OTP_LOGIN` after D2) on prod. Q-M-OTP PR #12 was already merged 2026-07-16 (roadmap doc
+line was stale) — no merge dependency remains. — Engineer
 
 ### 2026-07-21 — FROM ENGINEER — STATUS — R-DRR BUILT: daily report is now three-sided (Zoho ⋈ Wati ⋈ GoRefer funnel)
 

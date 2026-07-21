@@ -197,7 +197,9 @@ def central_defaults() -> dict:
         # overrides through the screen.
         OTP_PRIMARY_CHANNEL: OTP_CHANNEL_WHATSAPP_WATI,
         OTP_FALLBACK_CHANNELS: [OTP_CHANNEL_MANUAL],
-        OTP_WHATSAPP_TEMPLATE: getattr(settings, "OTP_WHATSAPP_TEMPLATE", "gorefer_login_otp"),
+        OTP_WHATSAPP_TEMPLATE: getattr(
+            settings, "OTP_WHATSAPP_TEMPLATE", "gr_platform_gorefer_login_otp_en_2026_07_21"
+        ),
         OTP_CODE_LENGTH: 6,
         OTP_CODE_TTL_SECONDS: 300,
         OTP_MAX_VERIFY_ATTEMPTS: 5,

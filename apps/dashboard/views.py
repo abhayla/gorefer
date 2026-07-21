@@ -231,6 +231,79 @@ def referrer_profile(request, client_id: str):
 
 
 @_staff_required
+@require_GET
+def verifications(request):
+    """Referrer verification queue (M13) — pending first, recent decisions below.
+
+    Rendered only when the customer-login surface exists; the nav link is likewise
+    flag-gated so an operator never sees a queue that can't receive requests.
+    """
+    from apps.accounts.models import VerificationRequest
+
+    tenant = get_current_tenant(request)
+    pending = VerificationRequest.objects.filter(
+        tenant=tenant, status=VerificationRequest.STATUS_PENDING
+    ).order_by("created_at")
+    decided = VerificationRequest.objects.filter(tenant=tenant).exclude(
+        status=VerificationRequest.STATUS_PENDING
+    ).order_by("-decided_at")[:25]
+    ctx = {
+        "pending": pending,
+        "decided": decided,
+        "sync_health": _sync_health(tenant),
+        "nav_active": "verifications",
+    }
+    return render(request, "dashboard/verifications.html", ctx)
+
+
+@_staff_required
+@require_GET
+def verification_evidence(request, request_id: int):
+    """Serve the Path-B evidence screenshot to STAFF only (never publicly routed).
+
+    404s once the request is decided — the bytes are purged at decision time (DPDP),
+    so there is nothing to serve and no stale copy to leak.
+    """
+    from django.http import HttpResponse
+
+    from apps.accounts.models import VerificationRequest
+
+    tenant = get_current_tenant(request)
+    req = VerificationRequest.objects.filter(id=request_id, tenant=tenant).first()
+    if req is None or req.evidence is None:
+        raise Http404("no evidence")
+    return HttpResponse(bytes(req.evidence), content_type=req.evidence_content_type or "image/png")
+
+
+@_staff_required
+@require_http_methods(["POST"])
+def verification_decide(request, request_id: int):
+    """Approve/reject a verification request (M13). Approval binds + puts on file."""
+    from apps.accounts import service as accounts_service
+    from apps.accounts.models import VerificationRequest
+
+    tenant = get_current_tenant(request)
+    req = VerificationRequest.objects.filter(id=request_id, tenant=tenant).first()
+    if req is None:
+        raise Http404("verification request not found")
+    action = request.POST.get("action", "")
+    try:
+        if action == "approve":
+            accounts_service.approve_verification(req, admin_user=request.user)
+        elif action == "reject":
+            accounts_service.reject_verification(
+                req, admin_user=request.user, note=request.POST.get("note", "")
+            )
+        else:
+            raise accounts_service.VerificationError("Unknown action.")
+    except accounts_service.VerificationError as exc:
+        from django.contrib import messages
+
+        messages.error(request, str(exc))
+    return redirect("dashboard_verifications")
+
+
+@_staff_required
 @require_http_methods(["GET", "POST"])
 def preferences(request):
     """GET/POST /admin-panel/preferences — the per-tenant Preferences screen (Q-M-PREF).

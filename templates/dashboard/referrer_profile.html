@@ -1,14 +1,30 @@
-{% extends "dashboard/base.html" %}
+{% extends base_template|default:"dashboard/base.html" %}
 {% load static %}
-{% block title %}{{ band.name }} — Referral Profile{% endblock %}
+{% block title %}{% if role == "referrer" %}My Referrals{% else %}{{ band.name }} — Referral Profile{% endif %}{% endblock %}
 {% block content %}
 
-{# Breadcrumb #}
+{% if role != "referrer" %}
+{# Breadcrumb (admin chrome — hidden on the referrer self view, ADR-026) #}
 <div class="flex items-center gap-2 text-[11px] text-ink-500">
   <a href="{% url 'dashboard_explorer' %}" class="hover:text-cobalt-600 font-medium">← Referral Explorer</a>
   <span class="text-ink-300">/</span>
   <span class="font-mono font-semibold text-cobalt-600">{{ client_id }}</span>
 </div>
+{% else %}
+{# Prominent share action (ADR-026: referrer role gets Share front-and-centre) #}
+<section class="bg-white border border-line rounded-2xl card p-5">
+  <div class="text-[10px] uppercase tracking-wide text-ink-300 font-semibold mb-2">Your referral link</div>
+  <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+    <code id="myLink" class="font-mono text-[13px] font-semibold text-cobalt-600 bg-cobalt-50 rounded-xl px-4 py-2.5 break-all flex-1">{{ my_link }}</code>
+    <div class="flex gap-2 shrink-0">
+      <button onclick="navigator.clipboard.writeText(document.getElementById('myLink').textContent).then(()=>{this.textContent='Copied ✓';setTimeout(()=>this.textContent='Copy link',1500);})"
+              class="rounded-full border border-line bg-white hover:bg-bg transition-colors px-4 py-2 text-[12.5px] font-bold text-ink-900 card">Copy link</button>
+      <a href="https://wa.me/?text={{ share_text|urlencode }}"
+         class="rounded-full bg-cobalt-600 hover:bg-cobalt-500 transition-colors px-4 py-2 text-[12.5px] font-bold text-white card">Share on WhatsApp</a>
+    </div>
+  </div>
+</section>
+{% endif %}
 
 {# Identity card + KPI rings + Zoho enrichment chips #}
 <section class="bg-white border border-line rounded-2xl card p-5 flex flex-col lg:flex-row lg:items-center gap-5">
@@ -72,7 +88,7 @@
   <div class="flex items-center gap-2 p-3 border-b border-line">
     <button onclick="grTab('c')" id="tc" class="px-4 py-2 rounded-full text-[12.5px] font-semibold bg-cobalt-600 text-white">Clicks · {{ clicks|length }}</button>
     <button onclick="grTab('p')" id="tp" class="px-4 py-2 rounded-full text-[12.5px] font-semibold text-ink-500 hover:bg-cobalt-50">Referred People · {{ people|length }}</button>
-    <span class="ml-auto text-[10px] text-ink-300 pr-1 hidden sm:inline">Admin view — full detail · customer view masks IP &amp; phone</span>
+    {% if role != "referrer" %}<span class="ml-auto text-[10px] text-ink-300 pr-1 hidden sm:inline">Admin view — full detail · customer view masks IP &amp; phone</span>{% endif %}
   </div>
 
   {# Clicks filters #}

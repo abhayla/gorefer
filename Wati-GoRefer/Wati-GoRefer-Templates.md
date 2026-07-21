@@ -27,6 +27,17 @@ Resolution: `notify_template_name(role, lang=…)` → cascade (tenant override 
 Unknown language falls back to English; an unknown **role raises** (a new role must register a
 default rather than silently resolving to something wrong).
 
+**Login OTP (M13, separate from the role map):** the referrer-login OTP template name resolves
+via `OTP_WHATSAPP_TEMPLATE` (settings/env default → per-tenant Preferences override), default
+**`gr_platform_gorefer_login_otp_en_2026_07_21`** (AUTHENTICATION, copy-code button). Variables are
+**NAMED** (owner rule 2026-07-21, never positional): `{{otp_code}}` then `{{expiry_minutes}}` — the
+exact ordered `template_params` the OTP adapter sends (`apps/otp/adapters.py`; expiry derived from
+the live TTL config at send time). Staged in
+`apps/integrations/wati/wati-templates.json` — **APPROVED by Meta 2026-07-21** (submitted on
+Abhay's review-go the same day; `waTemplateId 27564734539863645`; live-verified DELIVERED to the
+owner's allowlisted number via terminal status). The OTP door's template precondition is met;
+`ENABLE_OTP_LOGIN` may go on once the M13 code is deployed.
+
 ---
 
 ## 2. The approved `gr_*` templates in the Wati account
