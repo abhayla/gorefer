@@ -3624,3 +3624,51 @@ clicked" question against prod data for 2026-07-20.**
    **Organic prospect clicks from the campaign: 0.**
 
 Written to COORDINATION.md — ready for the DA. — Engineer
+
+### 2026-07-21 — FROM ENGINEER — REQUIREMENTS CAPTURED (owner interview) — R-DRR: full-funnel daily referral report + Zoho full go-live
+
+**No spec existed for a daily REFERRAL report (doc 13 O-6 covers delivery only). Captured from
+Abhay by structured interview (one question at a time, recommendation given per question),
+2026-07-21. For DA ratification; build sequenced after PR #19.**
+
+**R-DRR-1 — Scope: ONE full-funnel report** extending the existing O-6a 21:30 IST report:
+queued → sent → delivered → **clicked → landing → lead → account-opened**. No second report.
+
+**R-DRR-2 — Semantics: today's-activity per stage** (IST day). Each stage counts what happened
+today; NO cross-stage "conversion rate" between lagged stages (a click today may belong to an
+older send). Per-stage trend vs yesterday / 7-day avg instead. Cohort tracking explicitly
+rejected for the daily report (partly unjoinable without a per-message click token → would
+fabricate attribution).
+
+**R-DRR-3 — Breakdown: totals + per-referrer detail.** Headline totals per stage; then ONLY
+referrers with activity today: client_id · clicks (confirmed-human vs unconfirmed) · channel ·
+leads. Cap 15 rows (cap logged when hit). Click quality split mandatory: confirmed-human /
+unconfirmed / bot-excluded / internal-test (smoke, curl) — test+bot never inflate headlines
+(the 20-Jul "8 clicks = 3 real" lesson).
+
+**R-DRR-4 — Conversions from the GoRefer DB (owner's pick, against the engineer's
+Zoho-COQL-direct recommendation)** — gated on the Zoho ingest being live (R-GOLIVE below).
+Until live, the account-opened line renders "— (Zoho ingest not yet live)", NEVER a bare 0
+(a 0 meaning "not wired" would be indistinguishable from "no accounts opened").
+
+**R-DRR-5 — Delivery: extend the existing 21:30 IST WhatsApp summary** (v3 template per the
+design skill, Meta approval, auto-fallback v2→v1 until approved) + full per-referrer detail in
+the out\ HTML. Late-evening clicks roll to the next day's report (consistent with R-DRR-2).
+Timing stays one-command configurable (set_report_time).
+
+**R-GOLIVE — Zoho ingest FULL go-live (owner, 2026-07-21): take up immediately after R-DRR.**
+Scope chosen: **READ + conversion webhook + WRITE.**
+⚠ **This REVERSES DF-9** ("ENABLE_ZOHO_WRITE stays off while Ashok enters leads manually") —
+an explicit owner decision made in this interview with the workflow impact stated; DA please
+note/ratify the DF-9 closure. Work items: deploy the Zoho-side Deluge webhook sender + DF-2
+HMAC signer (contract already in DEPLOY-TARGET.md), sandbox-verify, then the Settings→
+Integrations flips (READ + WRITE; engineer prepares + verifies, flips confirmed with Abhay at
+execution time per the flags-are-user-owned rule). ENABLE_WATI_SEND remains out of scope
+(separate go-live gate: delivery reliability + template approvals).
+
+Engineer-decided implementation details (not owner questions): engine stays in
+5Wealths\Wati-Project\daily_report.py (L-042 boundary — it reads GoRefer prod read-only over
+SSH, writes nothing into the GoRefer repo); prod DB access read-only; internal-test UA markers
+(GoReferGoLiveSmoke, curl) excluded by UA match.
+
+Written to COORDINATION.md — ready for the DA. — Engineer
