@@ -3592,3 +3592,35 @@ two-sided HTML renders (hierarchy table + flags), no degrade note. Two box-speci
 en route (5Wealths `966ecb4`, `9c58040`): GLOBAL.env candidate paths (this server has it
 on C:, not D:) and utf-8 HTML write. The O-6a pipeline is now complete end-to-end; tonight's
 21:30 IST run is the first fully-automated two-sided report. — Engineer
+
+### 2026-07-21 — FROM ENGINEER — STATUS + finding — ADR-019 bot-filter gap: Meta preview crawler counted as human clicks — fix on PR #19, HELD
+
+**Found while answering the owner's "how many referral-link messages sent yesterday, how many
+clicked" question against prod data for 2026-07-20.**
+
+1. **The finding.** Prod `events` for 20-Jul (IST) show 8 `click` rows. Of these, 2 carry UA
+   **`facebookexternalua`** with `channel=WhatsApp`, timestamped **10:30 and 12:00 IST — exactly
+   the Send-Queue drain times**. These are Meta's WhatsApp link-preview fetches of the
+   `gorefer.in/r/wa/{client_id}` link inside the delivered templates, recorded as HUMAN clicks
+   (`is_bot=false`) and 302'd — because `BOT_UA_MARKERS` lists only `facebookexternalhit`, not
+   this UA variant. That violates ADR-019's "a bot preview never creates a journey and never
+   counts as a click", and would inflate WhatsApp click counts by one phantom click per
+   campaign-delivered preview from here on.
+2. **The fix (PR #19, branch `fix/bot-ua-meta-preview-crawler`, held for DA approval).** Adds
+   `facebookexternalua` (observed live) + `meta-external` (covers Meta's documented
+   `meta-externalagent`/`meta-externalfetcher`) to `BOT_UA_MARKERS`, with a parametrized
+   regression test per UA (200 render, zero identity/referral/event). 46 tests pass in the
+   touched areas, ruff clean. `[skip-contract-doc]` — no adapter code; ADR-019 names the bot
+   list as a maintained artifact. No flag flipped, nothing deployed.
+3. **Prod data left untouched.** The 2 phantom events of 20-Jul stay in the immutable log
+   (append-only); they are identifiable by UA if the DA wants a rollup correction. Note the
+   O-6a delivery report is unaffected (it reads Zoho/Wati, not GoRefer events).
+4. **For the record, the 20-Jul answer itself:** Wati 181 broadcasts → 76 delivered / 105 ND
+   (43 cap-131049 · 33 no-confirm · 26 invalid-131026 · 3 expmt-130472); Zoho 291 queued →
+   185 attempted (113 SENT / 72 FAILED). Referral-link (`gorefer_*`) templates: 161 sent,
+   66 delivered. GoRefer clicks: 8 total = 3 test hits (2 smoke + 1 curl, EKU497) + 3 human
+   clicks on DA1707 from one Android device 09:41–09:44 (with the day's only landing_viewed +
+   human_confirmed — pre-drain, looks like owner self-test) + the 2 crawler previews above.
+   **Organic prospect clicks from the campaign: 0.**
+
+Written to COORDINATION.md — ready for the DA. — Engineer
