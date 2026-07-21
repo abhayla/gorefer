@@ -29,7 +29,10 @@ default rather than silently resolving to something wrong).
 
 **Login OTP (M13, separate from the role map):** the referrer-login OTP template name resolves
 via `OTP_WHATSAPP_TEMPLATE` (settings/env default → per-tenant Preferences override), default
-**`gr_platform_gorefer_login_otp_en_2026_07_21`** (AUTHENTICATION, copy-code button). Staged in
+**`gr_platform_gorefer_login_otp_en_2026_07_21`** (AUTHENTICATION, copy-code button). Variables are
+**NAMED** (owner rule 2026-07-21, never positional): `{{otp_code}}` then `{{expiry_minutes}}` — the
+exact ordered `template_params` the OTP adapter sends (`apps/otp/adapters.py`; expiry derived from
+the live TTL config at send time). Staged in
 `apps/integrations/wati/wati-templates.json` on **HOLD — drafted, NOT yet submitted to Meta**;
 submission happens only on Abhay's explicit review-go (M13 owner decision 2026-07-21). Until it is
 APPROVED, `ENABLE_OTP_LOGIN` must stay off in prod (the send would fail template-not-found).

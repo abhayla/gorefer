@@ -189,14 +189,15 @@
       "category": "AUTHENTICATION",
       "language": "en",
       "recipient_role": "referrer",
-      "body": "{{1}} is your GoRefer login code. For your security, do not share this code.",
-      "footer": "This code expires in {{2}} minutes.",
+      "body": "{{otp_code}} is your GoRefer login code. For your security, do not share this code.",
+      "footer": "This code expires in {{expiry_minutes}} minutes.",
       "variables": [
-        {"index": 1, "name": "code", "meaning": "otp_code", "sample": "482913"},
-        {"index": 2, "name": "ttl_minutes", "meaning": "code_validity_minutes", "sample": "5"}
+        {"name": "otp_code", "meaning": "the one-time login code (CSPRNG, generated per issue — always present, no fallback needed)", "sample": "482913"},
+        {"name": "expiry_minutes", "meaning": "code validity in minutes, derived from the live OTP_CODE_TTL_SECONDS config at send time (always present)", "sample": "5"}
       ],
+      "_variables_note": "NAMED variables per the house standard (never positional {{1}}/{{2}}; owner rule 2026-07-21). Order matters at the Wati send layer: otp_code first, expiry_minutes second — matches apps/otp/adapters.py template_params. Meta's AUTHENTICATION category enforces its own fixed body scaffolding at submit time; the submission skill maps otp_code onto Meta's OTP parameter and expiry_minutes onto the code_expiration_minutes setting.",
       "buttons": [
-        {"type": "otp", "otp_type": "copy_code", "text": "Copy code", "_note": "Meta AUTHENTICATION copy-code button — carries the same {{1}} value as the body; no URL."}
+        {"type": "otp", "otp_type": "copy_code", "text": "Copy code", "_note": "Meta AUTHENTICATION copy-code button — carries the same {{otp_code}} value as the body; no URL."}
       ],
       "_compliance_note": "AUTHENTICATION templates are exempt from the marketing disclosure block (no promotional content, no incentive claim). Delivery reliability MUST be fixed before OTP depends on this (S2-03 §15 caveat a; historical ~60% send failure is fatal for time-sensitive OTP). Re-confirm the ~₹0.115/msg auth rate at go-live."
     }

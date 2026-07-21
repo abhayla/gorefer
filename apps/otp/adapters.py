@@ -49,7 +49,7 @@ class WatiWhatsAppOtpAdapter:
         from apps.integrations.wati import status as st
         from apps.integrations.wati.adapter import get_wati_adapter
 
-        template = context.get("template") or "gorefer_login_otp"
+        template = context.get("template") or "gr_platform_gorefer_login_otp_en_2026_07_21"
         adapter = get_wati_adapter()
         logger.info(
             "OTP whatsapp_wati send: to=%s template=%s code_len=%d ttl=%ds",
@@ -57,13 +57,18 @@ class WatiWhatsAppOtpAdapter:
         )
         # AUTHENTICATION template params must be an ORDERED template_params list — the
         # same contract the notify path uses (Fable5 M4). The live adapter reads ONLY
-        # params["template_params"] and remaps them to positional {{1}},{{2}}; a bare
-        # {"code":…} dict is silently ignored and Wati rejects the send as "blank text".
-        # {{1}} = the OTP code (body var AND copy-code button carry the same value).
+        # params["template_params"]; a bare {"code":…} dict is silently ignored and
+        # Wati rejects the send as "blank text". NAMED params per the house standard
+        # (never positional): otp_code first (body var AND the copy-code button carry
+        # the same value), expiry_minutes second — sent from the ACTUAL ttl so a
+        # config TTL change never makes the message lie about its own expiry.
         result = adapter.send_template(
             to=recipient,
             template=template,
-            params={"template_params": [{"name": "code", "value": code}]},
+            params={"template_params": [
+                {"name": "otp_code", "value": code},
+                {"name": "expiry_minutes", "value": str(max(1, ttl_seconds // 60))},
+            ]},
         )
         if not result.accepted:
             return DeliveryResult(status=STATUS_FAILED, provider_ref=None, error="wati not accepted")
