@@ -55,3 +55,8 @@ urlpatterns = [
 if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_ADMIN_DASHBOARD", True):
     urlpatterns.append(path("django-admin/", admin.site.urls))
     urlpatterns.append(path("admin-panel/", include("apps.dashboard.urls")))
+
+# Referrer self-service login + My Referrals (M13). The ENTIRE surface exists only
+# when ENABLE_CUSTOMER_LOGIN is on (Constitution §4 — no dead UI when off).
+if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_CUSTOMER_LOGIN", False):
+    urlpatterns.append(path("", include("apps.accounts.urls")))

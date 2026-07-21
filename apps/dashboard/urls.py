@@ -1,6 +1,7 @@
 """Admin dashboard URLs (M7). Mounted only when ENABLE_ADMIN_DASHBOARD is on."""
 from __future__ import annotations
 
+from django.conf import settings
 from django.contrib.auth.views import LogoutView
 from django.urls import path
 
@@ -23,3 +24,21 @@ urlpatterns = [
         name="dashboard_preferences_partnership",
     ),
 ]
+
+# Referrer verification queue (M13: ADR-027 mismatch + ADR-035 Path B evidence).
+# Mounted only when the customer-login surface exists — a queue that can never
+# receive a request is dead UI (Constitution §4), so it appears with the feature.
+if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_CUSTOMER_LOGIN", False):
+    urlpatterns += [
+        path("verifications/", views.verifications, name="dashboard_verifications"),
+        path(
+            "verifications/<int:request_id>/evidence",
+            views.verification_evidence,
+            name="dashboard_verification_evidence",
+        ),
+        path(
+            "verifications/<int:request_id>/decide",
+            views.verification_decide,
+            name="dashboard_verification_decide",
+        ),
+    ]

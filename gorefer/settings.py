@@ -107,6 +107,7 @@ INSTALLED_APPS = [
     "apps.events",
     "apps.integrations",
     "apps.otp",  # pluggable OTP delivery port (Q-M-OTP; behind ENABLE_OTP_LOGIN)
+    "apps.accounts",  # referrer self-service identity (M13; behind ENABLE_CUSTOMER_LOGIN)
 ]
 
 # --- Background queue (django-q2, Postgres/ORM broker — NO Redis) -----------
@@ -333,4 +334,17 @@ WATI_WEBHOOK_IP_ALLOWLIST = os.environ.get("WATI_WEBHOOK_IP_ALLOWLIST", "")  # c
 OTP_HASH_PEPPER = os.environ.get("OTP_HASH_PEPPER", "") or SECRET_KEY
 # Central default for the AUTHENTICATION template name (per-tenant override on the
 # Preferences screen wins). Config, not a secret.
-OTP_WHATSAPP_TEMPLATE = os.environ.get("OTP_WHATSAPP_TEMPLATE", "gorefer_login_otp")
+OTP_WHATSAPP_TEMPLATE = os.environ.get(
+    "OTP_WHATSAPP_TEMPLATE", "gr_platform_gorefer_login_otp_en_2026_07_21"
+)
+
+# --- Google OAuth (M13 referrer login, behind ENABLE_CUSTOMER_LOGIN) --------
+# Server-side authorization-code flow only — NO Google JS/SDK on any page (the
+# third-party-origin guardrail stays intact; the browser only ever 302s to Google).
+# CLIENT_SECRET is a SECRET (env only, never inline). Both unset => the Google door
+# simply doesn't render (no dead UI); the OTP door works independently.
+GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
+GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
+# Optional explicit redirect URI (must EXACTLY match the one registered in Google
+# Cloud Console). Empty => derived from the request (https://<host>/login/google/callback).
+GOOGLE_OAUTH_REDIRECT_URL = os.environ.get("GOOGLE_OAUTH_REDIRECT_URL", "")

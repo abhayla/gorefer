@@ -183,20 +183,22 @@
       ]
     },
     {
-      "_status": "HOLD — do NOT submit to Meta until Abhay's review-go (his rule; API create == submit). This is the Q-M-OTP AUTHENTICATION template (referrer login OTP). GO-LIVE precondition, not a build blocker.",
-      "_naming_convention": "gorefer_login_otp (matches OTP_WHATSAPP_TEMPLATE default). AUTHENTICATION category — OTP + copy-code button ONLY, no marketing, no free URLs (Meta rule).",
-      "name": "gorefer_login_otp",
+      "_status": "APPROVED (Meta, 2026-07-21, near-instant AUTH algorithmic approval) — submitted on Abhay's explicit go the same day; waTemplateId 27564734539863645; live-verified DELIVERED to the owner's number (terminal status via getMessages, not the ack). Submission recipe that worked: flat payload + buttonsType 'otp' + buttons [{type:'copy_code', parameter:{text:'Copy code', urlType:'none'}}] + addSecurityRecommendation true + includeExpiryTime true + expiresIn 5 + positional customParams. Wati parse-rejects type 'otp'/'OTP'/'COPY_CODE' with 'Template cannot be null'.",
+      "waTemplateId": "27564734539863645",
+      "_naming_convention": "gr_platform_gorefer_login_otp_en_2026_07_21 — current convention gr_<group>_<entity>_<purpose>_<lang>_<date>; platform-level like the delivery-report template. Matches the OTP_WHATSAPP_TEMPLATE config default (settings/.env.example; per-tenant override on Preferences). AUTHENTICATION category — OTP + copy-code button ONLY, no marketing, no free URLs (Meta rule).",
+      "name": "gr_platform_gorefer_login_otp_en_2026_07_21",
       "category": "AUTHENTICATION",
       "language": "en",
       "recipient_role": "referrer",
-      "body": "{{1}} is your GoRefer login code. For your security, do not share this code.",
-      "footer": "This code expires in {{2}} minutes.",
+      "body": "{{otp_code}} is your GoRefer login code. For your security, do not share this code.",
+      "footer": "This code expires in {{expiry_minutes}} minutes.",
       "variables": [
-        {"index": 1, "name": "code", "meaning": "otp_code", "sample": "482913"},
-        {"index": 2, "name": "ttl_minutes", "meaning": "code_validity_minutes", "sample": "5"}
+        {"name": "otp_code", "meaning": "the one-time login code (CSPRNG, generated per issue — always present, no fallback needed)", "sample": "482913"},
+        {"name": "expiry_minutes", "meaning": "code validity in minutes, derived from the live OTP_CODE_TTL_SECONDS config at send time (always present)", "sample": "5"}
       ],
+      "_variables_note": "NAMED variables per the house standard (never positional {{1}}/{{2}}; owner rule 2026-07-21). Order matters at the Wati send layer: otp_code first, expiry_minutes second — matches apps/otp/adapters.py template_params. Meta's AUTHENTICATION category enforces its own fixed body scaffolding at submit time; the submission skill maps otp_code onto Meta's OTP parameter and expiry_minutes onto the code_expiration_minutes setting.",
       "buttons": [
-        {"type": "otp", "otp_type": "copy_code", "text": "Copy code", "_note": "Meta AUTHENTICATION copy-code button — carries the same {{1}} value as the body; no URL."}
+        {"type": "otp", "otp_type": "copy_code", "text": "Copy code", "_note": "Meta AUTHENTICATION copy-code button — carries the same {{otp_code}} value as the body; no URL."}
       ],
       "_compliance_note": "AUTHENTICATION templates are exempt from the marketing disclosure block (no promotional content, no incentive claim). Delivery reliability MUST be fixed before OTP depends on this (S2-03 §15 caveat a; historical ~60% send failure is fatal for time-sensitive OTP). Re-confirm the ~₹0.115/msg auth rate at go-live."
     }
