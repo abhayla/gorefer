@@ -31,3 +31,15 @@ package-lock.json
 Thumbs.db
 .idea/
 .vscode/
+
+# Claude Code project config — the SHAREABLE parts are committed so skills/agents created
+# on one machine (e.g. the Windows VPS session) reach every other machine. Needed explicitly
+# because a machine-GLOBAL git ignore (~/.config/git/ignore) excludes `.claude/` wholesale;
+# repo-level negation overrides it. Runtime state stays ignored.
+!.claude/
+.claude/*
+!.claude/settings.json
+!.claude/skills/
+!.claude/agents/
+!.claude/rules/
+!.claude/commands/
