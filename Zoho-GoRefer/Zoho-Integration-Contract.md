@@ -41,11 +41,28 @@ Zoho — status flows one way only, Zoho → GoRefer.
 Gated by **`ENABLE_ZOHO_WRITE`**. With it off, the adapter logs the intended call and writes
 nothing (demo-safe).
 
+**Referrer Contact upsert (M13 Path B).** When an admin APPROVES an evidence-verified referrer
+(`apps/accounts/service.approve_verification`), the adapter upserts a **Contacts** record —
+`POST /crm/v8/Contacts/upsert` with `duplicate_check_fields:["ClientId"]` (the client id is the
+referrer's identity; mobile is deliberately NOT the dedup key here). Fields written:
+`Last_Name` (the verified registered name), `ClientId`, `Mobile`/`Phone` (bare 10-digit via
+`to_zoho_mobile`, same stored format as Leads), `Email` (if known), `IsReferrer=true`,
+`Lead_Source="GoRefer"`. **Identity/channel fields only — never account/conversion status**
+(guardrail #2 unchanged). Purpose: the referrer's NEXT login resolves an on-file channel (Path A).
+Same `ENABLE_ZOHO_WRITE` gate; log-only when off.
+
 ## 3. What GoRefer READS from Zoho
 
 Account/contact status enrichment, gated by **`ENABLE_ZOHO_READ`**. Read-only: it never mutates
-Zoho. Used to enrich the referral profile and (Q-M-OTP-2, still a stub) to resolve a referrer's
-phone from their client id.
+Zoho. Used to enrich the referral profile and — **Q-M-OTP-2, wired in M13** — to resolve a
+referrer's on-file channel from their client id.
+
+**Contact search field-set (M13 extension):** `fetch_contact_by_client_id` now also requests
+**`Mobile`, `Phone`, `Email`** alongside the profile-enrichment fields. These feed exactly two
+consumers: the login-OTP recipient resolver (`apps/otp/recipient.py` — OTP goes ONLY to the
+on-file `Mobile`, falling back to `Phone`; never a typed number, ADR-035) and the ADR-027 OAuth
+auto-bind match (Google email vs `Email`, entered mobile vs `Mobile`). They are **not rendered**
+on the profile page — they stay on the erasable-PII side of the boundary.
 
 **Token handling:** the OAuth access token is cached **process-wide until ~60s before
 `expires_in`** (`apps/integrations/zoho/client.py`). Before that fix every API call re-minted a
