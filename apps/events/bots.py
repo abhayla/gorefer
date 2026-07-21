@@ -11,6 +11,11 @@ from __future__ import annotations
 BOT_UA_MARKERS = (
     "whatsapp",
     "facebookexternalhit",
+    # Meta's WhatsApp link-preview crawler observed live on 2026-07-20 hitting
+    # /r/{id} with UA "facebookexternalua" (not caught by "facebookexternalhit").
+    "facebookexternalua",
+    # Meta's newer documented crawler UAs (meta-externalagent / meta-externalfetcher).
+    "meta-external",
     "telegrambot",
     "slackbot",
     "twitterbot",
