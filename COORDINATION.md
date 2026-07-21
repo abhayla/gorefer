@@ -3474,3 +3474,41 @@ window minimal (~30s, Zoho side first; webhook volume ≈ 0 in any 30s window).
 Files changed: prod `/var/www/gorefer/.env` (+ backup) · Zoho Variable `gorefer_webhook_secret` ·
 `C:\Abhay\VibeCoding\GLOBAL.env` (local, non-repo) · this entry. No code, no flags, no migrations.
 The last open security item from the 2026-07-19/20 handoff is now CLOSED. — Engineer
+
+
+### 2026-07-21 — FROM ENGINEER — STATUS — Send-queue gatekeepers: two latent bugs fixed, dry-run-verified, live
+
+Closed the last messaging-infra item from the 2026-07-20 handoff (`Zoho-Project/send-queue/
+TODO-gatekeeper-fixes.md`). The four per-audience Send-Queue drains — `wa_gatekeeper_contacts`,
+`wa_gatekeeper_leads`, `wa_gatekeeper_referrers`, `wa_welcome_fastlane` — each carried two latent
+bugs (they "worked" in prod only by timing luck: they run right after the 00:07 queue build while
+their rows are still in the first 200). Both now fixed, pasted, and proven against the DEPLOYED
+Deluge, not just the `.dg` sources.
+
+1. **Pagination.** Old `getRecords(1,200)` read only page 1 (first 200 rows by id) → on a queue
+   with history, eligible rows past row 200 were silently never seen. Replaced with
+   `searchRecords` paged over {1..8}, cap 200/run. Proof: contacts hit `collected=200` (the cap) —
+   impossible under the old page-1 read.
+2. **DRYRUN_WOULD_SEND dead-end.** Drains collected only `PENDING`, so any row stamped
+   `DRYRUN_WOULD_SEND` (by a dry-run, or a real run while `allow_all_recipients=false` and the
+   mobile not allowlisted) was orphaned forever — the same class of bug that stranded 64
+   office-visitor rows. Now collect BOTH `PENDING` and `DRYRUN_WOULD_SEND` via TWO `:equals:`
+   searches (Deluge `searchRecords` rejects `:in:` with INVALID_DATA/[BIGINT]); SENT/FAILED/
+   SUPPRESSED_* stay terminal. Mirrors the proven `send_office_visitor_earlier.dg` pattern. Leads
+   keeps exact `src=="Leads"` (no OfficeVisitors-Leads collision); welcome keeps its computed
+   `isWelcome` predicate.
+
+**Verification (2026-07-21, browser-free via zapikeys + COQL, per `write-zoho-code-safely`):** with
+Abhay's go-ahead, flipped config `dry_run=true` (sends NOTHING), ran all four — every one
+`code:success`, zero errors, `dry_run:true` (contacts 200 / leads 48 / referrers 27 / welcome 1).
+COQL then confirmed 271 `DRYRUN_WOULD_SEND` rows now sit re-collectable in the queue (Bug 2's fix
+demonstrated) + 142 PENDING past-cap (Bug 1's pagination working). Restored config to the live
+state Abhay set — `dry_run=false`, `allow_all_recipients=true` untouched (user-owned; never flipped
+unbidden). Net WhatsApp sent during verification: zero. The 271 DRYRUN rows are now valid work the
+normal schedules drain at bucket times today (contacts ~12:00, referrers ~10:30, leads ~19:00,
+welcome every 2h) — expected drainage under the 30-day cap + opt-out suppression, not a blast.
+
+Files changed: `Zoho-Project/deluge/{wa_gatekeeper_contacts,wa_gatekeeper_leads,
+wa_gatekeeper_referrers,wa_welcome_fastlane}.dg` + `Zoho-Project/send-queue/TODO-gatekeeper-fixes.md`
+(marked DONE) · committed `c53584d` + pushed to `main`. No GoRefer product code, flags, or
+migrations touched. — Engineer
