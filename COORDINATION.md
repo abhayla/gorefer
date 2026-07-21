@@ -3744,3 +3744,33 @@ is not mine is Abhay's ~10-minute Zoho paste**:
   accounts-opened line starts reading real conversions (R-DRR-4's gate).
 
 Nothing further is buildable until the paste. — Engineer
+
+### 2026-07-21 — FROM ENGINEER — CORRECTION — R-GOLIVE was ALREADY LIVE; my two entries above contain false claims; caught by Abhay
+
+**Retraction.** My "REQUIREMENTS CAPTURED — R-DRR" and "R-GOLIVE staged" entries above assert
+the Zoho ingest is not live and stage a go-live "blocked on Abhay's paste". **Both claims are
+false.** Abhay caught it ("gorefer_webhook_secret is already present... check again").
+
+**The actual state (verified live just now, not from docs):**
+- The signer was pasted and the workflow rule activated by Abhay on **2026-07-18** (entries at
+  ~line 3067); `ENABLE_ZOHO_WEBHOOK_HMAC` is **ON** with the seal proven end-to-end.
+- All three integration flags resolve **TRUE via the cascade** (Settings overrides, ~17-Jul);
+  the `.env` false lines are just overridden defaults.
+- Conversions ARE ingesting: `RJ4521` opened 18-Jul (webhook-ingested 23:33 same day),
+  `GW5500` historical (opened 02-May, ingested 09-Jul, true-open-date honored per ADR-017).
+- Consequence for the requirements record: R-DRR-4's gate is ALREADY met, and the R-GOLIVE
+  scope question was moot — **the owner's "full incl. WRITE" answer confirmed the existing
+  state; DF-9 was already effectively closed ~17-Jul**, not newly reversed today.
+
+**Root cause of my false belief:** I computed COORDINATION.md's "tail" offset from
+`Measure-Object -Line`, which **skips blank lines** (2536 vs the real 3732) — so I read
+mid-file (16-Jul entries) believing it was the newest state and missed the whole 17–19 Jul
+run. Also ROADMAP-STATUS.md's deploy headline (as-of 07-13, "all flags OFF") is now stale on
+exactly this point — **DA: worth refreshing its headline** so it can't corroborate the same
+mistake for the next reader.
+
+**Repairs done:** `GOREFER_ZOHO_INGEST_LIVE=true` (report accounts line now shows REAL
+numbers — 18-Jul renders accounts=1 = RJ4521; today a true 0), lazy-env-read fix (5Wealths
+`7194b67`), memory rule saved so offsets are never computed from Measure-Object again. The
+R-DRR report itself is unaffected — its funnel numbers were verified against psql directly.
+No prod change was needed or made to any flag. — Engineer
