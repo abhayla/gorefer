@@ -32,6 +32,7 @@ Document map (start at `README.md` for the index):
 | `docs/workflow/12-Resolved-Gaps-and-Edge-Case-Decisions.md` | **Authoritative edge-case decisions** (16 gaps, locked → ADR-015…020). |
 | `implementation/10-Claude-Code-Implementation-Guide.md` | **The build guide**: tech direction, standards, tests, git, DoD, build order. |
 | `docs/deploy/DEPLOY-TARGET.md` | **AUTHORITATIVE deploy target** — GoRefer production runs on the Hostinger VPS `<PROD-VPS>` (Linux nginx + certbot), NOT the local box `<BACKUP-VPS>`. Read before any deploy/DNS/TLS decision; if any doc disagrees, this file wins. |
+| `CURRENT-STATE.md` | **Read FIRST, every session** — the verified now-state snapshot (deployed SHA, LIVE flag values, in-flight missions). Updated in the same turn as any state change; `COORDINATION.md` stays the append-only log of record. Read COORDINATION's tail by CONTENT (`tail -n 80`, confirm the last entry's date), never by a computed line offset — blank-line-skipping counters caused the 2026-07-21 stale-state incident. When docs disagree, the live system wins. |
 | `COORDINATION.md` | **DA ⇆ Engineer coordination log** — the async channel between the Design Authority (Cowork planning session) and the Engineer (Claude Code). Read it before each mission; append a STATUS entry when you open a PR; log any surfaced inconsistency as a QUESTION and pause rather than guess. |
 | `review/` | LLM review pack (`09`) + review bundle. |
 | `_source-archive/` | Historical source-of-truth captures (context only). |
