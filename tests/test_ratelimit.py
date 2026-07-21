@@ -2,6 +2,9 @@
 ClickNonce purge sweep.
 
 RATELIMIT_ENABLED is off in dev/CI by default, so each test flips it on explicitly.
+The DB-cache reset between tests (needed because CI's DJANGO_DEBUG=false makes
+RATELIMIT_ENABLED default True for the whole suite) lives in the suite-wide
+autouse fixture in tests/conftest.py — not duplicated here.
 """
 from __future__ import annotations
 
@@ -11,17 +14,6 @@ import pytest
 from django.core.cache import cache
 from django.core.management import call_command
 from django.test import Client
-
-
-@pytest.fixture(autouse=True)
-def _clear_cache(request):
-    # The DB cache needs DB access; only clear it for tests that enable the DB.
-    has_db = "db" in request.fixturenames or "transactional_db" in request.fixturenames
-    if has_db:
-        cache.clear()
-    yield
-    if has_db:
-        cache.clear()
 
 
 @pytest.fixture
