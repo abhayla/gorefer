@@ -12,11 +12,18 @@
       Share a referral link, track the full journey, and let PIFS help your
       referrals open their Zerodha account — all in one place.
     </p>
-    {% if FEATURE_FLAGS.ENABLE_ADMIN_DASHBOARD %}
-      <a href="/admin-panel/" class="mt-6 inline-block rounded-full bg-cobalt-600 hover:bg-cobalt-500 transition-colors px-5 py-2.5 text-sm font-bold text-white card">
-        Admin sign in
-      </a>
-    {% endif %}
+    <div class="mt-6 flex items-center gap-3">
+      {% if FEATURE_FLAGS.ENABLE_CUSTOMER_LOGIN %}
+        <a href="{% url 'referrer_login' %}" class="inline-block rounded-full bg-cobalt-600 hover:bg-cobalt-500 transition-colors px-5 py-2.5 text-sm font-bold text-white card">
+          My Referrals — sign in
+        </a>
+      {% endif %}
+      {% if FEATURE_FLAGS.ENABLE_ADMIN_DASHBOARD %}
+        <a href="/admin-panel/" class="inline-block rounded-full {% if FEATURE_FLAGS.ENABLE_CUSTOMER_LOGIN %}border border-line bg-white hover:bg-bg text-ink-900{% else %}bg-cobalt-600 hover:bg-cobalt-500 text-white{% endif %} transition-colors px-5 py-2.5 text-sm font-bold card">
+          Admin sign in
+        </a>
+      {% endif %}
+    </div>
   </section>
 {% endblock %}
 {% block compliance %}

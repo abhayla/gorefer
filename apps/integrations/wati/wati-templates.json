@@ -183,9 +183,9 @@
       ]
     },
     {
-      "_status": "HOLD — do NOT submit to Meta until Abhay's review-go (his rule; API create == submit). This is the Q-M-OTP AUTHENTICATION template (referrer login OTP). GO-LIVE precondition, not a build blocker.",
-      "_naming_convention": "gorefer_login_otp (matches OTP_WHATSAPP_TEMPLATE default). AUTHENTICATION category — OTP + copy-code button ONLY, no marketing, no free URLs (Meta rule).",
-      "name": "gorefer_login_otp",
+      "_status": "HOLD — do NOT submit to Meta until Abhay's review-go (his rule; API create == submit). M13 owner decision 2026-07-21: draft shown to Abhay FIRST, submitted only on his explicit go. This is the Q-M-OTP/M13 AUTHENTICATION template (referrer login OTP). GO-LIVE precondition for the OTP door, not a build blocker.",
+      "_naming_convention": "gr_platform_gorefer_login_otp_en_2026_07_21 — current convention gr_<group>_<entity>_<purpose>_<lang>_<date>; platform-level like the delivery-report template. Matches the OTP_WHATSAPP_TEMPLATE config default (settings/.env.example; per-tenant override on Preferences). AUTHENTICATION category — OTP + copy-code button ONLY, no marketing, no free URLs (Meta rule).",
+      "name": "gr_platform_gorefer_login_otp_en_2026_07_21",
       "category": "AUTHENTICATION",
       "language": "en",
       "recipient_role": "referrer",

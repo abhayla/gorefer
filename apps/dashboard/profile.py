@@ -48,6 +48,8 @@ PROFILE_CONFIG = {
         "excluded from click & visitor totals."
     ),
     "link_base": "gorefer.in/r/",
+    # §4.4 disclosure host linked from the referrer self-view share text (ADR-031).
+    "disclosure_url": "gorefer.in/d/pifs",
 }
 
 

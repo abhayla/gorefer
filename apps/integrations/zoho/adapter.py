@@ -44,6 +44,11 @@ GOREFER_REFERENCE_FIELD = "GoRefer_Reference"
 # Server-side dedup key. Zoho decides create-vs-update on this field (Model 2).
 DUPLICATE_CHECK_FIELDS = ["Mobile"]
 
+# Referrer Contact upsert (M13 Path B): dedup on ClientId — a verified referrer is
+# keyed by their Zerodha client id in Contacts (doc-08 B4), NOT by mobile (a family
+# member could share a mobile; the client id is the identity, ADR-016/ADR-035).
+CONTACT_DUPLICATE_CHECK_FIELDS = ["ClientId"]
+
 # Zoho Leads fields pulled for the lazy per-referrer history fetch (#9, DF-4).
 # Account_Opened_On is the TRUE open date (ADR-017) — analytics must never key off
 # the import/sync date, or a backfill stacks all history onto day 1.
@@ -73,6 +78,12 @@ class LeadWriteResult:
 class ReferrerHistory:
     referrer_client_id: str
     conversions: list = field(default_factory=list)  # list of conversion dicts (Zoho-shaped)
+
+
+@dataclass
+class ContactWriteResult:
+    zoho_contact_id: str
+    action: str = "insert"  # "insert" | "update" — what Zoho actually did
 
 
 def gorefer_reference_for(referral) -> str:
@@ -115,6 +126,28 @@ def build_lead_record(*, payload: dict, gorefer_reference: str) -> dict:
     return record
 
 
+def build_referrer_contact_record(*, client_id: str, name: str, mobile: str, email: str = "") -> dict:
+    """Map an approved Path-B referrer (M13) to a Zoho Contacts record.
+
+    Same field conventions as the READ leg (doc-08 B4: Contacts stores `ClientId`)
+    and the Leads WRITE leg (Mobile in Zoho's bare 10-digit stored format via
+    `to_zoho_mobile`). `Last_Name` is required by Zoho — the verified registered
+    name from the evidence review fills it (never a placeholder that could look
+    like a real person GoRefer invented).
+    """
+    record = {
+        "Last_Name": name or f"(GoRefer referrer {client_id})",
+        "ClientId": client_id,
+        "Mobile": to_zoho_mobile(mobile),
+        "Phone": to_zoho_mobile(mobile),
+        "IsReferrer": True,
+        "Lead_Source": "GoRefer",
+    }
+    if email:
+        record["Email"] = email
+    return record
+
+
 class LogOnlyZohoAdapter:
     """Demo/dev adapter: logs the intended Zoho write, returns a fake lead id.
 
@@ -139,6 +172,18 @@ class LogOnlyZohoAdapter:
     def fetch_referrer_history(self, *, referrer_client_id: str) -> ReferrerHistory:
         logger.info("[demo] Zoho fetch_referrer_history suppressed: %s", referrer_client_id)
         return ReferrerHistory(referrer_client_id=referrer_client_id, conversions=[])
+
+    def upsert_referrer_contact(
+        self, *, client_id: str, name: str, mobile: str, email: str = ""
+    ) -> ContactWriteResult:
+        record = build_referrer_contact_record(
+            client_id=client_id, name=name, mobile=mobile, email=email
+        )
+        logger.info(
+            "[demo] Zoho upsert_referrer_contact suppressed: dedup_on=%s record=%s",
+            CONTACT_DUPLICATE_CHECK_FIELDS, record,
+        )
+        return ContactWriteResult(zoho_contact_id=f"demo-zoho-contact-{client_id}", action="insert")
 
 
 class LiveZohoAdapter:
@@ -220,6 +265,40 @@ class LiveZohoAdapter:
             "Zoho fetch_referrer_history: %d row(s) for ClientId=%s", len(rows), referrer_client_id
         )
         return ReferrerHistory(referrer_client_id=referrer_client_id, conversions=rows)
+
+    def upsert_referrer_contact(
+        self, *, client_id: str, name: str, mobile: str, email: str = ""
+    ) -> ContactWriteResult:
+        """Idempotent Contacts upsert keyed on ClientId (M13 Path B approval).
+
+        ADR-035: an approved evidence-verified referrer is upserted into Zoho so
+        their NEXT login resolves an on-file channel (Path A). Server-side dedup on
+        ClientId (same race-safety rationale as the Leads upsert). This writes
+        identity/channel fields ONLY — never account/conversion status (guardrail #2).
+        """
+        record = build_referrer_contact_record(
+            client_id=client_id, name=name, mobile=mobile, email=email
+        )
+        if not record["ClientId"]:
+            raise RuntimeError("Zoho contact upsert refused: no client_id to dedup on.")
+
+        resp = self.http.post_json(
+            "/crm/v8/Contacts/upsert",
+            body={"data": [record], "duplicate_check_fields": CONTACT_DUPLICATE_CHECK_FIELDS},
+        )
+        rows = resp.get("data") or []
+        if not rows:
+            raise RuntimeError(f"Zoho contact upsert returned no data: {resp}")
+        row = rows[0]
+        if row.get("code") not in ("SUCCESS",):
+            raise RuntimeError(f"Zoho contact upsert failed: {row}")
+        details = row.get("details") or {}
+        action = (row.get("action") or details.get("action") or "insert").lower()
+        logger.info(
+            "Zoho upsert_referrer_contact %s: ClientId=%s id=%s",
+            action, client_id, details.get("id"),
+        )
+        return ContactWriteResult(zoho_contact_id=str(details.get("id") or ""), action=action)
 
 
 def get_zoho_adapter():

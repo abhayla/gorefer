@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Verification pending — GoRefer{% endblock %}
+{% block content %}
+  <section class="rounded-2xl bg-white border border-line card p-8 text-center">
+    <div class="mx-auto h-12 w-12 rounded-2xl bg-amber-100 flex items-center justify-center text-xl">⏳</div>
+    <h1 class="mt-4 text-xl font-extrabold tracking-tight text-ink-900">Verification pending</h1>
+    <p class="mt-2 text-sm text-ink-500">
+      Thanks — your request for <span class="font-mono font-semibold text-cobalt-600">{{ client_id }}</span>
+      is with our team. You'll be able to sign in as soon as it's approved (usually within a day).
+    </p>
+    <a href="/" class="mt-6 inline-block rounded-full bg-cobalt-600 hover:bg-cobalt-500 transition-colors px-5 py-2.5 text-sm font-bold text-white card">Back to GoRefer</a>
+  </section>
+{% endblock %}

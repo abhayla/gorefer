@@ -1,0 +1,74 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Verifications — GoRefer Admin{% endblock %}
+{% block content %}
+
+<div class="flex items-center gap-2">
+  <h1 class="text-lg font-extrabold tracking-tight">Referrer verifications</h1>
+  <span class="text-[11px] text-ink-300">ADR-027 mismatches &amp; Path-B evidence — approve to bind &amp; put on file</span>
+</div>
+
+{% if messages %}
+  {% for m in messages %}<p class="text-[12px] font-semibold text-red-600">{{ m }}</p>{% endfor %}
+{% endif %}
+
+<section class="bg-white border border-line rounded-2xl card overflow-hidden">
+  <div class="px-4 py-3 border-b border-line text-[10px] uppercase tracking-wide text-ink-300 font-semibold">Pending · {{ pending|length }}</div>
+  <div class="divide-y divide-line">
+    {% for req in pending %}
+      <div class="px-4 py-3.5 flex flex-col lg:flex-row lg:items-center gap-3">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-mono text-[12px] font-bold text-cobalt-600 bg-cobalt-50 rounded-full px-2 py-0.5">{{ req.client_id }}</span>
+            <span class="text-[10px] font-bold rounded-full px-2 py-0.5 {% if req.kind == 'evidence' %}bg-amber-100 text-amber-700{% else %}bg-cobalt-50 text-cobalt-600{% endif %}">
+              {% if req.kind == 'evidence' %}Path B — screenshot{% else %}OAuth — no match{% endif %}
+            </span>
+            <span class="text-[11px] text-ink-300">{{ req.created_at|date:"d M Y H:i" }}</span>
+          </div>
+          <div class="mt-1 text-[12px] text-ink-500">
+            {% if req.registered_name %}Name: <b class="text-ink-900">{{ req.registered_name }}</b> · {% endif %}
+            {% if req.mobile_entered %}Mobile: <span class="font-mono">{{ req.mobile_entered }}</span> · {% endif %}
+            {% if req.google_email %}Google: <span class="font-mono">{{ req.google_email }}</span>{% endif %}
+          </div>
+          {% if req.evidence_size %}
+            <a href="{% url 'dashboard_verification_evidence' req.id %}" target="_blank"
+               class="mt-1 inline-block text-[12px] font-semibold text-cobalt-600 hover:underline">View screenshot ({{ req.evidence_size|filesizeformat }}) →</a>
+          {% endif %}
+        </div>
+        <div class="flex gap-2 shrink-0">
+          <form method="post" action="{% url 'dashboard_verification_decide' req.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="approve">
+            <button type="submit" class="rounded-full bg-positive hover:opacity-90 transition-opacity px-4 py-2 text-[12px] font-bold text-white card">Approve</button>
+          </form>
+          <form method="post" action="{% url 'dashboard_verification_decide' req.id %}" class="flex gap-2">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="reject">
+            <input name="note" placeholder="reason (optional)" class="rounded-full border border-line px-3 py-1.5 text-[11px] w-36 focus:outline-none focus:border-cobalt-500">
+            <button type="submit" class="rounded-full border border-line bg-white hover:bg-bg transition-colors px-4 py-2 text-[12px] font-bold text-danger card">Reject</button>
+          </form>
+        </div>
+      </div>
+    {% empty %}
+      <div class="px-4 py-10 text-center text-[12px] text-ink-300">No pending verifications.</div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="bg-white border border-line rounded-2xl card overflow-hidden">
+  <div class="px-4 py-3 border-b border-line text-[10px] uppercase tracking-wide text-ink-300 font-semibold">Recently decided</div>
+  <div class="divide-y divide-line">
+    {% for req in decided %}
+      <div class="px-4 py-2.5 flex items-center gap-3 text-[12px]">
+        <span class="font-mono font-bold text-cobalt-600">{{ req.client_id }}</span>
+        <span class="{% if req.status == 'approved' %}text-positive{% else %}text-danger{% endif %} font-semibold">{{ req.status }}</span>
+        <span class="text-ink-300">{{ req.kind }}</span>
+        {% if req.decision_note %}<span class="text-ink-500 truncate">“{{ req.decision_note }}”</span>{% endif %}
+        <span class="ml-auto text-[11px] text-ink-300">{{ req.decided_at|date:"d M Y H:i" }} · evidence purged</span>
+      </div>
+    {% empty %}
+      <div class="px-4 py-6 text-center text-[12px] text-ink-300">Nothing decided yet.</div>
+    {% endfor %}
+  </div>
+</section>
+
+{% endblock %}

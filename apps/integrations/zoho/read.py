@@ -30,6 +30,13 @@ logger = logging.getLogger("gorefer.zoho.read")
 # Kept as data (not scattered literals) so adding a field is config, not code surgery.
 CONTACT_ENRICHMENT_FIELDS = (
     "Full_Name",
+    # On-file channels (Q-M-OTP-2): the login OTP recipient resolver reads Mobile/
+    # Phone (never a user-typed number, ADR-035 Path A) and the OAuth auto-bind
+    # (ADR-027) matches on Email/Mobile. Profile chips do NOT render these — they
+    # stay on the erasable side of the PII boundary.
+    "Mobile",
+    "Phone",
+    "Email",
     "Mailing_City",
     "Mailing_State",
     "Mailing_Country",
@@ -72,6 +79,10 @@ class ZohoContact:
 
     client_id: str
     full_name: str | None = None
+    # On-file channels (Q-M-OTP-2 / ADR-027). PII — never rendered on the profile.
+    mobile: str | None = None
+    phone: str | None = None
+    email: str | None = None
     mailing_city: str | None = None
     mailing_state: str | None = None
     mailing_country: str | None = None
@@ -125,6 +136,9 @@ def _norm_contact(client_id: str, raw: dict) -> ZohoContact:
     return ZohoContact(
         client_id=client_id,
         full_name=g("Full_Name"),
+        mobile=g("Mobile"),
+        phone=g("Phone"),
+        email=g("Email"),
         mailing_city=g("Mailing_City"),
         mailing_state=g("Mailing_State"),
         mailing_country=g("Mailing_Country"),
@@ -287,6 +301,8 @@ def get_zoho_read_adapter():
 _DEMO_CONTACTS = {
     "RJ4521": {
         "Full_Name": "Rajesh Joshi",
+        "Mobile": "9876504321",
+        "Email": "rajesh.joshi.demo@example.com",
         "Mailing_City": "Pune",
         "Mailing_State": "MH",
         "Mailing_Country": "India",
@@ -304,6 +320,8 @@ _DEMO_CONTACTS = {
     },
     "DA1707": {
         "Full_Name": "Amit Deshpande",
+        "Mobile": "9876504322",
+        "Email": "amit.deshpande.demo@example.com",
         "Mailing_City": "Mumbai",
         "Mailing_State": "MH",
         "Mailing_Country": "India",

@@ -55,20 +55,28 @@ def _from_customer(tenant, client_id: str) -> str:
 
 
 def _from_zoho(tenant, client_id: str) -> str:
-    """Zoho on-file channel lookup — STUB (Q-M-OTP-2 OPEN).
+    """Zoho on-file channel lookup (Q-M-OTP-2, wired M13).
 
-    Wire this to the M9 Zoho READ adapter's client_id->Contact lookup once the exact
-    module/method is confirmed. Until then, return "" so the flow falls back to the
-    assisted path (never guesses a number). Gated by ENABLE_ZOHO_READ.
+    Reads the referrer's Zoho Contact by ClientId through the M9 READ adapter and
+    returns the on-file Mobile (Phone as fallback), normalized. Gated by the RESOLVED
+    ENABLE_ZOHO_READ flag (admin override -> env default) so the Settings checkbox
+    governs this exactly like the profile enrichment. Any failure degrades to "" —
+    the caller falls back to Path B; a number is never guessed.
     """
-    # Resolved (admin override -> env default), not raw env, so this stub honours the
-    # Settings checkbox the same way the real read adapter does — otherwise wiring
-    # Q-M-OTP-2 later would silently inherit the wrong gate.
     from apps.config.integration_flags import ENABLE_ZOHO_READ, resolve_flag
 
     if not resolve_flag(ENABLE_ZOHO_READ, tenant_id=getattr(tenant, "id", None)):
         return ""
-    # TODO(Q-M-OTP-2): call the M9 Zoho READ adapter, read Contact.Mobile/Phone for
-    # ClientId == client_id, normalize_phone(...) and return it.
-    logger.info("Zoho on-file OTP lookup not yet wired (Q-M-OTP-2); client_id=%s", client_id)
-    return ""
+    from apps.integrations.zoho.read import get_zoho_read_adapter
+
+    try:
+        contact = get_zoho_read_adapter().fetch_contact_by_client_id(client_id=client_id)
+    except Exception:  # noqa: BLE001 — a Zoho outage must degrade to Path B, never 500 a login
+        logger.warning(
+            "Zoho on-file OTP lookup failed for client_id=%s — degrading", client_id, exc_info=True
+        )
+        return ""
+    if not contact.matched:
+        return ""
+    raw = contact.mobile or contact.phone or ""
+    return normalize_phone(raw) if raw else ""

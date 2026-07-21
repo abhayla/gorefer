@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Link your Client ID — GoRefer{% endblock %}
+{% block content %}
+  <section class="rounded-2xl bg-white border border-line card p-8">
+    <h1 class="text-xl font-extrabold tracking-tight text-ink-900">Link your Zerodha Client ID</h1>
+    <p class="mt-1.5 text-sm text-ink-500">
+      Signed in as <span class="font-semibold">{{ google_email }}</span>. One last step: tell us which
+      Client ID is yours. We match it against the details already on file.
+    </p>
+    {% if error %}<p class="mt-4 text-[12px] font-semibold text-red-600">{{ error }}</p>{% endif %}
+    <form method="post" action="{% url 'referrer_oauth_bind' %}" class="mt-5 space-y-4">
+      {% csrf_token %}
+      <div>
+        <label class="block text-[12px] font-semibold text-ink-500" for="client_id">Your Zerodha Client ID</label>
+        <input id="client_id" name="client_id" type="text" required autocomplete="off" maxlength="20"
+               placeholder="e.g. RJ4521"
+               class="mt-1 w-full rounded-xl border border-line px-4 py-2.5 font-mono text-[14px] uppercase tracking-wide focus:outline-none focus:border-cobalt-500">
+      </div>
+      <div>
+        <label class="block text-[12px] font-semibold text-ink-500" for="mobile">Registered mobile number</label>
+        <input id="mobile" name="mobile" type="tel" autocomplete="tel" maxlength="16"
+               placeholder="98765 43210"
+               class="mt-1 w-full rounded-xl border border-line px-4 py-2.5 text-[14px] focus:outline-none focus:border-cobalt-500">
+        <p class="mt-1 text-[11px] text-ink-300">Used only to match against the record on file — we never send anything to it from here.</p>
+      </div>
+      <button type="submit"
+              class="w-full rounded-full bg-cobalt-600 hover:bg-cobalt-500 transition-colors px-5 py-2.5 text-sm font-bold text-white card">
+        Link my Client ID
+      </button>
+    </form>
+  </section>
+{% endblock %}
