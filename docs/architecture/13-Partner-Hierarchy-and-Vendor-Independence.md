@@ -272,6 +272,18 @@ the (tenant, mobile) upsert-key change as part of the first multi-AP migration (
 - **O-5 Ops maturity as a platform obligation.** Before APs depend on the platform: verified
   nightly Postgres backups, a TESTED restore, and a stated recovery expectation (RPO/RTO) in the
   AP agreement. One VPS serving 50 APs' businesses is a promise, not just a server.
+- **O-6 Hierarchy-scoped WhatsApp delivery report (feature + in-product page).** A daily
+  reconciliation: the **Zoho side** (how many messages were *supposed* to send — Send-Queue rows by
+  rule → partner → AP, by hour) joined against the **Wati side** (how many actually SENT, DELIVERED,
+  FAILED — with Meta failure reasons: 131049 cap, 131026 bad number, etc.). Two deliverables: (a) an
+  **operational scheduled report** (buildable now, single-AP, hierarchy-shaped — engine + skill:
+  `build-daily-delivery-report`); (b) a **GoRefer in-product report page**, permission-scoped to the
+  hierarchy — **an AP sees only their own numbers, a partner-group lead sees the whole group, admin
+  sees everything** (ADR-036 tree). The page is a **future, model-only feature** — built when a
+  mission opens, not speculatively; it needs the partner-group tagging that arrives with the first
+  multi-AP migration (until then group/partner is derived from `Source_Rule`). Owner idea: Abhay
+  2026-07-20. The reconciliation contract + data engine already exist as the skill above; the page
+  renders it. The report is the natural place a new AP or partner group first *sees* their activity.
 
 ## 9. DA ratification (2026-07-20)
 
