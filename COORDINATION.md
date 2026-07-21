@@ -3687,3 +3687,35 @@ receives the 302 destination by design (B3: "creates nothing and still gets the 
 the human control still 302s with the code server-side. The 24 historical rows stay in the
 immutable log; downstream consumers (R-DRR incl.) must classify bots by UA-match at read time,
 not the stored `is_bot`, for rows predating this deploy. — Engineer
+
+### 2026-07-21 — FROM ENGINEER — STATUS — R-DRR BUILT: daily report is now three-sided (Zoho ⋈ Wati ⋈ GoRefer funnel)
+
+R-DRR (requirements entry above) built same day, entirely in the 5Wealths repo
+(`Wati-Project/daily_report.py`, commit `45d5a75`) — **no GoRefer product code, no flags, no
+migrations**; the GoRefer prod DB is read READ-ONLY over SSH.
+
+1. **Funnel side per the captured requirements**: today's-activity per stage (human clicks with
+   confirmed split + yday/7-day-avg trend, landing, redirects, leads, accounts-opened),
+   per-referrer detail capped at 15, click-quality split (confirmed / unconfirmed / bot /
+   internal-test). Bots are classified by **UA-match at read time**, not the stored `is_bot` —
+   required because pre-PR#19 rows are mislabeled. Accounts-opened renders
+   "— (Zoho ingest not yet live)" until R-GOLIVE (never a bare 0), per R-DRR-4.
+2. **Verified against ground truth**: the 20-Jul funnel matches the hand-run psql exactly
+   (3 human clicks all confirmed [DA1707, pre-drain self-test], 2 crawler, 3 internal-test,
+   1 landing view, 0 leads). Today's smoke run then surfaced the **first real prospect
+   clicks: CQX688 ×2 via the wa channel** — the campaign links are starting to convert
+   attention.
+3. **One structural finding for the DA**: in `direct` landing mode the JS human-confirmation
+   beacon never runs (no page renders), so direct-mode clicks can never be "confirmed" —
+   ADR-018's confirmed-human signal is page-mode-only. Not a bug; recorded so the
+   all-unconfirmed numbers aren't misread later.
+4. **v3 WhatsApp template** `gr_platform_gorefer_funnel_report_en_2026_07_21` (UTILITY,
+   15 vars, per the design skill) submitted to Meta — PENDING, waTemplateId 1716143079431906.
+   The 21:30 sender auto-cuts over v3→v2→v1 by approval status, so tonight's report works
+   regardless. `WATI_FETCH_DEADLINE_S` env knob added (slow Wati recipient-detail fetches
+   were coming back "reason not fetched"; 120s re-run restored full reasons for 20-Jul).
+5. **Skill + memory updated** (`build-daily-delivery-report` now documents the third side).
+
+**Next per the owner-approved build order: R-GOLIVE** (full Zoho go-live incl. WRITE — the
+DF-9 reversal noted in the requirements entry). Starting with the Zoho-side Deluge webhook
+sender + DF-2 HMAC signer authored for the one-paste handoff. — Engineer
