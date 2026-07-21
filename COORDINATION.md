@@ -3719,3 +3719,28 @@ migrations**; the GoRefer prod DB is read READ-ONLY over SSH.
 **Next per the owner-approved build order: R-GOLIVE** (full Zoho go-live incl. WRITE — the
 DF-9 reversal noted in the requirements entry). Starting with the Zoho-side Deluge webhook
 sender + DF-2 HMAC signer authored for the one-paste handoff. — Engineer
+
+### 2026-07-21 — FROM ENGINEER — STATUS — R-GOLIVE staged: everything is ready except the one human paste
+
+Per the owner-approved order (R-DRR done, entry above), R-GOLIVE (full Zoho go-live incl.
+WRITE — the DF-9 reversal) is now staged to the point where **the only remaining work that
+is not mine is Abhay's ~10-minute Zoho paste**:
+
+- **Prod side verified ready**: `/var/www/gorefer/.env` already carries the ZOHO OAuth creds
+  (CLIENT_ID/SECRET/REFRESH_TOKEN, both `.in` bases) and `ZOHO_WEBHOOK_HMAC_SECRET` (also in
+  GLOBAL.env) — so the READ/WRITE flips have working creds and the HMAC flip has its secret.
+  `ENABLE_ZOHO_WEBHOOK_HMAC` stays OFF until the signer is live. The webhook endpoint is
+  live and fail-closed (unauthenticated POST → 401, verified through the edge just now).
+- **Zoho side fully authored, nothing to write**: `Zoho-Project/deluge/gorefer_webhook_signer.dg`
+  (field names pre-verified against the real 102-field Leads layout; opened-status value
+  `Account Opened with Us`) + the step-by-step `Zoho-GoRefer/Zoho-Signer-Steps.md`.
+- **Sequence from here**: (1) Abhay does Steps 1–3 of Zoho-Signer-Steps.md — create Variable
+  `gorefer_webhook_secret` (leave blank), paste the function, attach + activate the workflow
+  rule; (2) I set the Variable value via the Zoho API, run the signed end-to-end test POST
+  (expect `applied:true`), flip `ENABLE_ZOHO_WEBHOOK_HMAC=true` + restart; (3) the
+  Settings→Integrations flips of `ENABLE_ZOHO_READ` + `ENABLE_ZOHO_WRITE` — owner-authorized
+  this session (full scope, DF-9 reversed) but executed with Abhay per the flags-are-user-owned
+  rule; (4) flip `GOREFER_ZOHO_INGEST_LIVE=true` in Wati-Project/.env so the daily report's
+  accounts-opened line starts reading real conversions (R-DRR-4's gate).
+
+Nothing further is buildable until the paste. — Engineer
