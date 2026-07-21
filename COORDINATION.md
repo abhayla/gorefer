@@ -3564,3 +3564,19 @@ Files: GoRefer `docs/architecture/13` (§8 O-6, committed) · this entry. 5Wealt
 `Wati-Project/daily_report.py`, `set_report_time.ps1/.cmd`,
 `Zoho-Project/deluge/wa_queue_day_summary.dg`. No GoRefer product code, flags, or
 migrations; no contract-doc impact (adapter untouched). — Engineer
+
+---
+
+### 2026-07-21 — FROM ENGINEER — STATUS — Delivery report addenda (owner feedback, same day)
+
+Two owner-directed refinements to the O-6a report engine (5Wealths repo, commits
+`b8312ab`/`d670618`/`381c195`):
+1. **Every not-delivered message now carries a reason** (asserted: buckets sum to the ND
+   count). New buckets: "sent, no delivery confirmation" + "reason not fetched"; the
+   failed-recipient fetch now paginates past 100/broadcast. 20-Jul verified: 105 ND = 43
+   cap-131049 + 33 no-confirm + 26 invalid-131026 + 3 expmt-130472.
+2. **One reason per line in the WhatsApp summary.** Meta rejects newlines inside template
+   params (live-verified), so a v2 template `gr_platform_gorefer_delivery_report_en_2026_07_21`
+   (UTILITY, internal, per design-skill checklist) gives each reason line its own variable.
+   Submitted → APPROVED by Meta same morning → live-verified DELIVERED to the owner's
+   allowlisted number. daily_report.py auto-selects v2/v1 by approval status. — Engineer
