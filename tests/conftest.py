@@ -31,13 +31,21 @@ def _clear_ratelimit_cache(request):
     around each DB-touching test keeps counters test-local without changing
     any rate-limit behavior itself.
     """
-    has_db = "db" in request.fixturenames or "transactional_db" in request.fixturenames
-    if has_db:
+    db_fixture_name = (
+        "db" if "db" in request.fixturenames
+        else "transactional_db" if "transactional_db" in request.fixturenames
+        else None
+    )
+    if db_fixture_name:
+        # Force the db fixture to actually set up now (this autouse fixture has
+        # no dependency edge to it, so instantiation order isn't guaranteed —
+        # without this, cache.clear() can run before db access is unblocked).
+        request.getfixturevalue(db_fixture_name)
         from django.core.cache import cache
 
         cache.clear()
     yield
-    if has_db:
+    if db_fixture_name:
         from django.core.cache import cache
 
         cache.clear()
