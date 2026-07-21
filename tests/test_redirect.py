@@ -80,6 +80,24 @@ def test_bot_preview_creates_no_journey(seeded, client):
     assert Event.objects.count() == 0
 
 
+@pytest.mark.parametrize(
+    "ua",
+    [
+        # Observed live 2026-07-20: Meta's WhatsApp preview crawler slipped the
+        # filter and was recorded as a human click (channel=WhatsApp).
+        "facebookexternalua",
+        "meta-externalagent/1.1 (+https://developers.facebook.com/docs/sharing/webmasters/crawler)",
+        "meta-externalfetcher/1.1",
+    ],
+)
+def test_meta_preview_crawler_uas_create_no_journey(seeded, client, ua):
+    resp = client.get("/r/wa/RJ4521", HTTP_USER_AGENT=ua)
+    assert resp.status_code == 200
+    assert ReferralIdentity.objects.count() == 0
+    assert Referral.objects.count() == 0
+    assert Event.objects.count() == 0
+
+
 # --- /open partner-direct --------------------------------------------------
 
 def test_partner_direct_creates_none_referrer_journey(seeded, client):
