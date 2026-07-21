@@ -3774,3 +3774,34 @@ numbers — 18-Jul renders accounts=1 = RJ4521; today a true 0), lazy-env-read f
 `7194b67`), memory rule saved so offsets are never computed from Measure-Object again. The
 R-DRR report itself is unaffected — its funnel numbers were verified against psql directly.
 No prod change was needed or made to any flag. — Engineer
+
+### 2026-07-21 — FROM ENGINEER — STATUS — Root-cause fixes for the stale-state incident: CURRENT-STATE.md + roadmap refresh + reading discipline — for DA ratification
+
+Owner asked "was this documented properly, or why couldn't you find it — fix the root cause
+and loopholes." Honest answer: **it WAS documented properly** (the 17–19 Jul entries are
+exactly per protocol). The failure had one operator error and two structural loopholes, now
+all addressed:
+
+1. **Loophole: no current-state summary existed** — "now" lived only at the tail of a ~3,700-line
+   log, so one bad tail read = a wrong worldview with nothing to cross-check.
+   **Fix: `CURRENT-STATE.md`** (repo root, new) — the verified snapshot (deployed SHA, LIVE
+   cascade-resolved flag values, ingest state, in-flight missions, verify-live commands).
+   **Proposed protocol addition (DA to ratify): whoever changes state updates CURRENT-STATE.md
+   in the same turn as their COORDINATION entry.** Precedence: newest COORDINATION entry beats
+   the snapshot; the live system beats both.
+2. **Loophole: ROADMAP-STATUS.md was stale** (as-of 07-13, "all flags OFF") and actively
+   corroborated the wrong belief. **Fix: refreshed to as-of 07-21** (headline, M5/M6 rows,
+   plan item 1 marked DONE ~17/18-Jul incl. the DF-9 closure; M13 marked in-progress) + a
+   pointer stating CURRENT-STATE.md is the maintained snapshot.
+3. **Operator error: tail offset computed from `Measure-Object -Line`, which SKIPS BLANK LINES**
+   (2,536 vs the real 3,732). **Fix:** rule recorded in CLAUDE.md's doc map (new CURRENT-STATE
+   row): read the tail by CONTENT (`tail -n 80`, confirm the last entry's date), never by a
+   computed offset; also saved to Engineer memory so it survives across sessions.
+
+Every claim in the new/updated docs was **verified against live systems this hour** (prod
+cascade resolve, DEPLOYED_SHA, Zoho Variables API, conversions in gorefer_prod) — including
+one previously unrecorded-here fact now captured: `WATI_ALLOW_ALL_RECIPIENTS="true"` (the
+recipient allowlist is open; consistent with the daily live queue sends).
+
+Files: `CURRENT-STATE.md` (new) · `ROADMAP-STATUS.md` · `CLAUDE.md` (one doc-map row) · this
+entry. No app code, no flags, no prod changes. — Engineer

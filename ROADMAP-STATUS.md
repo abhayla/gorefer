@@ -1,9 +1,9 @@
 # GoRefer — Feature Roadmap & Status
 
-> **As of 2026-07-13.** Grounded in `COORDINATION.md` (DA⇆Engineer log), `CLAUDE.md`, `review/Deferred-Features-Backlog.md`, `docs/sprint2/`. Status vocabulary: **Discussed** (spec'd only) · **Implemented** (code+tests, on a branch, not yet in prod) · **Deployed** (on `main` and running at gorefer.in).
+> **As of 2026-07-21.** Grounded in `COORDINATION.md` (DA⇆Engineer log), `CLAUDE.md`, `review/Deferred-Features-Backlog.md`, `docs/sprint2/`. Status vocabulary: **Discussed** (spec'd only) · **Implemented** (code+tests, on a branch, not yet in prod) · **Deployed** (on `main` and running at gorefer.in). **For live flag/deploy state, `CURRENT-STATE.md` is the maintained snapshot — this file's headline is refreshed on milestones only** (the stale 07-13 headline here corroborated the 2026-07-21 wrong-state incident; hence the split).
 
 ## Deploy headline
-GoRefer is **LIVE in production** at **https://gorefer.in** — Hostinger VPS `72.61.240.224`, Cloudflare proxied, SSL Full-strict, live since 2026-07-09. Everything in Sprint 1 + Sprint-2 Track B + the Preferences screen is deployed. Only **Q-M-OTP** is built-but-not-deployed (deliberately held). Several deployed features are **live-but-dormant behind flags** (`ENABLE_ZOHO_WRITE`, `ENABLE_ZOHO_READ`, `ENABLE_WATI_SEND`, `ENABLE_OTP_LOGIN` all `false`) pending go-live preconditions.
+GoRefer is **LIVE in production AND live-integrated** at **https://gorefer.in** — Hostinger VPS `72.61.240.224`, Cloudflare proxied, SSL Full-strict, live since 2026-07-09; deployed SHA `5a96000`. **The go-live flips happened ~2026-07-17/18**: `ENABLE_WATI_SEND`, `ENABLE_ZOHO_WRITE`, `ENABLE_ZOHO_READ` are **ON** (Settings/cascade overrides — the `.env` defaults still read `false`; never judge flag state from `.env`), the WATI recipient allowlist is **open** (real sends daily), and the **Zoho conversion webhook is live with the DF-2 HMAC seal ON** (signer + workflow rule active in Zoho; conversions ingesting — first live ingest `RJ4521`, 18-Jul). Only **Q-M-OTP** remains built-but-held (PR #12, awaiting the M13 customer-login gate; `ENABLE_OTP_LOGIN`/`ENABLE_CUSTOMER_LOGIN` still `false`). The **M13 login mission is in progress** (branch `mission-13-referrer-login`). Daily ops instrument: the three-sided 21:30 IST delivery+funnel report (O-6a/R-DRR, `Wati-Project/daily_report.py`).
 
 ---
 
@@ -15,8 +15,8 @@ GoRefer is **LIVE in production** at **https://gorefer.in** — Hostinger VPS `7
 | **M2 — `/r/{client_id}` redirect + lazy journey + click event** | Deployed | Validate→log click→302 with `c=ZMPHZC` injected server-side; `/open` partner-direct; bot-UA filtering. This is the core live pipe recording clicks. |
 | **M3 — Branded landing + capture form + two buttons** | Deployed | PIFS-branded, saves lead first; Continue→Zerodha, Share→wa.me to WATI number; disclosure + consent baked in. |
 | **M4 — Analytics / journey / funnel rollups** | Deployed | Read-only aggregation, daily/monthly rollups; unique/human counts labelled approximate; never fabricates conversions. |
-| **M5 — WATI hooks (3 lead-time notifications)** | Deployed (flag OFF) | Behind `ENABLE_WATI_SEND=false` → adapter logs intended calls, sends nothing live. Terminal-status verification, dedup, opt-in aware. |
-| **M6 — Zoho lead + status sync** | Deployed (flag OFF) | Behind `ENABLE_ZOHO_WRITE=false`. Status only ever from Zoho (never fabricated). Conversions mirror Zoho as-mapped. |
+| **M5 — WATI hooks (3 lead-time notifications)** | Deployed — **flag ON (~17-Jul)** | Live adapter, allowlist open. Terminal-status verification, dedup, opt-in aware. |
+| **M6 — Zoho lead + status sync** | Deployed — **flags ON (~17-Jul); webhook + HMAC seal live (18-Jul)** | Status only ever from Zoho (never fabricated). Conversions ingesting live (first: RJ4521, 18-Jul). |
 | **M7 — Admin dashboard / referral explorer / journey detail** | Deployed | Read-only KPIs from rollups, filters, conversion side-panel; PII masked. Last Sprint-1 feature mission. |
 | **M8 — Hardening + independent verification endgame** | Deployed | Adversarial E2E vs the Acceptance Test Plan; removed Tailwind CDN → compiled CSS + vendored HTMX; fresh-agent UI/functional verification. |
 | **M9 — Zoho-READ enrichment + Referral Profile + Variant C re-skin** | Deployed (READ flag OFF) | `/admin-panel/referrer/{client_id}/` (Clicks + Referred-People tabs); whole-app re-skinned to Variant C · Cobalt. New `ENABLE_ZOHO_READ=false`. |
@@ -59,6 +59,6 @@ The full, tracked backlog (14 items — DF-1…DF-11, DF-OTP-SMS, DF-TESTDB-ISOL
 
 ## Plan / what's next
 
-1. **Flip the live integrations on** (highest leverage, no new build): resolve the two go-live preconditions — fix Wati's ~60% delivery reliability and get the Wati templates Meta-approved — then enable `ENABLE_WATI_SEND` and validate the WhatsApp E2E. Then sandbox-check and enable `ENABLE_ZOHO_READ`. `ENABLE_ZOHO_WRITE` stays off while Ashok enters leads manually (DF-9).
-2. **Open the Sprint-2 customer-login gate (M13)** only after #1 is stable — login is the worst thing to ship on flaky OTP delivery. The hard part (OTP engine, Q-M-OTP) is done, so the remaining work is the login screen + Zoho-verified identity binding; then merge PR #12 and flip `ENABLE_CUSTOMER_LOGIN`/`ENABLE_OTP_LOGIN`.
+1. ~~Flip the live integrations on~~ **DONE (~17/18-Jul)** — all three integration flags ON, HMAC seal live, conversions ingesting (DF-9 closed with the WRITE flip). **Remaining from this item: the delivery-rate problem itself** — ~42% delivery, dominated by the Meta per-user marketing cap (131049) — instrumented by the daily three-sided report (O-6a/R-DRR, 21:30 IST) which now also shows the click-through funnel (20-Jul: 66 referral-link deliveries → 0 prospect clicks; 21-Jul: first real prospect clicks).
+2. **Open the Sprint-2 customer-login gate (M13)** — **in progress** (branch `mission-13-referrer-login`). The hard part (OTP engine, Q-M-OTP) is done; the remaining work is the login screen + Zoho-verified identity binding; then merge PR #12 and flip `ENABLE_CUSTOMER_LOGIN`/`ENABLE_OTP_LOGIN`.
 3. **Sprint 3** picks up multi-platform share (M12) + creatives (M14) once WhatsApp-first is proven.
