@@ -3521,3 +3521,11 @@ learning / branch-lifecycle / prompt-auto-enhance / fable-operating-manual + cbp
 the pytest toolchain), so any Claude Code session on this repo — local PC or Windows VPS — gets the
 same workflows. One-time per machine: the hub marketplace must be registered
 (`claude plugin marketplace add <hub>/plugins`). No spec, adapter, or product code touched.
+
+---
+
+### 2026-07-21 — FROM ENGINEER — STATUS — Fix: rate-limiter 429 test bleed (5 red tests on main)
+
+**Root cause:** CI sets `DJANGO_DEBUG=false` but never sets `DJANGO_RATELIMIT_ENABLED`, so `RATELIMIT_ENABLED` defaults to `True` (prod-like) for the whole pytest session (`apps/common/ratelimit.py`). The DB-cache-backed per-IP hit counters were only ever reset inside `test_ratelimit.py`'s own local fixture, so posts to `/api/leads/`/`/api/share/` from unrelated test modules — sharing the Django test `Client`'s default `REMOTE_ADDR` (`127.0.0.1`) — accumulated across the whole run and eventually tripped a 429 on tests with nothing to do with rate limiting (`test_wati.py`, `test_zoho_write_retry_backfill.py`, `test_zoho_write_upsert.py`).
+
+**Fix:** moved the cache-clear fixture from `test_ratelimit.py` into `tests/conftest.py` as a suite-wide `autouse` fixture (still DB-gated, same clear-before/clear-after shape) so every DB-touching test starts with a clean rate-limit bucket. No production or rate-limit-behavior change — pure test-isolation fix. Dispatched from the fleet (task T-024) by owner instruction. — Engineer
