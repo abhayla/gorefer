@@ -3730,3 +3730,121 @@ prod `.env` (redirect URI `https://gorefer.in/login/google/callback`); D2 templa
 Engineer submits + tracks to APPROVED + live-verifies; D3 flip `ENABLE_CUSTOMER_LOGIN` (+
 `ENABLE_OTP_LOGIN` after D2) on prod. Q-M-OTP PR #12 was already merged 2026-07-16 (roadmap doc
 line was stale) — no merge dependency remains. — Engineer
+
+### 2026-07-21 — FROM ENGINEER — STATUS — R-DRR BUILT: daily report is now three-sided (Zoho ⋈ Wati ⋈ GoRefer funnel)
+
+R-DRR (requirements entry above) built same day, entirely in the 5Wealths repo
+(`Wati-Project/daily_report.py`, commit `45d5a75`) — **no GoRefer product code, no flags, no
+migrations**; the GoRefer prod DB is read READ-ONLY over SSH.
+
+1. **Funnel side per the captured requirements**: today's-activity per stage (human clicks with
+   confirmed split + yday/7-day-avg trend, landing, redirects, leads, accounts-opened),
+   per-referrer detail capped at 15, click-quality split (confirmed / unconfirmed / bot /
+   internal-test). Bots are classified by **UA-match at read time**, not the stored `is_bot` —
+   required because pre-PR#19 rows are mislabeled. Accounts-opened renders
+   "— (Zoho ingest not yet live)" until R-GOLIVE (never a bare 0), per R-DRR-4.
+2. **Verified against ground truth**: the 20-Jul funnel matches the hand-run psql exactly
+   (3 human clicks all confirmed [DA1707, pre-drain self-test], 2 crawler, 3 internal-test,
+   1 landing view, 0 leads). Today's smoke run then surfaced the **first real prospect
+   clicks: CQX688 ×2 via the wa channel** — the campaign links are starting to convert
+   attention.
+3. **One structural finding for the DA**: in `direct` landing mode the JS human-confirmation
+   beacon never runs (no page renders), so direct-mode clicks can never be "confirmed" —
+   ADR-018's confirmed-human signal is page-mode-only. Not a bug; recorded so the
+   all-unconfirmed numbers aren't misread later.
+4. **v3 WhatsApp template** `gr_platform_gorefer_funnel_report_en_2026_07_21` (UTILITY,
+   15 vars, per the design skill) submitted to Meta — PENDING, waTemplateId 1716143079431906.
+   The 21:30 sender auto-cuts over v3→v2→v1 by approval status, so tonight's report works
+   regardless. `WATI_FETCH_DEADLINE_S` env knob added (slow Wati recipient-detail fetches
+   were coming back "reason not fetched"; 120s re-run restored full reasons for 20-Jul).
+5. **Skill + memory updated** (`build-daily-delivery-report` now documents the third side).
+
+**Next per the owner-approved build order: R-GOLIVE** (full Zoho go-live incl. WRITE — the
+DF-9 reversal noted in the requirements entry). Starting with the Zoho-side Deluge webhook
+sender + DF-2 HMAC signer authored for the one-paste handoff. — Engineer
+
+### 2026-07-21 — FROM ENGINEER — STATUS — R-GOLIVE staged: everything is ready except the one human paste
+
+Per the owner-approved order (R-DRR done, entry above), R-GOLIVE (full Zoho go-live incl.
+WRITE — the DF-9 reversal) is now staged to the point where **the only remaining work that
+is not mine is Abhay's ~10-minute Zoho paste**:
+
+- **Prod side verified ready**: `/var/www/gorefer/.env` already carries the ZOHO OAuth creds
+  (CLIENT_ID/SECRET/REFRESH_TOKEN, both `.in` bases) and `ZOHO_WEBHOOK_HMAC_SECRET` (also in
+  GLOBAL.env) — so the READ/WRITE flips have working creds and the HMAC flip has its secret.
+  `ENABLE_ZOHO_WEBHOOK_HMAC` stays OFF until the signer is live. The webhook endpoint is
+  live and fail-closed (unauthenticated POST → 401, verified through the edge just now).
+- **Zoho side fully authored, nothing to write**: `Zoho-Project/deluge/gorefer_webhook_signer.dg`
+  (field names pre-verified against the real 102-field Leads layout; opened-status value
+  `Account Opened with Us`) + the step-by-step `Zoho-GoRefer/Zoho-Signer-Steps.md`.
+- **Sequence from here**: (1) Abhay does Steps 1–3 of Zoho-Signer-Steps.md — create Variable
+  `gorefer_webhook_secret` (leave blank), paste the function, attach + activate the workflow
+  rule; (2) I set the Variable value via the Zoho API, run the signed end-to-end test POST
+  (expect `applied:true`), flip `ENABLE_ZOHO_WEBHOOK_HMAC=true` + restart; (3) the
+  Settings→Integrations flips of `ENABLE_ZOHO_READ` + `ENABLE_ZOHO_WRITE` — owner-authorized
+  this session (full scope, DF-9 reversed) but executed with Abhay per the flags-are-user-owned
+  rule; (4) flip `GOREFER_ZOHO_INGEST_LIVE=true` in Wati-Project/.env so the daily report's
+  accounts-opened line starts reading real conversions (R-DRR-4's gate).
+
+Nothing further is buildable until the paste. — Engineer
+
+### 2026-07-21 — FROM ENGINEER — CORRECTION — R-GOLIVE was ALREADY LIVE; my two entries above contain false claims; caught by Abhay
+
+**Retraction.** My "REQUIREMENTS CAPTURED — R-DRR" and "R-GOLIVE staged" entries above assert
+the Zoho ingest is not live and stage a go-live "blocked on Abhay's paste". **Both claims are
+false.** Abhay caught it ("gorefer_webhook_secret is already present... check again").
+
+**The actual state (verified live just now, not from docs):**
+- The signer was pasted and the workflow rule activated by Abhay on **2026-07-18** (entries at
+  ~line 3067); `ENABLE_ZOHO_WEBHOOK_HMAC` is **ON** with the seal proven end-to-end.
+- All three integration flags resolve **TRUE via the cascade** (Settings overrides, ~17-Jul);
+  the `.env` false lines are just overridden defaults.
+- Conversions ARE ingesting: `RJ4521` opened 18-Jul (webhook-ingested 23:33 same day),
+  `GW5500` historical (opened 02-May, ingested 09-Jul, true-open-date honored per ADR-017).
+- Consequence for the requirements record: R-DRR-4's gate is ALREADY met, and the R-GOLIVE
+  scope question was moot — **the owner's "full incl. WRITE" answer confirmed the existing
+  state; DF-9 was already effectively closed ~17-Jul**, not newly reversed today.
+
+**Root cause of my false belief:** I computed COORDINATION.md's "tail" offset from
+`Measure-Object -Line`, which **skips blank lines** (2536 vs the real 3732) — so I read
+mid-file (16-Jul entries) believing it was the newest state and missed the whole 17–19 Jul
+run. Also ROADMAP-STATUS.md's deploy headline (as-of 07-13, "all flags OFF") is now stale on
+exactly this point — **DA: worth refreshing its headline** so it can't corroborate the same
+mistake for the next reader.
+
+**Repairs done:** `GOREFER_ZOHO_INGEST_LIVE=true` (report accounts line now shows REAL
+numbers — 18-Jul renders accounts=1 = RJ4521; today a true 0), lazy-env-read fix (5Wealths
+`7194b67`), memory rule saved so offsets are never computed from Measure-Object again. The
+R-DRR report itself is unaffected — its funnel numbers were verified against psql directly.
+No prod change was needed or made to any flag. — Engineer
+
+### 2026-07-21 — FROM ENGINEER — STATUS — Root-cause fixes for the stale-state incident: CURRENT-STATE.md + roadmap refresh + reading discipline — for DA ratification
+
+Owner asked "was this documented properly, or why couldn't you find it — fix the root cause
+and loopholes." Honest answer: **it WAS documented properly** (the 17–19 Jul entries are
+exactly per protocol). The failure had one operator error and two structural loopholes, now
+all addressed:
+
+1. **Loophole: no current-state summary existed** — "now" lived only at the tail of a ~3,700-line
+   log, so one bad tail read = a wrong worldview with nothing to cross-check.
+   **Fix: `CURRENT-STATE.md`** (repo root, new) — the verified snapshot (deployed SHA, LIVE
+   cascade-resolved flag values, ingest state, in-flight missions, verify-live commands).
+   **Proposed protocol addition (DA to ratify): whoever changes state updates CURRENT-STATE.md
+   in the same turn as their COORDINATION entry.** Precedence: newest COORDINATION entry beats
+   the snapshot; the live system beats both.
+2. **Loophole: ROADMAP-STATUS.md was stale** (as-of 07-13, "all flags OFF") and actively
+   corroborated the wrong belief. **Fix: refreshed to as-of 07-21** (headline, M5/M6 rows,
+   plan item 1 marked DONE ~17/18-Jul incl. the DF-9 closure; M13 marked in-progress) + a
+   pointer stating CURRENT-STATE.md is the maintained snapshot.
+3. **Operator error: tail offset computed from `Measure-Object -Line`, which SKIPS BLANK LINES**
+   (2,536 vs the real 3,732). **Fix:** rule recorded in CLAUDE.md's doc map (new CURRENT-STATE
+   row): read the tail by CONTENT (`tail -n 80`, confirm the last entry's date), never by a
+   computed offset; also saved to Engineer memory so it survives across sessions.
+
+Every claim in the new/updated docs was **verified against live systems this hour** (prod
+cascade resolve, DEPLOYED_SHA, Zoho Variables API, conversions in gorefer_prod) — including
+one previously unrecorded-here fact now captured: `WATI_ALLOW_ALL_RECIPIENTS="true"` (the
+recipient allowlist is open; consistent with the daily live queue sends).
+
+Files: `CURRENT-STATE.md` (new) · `ROADMAP-STATUS.md` · `CLAUDE.md` (one doc-map row) · this
+entry. No app code, no flags, no prod changes. — Engineer
