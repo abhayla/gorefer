@@ -3529,3 +3529,38 @@ same workflows. One-time per machine: the hub marketplace must be registered
 **Root cause:** CI sets `DJANGO_DEBUG=false` but never sets `DJANGO_RATELIMIT_ENABLED`, so `RATELIMIT_ENABLED` defaults to `True` (prod-like) for the whole pytest session (`apps/common/ratelimit.py`). The DB-cache-backed per-IP hit counters were only ever reset inside `test_ratelimit.py`'s own local fixture, so posts to `/api/leads/`/`/api/share/` from unrelated test modules — sharing the Django test `Client`'s default `REMOTE_ADDR` (`127.0.0.1`) — accumulated across the whole run and eventually tripped a 429 on tests with nothing to do with rate limiting (`test_wati.py`, `test_zoho_write_retry_backfill.py`, `test_zoho_write_upsert.py`).
 
 **Fix:** moved the cache-clear fixture from `test_ratelimit.py` into `tests/conftest.py` as a suite-wide `autouse` fixture (still DB-gated, same clear-before/clear-after shape) so every DB-touching test starts with a clean rate-limit bucket. No production or rate-limit-behavior change — pure test-isolation fix. Dispatched from the fleet (task T-024) by owner instruction. — Engineer
+
+---
+
+### 2026-07-21 — FROM ENGINEER — STATUS — O-6a operational delivery report BUILT + scheduled; ov_earlier_* cleared (no leak)
+
+Doc 13 §8 O-6 addition committed (`36595cd`, GoRefer). O-6(a) — the operational scheduled
+two-sided report — is built and live-scheduled (5Wealths repo `e927aaa`); O-6(b) in-product
+page stays model-only per §5.
+
+1. **ov_earlier_* RESOLVED — sanctioned, not a leak.** Every queue drain stamps a broadcast
+   prefix (`wa_queue_` / `ov_today_` / `ov_earlier_` / `wa_welcome_`, verified in Deluge
+   sources); the 20-Jul "63 msgs outside the queue" finding was the office-visitor-earlier
+   DRAIN misread by a `wa_queue_*`-only filter. Its 31.7% delivery is an audience problem
+   (backlog numbers hitting the 131049 cap + dead numbers), not a process bypass.
+2. **daily_report.py is now TWO-SIDED**: Zoho supposed-to-send (new read-only Deluge fn
+   `wa_queue_day_summary` over zapikey REST; graceful Wati-only degrade until deployed) ⋈
+   Wati terminal delivery. Hierarchy-shaped per ADR-036 (group/partner/AP from Source_Rule),
+   per-hour drain view, reconciliation flags (SENT-but-failed / PENDING / DRYRUN leftovers),
+   and a 3-class sender taxonomy whose "unknown" class is the real out-of-queue alert.
+3. **Join validated on 20-Jul data**: Zoho attempted 179 (107 SENT + 72 FAILED, COQL) ==
+   Wati queue-class broadcasts 179 (116 wa_queue + 63 ov_earlier). Exact match.
+4. **Scheduling durable**: the report previously ran from an ephemeral session (the Windows
+   task existed but was Disabled and had NEVER run). Now: `Wati-DailyDeliveryReport` daily
+   21:30 IST (owner-chosen), S4U so it runs without logon; smoke-run through Task Scheduler
+   passed (exit 0, WhatsApp summary delivered to owner's allowlisted number). Timing is
+   one-command configurable per owner: `Wati-Project\set_report_time.cmd HH:mm`.
+5. **Pending owner action (one paste)**: `Zoho-Project/deluge/wa_queue_day_summary.dg`
+   (read-only, trap-checked) into the Zoho editor + expose REST + zapikey →
+   `ZOHO_FN_ZAPIKEY_WA_QUEUE_DAY_SUMMARY` in GLOBAL.env. Until then the nightly report is
+   Wati-only with a visible note; Engineer verifies against the COQL baseline after paste.
+
+Files: GoRefer `docs/architecture/13` (§8 O-6, committed) · this entry. 5Wealths repo:
+`Wati-Project/daily_report.py`, `set_report_time.ps1/.cmd`,
+`Zoho-Project/deluge/wa_queue_day_summary.dg`. No GoRefer product code, flags, or
+migrations; no contract-doc impact (adapter untouched). — Engineer
