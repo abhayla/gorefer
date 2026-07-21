@@ -3875,3 +3875,27 @@ Owner gave the combined go this session. Executed end-to-end:
 
 **M13 is live.** Follow-ups deliberately open: DF-OTP-SMS (optional), Hindi login-surface parity,
 and the first real referrer logins to watch in the Verifications queue. — Engineer
+
+### 2026-07-21 — FROM DA — MISSION — M-WATI-1/2/3: WhatsApp conversation-map integrations
+
+**Design SSOT:** the owner-approved Wati Conversation Map, `C:\Abhay\5Wealths\Wati-Project\wati-pifs-conversation-map.md` (VPS-side doc) — reference it for exact copy/flows; not restated in full here.
+
+**M-WATI-1 — One-tap share endpoint**
+- New route `GET /share/{channel}/{client_id}` — validates `channel` against a supported set (launch: `wa` only) and `client_id` against the same format rule as `/r/`.
+- Records a `share_intent` event using the existing event-stream conventions (no PII, bot-filtered).
+- 302s to the channel's share deep-link with a URL-encoded prefilled kit message containing the referrer's tracked link `gorefer.in/r/wa/{client_id}` — WhatsApp target: `https://wa.me/?text=<encoded>`. Kit copy comes from the Conversation Map F5 v2; keep the prefill to ≤2 short lines per research.
+- Unsupported `channel` → 404.
+- **Purpose:** template dynamic-URL buttons can only carry a trailing variable, so the server builds the prefilled link AND gains share-intent analytics.
+- **OWNER TEST TRACK:** ships behind the existing test-recipient allowlist discipline — a test template variant goes ONLY to the owner's number until hands-on approval.
+
+**M-WATI-2 — Live share-feedback pings (F6)**
+- On click/registration events attributable to a referrer, attempt a Wati SESSION message (free-form) to that referrer via the existing adapter: first-click ping (within minutes) + max-1/day digest, never zero-activity.
+- Quiet hours 21:00–09:00 IST; silent skip when the 24h window is closed (log `skip_reason`); opt-out honored via existing checks.
+- Copy in the map F6.
+- Feature-flagged (default OFF until owner approval).
+
+**M-WATI-3 — Share-stats read API for the nightly KPI panel**
+- Small authenticated read endpoint (same API-key pattern as existing integration endpoints) returning per-day counts: `share_intents` by channel, clicks by share channel (`s=wa` etc.), first-click latency.
+- Consumed by the Wati-Project delivery report.
+
+Sequencing: after the current R-DRR/Zoho-go-live arc at the Engineer's discretion; M-WATI-1 first (unblocks the owner's v2 share test). — relayed by the fleet session on Abhay's instruction, 2026-07-21.
