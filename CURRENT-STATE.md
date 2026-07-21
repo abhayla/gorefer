@@ -11,15 +11,15 @@
 > wins; if either disagrees with the live system, **the live system wins** — verify, don't
 > trust (commands at the bottom).
 >
-> **Last updated:** 2026-07-21 (Engineer) — after live verification of every claim below.
+> **Last updated:** 2026-07-21 (Engineer, M13 go-live) — after live verification of every claim below.
 
 ## Production
 
 | Fact | Value |
 |---|---|
-| Deployed SHA | `5a96000` (PR #19 — Meta preview-crawler bot-filter fix) |
+| Deployed SHA | `2eff029` (PR #20 — M13 referrer login: OAuth-primary + OTP + Path B; Q-M-OTP-2 wired) |
 | Host | Hostinger VPS `72.61.240.224`, Cloudflare-proxied, gunicorn + qcluster (`Q_ASYNC=true`) |
-| DB | `gorefer_prod` (Postgres) |
+| DB | `gorefer_prod` (Postgres) — migration `accounts.0001` applied |
 
 ## Integration flags — LIVE VALUES (cascade-resolved, verified 2026-07-21)
 
@@ -29,7 +29,8 @@
 | `ENABLE_ZOHO_WRITE` | **ON** | Settings override ~17-Jul (DF-9 effectively closed then) |
 | `ENABLE_ZOHO_READ` | **ON** | Settings override ~17-Jul |
 | `ENABLE_ZOHO_WEBHOOK_HMAC` | **ON** | 18-Jul; Deluge signer pasted + workflow rule active in Zoho; seal proven end-to-end |
-| `ENABLE_CUSTOMER_LOGIN` / `ENABLE_OTP_LOGIN` | OFF | Sprint-2 gate; Q-M-OTP built on held PR #12 |
+| `ENABLE_CUSTOMER_LOGIN` | **ON** | 21-Jul (M13 go-live, owner "go"): prod `.env` true. `/login/` live (Google OAuth primary + OTP fallback), `/my/referrals` live, admin Verifications queue live |
+| `ENABLE_OTP_LOGIN` | **ON** | 21-Jul: AUTH template `gr_platform_gorefer_login_otp_en_2026_07_21` APPROVED by Meta + live-verified DELIVERED (`waTemplateId 27564734539863645`) |
 
 The prod `.env` lines say `false` for the three integration flags — those are **overridden
 defaults**; the truth is the ConfigGlobal override read through `resolve_flag()`. Never read
@@ -51,10 +52,11 @@ template: v3 `gr_platform_gorefer_funnel_report_en_2026_07_21` **PENDING at Meta
 
 ## In flight
 
-- **M13 referrer-login mission IN PROGRESS** in a separate session — branch
-  `mission-13-referrer-login`, working in the primary tree at `C:\Abhay\5Wealths\GoRefer`
-  (other sessions: use a clone/worktree, don't switch its branch).
-- PR #12 (Q-M-OTP) — merged-ready, deliberately HELD until the M13 gate.
+- **M13 is DONE and LIVE** (2026-07-21): PR #20 merged + deployed; Google OAuth creds in prod
+  `.env` (owner-created); OTP AUTH template approved + delivery-verified; both login flags ON.
+  Contract: `docs/sprint2/S2-05-M13-Referrer-Login-Goal-Contract.md`. Q-M-OTP-2 CLOSED.
+  (Correction to an earlier line here: PR #12/Q-M-OTP was in fact MERGED 2026-07-16 — the
+  "held" note was stale; M13 built on it.)
 - Known messaging problem: delivery rate ~42% (131049 per-user cap dominated) — the daily
   report is the instrument on it.
 

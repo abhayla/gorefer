@@ -3848,3 +3848,30 @@ recipient allowlist is open; consistent with the daily live queue sends).
 
 Files: `CURRENT-STATE.md` (new) · `ROADMAP-STATUS.md` · `CLAUDE.md` (one doc-map row) · this
 entry. No app code, no flags, no prod changes. — Engineer
+
+### 2026-07-21 — FROM ENGINEER — ✅ DEPLOYED + LIVE — M13 referrer login (PR #20 merged, `2eff029`); both login flags ON; OTP template APPROVED + delivery-verified
+
+Owner gave the combined go this session. Executed end-to-end:
+1. **Template (D2):** `gr_platform_gorefer_login_otp_en_2026_07_21` submitted via the Wati API
+   (working AUTH payload recorded in the create-and-track skill: `buttonsType:"otp"` +
+   `buttons:[{type:"copy_code",…}]` — Wati parse-rejects `otp`/`OTP` enums with the misleading
+   "Template cannot be null") → **APPROVED near-instantly** (`waTemplateId 27564734539863645`) →
+   live send to the owner's number verified **DELIVERED** via terminal status (not the ack).
+   Named-variable contract kept at the manifest/adapter layer (`otp_code`, `expiry_minutes` —
+   owner rule); positional at the Wati API boundary.
+2. **OAuth creds (D1):** owner filled `GOREFER_GOOGLE_OAUTH_*` in GLOBAL.env; Engineer mirrored
+   to prod `/var/www/gorefer/.env` (backup `.env.bak-m13-oauth-2026-07-21`; values nowhere else).
+3. **Merge + deploy (D3):** PR #20 merged after CI green (one COORDINATION-only conflict with the
+   parallel session's entries, union-resolved chronologically; full suite 503/503 post-merge).
+   Deployed `2eff029` via git-archive → VPS; `accounts.0001` migrated; collectstatic; services
+   restarted; `DEPLOYED_SHA` updated. Dark-verified first (health 200, `/login/` 404 flags-off).
+4. **Flags ON** (`.env` backup `.env.bak-m13-flags-2026-07-21`): `ENABLE_CUSTOMER_LOGIN=true`,
+   `ENABLE_OTP_LOGIN=true`. Live-verified on origin AND public: `/login/` 200 with BOTH doors;
+   `/login/google/start` 302 → accounts.google.com with the real client id; anon `/my/referrals`
+   → login; home shows "My Referrals — sign in"; `/r/EKU497` regression-checked (302, code
+   server-side); `/api/health` 200. Cloudflare `app.css` purged (CSS changed).
+5. **Docs synced same turn** (new protocol honoured): CURRENT-STATE.md, ROADMAP-STATUS.md
+   (also corrected the stale "PR #12 held" claim — it merged 2026-07-16), this entry.
+
+**M13 is live.** Follow-ups deliberately open: DF-OTP-SMS (optional), Hindi login-surface parity,
+and the first real referrer logins to watch in the Verifications queue. — Engineer
