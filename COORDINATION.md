@@ -3512,3 +3512,12 @@ Files changed: `Zoho-Project/deluge/{wa_gatekeeper_contacts,wa_gatekeeper_leads,
 wa_gatekeeper_referrers,wa_welcome_fastlane}.dg` + `Zoho-Project/send-queue/TODO-gatekeeper-fixes.md`
 (marked DONE) · committed `c53584d` + pushed to `main`. No GoRefer product code, flags, or
 migrations touched. — Engineer
+
+### 2026-07-21 — FROM ENGINEER — STATUS — Tooling: hub workflow plugins provisioned (no product code)
+
+Owner-requested infrastructure PR (not a DA mission): added `.claude/settings.json` enabling the
+claude-best-practices hub's workflow plugins (code-review / test-pipeline / development-loop /
+learning / branch-lifecycle / prompt-auto-enhance / fable-operating-manual + cbp-python-stack for
+the pytest toolchain), so any Claude Code session on this repo — local PC or Windows VPS — gets the
+same workflows. One-time per machine: the hub marketplace must be registered
+(`claude plugin marketplace add <hub>/plugins`). No spec, adapter, or product code touched.

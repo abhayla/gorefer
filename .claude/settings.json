@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push --no-verify:*)",
+      "Bash(git commit --no-verify:*)",
+      "Bash(git commit -n:*)"
+    ]
+  },
+  "enabledPlugins": {
+    "cbp-workflows@claude-best-practices": true,
+    "cbp-build-test-workflows@claude-best-practices": true,
+    "cbp-learning-workflow@claude-best-practices": true,
+    "loop-engineering@claude-best-practices": true,
+    "branch-lifecycle@claude-best-practices": true,
+    "prompt-auto-enhance@claude-best-practices": true,
+    "fable-operating-manual@claude-best-practices": true,
+    "cbp-python-stack@claude-best-practices": true
+  }
+}
