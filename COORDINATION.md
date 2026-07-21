@@ -3672,3 +3672,18 @@ SSH, writes nothing into the GoRefer repo); prod DB access read-only; internal-t
 (GoReferGoLiveSmoke, curl) excluded by UA match.
 
 Written to COORDINATION.md — ready for the DA. — Engineer
+
+### 2026-07-21 — FROM ENGINEER — ✅ DEPLOYED — PR #19 merged + prod on 5a96000; crawler phantom-click leak closed
+
+Owner authorized the build order (PR #19 → R-DRR → R-GOLIVE) this session. PR #19 merged (CI
+green) and deployed to the VPS from a clean scratchpad clone (the local tree is in use by the
+M13 session and was not touched). `DEPLOYED_SHA=5a960003`; migrate --check clean, both services
+active, home 200.
+
+**Verified live:** post-deploy hits with `facebookexternalua` / `meta-externalagent` create
+ZERO events (pre-deploy the same UA logged a click at 10:30 + 12:00 IST daily — the leak ran
+18→21 Jul, 24 phantom rows total, all `is_bot=false` by UA-miss). In `direct` mode a bot still
+receives the 302 destination by design (B3: "creates nothing and still gets the destination");
+the human control still 302s with the code server-side. The 24 historical rows stay in the
+immutable log; downstream consumers (R-DRR incl.) must classify bots by UA-match at read time,
+not the stored `is_bot`, for rows predating this deploy. — Engineer
