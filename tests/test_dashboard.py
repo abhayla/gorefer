@@ -218,6 +218,64 @@ def test_explorer_headers_link_and_preserve_filters(admin_client):
     assert "&#9660;" in html or "▼" in html
 
 
+# --- explorer derived status + bot-free last activity (DA 2026-07-22) --------
+
+def _make_journey(events=()):
+    """Referral on the seeded program with the given (event_type, is_bot) events."""
+    from apps.events.models import Event
+    from apps.referrals.models import Referral, ReferralIdentity, ReferralProgram
+    program = ReferralProgram.objects.get()
+    identity = ReferralIdentity.objects.create(
+        tenant=program.tenant, program=program, partner=program.partner,
+        client_id="ZZ9999", status="active",
+    )
+    ref = Referral.objects.create(
+        tenant=program.tenant, program=program, referral_identity=identity,
+        source="referral_link", status="opened",
+    )
+    for event_type, is_bot in events:
+        Event.objects.create(
+            tenant=program.tenant, referral=ref, event_type=event_type, is_bot=is_bot
+        )
+    return ref
+
+
+def _row_for(ref, **kwargs):
+    from apps.dashboard import queries
+    rows = queries.explorer_rows(ref.tenant, **kwargs)
+    return next(r for r in rows if r["id"] == ref.id)
+
+
+def test_explorer_status_derives_deepest_human_stage(demo):
+    ref = _make_journey([("click", False), ("landing_viewed", False)])
+    assert _row_for(ref)["status"] == "landing_viewed"
+
+
+def test_explorer_status_lead_beats_landing(demo):
+    ref = _make_journey(
+        [("click", False), ("landing_viewed", False), ("lead_captured", False)]
+    )
+    assert _row_for(ref)["status"] == "lead_captured"
+
+
+def test_explorer_status_conversion_still_wins(demo):
+    ref = _make_journey([("landing_viewed", False)])
+    ref.conversion_status = "account_opened"
+    ref.save(update_fields=["conversion_status"])
+    assert _row_for(ref)["status"] == "account_opened"
+
+
+def test_explorer_bot_events_do_not_set_status_or_last_activity(demo):
+    ref = _make_journey([("click", True), ("landing_viewed", True)])
+    row = _row_for(ref)
+    assert row["status"] == "opened"          # bot events derive nothing
+    assert row["last_activity"] is None       # bot ping must not refresh the stamp
+    # and the no-activity row trails the dated rows under the default sort
+    from apps.dashboard import queries
+    rows = queries.explorer_rows(ref.tenant)
+    assert rows[-1]["last_activity"] is None
+
+
 # --- journey detail --------------------------------------------------------
 
 def test_journey_detail_shows_timeline_and_conversion(admin_client):
