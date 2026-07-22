@@ -226,7 +226,8 @@ def _make_journey(events=()):
     from apps.referrals.models import Referral, ReferralIdentity, ReferralProgram
     program = ReferralProgram.objects.get()
     identity = ReferralIdentity.objects.create(
-        tenant=program.tenant, program=program, client_id="ZZ9999", status="active"
+        tenant=program.tenant, program=program, partner=program.partner,
+        client_id="ZZ9999", status="active",
     )
     ref = Referral.objects.create(
         tenant=program.tenant, program=program, referral_identity=identity,
