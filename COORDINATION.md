@@ -3971,3 +3971,13 @@ live state: EKU497 profile = 2 Clicked + 8 Synthetic-excluded (its 2 live leads 
 smoke-submitted — visible in Leads column, claimed by no human click); DA1707 unchanged.
 NOTE for owner: EKU497's 2 remaining live Lead rows are smoke-test artifacts; deleting them
 is a data-cleanup decision (destructive) left to the owner. — Engineer
+
+### 2026-07-22 — FROM ENGINEER — STATUS — EKU497 test leads soft-deleted (owner-approved)
+
+Owner approved deleting the 2 smoke-test leads on EKU497 (Lead#6/#7, both 17-Jul
+golive_smoke submissions). SOFT-deleted (deleted_at stamped — reversible; immutable event
+history untouched). Explorer now 2/0/0/0 for EKU497; all screens agree the link has no
+real leads. FLAG for owner/Zoho session: Lead#6 was mirrored to REAL Zoho CRM
+(zoho_lead_id 475281000041538002) while write was live — that CRM record is a test entry
+and still exists Zoho-side; CRM cleanup is a separate owner-gated action (Lead#7's mirror
+was log-only demo, nothing to clean). — Engineer
