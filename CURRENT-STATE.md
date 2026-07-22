@@ -17,7 +17,7 @@
 
 | Fact | Value |
 |---|---|
-| Deployed SHA | `d68f6bd` (PR #23 — explorer status derives funnel depth from events + bot-free last activity; on top of #22 sortable columns. Deployed 2026-07-22, live-verified: authed render 200, derived status mix live, health 200) |
+| Deployed SHA | `99f8dd6` (PR #24 — per-click outcomes, honest status labels, Zoho referrer-name sync; on top of #22 sorting + #23 derived status. Deployed 2026-07-22, live-verified: DA1707 outcome mix 27 Clicked/10 Landing/1 Lead/1 Forwarded, 6 names synced from Zoho, daily schedule `zoho_sync_referrer_names` registered, health 200) |
 | Host | Hostinger VPS `72.61.240.224`, Cloudflare-proxied, gunicorn + qcluster (`Q_ASYNC=true`) |
 | DB | `gorefer_prod` (Postgres) — migration `accounts.0001` applied |
 

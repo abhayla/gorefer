@@ -3931,3 +3931,16 @@ Two display-accuracy findings need DA decisions before any code change:
    flagging rather than fixing since "any observed activity" may be intended.
 
 — Engineer
+
+### 2026-07-22 — FROM ENGINEER — STATUS — PR #24 LIVE: per-click outcomes, honest labels, name sync
+
+DA1707 audit verdict: its lead is GENUINE (1 real Lead row, confirmed-human landing visit
+09-Jul 09:04); the defect was display attribution (journey-furthest stage stamped on every
+click row). Shipped + deployed (SHA 99f8dd6, live-verified): (1) per-click outcome windows —
+DA1707 now renders 27 Clicked / 10 Landing page opened / 1 Lead captured / 1 Forwarded to
+Zerodha signup; (2) honest badge labels everywhere (Link clicked / Landing page opened /
+Forwarded to Zerodha signup / Lead captured / Account opened); (3) NEW READ-leg
+`sync_referrer_names` (daily schedule; contract doc §6b) — first run synced 6 names from Zoho
+(Ashok Kumar Patel, Ram Chandra Gupta, Vijay Balda, Madhu Kushwaha, Test Contact, + Rajesh
+Joshi refresh), 6 ClientIds honestly unmatched (PRODWA01, ZMPHZC, GW5500, SG2210, MK9033 —
+not Zoho Contacts). — Engineer
