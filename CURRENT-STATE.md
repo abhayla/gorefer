@@ -11,13 +11,13 @@
 > wins; if either disagrees with the live system, **the live system wins** — verify, don't
 > trust (commands at the bottom).
 >
-> **Last updated:** 2026-07-21 (Engineer, M13 go-live) — after live verification of every claim below.
+> **Last updated:** 2026-07-22 (Engineer, explorer column sorting deploy) — deploy + health verified live; flag values below carry the 2026-07-21 verification date.
 
 ## Production
 
 | Fact | Value |
 |---|---|
-| Deployed SHA | `2eff029` (PR #20 — M13 referrer login: OAuth-primary + OTP + Path B; Q-M-OTP-2 wired) |
+| Deployed SHA | `76d1537` (PR #22 — sortable explorer columns, default last-activity desc; deployed 2026-07-22 via file-copy + restart, services active + health 200) |
 | Host | Hostinger VPS `72.61.240.224`, Cloudflare-proxied, gunicorn + qcluster (`Q_ASYNC=true`) |
 | DB | `gorefer_prod` (Postgres) — migration `accounts.0001` applied |
 
