@@ -131,11 +131,22 @@ def explorer(request):
     source = request.GET.get("source", "")
     status = request.GET.get("status", "")
     search = request.GET.get("q", "")
+    sort = request.GET.get("sort", "last_activity")
+    if sort not in queries.EXPLORER_SORT_KEYS:
+        sort = "last_activity"
+    direction = request.GET.get("dir", "desc")
+    if direction not in ("asc", "desc"):
+        direction = "desc"
     ctx = {
-        "rows": queries.explorer_rows(tenant, source=source, status=status, search=search),
+        "rows": queries.explorer_rows(
+            tenant, source=source, status=status, search=search,
+            sort=sort, direction=direction,
+        ),
         "filter_source": source,
         "filter_status": status,
         "search": search,
+        "sort": sort,
+        "dir": direction,
         "sync_health": _sync_health(tenant),
         "sources": ["referral_link", "partner_direct", "zoho_import"],
         "nav_active": "explorer",

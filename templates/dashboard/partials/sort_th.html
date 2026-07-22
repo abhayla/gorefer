@@ -1,0 +1,8 @@
+{% comment %}Sortable explorer column header.
+Args (via include-with): key, label, align ("right" or empty), numeric (truthy →
+first click sorts descending; text columns start ascending).
+Context needed: sort, dir, search, filter_source, filter_status.{% endcomment %}
+<th class="py-2.5 px-3 font-semibold{% if align == 'right' %} text-right{% endif %}">
+  <a href="?q={{ search|urlencode }}&amp;source={{ filter_source|urlencode }}&amp;status={{ filter_status|urlencode }}&amp;sort={{ key }}&amp;dir={% if sort == key %}{% if dir == 'desc' %}asc{% else %}desc{% endif %}{% elif numeric %}desc{% else %}asc{% endif %}"
+     class="hover:underline" title="Sort by {{ label }}">{{ label }}{% if sort == key %}&nbsp;{% if dir == 'asc' %}&#9650;{% else %}&#9660;{% endif %}{% endif %}</a>
+</th>

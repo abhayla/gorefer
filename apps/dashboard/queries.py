@@ -185,8 +185,30 @@ def _mask_mobile(mobile: str) -> str:
     return f"{digits[:3]}•••{digits[-2:]}"
 
 
-def explorer_rows(tenant=None, *, source: str = "", status: str = "", search: str = ""):
-    """Referral explorer rows with filters (source / status / search)."""
+# Whitelisted sort keys for the explorer table — every visible column is sortable.
+# Values are key functions over a built row dict; only last_activity can be None.
+EXPLORER_SORT_KEYS = {
+    "client_id": lambda r: (r["client_id"] or "").lower(),
+    "referrer_name": lambda r: (r["referrer_name"] or "").lower(),
+    "source": lambda r: r["source"],
+    "clicks": lambda r: r["clicks"],
+    "landing_views": lambda r: r["landing_views"],
+    "status": lambda r: (r["status"] or "").lower(),
+    "last_activity": lambda r: r["last_activity"],
+}
+
+
+def explorer_rows(
+    tenant=None,
+    *,
+    source: str = "",
+    status: str = "",
+    search: str = "",
+    sort: str = "last_activity",
+    direction: str = "desc",
+):
+    """Referral explorer rows with filters (source / status / search) and
+    whitelisted column sorting (default: last activity, newest first)."""
     qs = Referral.objects.select_related("referral_identity")
     if tenant is not None:
         qs = qs.filter(tenant=tenant)
@@ -219,7 +241,12 @@ def explorer_rows(tenant=None, *, source: str = "", status: str = "", search: st
             "is_partner_direct": ref.source == "partner_direct",
             "is_off_platform": ref.source == "zoho_import",
         })
-    return rows
+    key_fn = EXPLORER_SORT_KEYS.get(sort, EXPLORER_SORT_KEYS["last_activity"])
+    # Rows missing the sort value (no activity yet) always trail, in either direction.
+    present = [r for r in rows if key_fn(r) is not None]
+    missing = [r for r in rows if key_fn(r) is None]
+    present.sort(key=key_fn, reverse=(direction != "asc"))
+    return present + missing
 
 
 def journey_detail(referral) -> dict:
