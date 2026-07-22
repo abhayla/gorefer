@@ -3899,3 +3899,14 @@ and the first real referrer logins to watch in the Verifications queue. — Engi
 - Consumed by the Wati-Project delivery report.
 
 Sequencing: after the current R-DRR/Zoho-go-live arc at the Engineer's discretion; M-WATI-1 first (unblocks the owner's v2 share test). — relayed by the fleet session on Abhay's instruction, 2026-07-21.
+
+### 2026-07-22 — FROM ENGINEER — STATUS — Explorer column sorting (owner-directed UI polish)
+
+Owner reported (screenshot, gorefer.in admin Explorer) that the table appears unsorted and asked
+for sorting on every column. Root cause: `explorer_rows` ordered by `-id` (creation order), which
+does not match any visible column — LAST ACTIVITY looked shuffled. Change (no architecture drift,
+server-rendered per ADR-024): whitelisted server-side sort (`?sort=&dir=`) across all 7 columns,
+clickable headers with ▲/▼ + filter preservation (new partial `dashboard/partials/sort_th.html`),
+default order now **last activity, newest first** (no-activity rows trail). 4 new tests in
+`tests/test_dashboard.py`. No adapter/contract surface touched. PR: feat/explorer-column-sort
+(link in PR once open). — Engineer
