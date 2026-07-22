@@ -111,22 +111,37 @@ _OUTCOME_CLASS = {
     "Landing page opened": "text-sky-600",
     "Forwarded to Zerodha signup": "text-indigo-600",
     "Lead captured": "text-amber-500",
+    # The lead event is immutable history; the Lead row was later hard-deleted
+    # (owner decision 2026-07-22: show the deletion, never hide or overstate it).
+    "Lead captured (since removed)": "text-amber-400",
     "Bot — excluded": "text-rose-400",
+    "Synthetic — excluded": "text-ink-300",
 }
 
 
-def _click_outcome(click_ts, next_click_ts, journey_events) -> str:
+def _click_outcome(click_ts, next_click_ts, journey_events, live_lead_prospects=frozenset()) -> str:
     """Deepest stage reached between THIS click and the journey's next click.
 
-    `journey_events` is the journey's non-bot, non-click (event_type, timestamp)
-    list sorted by timestamp. A bare click (nothing followed) is just "Clicked".
+    `journey_events` is the journey's non-bot, non-click, non-synthetic
+    (event_type, timestamp, person_ref_id) list sorted by timestamp. A bare click
+    (nothing followed) is just "Clicked". A lead event whose Lead row no longer
+    exists (person_ref_id not in `live_lead_prospects`) reads "(since removed)" —
+    the event log is immutable history, the Lead table is current truth.
     """
     window = [
-        et for et, ts in journey_events
+        (et, pid) for et, ts, pid in journey_events
         if ts >= click_ts and (next_click_ts is None or ts < next_click_ts)
     ]
+    types_in_window = {et for et, _ in window}
     for event_type, label in _CLICK_WINDOW_PRECEDENCE:
-        if event_type in window:
+        if event_type in types_in_window:
+            if event_type == "lead_captured":
+                alive = any(
+                    pid in live_lead_prospects
+                    for et, pid in window
+                    if et == "lead_captured" and pid is not None
+                )
+                return label if alive else "Lead captured (since removed)"
             return label
     return "Clicked"
 
@@ -223,9 +238,13 @@ def top_band(tenant, client_id: str) -> dict:
     """Identity + Zoho enrichment chips + the 4 headline aggregates."""
     contact = _safe_zoho_contact(client_id)
 
+    from apps.events.bots import exclude_synthetic
+
     referrals = list(_referrer_referrals(tenant, client_id))
     referral_ids = [r.id for r in referrals]
-    clicks = Event.objects.filter(referral_id__in=referral_ids, event_type="click", is_bot=False).count()
+    clicks = exclude_synthetic(
+        Event.objects.filter(referral_id__in=referral_ids, event_type="click", is_bot=False)
+    ).count()
     leads = Lead.objects.filter(referral_id__in=referral_ids)
     if tenant is not None:
         leads = leads.filter(tenant=tenant)
@@ -320,20 +339,30 @@ def clicks_rows(tenant, client_id: str) -> list[dict]:
         Event.objects.filter(referral_id__in=list(referrals), event_type="click")
         .order_by("-timestamp")
     )
-    # Per-journey stage events (non-bot, non-click) + human click times, for the
-    # per-click outcome windows (this click → the journey's next human click).
+    # Per-journey stage events (non-bot, non-click, non-synthetic) + human click
+    # times, for the per-click outcome windows (this click → the next human click).
+    from apps.events.bots import exclude_synthetic, is_synthetic_user_agent
+    from apps.referrals.models import Lead
+
     stage_events: dict[int, list] = {}
     click_times: dict[int, list] = {}
     for ev in (
-        Event.objects.filter(referral_id__in=list(referrals), is_bot=False)
+        exclude_synthetic(Event.objects.filter(referral_id__in=list(referrals), is_bot=False))
         .order_by("timestamp")
-        .values_list("referral_id", "event_type", "timestamp")
+        .values_list("referral_id", "event_type", "timestamp", "person_ref_id")
     ):
-        rid, et, ts = ev
+        rid, et, ts, pid = ev
         if et == "click":
             click_times.setdefault(rid, []).append(ts)
         else:
-            stage_events.setdefault(rid, []).append((et, ts))
+            stage_events.setdefault(rid, []).append((et, ts, pid))
+    # Prospects that still have a LIVE Lead row per journey — the current-truth
+    # side of the "Lead captured (since removed)" resolution.
+    live_lead_prospects: dict[int, set] = {}
+    for rid, pid in Lead.objects.filter(
+        referral_id__in=list(referrals), deleted_at__isnull=True
+    ).values_list("referral_id", "prospect_id"):
+        live_lead_prospects.setdefault(rid, set()).add(pid)
     # Resolve city/IP from VisitorPII by visitor_id (erasable PII record).
     vids = [e.visitor_id for e in events if e.visitor_id]
     pii = {}
@@ -351,14 +380,18 @@ def clicks_rows(tenant, client_id: str) -> list[dict]:
         vpii = pii.get(e.visitor_id)
         device, ua_label = _device_and_ua(e.user_agent)
         channel = (e.metadata or {}).get("channel") or "Direct"
+        synthetic = is_synthetic_user_agent(e.user_agent)
         if e.is_bot:
             outcome = "Bot — excluded"
             device = device if device != "—" else "—"
+        elif synthetic:
+            outcome = "Synthetic — excluded"
         else:
             later = [t for t in click_times.get(e.referral_id, []) if t > e.timestamp]
             outcome = _click_outcome(
                 e.timestamp, min(later) if later else None,
                 stage_events.get(e.referral_id, []),
+                frozenset(live_lead_prospects.get(e.referral_id, set())),
             )
         rows.append({
             "t": e.timestamp,
@@ -371,6 +404,7 @@ def clicks_rows(tenant, client_id: str) -> list[dict]:
             "device": device,
             "ua": ua_label,
             "bot": e.is_bot,
+            "synthetic": synthetic,
             "outcome": outcome,
             "outcome_class": _OUTCOME_CLASS.get(outcome, "text-ink-500"),
         })
