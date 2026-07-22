@@ -287,6 +287,26 @@ def test_explorer_bot_events_never_counted_or_timestamped(demo):
     assert rows[-1]["last_activity"] is None
 
 
+def test_explorer_synthetic_traffic_never_counted(demo):
+    """GoLiveSmoke/curl traffic is excluded from counts (owner decision 2026-07-22)."""
+    from apps.events.models import Event
+    ref = _make_journey(client_id="ZZ5555")
+    for ua in ("GoReferGoLiveSmoke/1.0 (+ops)", "curl/8.15.0"):
+        Event.objects.create(
+            tenant=ref.tenant, referral=ref, event_type="click", user_agent=ua
+        )
+    row = _row_for(ref)
+    assert (row["clicks"], row["last_activity"]) == (0, None)
+
+
+def test_synthetic_ua_classifier():
+    from apps.events.bots import is_synthetic_user_agent
+    assert is_synthetic_user_agent("GoReferGoLiveSmoke/1.0 (+ops)")
+    assert is_synthetic_user_agent("curl/8.15.0")
+    assert not is_synthetic_user_agent("Mozilla/5.0 (Linux; Android 14)")
+    assert not is_synthetic_user_agent(None)
+
+
 def test_explorer_renders_funnel_columns_and_stage_dropdown(admin_client):
     """Owner design A: count columns replace the collapsed Status word entirely."""
     html = admin_client.get("/admin-panel/explorer/").content.decode()

@@ -13,6 +13,7 @@ from apps.events.analytics import (
     build_journey_timeline,
     confirmed_human_clicks,
 )
+from apps.events.bots import exclude_synthetic
 from apps.events.models import DailyMetric
 from apps.integrations.models import Conversion
 from apps.referrals.models import Customer, Lead, Referral
@@ -237,14 +238,18 @@ def explorer_rows(
         client_id = identity.client_id if identity else ""
         if search and search.lower() not in (client_id or "").lower():
             continue
-        clicks = ref.events.filter(event_type="click", is_bot=False).count()
-        landing = ref.events.filter(event_type="landing_viewed").count()
+        clicks = exclude_synthetic(
+            ref.events.filter(event_type="click", is_bot=False)
+        ).count()
+        landing = exclude_synthetic(
+            ref.events.filter(event_type="landing_viewed")
+        ).count()
         leads = Lead.objects.filter(referral=ref, deleted_at__isnull=True).count()
         accounts = Conversion.objects.filter(referral=ref, is_reversed=False).count()
-        # Human activity only — bot/preview pings must not refresh the timestamp
-        # (DA decision 2026-07-22; the count columns already exclude bots).
+        # Human activity only — bot/preview/synthetic pings must not refresh the
+        # timestamp (DA decisions 2026-07-22; count columns exclude both already).
         last = (
-            ref.events.filter(is_bot=False)
+            exclude_synthetic(ref.events.filter(is_bot=False))
             .order_by("-timestamp")
             .values_list("timestamp", flat=True)
             .first()

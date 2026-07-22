@@ -49,7 +49,7 @@
     head();
     var q = (document.getElementById("q").value || "").toLowerCase();
     var rows = clicks.filter(function (c) {
-      if (filt === "human" && c.bot) return false;
+      if (filt === "human" && (c.bot || c.synthetic)) return false;
       if (filt === "bot" && !c.bot) return false;
       if ((filt === "Mobile" || filt === "Desktop") && c.device !== filt) return false;
       if (filt === "WhatsApp" && c.channel !== "WhatsApp") return false;
@@ -62,10 +62,12 @@
     b.innerHTML = "";
     rows.forEach(function (c) {
       var tr = document.createElement("tr");
-      tr.className = "hover:bg-cobalt-50/40 " + (c.bot ? "opacity-50" : "");
+      tr.className = "hover:bg-cobalt-50/40 " + ((c.bot || c.synthetic) ? "opacity-50" : "");
       var traffic = c.bot
         ? '<span class="text-rose-500">Bot</span>'
-        : '<span class="text-positive">Human</span>';
+        : (c.synthetic
+          ? '<span class="text-ink-300">Synthetic</span>'
+          : '<span class="text-positive">Human</span>');
       tr.innerHTML =
         '<td class="py-1.5 px-3 whitespace-nowrap text-ink-700">' + fmtTime(c.t) + "</td>" +
         '<td class="py-1.5 px-3">' + c.partner + "</td>" +

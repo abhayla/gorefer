@@ -280,19 +280,35 @@ def test_click_outcome_windows_never_overstate():
     def m(n):
         return t0 + timedelta(minutes=n)
     journey_events = [
-        ("landing_viewed", m(1)),
-        ("lead_captured", m(4)),
-        ("redirect_completed", m(5)),
-        ("landing_viewed", m(20)),
+        ("landing_viewed", m(1), None),
+        ("lead_captured", m(4), 77),
+        ("redirect_completed", m(5), None),
+        ("landing_viewed", m(20), None),
     ]
+    live = frozenset({77})
     # click at t0, next click at +19min: window holds landing+lead+redirect → lead wins
-    assert _click_outcome(m(0), m(19), journey_events) == "Lead captured"
+    assert _click_outcome(m(0), m(19), journey_events, live) == "Lead captured"
     # click at +19, no later click: window holds only the +20 landing view
-    assert _click_outcome(m(19), None, journey_events) == "Landing page opened"
+    assert _click_outcome(m(19), None, journey_events, live) == "Landing page opened"
     # bare click whose window holds nothing
-    assert _click_outcome(m(30), None, journey_events) == "Clicked"
+    assert _click_outcome(m(30), None, journey_events, live) == "Clicked"
     # direct pass-through: click whose window holds only a redirect
-    assert _click_outcome(m(4, ), m(6), [("redirect_completed", m(5))]) == "Forwarded to Zerodha signup"
+    assert _click_outcome(m(4), m(6), [("redirect_completed", m(5), None)]) == "Forwarded to Zerodha signup"
+
+
+def test_click_outcome_lead_since_removed():
+    """A lead event whose Lead row was later hard-deleted reads '(since removed)' —
+    the immutable event log is history, the Lead table is current truth (EKU497
+    live finding 2026-07-22: 4 lead events, 2 surviving Lead rows)."""
+    from datetime import datetime, timedelta
+    from datetime import timezone as tz
+
+    from apps.dashboard.profile import _click_outcome
+
+    t0 = datetime(2026, 7, 17, 0, 0, tzinfo=tz.utc)
+    events = [("lead_captured", t0 + timedelta(minutes=2), 42)]
+    assert _click_outcome(t0, None, events, frozenset()) == "Lead captured (since removed)"
+    assert _click_outcome(t0, None, events, frozenset({42})) == "Lead captured"
 
 
 def test_clicks_rows_outcomes_are_per_click(admin_client):
@@ -315,16 +331,50 @@ def test_clicks_rows_outcomes_are_per_click(admin_client):
         tenant=program.tenant, program=program, referral_identity=identity,
         source="referral_link", status="opened",
     )
+    from apps.referrals.models import Lead, Prospect
+    prospect = Prospect.objects.create(tenant=program.tenant, mobile="919876500777", name="T")
+    Lead.objects.create(tenant=program.tenant, referral=ref, prospect=prospect, status="new")
     t0 = timezone.now() - timedelta(hours=2)
     spec = [
-        ("click", 0), ("landing_viewed", 1),          # visit 1: landing only
-        ("click", 30), ("landing_viewed", 31), ("lead_captured", 34),  # visit 2: lead
+        ("click", 0, None), ("landing_viewed", 1, None),   # visit 1: landing only
+        ("click", 30, None), ("landing_viewed", 31, None),
+        ("lead_captured", 34, prospect.pk),                # visit 2: real live lead
     ]
-    for event_type, minutes in spec:
-        e = Event.objects.create(tenant=program.tenant, referral=ref, event_type=event_type)
+    for event_type, minutes, pid in spec:
+        e = Event.objects.create(
+            tenant=program.tenant, referral=ref, event_type=event_type, person_ref_id=pid
+        )
         Event.objects.filter(pk=e.pk).update(timestamp=t0 + timedelta(minutes=minutes))
     rows = clicks_rows(program.tenant, "ZZ7777")  # newest first
     assert [r["outcome"] for r in rows] == ["Lead captured", "Landing page opened"]
+
+
+def test_clicks_rows_synthetic_traffic_excluded_and_flagged(admin_client):
+    """GoLiveSmoke/curl rows render flagged + excluded from windows (owner 2026-07-22)."""
+    from apps.dashboard.profile import clicks_rows
+    from apps.events.models import Event
+    from apps.referrals.models import Referral, ReferralIdentity, ReferralProgram
+
+    program = ReferralProgram.objects.get()
+    identity = ReferralIdentity.objects.create(
+        tenant=program.tenant, program=program, partner=program.partner,
+        client_id="ZZ6666", status="active",
+    )
+    ref = Referral.objects.create(
+        tenant=program.tenant, program=program, referral_identity=identity,
+        source="referral_link", status="opened",
+    )
+    Event.objects.create(
+        tenant=program.tenant, referral=ref, event_type="click",
+        user_agent="GoReferGoLiveSmoke/1.0 (+ops)",
+    )
+    Event.objects.create(
+        tenant=program.tenant, referral=ref, event_type="click",
+        user_agent="curl/8.15.0",
+    )
+    rows = clicks_rows(program.tenant, "ZZ6666")
+    assert [r["outcome"] for r in rows] == ["Synthetic — excluded", "Synthetic — excluded"]
+    assert all(r["synthetic"] for r in rows)
 
 
 # --- Zoho referrer-name sync (READ leg, 2026-07-22) ---------------------------
