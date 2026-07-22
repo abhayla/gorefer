@@ -14,8 +14,12 @@
           <option value="{{ s }}" {% if s == filter_source %}selected{% endif %}>{{ s }}</option>
         {% endfor %}
       </select>
-      <input type="text" name="status" value="{{ filter_status }}" placeholder="Status…"
-        class="rounded-full border border-line px-3.5 py-1.5 w-28 focus:outline-none focus:ring-2 focus:ring-cobalt-500/30 focus:border-cobalt-500" />
+      <select name="stage" class="rounded-full border border-line px-3 py-1.5 bg-white">
+        <option value="">Any stage reached</option>
+        {% for value, label in stages %}
+          <option value="{{ value }}" {% if value == filter_stage %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
       <button class="rounded-full bg-cobalt-600 text-white px-4 py-1.5 font-semibold hover:bg-cobalt-500">Filter</button>
     </form>
   </div>
@@ -27,8 +31,9 @@
           {% include "dashboard/partials/sort_th.html" with key="referrer_name" label="Referrer" %}
           {% include "dashboard/partials/sort_th.html" with key="source" label="Source" %}
           {% include "dashboard/partials/sort_th.html" with key="clicks" label="Clicks" align="right" numeric=True %}
-          {% include "dashboard/partials/sort_th.html" with key="landing_views" label="Landing" align="right" numeric=True %}
-          {% include "dashboard/partials/sort_th.html" with key="status" label="Status" %}
+          {% include "dashboard/partials/sort_th.html" with key="landing_views" label="Landing opens" align="right" numeric=True %}
+          {% include "dashboard/partials/sort_th.html" with key="leads" label="Leads" align="right" numeric=True %}
+          {% include "dashboard/partials/sort_th.html" with key="accounts" label="Accounts" align="right" numeric=True %}
           {% include "dashboard/partials/sort_th.html" with key="last_activity" label="Last activity" align="right" numeric=True %}
         </tr>
       </thead>
@@ -63,13 +68,14 @@
             </td>
             <td class="py-2.5 px-3 text-right tabular-nums text-ink-500">{{ row.clicks }}</td>
             <td class="py-2.5 px-3 text-right tabular-nums text-ink-500">{{ row.landing_views }}</td>
-            <td class="py-2.5 px-3">{% include "dashboard/partials/status_badge.html" with status=row.status %}</td>
+            <td class="py-2.5 px-3 text-right tabular-nums {% if row.leads %}text-amber-600 font-semibold{% else %}text-ink-300{% endif %}">{{ row.leads }}</td>
+            <td class="py-2.5 px-3 text-right tabular-nums {% if row.accounts %}text-positive font-semibold{% else %}text-ink-300{% endif %}">{{ row.accounts }}</td>
             <td class="py-2.5 px-3 text-right text-[11px] text-ink-300 whitespace-nowrap">
               {% if row.last_activity %}{{ row.last_activity|date:"d M, g:i A" }}{% else %}—{% endif %}
             </td>
           </tr>
         {% empty %}
-          <tr><td colspan="7" class="py-6 text-center text-[11px] text-ink-300">No referrals match these filters.</td></tr>
+          <tr><td colspan="8" class="py-6 text-center text-[11px] text-ink-300">No referrals match these filters.</td></tr>
         {% endfor %}
       </tbody>
     </table>
