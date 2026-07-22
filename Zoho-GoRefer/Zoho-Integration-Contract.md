@@ -187,6 +187,24 @@ and asserts accept-on-match plus reject on byte-mismatch / wrong-secret / replay
 `gorefer.flags` or a `.env`-only flag stays frozen at its default and a `.env` flip silently
 no-ops. A static load-order guard test now enforces this.
 
+## 6b. READ-leg referrer NAME sync (scheduled, 2026-07-22)
+
+`apps.integrations.zoho.tasks.sync_referrer_names` (django-q schedule
+`zoho_sync_referrer_names`, daily) walks every live `ReferralIdentity`, calls the READ
+adapter's `fetch_contact_by_client_id`, and fills the local `Customer` name (the
+Explorer/leaderboard name source) for MATCHED contacts with a `Full_Name`:
+
+- Zoho remains the name truth-source; an unmatched ClientId stays "name not on file".
+- Existing non-empty Customer names are NEVER overwritten (referrer-login names win).
+- READ-only against Zoho (Contacts fetch); guardrail #2 unaffected — this path never
+  touches account/conversion status.
+- Gated by the same `ENABLE_ZOHO_READ` resolution as all read-back enrichment
+  (log-only adapter when off ⇒ the sync is a no-op offline).
+
+Why: the profile page always fetched names live from Zoho, but the Explorer reads the
+`Customer` table, which nothing populated except referrer login — so referrers who never
+logged in rendered nameless even when Zoho knew them (live finding 2026-07-22).
+
 ---
 
 ## 7. Related

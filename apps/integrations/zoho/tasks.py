@@ -152,3 +152,51 @@ def backfill_unsynced() -> int:
 def _referrer_client_id(referral) -> str:
     identity = getattr(referral, "referral_identity", None)
     return identity.client_id if identity is not None else ""
+
+
+def sync_referrer_names() -> dict:
+    """READ-leg name sync: fill Customer names from Zoho Contacts (scheduled daily).
+
+    The Explorer/leaderboard render names from the Customer table, but before this
+    task nothing populated it except referrer login and demo seed — so referrers who
+    never logged in showed "— name not on file —" even when Zoho knows them (live
+    finding 2026-07-22: 10 of 12 identities nameless while the profile page fetched
+    the same names live). Zoho stays the name truth-source: only MATCHED contacts
+    with a Full_Name are written, existing non-empty names are never overwritten,
+    and an unmatched ClientId stays honestly nameless.
+
+    Guardrail #2 untouched: reads Contacts only — never writes status/conversions.
+    """
+    from apps.integrations.zoho.read import get_zoho_read_adapter
+    from apps.referrals.models import Customer, ReferralIdentity
+
+    adapter = get_zoho_read_adapter()
+    synced, unmatched, errors = 0, 0, 0
+    identities = (
+        ReferralIdentity.objects.filter(deleted_at__isnull=True)
+        .select_related("partner", "program", "tenant")
+    )
+    for identity in identities:
+        try:
+            contact = adapter.fetch_contact_by_client_id(client_id=identity.client_id)
+        except Exception:
+            errors += 1
+            logger.warning("name-sync: Zoho fetch failed for %s", identity.client_id, exc_info=True)
+            continue
+        if not contact.matched or not (contact.full_name or "").strip():
+            unmatched += 1
+            continue
+        first, _, last = contact.full_name.strip().partition(" ")
+        customer, created = Customer.objects.get_or_create(
+            tenant=identity.tenant,
+            program=identity.program,
+            client_id=identity.client_id,
+            defaults={"partner": identity.partner, "first_name": first, "last_name": last},
+        )
+        if not created and not customer.first_name:
+            customer.first_name, customer.last_name = first, last
+            customer.save(update_fields=["first_name", "last_name"])
+        synced += 1
+    result = {"synced": synced, "unmatched": unmatched, "errors": errors}
+    logger.info("name-sync done: %s", result)
+    return result
