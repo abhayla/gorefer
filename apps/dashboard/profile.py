@@ -341,20 +341,24 @@ def clicks_rows(tenant, client_id: str) -> list[dict]:
     )
     # Per-journey stage events (non-bot, non-click, non-synthetic) + human click
     # times, for the per-click outcome windows (this click → the next human click).
-    from apps.events.bots import exclude_synthetic, is_synthetic_user_agent
+    from apps.events.bots import is_synthetic_user_agent
     from apps.referrals.models import Lead
 
     stage_events: dict[int, list] = {}
     click_times: dict[int, list] = {}
     for ev in (
-        exclude_synthetic(Event.objects.filter(referral_id__in=list(referrals), is_bot=False))
+        Event.objects.filter(referral_id__in=list(referrals), is_bot=False)
         .order_by("timestamp")
-        .values_list("referral_id", "event_type", "timestamp", "person_ref_id")
+        .values_list("referral_id", "event_type", "timestamp", "person_ref_id", "user_agent")
     ):
-        rid, et, ts, pid = ev
+        rid, et, ts, pid, ua = ev
         if et == "click":
+            # ALL clicks (synthetic included) bound the windows — otherwise a human
+            # click's window would swallow a smoke run's lead and claim it (live
+            # misattribution caught on EKU497, 2026-07-22). Synthetic rows still
+            # RENDER as "Synthetic — excluded"; they just also close windows.
             click_times.setdefault(rid, []).append(ts)
-        else:
+        elif not is_synthetic_user_agent(ua):
             stage_events.setdefault(rid, []).append((et, ts, pid))
     # Prospects that still have a LIVE Lead row per journey — the current-truth
     # side of the "Lead captured (since removed)" resolution.

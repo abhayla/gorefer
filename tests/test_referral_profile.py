@@ -377,6 +377,44 @@ def test_clicks_rows_synthetic_traffic_excluded_and_flagged(admin_client):
     assert all(r["synthetic"] for r in rows)
 
 
+def test_human_click_never_claims_a_smoke_leads_window(admin_client):
+    """Synthetic clicks still BOUND windows — a human click before a smoke run must
+    not absorb the smoke lead (live misattribution caught on EKU497 2026-07-22)."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.dashboard.profile import clicks_rows
+    from apps.events.models import Event
+    from apps.referrals.models import Lead, Prospect, Referral, ReferralIdentity, ReferralProgram
+
+    program = ReferralProgram.objects.get()
+    identity = ReferralIdentity.objects.create(
+        tenant=program.tenant, program=program, partner=program.partner,
+        client_id="ZZ4444", status="active",
+    )
+    ref = Referral.objects.create(
+        tenant=program.tenant, program=program, referral_identity=identity,
+        source="referral_link", status="opened",
+    )
+    prospect = Prospect.objects.create(tenant=program.tenant, mobile="919876500444", name="S")
+    Lead.objects.create(tenant=program.tenant, referral=ref, prospect=prospect, status="new")
+    t0 = timezone.now() - timedelta(hours=3)
+    spec = [
+        ("click", 0, None, "Mozilla/5.0 (Linux; Android 14)"),     # real human, went nowhere
+        ("click", 60, None, "GoReferGoLiveSmoke/1.0 (+ops)"),      # smoke run starts
+        ("lead_captured", 62, prospect.pk, ""),                    # smoke-submitted lead
+    ]
+    for event_type, minutes, pid, ua in spec:
+        e = Event.objects.create(
+            tenant=program.tenant, referral=ref, event_type=event_type,
+            person_ref_id=pid, user_agent=ua,
+        )
+        Event.objects.filter(pk=e.pk).update(timestamp=t0 + timedelta(minutes=minutes))
+    rows = clicks_rows(program.tenant, "ZZ4444")  # newest first
+    assert [r["outcome"] for r in rows] == ["Synthetic — excluded", "Clicked"]
+
+
 # --- Zoho referrer-name sync (READ leg, 2026-07-22) ---------------------------
 
 class _FakeReadAdapter:
