@@ -176,6 +176,48 @@ def test_explorer_referrer_column_shows_name_when_known():
     assert "Ramesh Kumar" in html  # name shown for the known referrer
 
 
+# --- explorer sorting --------------------------------------------------------
+
+def test_explorer_default_sorts_by_last_activity_desc(admin_client):
+    """Default order = last activity, newest first; rows with no activity trail."""
+    from apps.dashboard import queries
+    from apps.tenants.resolve import get_bootstrap_tenant
+    rows = queries.explorer_rows(get_bootstrap_tenant())
+    stamps = [r["last_activity"] for r in rows if r["last_activity"] is not None]
+    assert stamps == sorted(stamps, reverse=True)
+    # every no-activity row (if any) comes after every dated row
+    tail = rows[len(stamps):]
+    assert all(r["last_activity"] is None for r in tail)
+
+
+def test_explorer_sorts_by_any_whitelisted_column_both_directions(admin_client):
+    from apps.dashboard import queries
+    from apps.tenants.resolve import get_bootstrap_tenant
+    tenant = get_bootstrap_tenant()
+    for key in queries.EXPLORER_SORT_KEYS:
+        for direction, rev in (("asc", False), ("desc", True)):
+            rows = queries.explorer_rows(tenant, sort=key, direction=direction)
+            key_fn = queries.EXPLORER_SORT_KEYS[key]
+            vals = [key_fn(r) for r in rows if key_fn(r) is not None]
+            assert vals == sorted(vals, reverse=rev), f"{key} {direction} out of order"
+
+
+def test_explorer_invalid_sort_params_fall_back(admin_client):
+    resp = admin_client.get("/admin-panel/explorer/?sort=evil'-- &dir=sideways")
+    assert resp.status_code == 200
+
+
+def test_explorer_headers_link_and_preserve_filters(admin_client):
+    html = admin_client.get(
+        "/admin-panel/explorer/?source=referral_link&sort=clicks&dir=desc"
+    ).content.decode()
+    # header links carry the sort params and keep the active source filter
+    assert "sort=clicks" in html and "sort=last_activity" in html
+    assert "source=referral_link" in html
+    # active column shows a direction indicator (▼ desc)
+    assert "&#9660;" in html or "▼" in html
+
+
 # --- journey detail --------------------------------------------------------
 
 def test_journey_detail_shows_timeline_and_conversion(admin_client):

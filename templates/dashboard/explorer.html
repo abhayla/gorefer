@@ -23,13 +23,13 @@
     <table class="w-full text-[12px] min-w-[720px]">
       <thead>
         <tr class="text-left text-[10px] uppercase tracking-wide text-ink-300 border-b border-line bg-cobalt-50/40">
-          <th class="py-2.5 px-3 font-semibold">Referral ID</th>
-          <th class="py-2.5 px-3 font-semibold">Referrer</th>
-          <th class="py-2.5 px-3 font-semibold">Source</th>
-          <th class="py-2.5 px-3 font-semibold text-right">Clicks</th>
-          <th class="py-2.5 px-3 font-semibold text-right">Landing</th>
-          <th class="py-2.5 px-3 font-semibold">Status</th>
-          <th class="py-2.5 px-3 font-semibold text-right">Last activity</th>
+          {% include "dashboard/partials/sort_th.html" with key="client_id" label="Referral ID" %}
+          {% include "dashboard/partials/sort_th.html" with key="referrer_name" label="Referrer" %}
+          {% include "dashboard/partials/sort_th.html" with key="source" label="Source" %}
+          {% include "dashboard/partials/sort_th.html" with key="clicks" label="Clicks" align="right" numeric=True %}
+          {% include "dashboard/partials/sort_th.html" with key="landing_views" label="Landing" align="right" numeric=True %}
+          {% include "dashboard/partials/sort_th.html" with key="status" label="Status" %}
+          {% include "dashboard/partials/sort_th.html" with key="last_activity" label="Last activity" align="right" numeric=True %}
         </tr>
       </thead>
       <tbody class="divide-y divide-line">
