@@ -3910,3 +3910,24 @@ clickable headers with ▲/▼ + filter preservation (new partial `dashboard/par
 default order now **last activity, newest first** (no-activity rows trail). 4 new tests in
 `tests/test_dashboard.py`. No adapter/contract surface touched. PR: feat/explorer-column-sort
 (link in PR once open). — Engineer
+
+### 2026-07-22 — FROM ENGINEER — QUESTION — Explorer data-accuracy audit (owner asked "is the data correct?")
+
+Audit verdict: truthful-to-DB, nothing fabricated (conversion fields Zoho-only, guardrail-tested).
+Two display-accuracy findings need DA decisions before any code change:
+
+1. **STATUS column never advances between "opened" and conversion.** Journeys are created
+   `status="opened"` and the ONLY writer that advances it is the Zoho ingest
+   (`ingest.py:170` → "confirmed"; `conversion_status` mirror). The model's intermediate
+   vocabulary (`landing_viewed`, `signup_started`, `signup_completed`, `rewarded`) has NO
+   writer anywhere — so a journey with a landing view still shows "opened". Options:
+   (a) derive display status from the journey's own events (landing_viewed when present, etc.)
+   while keeping conversion states Zoho-only — recommended, read-side only, no guardrail risk;
+   (b) write status transitions in the event-logging services (touches M2/M4 write paths);
+   (c) leave as-is and rename/clarify the column. Awaiting DA pick — not building on a guess.
+2. **LAST ACTIVITY includes bot events** (count columns exclude `is_bot`, the timestamp query
+   does not) — a 0-click row can carry a fresh timestamp from a WhatsApp preview bot.
+   Recommend excluding bot events from the display timestamp (read-side, one-line filter);
+   flagging rather than fixing since "any observed activity" may be intended.
+
+— Engineer
