@@ -12,12 +12,5 @@
   {% elif s == 'kyc_started' %}bg-amber-100 text-amber-700
   {% elif s == 'contacted' or s == 'interested' %}bg-sky-100 text-sky-700
   {% elif s == 'rejected' %}bg-rose-100 text-rose-600
-  {% else %}bg-slate-100 text-slate-700{% endif %}">
-  {%- if s == 'opened' %}Link clicked
-  {%- elif s == 'landing_viewed' %}Landing page opened
-  {%- elif s == 'redirect_completed' %}Forwarded to Zerodha signup
-  {%- elif s == 'lead_captured' %}Lead captured
-  {%- elif s == 'account_opened' %}Account opened
-  {%- elif s == 'confirmed' %}Confirmed
-  {%- else %}{{ s|default:'—' }}{% endif %}</span>
+  {% else %}bg-slate-100 text-slate-700{% endif %}">{% if s == 'opened' %}Link clicked{% elif s == 'landing_viewed' %}Landing page opened{% elif s == 'redirect_completed' %}Forwarded to Zerodha signup{% elif s == 'lead_captured' %}Lead captured{% elif s == 'account_opened' %}Account opened{% elif s == 'confirmed' %}Confirmed{% else %}{{ s|default:'—' }}{% endif %}</span>
 {% endwith %}
