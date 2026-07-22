@@ -29,6 +29,10 @@ SCHEDULES = {
     # delivery that wasn't terminal at first read gets finalized (or expired), not left
     # 'accepted' forever — otherwise the funnel silently under-reports delivery.
     "wati_reconcile_pending": ("apps.integrations.wati.tasks.reconcile_pending_deliveries", 15),
+    # Daily: fill Customer names from Zoho Contacts (READ leg) so the Explorer and
+    # leaderboard show real referrer names instead of "name not on file" for anyone
+    # Zoho knows. Unmatched ClientIds stay honestly nameless; never overwrites.
+    "zoho_sync_referrer_names": ("apps.integrations.zoho.tasks.sync_referrer_names", 1440),
 }
 
 

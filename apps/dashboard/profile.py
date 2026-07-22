@@ -97,35 +97,38 @@ def _device_and_ua(user_agent: str) -> tuple[str, str]:
 
 
 # Map the furthest stage a journey reached to a click Outcome label + colour class.
-_OUTCOME_ORDER = ["click", "landing_viewed", "redirect_completed", "lead_captured", "account_opened"]
-_OUTCOME_LABEL = {
-    "click": "Clicked",
-    "landing_viewed": "Landing viewed",
-    "redirect_completed": "Redirected",
-    "lead_captured": "Lead captured",
-    "account_opened": "Account opened",
-}
+# Per-CLICK outcome labels (owner decision 2026-07-22): each click row reports what
+# THAT click led to — never the journey's overall furthest stage, which stamped
+# "Lead captured" on every click of a journey where one visit submitted a lead.
+# Depth precedence within a click's window (this click → the journey's next click):
+_CLICK_WINDOW_PRECEDENCE = [
+    ("lead_captured", "Lead captured"),
+    ("redirect_completed", "Forwarded to Zerodha signup"),
+    ("landing_viewed", "Landing page opened"),
+]
 _OUTCOME_CLASS = {
     "Clicked": "text-ink-500",
-    "Landing viewed": "text-sky-600",
-    "Redirected": "text-indigo-600",
+    "Landing page opened": "text-sky-600",
+    "Forwarded to Zerodha signup": "text-indigo-600",
     "Lead captured": "text-amber-500",
-    "Account opened": "text-positive font-semibold",
     "Bot — excluded": "text-rose-400",
 }
 
 
-def _referral_outcome(referral, has_account: bool) -> str:
-    """The furthest stage this referral reached (for the click Outcome column)."""
-    stages = set(referral.events.values_list("event_type", flat=True))
-    reached = "click"
-    for stage in _OUTCOME_ORDER:
-        if stage == "account_opened":
-            if has_account:
-                reached = "account_opened"
-        elif stage in stages:
-            reached = stage
-    return _OUTCOME_LABEL.get(reached, "Clicked")
+def _click_outcome(click_ts, next_click_ts, journey_events) -> str:
+    """Deepest stage reached between THIS click and the journey's next click.
+
+    `journey_events` is the journey's non-bot, non-click (event_type, timestamp)
+    list sorted by timestamp. A bare click (nothing followed) is just "Clicked".
+    """
+    window = [
+        et for et, ts in journey_events
+        if ts >= click_ts and (next_click_ts is None or ts < next_click_ts)
+    ]
+    for event_type, label in _CLICK_WINDOW_PRECEDENCE:
+        if event_type in window:
+            return label
+    return "Clicked"
 
 
 def _referrer_referrals(tenant, client_id: str):
@@ -313,11 +316,24 @@ def clicks_rows(tenant, client_id: str) -> list[dict]:
     are included but flagged (the template dims them + excludes from totals).
     """
     referrals = {r.id: r for r in _referrer_referrals(tenant, client_id)}
-    has_account = _accounts_for(tenant, client_id) > 0
     events = (
         Event.objects.filter(referral_id__in=list(referrals), event_type="click")
         .order_by("-timestamp")
     )
+    # Per-journey stage events (non-bot, non-click) + human click times, for the
+    # per-click outcome windows (this click → the journey's next human click).
+    stage_events: dict[int, list] = {}
+    click_times: dict[int, list] = {}
+    for ev in (
+        Event.objects.filter(referral_id__in=list(referrals), is_bot=False)
+        .order_by("timestamp")
+        .values_list("referral_id", "event_type", "timestamp")
+    ):
+        rid, et, ts = ev
+        if et == "click":
+            click_times.setdefault(rid, []).append(ts)
+        else:
+            stage_events.setdefault(rid, []).append((et, ts))
     # Resolve city/IP from VisitorPII by visitor_id (erasable PII record).
     vids = [e.visitor_id for e in events if e.visitor_id]
     pii = {}
@@ -339,7 +355,11 @@ def clicks_rows(tenant, client_id: str) -> list[dict]:
             outcome = "Bot — excluded"
             device = device if device != "—" else "—"
         else:
-            outcome = _referral_outcome(referral, has_account) if referral else "Clicked"
+            later = [t for t in click_times.get(e.referral_id, []) if t > e.timestamp]
+            outcome = _click_outcome(
+                e.timestamp, min(later) if later else None,
+                stage_events.get(e.referral_id, []),
+            )
         rows.append({
             "t": e.timestamp,
             "partner": program.name if program else "—",

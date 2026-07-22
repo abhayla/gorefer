@@ -264,3 +264,123 @@ def test_pii_mask_config_exists_and_admin_view_is_full(admin_client, settings):
     html = admin_client.get("/admin-panel/referrer/RJ4521/").content.decode()
     rows = _embedded_clicks(html)
     assert any(r["ip"] == "49.36.142.18" for r in rows)  # full IP, unmasked (admin)
+
+
+# --- per-click outcome windows (owner decision 2026-07-22) --------------------
+
+def test_click_outcome_windows_never_overstate():
+    """Each click reports only what happened in ITS window — one lead submit must
+    not stamp 'Lead captured' on every other click of the journey."""
+    from datetime import datetime, timedelta
+    from datetime import timezone as tz
+
+    from apps.dashboard.profile import _click_outcome
+
+    t0 = datetime(2026, 7, 9, 9, 0, tzinfo=tz.utc)
+    def m(n):
+        return t0 + timedelta(minutes=n)
+    journey_events = [
+        ("landing_viewed", m(1)),
+        ("lead_captured", m(4)),
+        ("redirect_completed", m(5)),
+        ("landing_viewed", m(20)),
+    ]
+    # click at t0, next click at +19min: window holds landing+lead+redirect → lead wins
+    assert _click_outcome(m(0), m(19), journey_events) == "Lead captured"
+    # click at +19, no later click: window holds only the +20 landing view
+    assert _click_outcome(m(19), None, journey_events) == "Landing page opened"
+    # bare click whose window holds nothing
+    assert _click_outcome(m(30), None, journey_events) == "Clicked"
+    # direct pass-through: click whose window holds only a redirect
+    assert _click_outcome(m(4, ), m(6), [("redirect_completed", m(5))]) == "Forwarded to Zerodha signup"
+
+
+def test_clicks_rows_outcomes_are_per_click(admin_client):
+    """Integration: build a journey where visit 1 only viewed the landing page and
+    visit 2 submitted the lead — the two click rows must differ."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.dashboard.profile import clicks_rows
+    from apps.events.models import Event
+    from apps.referrals.models import Referral, ReferralIdentity, ReferralProgram
+
+    program = ReferralProgram.objects.get()
+    identity = ReferralIdentity.objects.create(
+        tenant=program.tenant, program=program, partner=program.partner,
+        client_id="ZZ7777", status="active",
+    )
+    ref = Referral.objects.create(
+        tenant=program.tenant, program=program, referral_identity=identity,
+        source="referral_link", status="opened",
+    )
+    t0 = timezone.now() - timedelta(hours=2)
+    spec = [
+        ("click", 0), ("landing_viewed", 1),          # visit 1: landing only
+        ("click", 30), ("landing_viewed", 31), ("lead_captured", 34),  # visit 2: lead
+    ]
+    for event_type, minutes in spec:
+        e = Event.objects.create(tenant=program.tenant, referral=ref, event_type=event_type)
+        Event.objects.filter(pk=e.pk).update(timestamp=t0 + timedelta(minutes=minutes))
+    rows = clicks_rows(program.tenant, "ZZ7777")  # newest first
+    assert [r["outcome"] for r in rows] == ["Lead captured", "Landing page opened"]
+
+
+# --- Zoho referrer-name sync (READ leg, 2026-07-22) ---------------------------
+
+class _FakeReadAdapter:
+    def __init__(self, names):
+        self.names = names
+
+    def fetch_contact_by_client_id(self, *, client_id):
+        from apps.integrations.zoho.read import ZohoContact
+        name = self.names.get(client_id)
+        if not name:
+            return ZohoContact(client_id=client_id, matched=False)
+        return ZohoContact(client_id=client_id, matched=True, full_name=name)
+
+
+def _identity(client_id):
+    from apps.referrals.models import ReferralIdentity, ReferralProgram
+    program = ReferralProgram.objects.get()
+    return ReferralIdentity.objects.create(
+        tenant=program.tenant, program=program, partner=program.partner,
+        client_id=client_id, status="active",
+    )
+
+
+def test_name_sync_fills_matched_and_skips_unmatched(demo, monkeypatch):
+    from apps.integrations.zoho import tasks
+    from apps.referrals.models import Customer
+
+    _identity("NM1001")
+    _identity("NM2002")
+    monkeypatch.setattr(
+        "apps.integrations.zoho.read.get_zoho_read_adapter",
+        lambda: _FakeReadAdapter({"NM1001": "Sunita Rao"}),
+    )
+    result = tasks.sync_referrer_names()
+    assert result["synced"] >= 1
+    cust = Customer.objects.get(client_id="NM1001")
+    assert (cust.first_name, cust.last_name) == ("Sunita", "Rao")
+    assert not Customer.objects.filter(client_id="NM2002").exists()
+
+
+def test_name_sync_never_overwrites_existing_name(demo, monkeypatch):
+    from apps.integrations.zoho import tasks
+    from apps.referrals.models import Customer, ReferralProgram
+
+    _identity("NM3003")
+    program = ReferralProgram.objects.get()
+    Customer.objects.create(
+        tenant=program.tenant, program=program, partner=program.partner,
+        client_id="NM3003", first_name="Login", last_name="Name",
+    )
+    monkeypatch.setattr(
+        "apps.integrations.zoho.read.get_zoho_read_adapter",
+        lambda: _FakeReadAdapter({"NM3003": "Zoho Other"}),
+    )
+    tasks.sync_referrer_names()
+    cust = Customer.objects.get(client_id="NM3003")
+    assert (cust.first_name, cust.last_name) == ("Login", "Name")
