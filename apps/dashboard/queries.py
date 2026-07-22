@@ -185,6 +185,17 @@ def _mask_mobile(mobile: str) -> str:
     return f"{digits[:3]}•••{digits[-2:]}"
 
 
+# Funnel-depth precedence for the DERIVED explorer display status (DA decision
+# 2026-07-22): the stored intermediate Referral.status values have no writer (only
+# the Zoho ingest advances status), so the explorer derives display depth from the
+# journey's own non-bot events. Conversion states still come ONLY from Zoho fields.
+_STATUS_EVENT_PRECEDENCE = [
+    "lead_captured",
+    "redirect_completed",
+    "landing_viewed",
+]
+
+
 # Whitelisted sort keys for the explorer table — every visible column is sortable.
 # Values are key functions over a built row dict; only last_activity can be None.
 EXPLORER_SORT_KEYS = {
@@ -223,9 +234,26 @@ def explorer_rows(
         clicks = ref.events.filter(event_type="click", is_bot=False).count()
         landing = ref.events.filter(event_type="landing_viewed").count()
         row_status = ref.conversion_status or ref.status
+        if not ref.conversion_status and ref.status not in ("confirmed", "rewarded"):
+            seen = set(
+                ref.events.filter(is_bot=False)
+                .values_list("event_type", flat=True)
+                .distinct()
+            )
+            for stage in _STATUS_EVENT_PRECEDENCE:
+                if stage in seen:
+                    row_status = stage
+                    break
         if status and status != row_status:
             continue
-        last = ref.events.order_by("-timestamp").values_list("timestamp", flat=True).first()
+        # Human activity only — bot/preview pings must not refresh the timestamp
+        # (DA decision 2026-07-22; the count columns already exclude bots).
+        last = (
+            ref.events.filter(is_bot=False)
+            .order_by("-timestamp")
+            .values_list("timestamp", flat=True)
+            .first()
+        )
         # Referrer column shows the NAME when known (Customer/Zoho); it never
         # duplicates the client id. Unknown -> a clear "name not on file" marker so
         # the "Referral ID" and "Referrer" columns are visibly distinct (DA polish).
