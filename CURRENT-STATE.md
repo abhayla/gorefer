@@ -17,7 +17,7 @@
 
 | Fact | Value |
 |---|---|
-| Deployed SHA | `99f8dd6` (PR #24 — per-click outcomes, honest status labels, Zoho referrer-name sync; on top of #22 sorting + #23 derived status. Deployed 2026-07-22, live-verified: DA1707 outcome mix 27 Clicked/10 Landing/1 Lead/1 Forwarded, 6 names synced from Zoho, daily schedule `zoho_sync_referrer_names` registered, health 200) |
+| Deployed SHA | `3142215` (PR #25 — Explorer funnel columns, owner design A: Clicks/Landing opens/Leads/Accounts sortable counts + Stage-reached dropdown, Status column removed. On top of #22–#24 (sorting, per-click outcomes, honest labels, Zoho name sync). Deployed 2026-07-22, live-verified: DA1707 39/12/1/0, RJ4521 64/47/1/1, stage filters correct, health 200) |
 | Host | Hostinger VPS `72.61.240.224`, Cloudflare-proxied, gunicorn + qcluster (`Q_ASYNC=true`) |
 | DB | `gorefer_prod` (Postgres) — migration `accounts.0001` applied |
 

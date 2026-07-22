@@ -3944,3 +3944,14 @@ Forwarded to Zerodha signup / Lead captured / Account opened); (3) NEW READ-leg
 (Ashok Kumar Patel, Ram Chandra Gupta, Vijay Balda, Madhu Kushwaha, Test Contact, + Rajesh
 Joshi refresh), 6 ClientIds honestly unmatched (PRODWA01, ZMPHZC, GW5500, SG2210, MK9033 —
 not Zoho Contacts). — Engineer
+
+### 2026-07-22 — FROM ENGINEER — STATUS — PR #25 LIVE: Explorer funnel columns (owner design A)
+
+Owner design review concluded a single Status word collapses each link's funnel into its
+best moment (DA1707's 39 clicks all summarized as "Lead captured"). Owner picked design A
+via option card: Status column REMOVED; sortable count columns Clicks / Landing opens /
+Leads (real Lead rows only — a stray event can never inflate it, test-pinned) / Accounts
+(non-reversed Zoho conversions); free-text status filter replaced by whitelisted
+"Stage reached" dropdown. Deployed SHA 3142215, live-verified: DA1707 = 39/12/1/0,
+RJ4521 = 64/47/1/1; stage=account → RJ4521+GW5500; stage=lead → 5 rows (EKU497 has 2).
+status_badge.html keeps honest labels for its remaining consumers. — Engineer
