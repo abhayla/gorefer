@@ -17,7 +17,7 @@
 
 | Fact | Value |
 |---|---|
-| Deployed SHA | `76d1537` (PR #22 — sortable explorer columns, default last-activity desc; deployed 2026-07-22 via file-copy + restart, services active + health 200) |
+| Deployed SHA | `d68f6bd` (PR #23 — explorer status derives funnel depth from events + bot-free last activity; on top of #22 sortable columns. Deployed 2026-07-22, live-verified: authed render 200, derived status mix live, health 200) |
 | Host | Hostinger VPS `72.61.240.224`, Cloudflare-proxied, gunicorn + qcluster (`Q_ASYNC=true`) |
 | DB | `gorefer_prod` (Postgres) — migration `accounts.0001` applied |
 
