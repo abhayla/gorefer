@@ -39,3 +39,30 @@ def is_bot_user_agent(user_agent: str | None) -> bool:
         return True
     ua = user_agent.lower()
     return any(marker in ua for marker in BOT_UA_MARKERS)
+
+
+# SYNTHETIC traffic (owner decision 2026-07-22): our own test/ops tooling. Unlike
+# bots it MUST exercise the real capture flow (golive_smoke exists to prove the
+# whole loop), so it is never blocked at capture — it is excluded at COUNT time so
+# smoke runs stop inflating real referrer analytics (live finding: EKU497's clicks
+# were entirely GoLiveSmoke/curl traffic rendered as "Human").
+SYNTHETIC_UA_MARKERS = (
+    "gorefergolivesmoke",
+    "curl/",
+)
+
+
+def is_synthetic_user_agent(user_agent: str | None) -> bool:
+    """True if the UA is our own test/ops tooling (counted nowhere, never blocked)."""
+    ua = (user_agent or "").lower()
+    return any(marker in ua for marker in SYNTHETIC_UA_MARKERS)
+
+
+def exclude_synthetic(qs):
+    """Filter an Event queryset down to non-synthetic rows (count-time exclusion)."""
+    from django.db.models import Q
+
+    cond = Q()
+    for marker in SYNTHETIC_UA_MARKERS:
+        cond |= Q(user_agent__icontains=marker)
+    return qs.exclude(cond)

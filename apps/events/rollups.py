@@ -49,11 +49,14 @@ def mark_dirty(*, tenant, program, on_date):
 
 
 def _counts_for_range(*, tenant, program, start, end):
-    """event_type -> count over [start, end) from raw events (bots excluded)."""
+    """event_type -> count over [start, end) from raw events (bots + synthetic excluded)."""
+    from apps.events.bots import exclude_synthetic
+
     qs = Event.objects.filter(
         tenant=tenant, referral__program=program, is_bot=False,
         timestamp__gte=start, timestamp__lt=end,
     )
+    qs = exclude_synthetic(qs)
     return dict(qs.values_list("event_type").annotate(n=Count("id")).values_list("event_type", "n"))
 
 

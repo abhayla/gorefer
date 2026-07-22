@@ -33,8 +33,10 @@ def build_journey_timeline(referral) -> list[dict]:
     Read model for the M7 journey-detail screen. Bots excluded (they never created a
     journey anyway). No PII — labels/source/timestamp only.
     """
+    from apps.events.bots import exclude_synthetic
+
     events = (
-        Event.objects.filter(referral=referral, is_bot=False)
+        exclude_synthetic(Event.objects.filter(referral=referral, is_bot=False))
         .order_by("timestamp", "id")
         .values("event_type", "source", "timestamp")
     )
@@ -57,7 +59,9 @@ def funnel_counts(*, tenant=None, program=None) -> list[dict]:
     it is NEVER derived from clicks/leads. `click` uses confirmed-human counts is
     reported separately via confirmed_human_clicks().
     """
-    qs = Event.objects.filter(is_bot=False)
+    from apps.events.bots import exclude_synthetic
+
+    qs = exclude_synthetic(Event.objects.filter(is_bot=False))
     if tenant is not None:
         qs = qs.filter(tenant=tenant)
     if program is not None:
@@ -79,7 +83,11 @@ def funnel_counts(*, tenant=None, program=None) -> list[dict]:
 
 def confirmed_human_clicks(*, tenant=None) -> int:
     """Count of confirmed-human click events (is_confirmed_human, bots excluded)."""
-    qs = Event.objects.filter(event_type=vocab.CLICK, is_bot=False, is_confirmed_human=True)
+    from apps.events.bots import exclude_synthetic
+
+    qs = exclude_synthetic(
+        Event.objects.filter(event_type=vocab.CLICK, is_bot=False, is_confirmed_human=True)
+    )
     if tenant is not None:
         qs = qs.filter(tenant=tenant)
     return qs.count()
@@ -91,7 +99,11 @@ def approximate_unique_visitors(*, tenant=None) -> int:
     Approximate by construction (cookie-keyed) — callers MUST label it as such
     (ADR-018/019). Never asserted as an exact human count.
     """
-    qs = Event.objects.filter(is_bot=False).exclude(visitor_id__isnull=True).exclude(visitor_id="")
+    from apps.events.bots import exclude_synthetic
+
+    qs = exclude_synthetic(
+        Event.objects.filter(is_bot=False).exclude(visitor_id__isnull=True).exclude(visitor_id="")
+    )
     if tenant is not None:
         qs = qs.filter(tenant=tenant)
     return qs.values("visitor_id").distinct().count()
