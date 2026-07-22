@@ -129,7 +129,9 @@ def dashboard(request):
 def explorer(request):
     tenant = get_current_tenant(request)
     source = request.GET.get("source", "")
-    status = request.GET.get("status", "")
+    stage = request.GET.get("stage", "")
+    if stage not in queries.EXPLORER_STAGE_FILTERS:
+        stage = ""
     search = request.GET.get("q", "")
     sort = request.GET.get("sort", "last_activity")
     if sort not in queries.EXPLORER_SORT_KEYS:
@@ -139,16 +141,22 @@ def explorer(request):
         direction = "desc"
     ctx = {
         "rows": queries.explorer_rows(
-            tenant, source=source, status=status, search=search,
+            tenant, source=source, stage=stage, search=search,
             sort=sort, direction=direction,
         ),
         "filter_source": source,
-        "filter_status": status,
+        "filter_stage": stage,
         "search": search,
         "sort": sort,
         "dir": direction,
         "sync_health": _sync_health(tenant),
         "sources": ["referral_link", "partner_direct", "zoho_import"],
+        "stages": [
+            ("clicked", "Link clicked"),
+            ("landing", "Landing opened"),
+            ("lead", "Lead captured"),
+            ("account", "Account opened"),
+        ],
         "nav_active": "explorer",
     }
     return render(request, "dashboard/explorer.html", ctx)

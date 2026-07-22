@@ -185,17 +185,6 @@ def _mask_mobile(mobile: str) -> str:
     return f"{digits[:3]}•••{digits[-2:]}"
 
 
-# Funnel-depth precedence for the DERIVED explorer display status (DA decision
-# 2026-07-22): the stored intermediate Referral.status values have no writer (only
-# the Zoho ingest advances status), so the explorer derives display depth from the
-# journey's own non-bot events. Conversion states still come ONLY from Zoho fields.
-_STATUS_EVENT_PRECEDENCE = [
-    "lead_captured",
-    "redirect_completed",
-    "landing_viewed",
-]
-
-
 # Whitelisted sort keys for the explorer table — every visible column is sortable.
 # Values are key functions over a built row dict; only last_activity can be None.
 EXPLORER_SORT_KEYS = {
@@ -204,8 +193,19 @@ EXPLORER_SORT_KEYS = {
     "source": lambda r: r["source"],
     "clicks": lambda r: r["clicks"],
     "landing_views": lambda r: r["landing_views"],
-    "status": lambda r: (r["status"] or "").lower(),
+    "leads": lambda r: r["leads"],
+    "accounts": lambda r: r["accounts"],
     "last_activity": lambda r: r["last_activity"],
+}
+
+# "Stage reached" filter (owner design A, 2026-07-22): each row is a referral link's
+# whole FUNNEL (clicks → landing opens → leads → accounts), so filtering is by the
+# stage a link has reached — never by a single collapsed status word.
+EXPLORER_STAGE_FILTERS = {
+    "clicked": lambda r: r["clicks"] > 0,
+    "landing": lambda r: r["landing_views"] > 0,
+    "lead": lambda r: r["leads"] > 0,
+    "account": lambda r: r["accounts"] > 0,
 }
 
 
@@ -213,18 +213,24 @@ def explorer_rows(
     tenant=None,
     *,
     source: str = "",
-    status: str = "",
+    stage: str = "",
     search: str = "",
     sort: str = "last_activity",
     direction: str = "desc",
 ):
-    """Referral explorer rows with filters (source / status / search) and
-    whitelisted column sorting (default: last activity, newest first)."""
+    """Referral explorer rows — one row per referral link with its full funnel
+    counts (clicks / landing opens / leads / accounts), filters (source / stage
+    reached / search) and whitelisted column sorting (default: newest activity).
+
+    Counts never overstate: clicks are non-bot, leads are REAL Lead rows (created
+    only by a landing-page form submit), accounts are non-reversed Zoho conversions.
+    """
     qs = Referral.objects.select_related("referral_identity")
     if tenant is not None:
         qs = qs.filter(tenant=tenant)
     if source:
         qs = qs.filter(source=source)
+    stage_pred = EXPLORER_STAGE_FILTERS.get(stage)
     rows = []
     for ref in qs.order_by("-id"):
         identity = ref.referral_identity
@@ -233,19 +239,8 @@ def explorer_rows(
             continue
         clicks = ref.events.filter(event_type="click", is_bot=False).count()
         landing = ref.events.filter(event_type="landing_viewed").count()
-        row_status = ref.conversion_status or ref.status
-        if not ref.conversion_status and ref.status not in ("confirmed", "rewarded"):
-            seen = set(
-                ref.events.filter(is_bot=False)
-                .values_list("event_type", flat=True)
-                .distinct()
-            )
-            for stage in _STATUS_EVENT_PRECEDENCE:
-                if stage in seen:
-                    row_status = stage
-                    break
-        if status and status != row_status:
-            continue
+        leads = Lead.objects.filter(referral=ref, deleted_at__isnull=True).count()
+        accounts = Conversion.objects.filter(referral=ref, is_reversed=False).count()
         # Human activity only — bot/preview pings must not refresh the timestamp
         # (DA decision 2026-07-22; the count columns already exclude bots).
         last = (
@@ -257,18 +252,22 @@ def explorer_rows(
         # Referrer column shows the NAME when known (Customer/Zoho); it never
         # duplicates the client id. Unknown -> a clear "name not on file" marker so
         # the "Referral ID" and "Referrer" columns are visibly distinct (DA polish).
-        rows.append({
+        row = {
             "id": ref.id,
             "client_id": client_id,
             "referrer_name": _referrer_name(tenant, client_id),  # "" when unknown
             "source": ref.source,
             "clicks": clicks,
             "landing_views": landing,
-            "status": row_status,
+            "leads": leads,
+            "accounts": accounts,
             "last_activity": last,
             "is_partner_direct": ref.source == "partner_direct",
             "is_off_platform": ref.source == "zoho_import",
-        })
+        }
+        if stage_pred is not None and not stage_pred(row):
+            continue
+        rows.append(row)
     key_fn = EXPLORER_SORT_KEYS.get(sort, EXPLORER_SORT_KEYS["last_activity"])
     # Rows missing the sort value (no activity yet) always trail, in either direction.
     present = [r for r in rows if key_fn(r) is not None]
