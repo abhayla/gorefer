@@ -1,8 +1,8 @@
-{# Reusable status badge. `status` is a GoRefer stage/status string. Variant C.
-   Journey-stage tokens render OWNER-DECIDED honest labels (2026-07-22): a label may
-   never overstate — "Lead captured" only exists when a landing-page lead was really
-   submitted (the lead_captured event fires only after the Lead row is created).
-   Unknown tokens render as-is so lead statuses (new/contacted/…) are unaffected. #}
+{% comment %}Reusable status badge. `status` is a GoRefer stage/status string. Variant C.
+Journey-stage tokens render OWNER-DECIDED honest labels (2026-07-22): a label may
+never overstate — "Lead captured" only exists when a landing-page lead was really
+submitted (the lead_captured event fires only after the Lead row is created).
+Unknown tokens render as-is so lead statuses (new/contacted/…) are unaffected.{% endcomment %}
 {% with s=status %}
 <span class="inline-block rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold
   {% if s == 'account_opened' or s == 'confirmed' %}bg-positive/10 text-positive
