@@ -1,9 +1,23 @@
-{# Reusable status badge. `status` is a GoRefer stage/status string. Variant C. #}
+{# Reusable status badge. `status` is a GoRefer stage/status string. Variant C.
+   Journey-stage tokens render OWNER-DECIDED honest labels (2026-07-22): a label may
+   never overstate — "Lead captured" only exists when a landing-page lead was really
+   submitted (the lead_captured event fires only after the Lead row is created).
+   Unknown tokens render as-is so lead statuses (new/contacted/…) are unaffected. #}
 {% with s=status %}
 <span class="inline-block rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold
   {% if s == 'account_opened' or s == 'confirmed' %}bg-positive/10 text-positive
+  {% elif s == 'lead_captured' %}bg-amber-100 text-amber-700
+  {% elif s == 'redirect_completed' %}bg-indigo-100 text-indigo-700
+  {% elif s == 'landing_viewed' %}bg-sky-100 text-sky-700
   {% elif s == 'kyc_started' %}bg-amber-100 text-amber-700
   {% elif s == 'contacted' or s == 'interested' %}bg-sky-100 text-sky-700
   {% elif s == 'rejected' %}bg-rose-100 text-rose-600
-  {% else %}bg-slate-100 text-slate-700{% endif %}">{{ s|default:'—' }}</span>
+  {% else %}bg-slate-100 text-slate-700{% endif %}">
+  {%- if s == 'opened' %}Link clicked
+  {%- elif s == 'landing_viewed' %}Landing page opened
+  {%- elif s == 'redirect_completed' %}Forwarded to Zerodha signup
+  {%- elif s == 'lead_captured' %}Lead captured
+  {%- elif s == 'account_opened' %}Account opened
+  {%- elif s == 'confirmed' %}Confirmed
+  {%- else %}{{ s|default:'—' }}{% endif %}</span>
 {% endwith %}

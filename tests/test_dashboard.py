@@ -276,6 +276,17 @@ def test_explorer_bot_events_do_not_set_status_or_last_activity(demo):
     assert rows[-1]["last_activity"] is None
 
 
+def test_explorer_badges_render_honest_labels(admin_client):
+    """Owner decision 2026-07-22: badges show real, never-overstating labels."""
+    ref = _make_journey([("click", False), ("landing_viewed", False)])
+    html = admin_client.get("/admin-panel/explorer/").content.decode()
+    assert "Landing page opened" in html   # derived stage, friendly label
+    assert "Link clicked" in html          # 'opened' token rendered honestly
+    # the raw 'landing_viewed' token never renders as badge text
+    assert ">landing_viewed<" not in html
+    assert ref.id  # journey exists
+
+
 # --- journey detail --------------------------------------------------------
 
 def test_journey_detail_shows_timeline_and_conversion(admin_client):
