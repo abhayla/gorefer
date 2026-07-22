@@ -218,16 +218,16 @@ def test_explorer_headers_link_and_preserve_filters(admin_client):
     assert "&#9660;" in html or "▼" in html
 
 
-# --- explorer derived status + bot-free last activity (DA 2026-07-22) --------
+# --- explorer funnel columns (owner design A, 2026-07-22) --------------------
 
-def _make_journey(events=()):
+def _make_journey(events=(), client_id="ZZ9999"):
     """Referral on the seeded program with the given (event_type, is_bot) events."""
     from apps.events.models import Event
     from apps.referrals.models import Referral, ReferralIdentity, ReferralProgram
     program = ReferralProgram.objects.get()
     identity = ReferralIdentity.objects.create(
         tenant=program.tenant, program=program, partner=program.partner,
-        client_id="ZZ9999", status="active",
+        client_id=client_id, status="active",
     )
     ref = Referral.objects.create(
         tenant=program.tenant, program=program, referral_identity=identity,
@@ -246,45 +246,55 @@ def _row_for(ref, **kwargs):
     return next(r for r in rows if r["id"] == ref.id)
 
 
-def test_explorer_status_derives_deepest_human_stage(demo):
-    ref = _make_journey([("click", False), ("landing_viewed", False)])
-    assert _row_for(ref)["status"] == "landing_viewed"
-
-
-def test_explorer_status_lead_beats_landing(demo):
-    ref = _make_journey(
-        [("click", False), ("landing_viewed", False), ("lead_captured", False)]
+def test_explorer_row_carries_full_funnel_counts(demo):
+    """One row = one link's funnel: clicks / landing opens / REAL leads / accounts."""
+    from apps.referrals.lead_service import capture_lead
+    ref = _make_journey([
+        ("click", False), ("click", False), ("landing_viewed", False),
+    ])
+    capture_lead(
+        tenant=ref.tenant, referral=ref, name="Test Prospect",
+        mobile="9876500001", email="", city="", consent=True,
     )
-    assert _row_for(ref)["status"] == "lead_captured"
+    row = _row_for(ref)
+    assert (row["clicks"], row["landing_views"], row["leads"], row["accounts"]) == (2, 1, 1, 0)
 
 
-def test_explorer_status_conversion_still_wins(demo):
-    ref = _make_journey([("landing_viewed", False)])
-    ref.conversion_status = "account_opened"
-    ref.save(update_fields=["conversion_status"])
-    assert _row_for(ref)["status"] == "account_opened"
+def test_explorer_leads_count_real_lead_rows_not_events(demo):
+    """A stray lead_captured event with NO Lead row must not count (never overstate)."""
+    ref = _make_journey([("click", False), ("lead_captured", False)])
+    assert _row_for(ref)["leads"] == 0
 
 
-def test_explorer_bot_events_do_not_set_status_or_last_activity(demo):
+def test_explorer_stage_filter(demo):
+    from apps.dashboard import queries
+    ref = _make_journey([("click", False), ("landing_viewed", False)], client_id="ZZ9998")
+    rows = queries.explorer_rows(ref.tenant, stage="landing")
+    assert all(r["landing_views"] > 0 for r in rows)
+    assert any(r["id"] == ref.id for r in rows)
+    rows = queries.explorer_rows(ref.tenant, stage="account")
+    assert all(r["accounts"] > 0 for r in rows)
+    assert not any(r["id"] == ref.id for r in rows)
+
+
+def test_explorer_bot_events_never_counted_or_timestamped(demo):
     ref = _make_journey([("click", True), ("landing_viewed", True)])
     row = _row_for(ref)
-    assert row["status"] == "opened"          # bot events derive nothing
-    assert row["last_activity"] is None       # bot ping must not refresh the stamp
+    assert (row["clicks"], row["last_activity"]) == (0, None)
     # and the no-activity row trails the dated rows under the default sort
     from apps.dashboard import queries
     rows = queries.explorer_rows(ref.tenant)
     assert rows[-1]["last_activity"] is None
 
 
-def test_explorer_badges_render_honest_labels(admin_client):
-    """Owner decision 2026-07-22: badges show real, never-overstating labels."""
-    ref = _make_journey([("click", False), ("landing_viewed", False)])
+def test_explorer_renders_funnel_columns_and_stage_dropdown(admin_client):
+    """Owner design A: count columns replace the collapsed Status word entirely."""
     html = admin_client.get("/admin-panel/explorer/").content.decode()
-    assert "Landing page opened" in html   # derived stage, friendly label
-    assert "Link clicked" in html          # 'opened' token rendered honestly
-    # the raw 'landing_viewed' token never renders as badge text
-    assert ">landing_viewed<" not in html
-    assert ref.id  # journey exists
+    for label in ("Leads", "Accounts", "Landing opens", "Any stage reached"):
+        assert label in html
+    assert "sort=leads" in html and "sort=accounts" in html
+    # the collapsed status column is gone from the explorer table
+    assert "sort=status" not in html
 
 
 # --- journey detail --------------------------------------------------------
