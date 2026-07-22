@@ -3955,3 +3955,19 @@ Leads (real Lead rows only — a stray event can never inflate it, test-pinned) 
 "Stage reached" dropdown. Deployed SHA 3142215, live-verified: DA1707 = 39/12/1/0,
 RJ4521 = 64/47/1/1; stage=account → RJ4521+GW5500; stage=lead → 5 rows (EKU497 has 2).
 status_badge.html keeps honest labels for its remaining consumers. — Engineer
+
+### 2026-07-22 — FROM ENGINEER — STATUS — PRs #26+#27 LIVE: lead-history honesty + synthetic traffic class
+
+Owner-reported mismatch (Explorer EKU497 leads=2 vs profile 4x "Lead captured") root-caused:
+Explorer counts LIVE Lead rows; profile windows used immutable lead_captured events — two
+go-live test leads were HARD-deleted (16Jul 18:45 + 17Jul 03:05 UTC, no soft-delete trail,
+golive_smoke has no delete logic → manual go-live cleanup), orphaning their events. Fixes
+(owner-approved): (1) window lead events resolve against live Lead rows via person_ref_id →
+"Lead captured (since removed)" when gone; (2) NEW synthetic-traffic class (GoReferGoLiveSmoke
+/curl UAs) excluded from ALL counts (rollups/funnel/KPIs/uniques/explorer/profile), rendered
+dimmed "Synthetic"; capture-time flow untouched. Follow-up #27 (caught in live verify):
+synthetic clicks still BOUND windows so a human click can never claim a smoke lead. Final
+live state: EKU497 profile = 2 Clicked + 8 Synthetic-excluded (its 2 live leads are
+smoke-submitted — visible in Leads column, claimed by no human click); DA1707 unchanged.
+NOTE for owner: EKU497's 2 remaining live Lead rows are smoke-test artifacts; deleting them
+is a data-cleanup decision (destructive) left to the owner. — Engineer

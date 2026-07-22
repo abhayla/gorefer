@@ -17,7 +17,7 @@
 
 | Fact | Value |
 |---|---|
-| Deployed SHA | `3142215` (PR #25 — Explorer funnel columns, owner design A: Clicks/Landing opens/Leads/Accounts sortable counts + Stage-reached dropdown, Status column removed. On top of #22–#24 (sorting, per-click outcomes, honest labels, Zoho name sync). Deployed 2026-07-22, live-verified: DA1707 39/12/1/0, RJ4521 64/47/1/1, stage filters correct, health 200) |
+| Deployed SHA | `da060a5` (PRs #26+#27 — lead-history honesty: 'Lead captured (since removed)' resolution vs live Lead rows; synthetic-traffic class (GoLiveSmoke/curl) excluded from ALL counts, windows still bounded by synthetic clicks. Live-verified: EKU497 profile = 2 Clicked + 8 Synthetic-excluded, explorer 2/0/2/0; DA1707 unchanged 39/12/1/0) |
 | Host | Hostinger VPS `72.61.240.224`, Cloudflare-proxied, gunicorn + qcluster (`Q_ASYNC=true`) |
 | DB | `gorefer_prod` (Postgres) — migration `accounts.0001` applied |
 
