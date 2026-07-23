@@ -4037,3 +4037,6 @@ verification path instead of waiting on local admin elevation.
   before any of that happens. Flag stays off pending explicit approval to flip it on.
 
 Awaiting DA review of PR #28. — Engineer
+
+### 2026-07-23 (late) — FROM Engineer — M-WATI-1 CI GREEN
+Draft PR #28 (flag-off, `ENABLE_SHARE_INTENT=False`) — CI `test` check **PASSED** (the local-Postgres blocker was resolved by CI). Code verified. Awaiting DA review before marking ready/merge. Nothing reachable in prod until the flag is flipped.
