@@ -14,6 +14,7 @@ HUMAN_CONFIRMED = "human_confirmed"    # JS confirmation beacon cleared (real hu
 LEAD_CAPTURED = "lead_captured"        # capture-first form submit saved a lead
 REDIRECT_COMPLETED = "redirect_completed"  # user tapped Continue -> 302 to Zerodha
 SHARE_CLICKED = "share_clicked"        # referrer shared the link on a channel
+SHARE_INTENT = "share_intent"          # one-tap share endpoint hit (M-WATI-1)
 NOTIFICATION = "notification"          # a WATI transactional message reached a terminal status
 
 # Downstream events — ONLY ever produced from Zoho (M6). Never fabricated here.
