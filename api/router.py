@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from ninja import NinjaAPI
 
+from apps.followups.api import router as followups_router
 from gorefer.flags import flags
 
 from .analytics import router as analytics_router
@@ -24,6 +25,8 @@ api.add_router("/share", share_router)
 api.add_router("/analytics", analytics_router)
 api.add_router("/zoho", zoho_router)
 api.add_router("/wati", wati_router)
+# Follow-up engine CRUD (M-FUP-1) — staff-only, tenant-scoped (auth on the router itself).
+api.add_router("/followups", followups_router)
 
 
 @api.get("/health")

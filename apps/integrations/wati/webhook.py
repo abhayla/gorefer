@@ -138,3 +138,41 @@ def process_assisted_capture(request, payload: dict) -> dict:
         "consent": lead.consent,
         "deduped": lead.status == "new" and lead.pk is not None,
     }
+
+
+# --- Inbound message → 24h-window state feed (M-FUP-1, doc 14 §2E) ------------
+#
+# Every CUSTOMER inbound message opens/refreshes the WhatsApp 24h window. We stamp
+# `last_inbound_at` (services.stamp_inbound) so the follow-up send gate can tell an
+# open window (free-form session send) from a closed one (template/skip), and on a
+# FRESH open we start the AP's cadence (tasks.enqueue_followups). Enqueue is itself
+# flag-gated + opt-out-gated, so this is inert until `followups_enabled` is on.
+
+
+def record_inbound(tenant, mobile: str, at=None, *, prospect_id: int | None = None,
+                   source_event: str = "wati_inbound", pref_lang: str = "en") -> dict:
+    """Stamp the window for one inbound; start the cadence on a fresh open.
+
+    Pure of any HTTP concern so it is unit-testable and reusable (endpoint, backfill,
+    or a live getMessages fallback). Returns a small result dict.
+    """
+    from apps.common.phone import normalize_phone
+    from apps.followups import services, tasks
+
+    canonical = normalize_phone(mobile)
+    if not canonical:
+        return {"stamped": False, "reason": "no mobile"}
+
+    window, opened_fresh = services.stamp_inbound(tenant, canonical, at)
+    result = {"stamped": True, "mobile": canonical, "opened_fresh": opened_fresh, "enqueued": 0}
+    if opened_fresh:
+        enq = tasks.enqueue_followups(
+            tenant.id,
+            canonical,
+            opened_at=window.last_inbound_at,
+            prospect_id=prospect_id,
+            source_event=source_event,
+            pref_lang=pref_lang,
+        )
+        result["enqueued"] = enq.get("created", 0)
+    return result

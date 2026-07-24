@@ -75,6 +75,17 @@ class LogOnlyWatiAdapter:
             raw_status=status.STATUS_ACCEPTED,
         )
 
+    def send_session_text(self, *, to: str, message: str) -> SendResult:
+        # Demo/dev: log the intended free-form session send WITHOUT the body (a follow-up
+        # body is config copy, but log length only to keep the same "never print message
+        # content" discipline the template path uses for OTP/PII). No network call.
+        logger.info("[demo] WATI session-text suppressed: to=%s len=%s", to, len(message or ""))
+        return SendResult(
+            accepted=True,
+            provider_message_id=f"demo-session-{to}",
+            raw_status=status.STATUS_ACCEPTED,
+        )
+
     def get_message_status(self, *, provider_message_id: str, recipient_mobile: str | None = None,
                            template: str | None = None) -> DeliveryResult:
         # Demo made NO network call, so this is a SIMULATED terminal status, reported as
@@ -201,6 +212,54 @@ class LiveWatiAdapter:
         else:
             logger.info("WATI send accepted: template=%s http=%s", template, code)
         # The ack has NO message id — we deliberately return None, not a fabricated id.
+        return SendResult(
+            accepted=ok,
+            provider_message_id=None,
+            raw_status=status.STATUS_ACCEPTED if ok else status.STATUS_FAILED,
+        )
+
+    def send_session_text(self, *, to: str, message: str) -> SendResult:
+        """POST a FREE-FORM session message (only valid inside the 24h window).
+
+        Used by the follow-up engine's in-session nudge. Inherits the SAME fail-closed
+        recipient allowlist as send_template — a session send can no more reach a
+        non-allowlisted number during testing than a template can.
+
+        Endpoint: the Wati v1 session-message surface on the tenant base URL
+        (`/api/v1/sendSessionMessage/{number}?messageText=…`), consistent with the proven
+        `/api/v1/` calls this adapter already makes. CONFIRMED correct by a live probe on
+        2026-07-24: a real POST to this endpoint for a closed window returned
+        `{"result":false,"message":"Ticket has been expired.","ticketStatus":"CLOSED"}` —
+        proving both that this is the right endpoint (the Phase-1 checklist's v3
+        `/conversations/messages/text` path was wrong — it does not compose with the v1
+        tenant base) and that `result:false` is the out-of-window signal we parse. Returns
+        ACCEPTED (never treated as delivery); a session message carries no template to
+        reconcile terminal status by, so in-window delivery is verified at the destination
+        (getMessages statusString), not fabricated here.
+        """
+        number = "".join(ch for ch in str(to) if ch.isdigit())
+
+        if not _recipient_allowed(number):
+            logger.warning("WATI session-text BLOCKED by allowlist (recipient not allowlisted)")
+            return SendResult(accepted=False, provider_message_id=None, raw_status=status.STATUS_BLOCKED)
+
+        url = (
+            f"{self.base_url}/api/v1/sendSessionMessage/{urllib.parse.quote(number)}"
+            f"?messageText={urllib.parse.quote(message or '')}"
+        )
+        # No JSON body — the text rides in the query per the v1 sendSessionMessage shape.
+        code, text = self._transport("POST", url, self._auth_headers(json_body=False), None)
+        ok = False
+        if 200 <= code < 300:
+            try:
+                payload = json.loads(text or "{}")
+                ok = bool(payload.get("result", payload.get("ok", False)))
+            except (ValueError, AttributeError):
+                ok = False
+        if not ok:
+            logger.warning("WATI session-text not accepted: http=%s", code)
+        else:
+            logger.info("WATI session-text accepted: http=%s", code)
         return SendResult(
             accepted=ok,
             provider_message_id=None,
