@@ -59,6 +59,12 @@ template: v3 `gr_platform_gorefer_funnel_report_en_2026_07_21` **PENDING at Meta
   "held" note was stale; M13 built on it.)
 - Known messaging problem: delivery rate ~42% (131049 per-user cap dominated) — the daily
   report is the instrument on it.
+- **M-WATI-1 (one-tap `/share/{channel}/{client_id}` endpoint) is BUILT, NOT LIVE**: pushed
+  as **DRAFT PR #28** (`feat/m-wati1-share-intent`, 2026-07-23). `ENABLE_SHARE_INTENT` defaults
+  **False** — nothing reachable in prod even if merged as-is. CI (`test` check, which runs
+  against real Postgres) is **green** (pass, 3m10s) — this was the intended verification path
+  since the dev machine has no local Postgres. Draft is intentional: awaiting owner (DA) review
+  before marking ready/merging; flag stays off until the owner approves flipping it on.
 
 ## Verify-live commands (truth beats this file)
 

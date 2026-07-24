@@ -46,6 +46,11 @@ SHARE_CHANNEL_LABELS = {
 }
 SHARE_CHANNEL_OTHER = "other"
 
+# One-tap share endpoint (M-WATI-1). Launch supports WhatsApp only — an unsupported
+# or unlisted channel 404s rather than silently falling back to "other" (unlike the
+# /r/ attribution tag above, this gates which channels the endpoint will SERVE).
+SHARE_INTENT_CHANNELS = frozenset({"wa"})
+
 
 def normalize_share_channel(raw: str | None) -> str | None:
     """Map a raw ?s= value to its canonical Channel label (config-driven).
@@ -104,6 +109,14 @@ class FeatureFlags:
     # This is the ONLY place the incentive claim wording lives (default; env overrides).
     REFERRAL_INCENTIVE_CLAIM: str = "10% brokerage share + 300 reward points"
 
+    # M-WATI-1 — one-tap share endpoint (GET /share/{channel}/{client_id}). OFF by
+    # default so nothing is reachable in production until the owner flips it on.
+    ENABLE_SHARE_INTENT: bool = False
+    # The single swappable kit-message template (mirrors REFERRAL_INCENTIVE_CLAIM
+    # above) — owner-approved EN copy. `{link}` is substituted with the tracked
+    # `/r/{channel}/{client_id}` URL server-side; never partner code / raw Zerodha URL.
+    SHARE_KIT_MESSAGE_TEMPLATE: str = "Open a free Zerodha account — my referral link:\n{link}"
+
     @classmethod
     def from_env(cls) -> "FeatureFlags":
         return cls(
@@ -119,6 +132,10 @@ class FeatureFlags:
             ENABLE_ADMIN_DASHBOARD=_bool("ENABLE_ADMIN_DASHBOARD", cls.ENABLE_ADMIN_DASHBOARD),
             ENABLE_DEMO_MODE=_bool("ENABLE_DEMO_MODE", cls.ENABLE_DEMO_MODE),
             REFERRAL_INCENTIVE_CLAIM=_str("REFERRAL_INCENTIVE_CLAIM", cls.REFERRAL_INCENTIVE_CLAIM),
+            ENABLE_SHARE_INTENT=_bool("ENABLE_SHARE_INTENT", cls.ENABLE_SHARE_INTENT),
+            SHARE_KIT_MESSAGE_TEMPLATE=_str(
+                "SHARE_KIT_MESSAGE_TEMPLATE", cls.SHARE_KIT_MESSAGE_TEMPLATE
+            ),
         )
 
     def as_dict(self) -> dict:

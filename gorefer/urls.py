@@ -26,6 +26,7 @@ from apps.referrals.views import (
     partner_direct_redirect,
     referral_continue,
     referral_redirect,
+    share_intent_redirect,
 )
 from gorefer.converters import ChannelConverter
 
@@ -49,6 +50,13 @@ urlpatterns = [
     path("r/<str:client_id>", referral_redirect, name="referral_redirect"),
     path("api/", api.urls),
 ]
+
+# One-tap share endpoint (M-WATI-1). The ENTIRE route exists only when
+# ENABLE_SHARE_INTENT is on (Constitution §4 — no dead UI/route when off).
+if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_SHARE_INTENT", False):
+    urlpatterns.append(
+        path("share/<channel:channel>/<str:client_id>", share_intent_redirect, name="share_intent")
+    )
 
 # The M7 admin dashboard (custom, built from the mockups) + Django admin base,
 # both gated by the feature flag (no dead UI when off).

@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import uuid
 
-from django.http import HttpResponseRedirect
+from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import render
 from django.views.decorators.http import require_GET
 
+from apps.common.ratelimit import RateLimited, check_rate, client_ip
 from apps.config.cascade import resolve
 from apps.tenants.resolve import get_current_tenant
 from gorefer import flags as flagmod
@@ -30,6 +31,7 @@ from .redirect_service import (
     handle_landing_view,
     handle_partner_direct,
 )
+from .share_intent_service import handle_share_intent
 from .validators import InvalidClientId, validate_client_id
 
 VISITOR_COOKIE = "gr_vid"
@@ -245,6 +247,47 @@ def disclosure_page(request, slug: str):
         "disclosure_blocks": blocks,
     }
     return render(request, "disclosure.html", context)
+
+
+@require_GET
+def share_intent_redirect(request, channel: str, client_id: str):
+    """GET /share/{channel}/{client_id} — the one-tap share endpoint (M-WATI-1).
+
+    Only reachable when `ENABLE_SHARE_INTENT` is on (gorefer/urls.py registers the
+    route conditionally, per Constitution §4 — no dead UI when off). Builds the
+    channel's share deep-link (launch: WhatsApp) with a prefilled kit message
+    carrying the tracked `/r/{channel}/{client_id}` link, records a PII-free
+    `share_intent` event, then 302s. Unsupported channel -> 404; invalid
+    client_id -> the same branded 400 as `/r/`; unresolvable partner config -> the
+    same branded 503 as `/r/`.
+    """
+    from django.conf import settings
+    from django.http import HttpResponse, HttpResponseNotFound
+
+    try:
+        check_rate("share", client_ip(request),
+                   limit=settings.RATELIMIT_SHARE_MAX, window=settings.RATELIMIT_API_WINDOW)
+    except RateLimited as exc:
+        return HttpResponse(status=429, headers={"Retry-After": str(exc.retry_after)})
+
+    try:
+        normalized = validate_client_id(client_id)
+    except InvalidClientId:
+        return render(request, "landing_invalid.html", status=400)
+
+    tenant = get_current_tenant(request)
+    try:
+        destination = handle_share_intent(
+            tenant=tenant,
+            channel=channel,
+            client_id=normalized,
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+        )
+    except Http404:
+        return HttpResponseNotFound()
+    except PartnerUnavailable:
+        return _partner_unavailable(request)
+    return HttpResponseRedirect(destination)
 
 
 @require_GET
