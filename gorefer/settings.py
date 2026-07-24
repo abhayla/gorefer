@@ -108,6 +108,7 @@ INSTALLED_APPS = [
     "apps.integrations",
     "apps.otp",  # pluggable OTP delivery port (Q-M-OTP; behind ENABLE_OTP_LOGIN)
     "apps.accounts",  # referrer self-service identity (M13; behind ENABLE_CUSTOMER_LOGIN)
+    "apps.followups",  # 24h-window follow-up engine (M-FUP-1; behind cascade followups_enabled)
 ]
 
 # --- Background queue (django-q2, Postgres/ORM broker — NO Redis) -----------

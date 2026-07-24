@@ -4057,3 +4057,47 @@ so this was a code deploy, not just a flag flip.
 - **Rollback:** set `ENABLE_SHARE_INTENT=false` + restart → route unregisters (Constitution §4, no dead route).
 
 M-WATI-1 status: BUILT+DRAFT → **LIVE**. — Engineer [skip-contract-doc]
+
+### 2026-07-24 — FROM ENGINEER — STATUS — Sprint-2 mission OPENED: M-FUP-1 24h-window Follow-up Engine (Phase 1) — §6 deferral lifted (owner-authorized)
+
+**Mission opened per owner (Design Authority) authorization.** GoRefer `CLAUDE.md §6` defers the
+"WATI stale-lead auto-nudge" to Sprint 2+. The owner has lifted that deferral and authorized this as
+a **Sprint-2 mission**. Building spec-first against `docs/architecture/14-24h-Window-Followup-Engine.md`,
+constrained by `docs/architecture/13 §5` (Phase 1 is **TENANT-SCOPED only — NO PartnerGroup, NO
+5-tier resolution**). This entry is the paper trail that the deferral was lifted deliberately, not drifted.
+
+**Scope (Phase 1, PIFS-as-sole-AP):** new `apps/followups/` (FollowupRule + ScheduledFollowup +
+window-state), `followup_sweep` 5-min schedule, `send_session_text` on the Wati adapter, `last_inbound_at`
+stamp from the Wati inbound webhook, the send gate (opt-out/engaged/window), CRUD API + admin, and tests.
+All behind cascade flag **`followups_enabled` (default OFF)**. Contract-doc CI discipline (§6b) obeyed for
+the `apps/integrations/wati/**` changes.
+
+**Three points surfaced (none blocks Phase 1 — building with the recommendation, flagging for DA confirm):**
+
+1. **API framework — spec says "DRF", the LOCKED stack (ADR-024) is Django Ninja; DRF is NOT installed.**
+   Doc 14 §4 + the resume checklist say "DRF CRUD". The repo has no `djangorestframework` — every existing
+   API router (`api/*.py`) is **Django Ninja**, and ADR-024 locks the stack to Django + Ninja + HTMX. A
+   locked ADR + the actual installed stack outrank a loose word in a DESIGN-status doc, so I'm building the
+   CRUD as a **Django Ninja router** (`api/followups.py`) matching every other endpoint — NOT introducing DRF
+   (that would be architecture drift). **DA: confirm "DRF" in doc 14 was shorthand for "the REST API layer".**
+
+2. **`send_session_text` endpoint — checklist says Wati v3 `/conversations/messages/text`; the adapter's
+   base URL is the v1 tenant server (`live-mt-server.wati.io/<tenantId>/api/v1/…`).** Mixing a v3 path onto
+   the v1 base is likely wrong. I'm implementing session-send on the **same v1 base + auth as `send_template`**
+   (the proven-working surface) and documenting the exact request shape in the contract doc, marked
+   **CONFIRM-ON-LIVE-TEST**. The rollout already gates on a live test to the test numbers before enable, so the
+   endpoint is verified at the destination there — no fabricated "it works". **DA/owner: fine to confirm the
+   final endpoint during the 7972672473 / 7767009136 live test.**
+
+3. **`last_inbound_at` "contact field" realized as a dedicated tenant+mobile window-state row**
+   (`FollowupWindow`), not a column bolted onto `Prospect`. Window state is **mobile-keyed and must exist
+   before/without a Prospect** (a contact can message before they are ever a lead); keeping it in `apps/followups`
+   keeps the messaging-window concern out of the referrals PII model and self-contained. `ScheduledFollowup`
+   still carries a nullable `prospect` FK as the "contact" link. Spec-realization, not a scope change.
+
+**Verification path:** this dev box has **no reachable Postgres** (127.0.0.1:5432 refused; no Docker/podman;
+PG install needs admin this session lacks) — identical to the M-WATI-1 blocker. Per that owner-accepted
+precedent, I author TDD-first, run the non-DB static gates locally (`ruff`, `manage.py check`,
+`makemigrations --check`), and use **CI's Postgres as the pytest runner** on push. Nothing reaches prod:
+`followups_enabled` defaults OFF and no schedule fires until an operator runs `setup_schedules`. PR will open
+as **DRAFT** for DA review before any flag flip. — Engineer

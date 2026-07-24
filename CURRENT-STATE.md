@@ -59,6 +59,15 @@ template: v3 `gr_platform_gorefer_funnel_report_en_2026_07_21` **PENDING at Meta
   "held" note was stale; M13 built on it.)
 - Known messaging problem: delivery rate ~42% (131049 per-user cap dominated) — the daily
   report is the instrument on it.
+- **M-FUP-1 (24h-window follow-up engine, Phase 1) — BUILDING** (2026-07-24, owner-authorized
+  Sprint-2 mission; CLAUDE.md §6 deferral lifted). New `apps/followups/` (FollowupRule +
+  ScheduledFollowup + FollowupWindow), `followup_sweep` 5-min schedule, `send_session_text` on the
+  Wati adapter, `/api/wati/inbound` window feed, send gate, Ninja CRUD. **Gated by cascade
+  `followups_enabled` (default OFF) — nothing live, nothing schedulable until an operator runs
+  `setup_schedules` AND flips the flag.** Branch `feat/followup-engine-phase1`; PR opens DRAFT for DA
+  review. Rollout: flag-off → live-test on 7972672473 / 7767009136 → owner copy sign-off → enable.
+  Tenant-scoped only (doc-13 §5, NO PartnerGroup). See COORDINATION 2026-07-24 STATUS for the three
+  flagged points (DRF→Ninja, session-endpoint CONFIRM-ON-LIVE-TEST, window-state as its own row).
 - **M-WATI-1 (one-tap `/share/{channel}/{client_id}` endpoint) is LIVE** (2026-07-24, owner "make it
   live now"): PR #28 merged (`f7f8656`); the 6 code files deployed to prod (file-copy, backup
   `.predeploy-backup-20260724-150205`), `ENABLE_SHARE_INTENT=true` in prod `.env`, both services
