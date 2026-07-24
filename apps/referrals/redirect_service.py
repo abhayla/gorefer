@@ -238,3 +238,9 @@ def handle_partner_direct(*, tenant, visitor_id, user_agent, raw_ip, share_chann
         )
     )
     return destination, True
+
+
+# Public aliases (M-WATI-1): share_intent_service reuses the ADR-008 lazy-creation
+# engine + program resolution rather than duplicating them (DRY).
+get_active_program = _active_program
+lazy_get_or_create_referral = _lazy_get_or_create_referral
