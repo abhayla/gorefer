@@ -4040,3 +4040,20 @@ Awaiting DA review of PR #28. — Engineer
 
 ### 2026-07-23 (late) — FROM Engineer — M-WATI-1 CI GREEN
 Draft PR #28 (flag-off, `ENABLE_SHARE_INTENT=False`) — CI `test` check **PASSED** (the local-Postgres blocker was resolved by CI). Code verified. Awaiting DA review before marking ready/merge. Nothing reachable in prod until the flag is flipped.
+
+### 2026-07-24 — FROM Engineer — GO-LIVE — M-WATI-1 one-tap /share flipped LIVE (owner "make it live now")
+
+Owner authorized flipping M-WATI-1 live from the hub session. Prod (`da060a5`) predated the feature,
+so this was a code deploy, not just a flag flip.
+
+- **Deployed** `f7f8656` 6 code files (`apps/events/vocab.py`, `apps/referrals/redirect_service.py`,
+  `apps/referrals/share_intent_service.py` [new], `apps/referrals/views.py`, `gorefer/flags.py`,
+  `gorefer/urls.py`) to `/var/www/gorefer` via tar-pipe over SSH; sha1-verified byte-identical on prod.
+  No migrations, no dep changes, no static/template changes. Pre-deploy backup: `.predeploy-backup-20260724-150205`.
+- **Flag:** `ENABLE_SHARE_INTENT=true` in prod `.env`; `DEPLOYED_SHA` → `f7f8656`; restarted
+  `gorefer.service` + `gorefer-qcluster.service` (both active).
+- **Destination-verified live:** `GET https://gorefer.in/share/wa/DA1707` → **302 → wa.me** with the
+  pre-filled referral message (`gorefer.in/r/wa/DA1707`); homepage 200; unsupported `/share/xx/` → 404 (spec-correct).
+- **Rollback:** set `ENABLE_SHARE_INTENT=false` + restart → route unregisters (Constitution §4, no dead route).
+
+M-WATI-1 status: BUILT+DRAFT → **LIVE**. — Engineer [skip-contract-doc]

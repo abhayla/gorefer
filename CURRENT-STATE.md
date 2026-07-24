@@ -11,13 +11,13 @@
 > wins; if either disagrees with the live system, **the live system wins** — verify, don't
 > trust (commands at the bottom).
 >
-> **Last updated:** 2026-07-22 (Engineer, explorer column sorting deploy) — deploy + health verified live; flag values below carry the 2026-07-21 verification date.
+> **Last updated:** 2026-07-24 (M-WATI-1 one-tap `/share` flipped LIVE, owner-authorized; deploy `f7f8656`, endpoint 302-verified) — earlier 2026-07-22 (explorer column sorting deploy). Flag values below carry the 2026-07-21 verification date.
 
 ## Production
 
 | Fact | Value |
 |---|---|
-| Deployed SHA | `da060a5` (PRs #26+#27 — lead-history honesty: 'Lead captured (since removed)' resolution vs live Lead rows; synthetic-traffic class (GoLiveSmoke/curl) excluded from ALL counts, windows still bounded by synthetic clicks. Live-verified: EKU497 profile = 2 Clicked + 8 Synthetic-excluded, explorer 2/0/2/0; DA1707 unchanged 39/12/1/0) |
+| Deployed SHA | `f7f8656` (M-WATI-1 one-tap `/share` LIVE 2026-07-24 — `ENABLE_SHARE_INTENT=true`; deployed over `da060a5`, no migrations/deps/static). Prior `da060a5` (PRs #26+#27 — lead-history honesty: 'Lead captured (since removed)' resolution vs live Lead rows; synthetic-traffic class (GoLiveSmoke/curl) excluded from ALL counts; live-verified EKU497 2/0/2/0, DA1707 39/12/1/0) |
 | Host | Hostinger VPS `72.61.240.224`, Cloudflare-proxied, gunicorn + qcluster (`Q_ASYNC=true`) |
 | DB | `gorefer_prod` (Postgres) — migration `accounts.0001` applied |
 
@@ -59,12 +59,12 @@ template: v3 `gr_platform_gorefer_funnel_report_en_2026_07_21` **PENDING at Meta
   "held" note was stale; M13 built on it.)
 - Known messaging problem: delivery rate ~42% (131049 per-user cap dominated) — the daily
   report is the instrument on it.
-- **M-WATI-1 (one-tap `/share/{channel}/{client_id}` endpoint) is BUILT, NOT LIVE**: pushed
-  as **DRAFT PR #28** (`feat/m-wati1-share-intent`, 2026-07-23). `ENABLE_SHARE_INTENT` defaults
-  **False** — nothing reachable in prod even if merged as-is. CI (`test` check, which runs
-  against real Postgres) is **green** (pass, 3m10s) — this was the intended verification path
-  since the dev machine has no local Postgres. Draft is intentional: awaiting owner (DA) review
-  before marking ready/merging; flag stays off until the owner approves flipping it on.
+- **M-WATI-1 (one-tap `/share/{channel}/{client_id}` endpoint) is LIVE** (2026-07-24, owner "make it
+  live now"): PR #28 merged (`f7f8656`); the 6 code files deployed to prod (file-copy, backup
+  `.predeploy-backup-20260724-150205`), `ENABLE_SHARE_INTENT=true` in prod `.env`, both services
+  restarted. Live-verified at destination: `GET /share/wa/DA1707` → **302 → wa.me** (pre-filled
+  referral message), homepage 200, unsupported channel `/share/xx/` → 404 (spec-correct). No
+  migrations/deps/static in this deploy. Rollback = set flag false + restart (route unregisters).
 
 ## Verify-live commands (truth beats this file)
 
