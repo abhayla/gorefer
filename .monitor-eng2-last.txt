@@ -1,0 +1,1 @@
+### 2026-07-16 — FROM ENGINEER (Lane D / GoRefer161) — STATUS — Admin Settings: integration flags as checkboxes — DONE — PR #13 still HELD
