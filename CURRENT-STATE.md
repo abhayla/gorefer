@@ -11,7 +11,7 @@
 > wins; if either disagrees with the live system, **the live system wins** — verify, don't
 > trust (commands at the bottom).
 >
-> **Last updated:** 2026-07-24 (M-WATI-1 one-tap `/share` flipped LIVE, owner-authorized; deploy `f7f8656`, endpoint 302-verified) — earlier 2026-07-22 (explorer column sorting deploy). Flag values below carry the 2026-07-21 verification date.
+> **Last updated:** 2026-07-24 (M-FUP-1 follow-up engine deployed + LIVE on prod, `bbc32c8`, `followups_enabled=True`, live session nudge DELIVERED+READ) — earlier same day M-WATI-1 `/share` LIVE (`f7f8656`). Flag values below carry the 2026-07-21 verification date.
 
 ## Production
 
@@ -59,15 +59,19 @@ template: v3 `gr_platform_gorefer_funnel_report_en_2026_07_21` **PENDING at Meta
   "held" note was stale; M13 built on it.)
 - Known messaging problem: delivery rate ~42% (131049 per-user cap dominated) — the daily
   report is the instrument on it.
-- **M-FUP-1 (24h-window follow-up engine, Phase 1) — BUILDING** (2026-07-24, owner-authorized
-  Sprint-2 mission; CLAUDE.md §6 deferral lifted). New `apps/followups/` (FollowupRule +
-  ScheduledFollowup + FollowupWindow), `followup_sweep` 5-min schedule, `send_session_text` on the
-  Wati adapter, `/api/wati/inbound` window feed, send gate, Ninja CRUD. **Gated by cascade
-  `followups_enabled` (default OFF) — nothing live, nothing schedulable until an operator runs
-  `setup_schedules` AND flips the flag.** Branch `feat/followup-engine-phase1`; PR opens DRAFT for DA
-  review. Rollout: flag-off → live-test on 7972672473 / 7767009136 → owner copy sign-off → enable.
-  Tenant-scoped only (doc-13 §5, NO PartnerGroup). See COORDINATION 2026-07-24 STATUS for the three
-  flagged points (DRF→Ninja, session-endpoint CONFIRM-ON-LIVE-TEST, window-state as its own row).
+- **M-FUP-1 (24h-window follow-up engine, Phase 1) — LIVE on prod** (2026-07-24, owner-authorized
+  Sprint-2 mission + prod deploy; CLAUDE.md §6 deferral lifted). PR #30 merged (`bbc32c8`), deployed
+  to `/var/www/gorefer` (DEPLOYED_SHA `bbc32c8`, backup `predeploy-fup-20260724-223741.tgz`), migration
+  `followups.0001` applied, `followup_sweep` registered (every 5 min → `fire_due_followups`), cadence
+  seeded (**every 3h through 24h**: nudge_3h…nudge_21h), **`followups_enabled=True` for PIFS**, both
+  services restarted. **Live end-to-end proof:** owner messaged the WATI business number → window
+  opened → `record_inbound` enqueued the 7-step cadence → the sweep sent a session nudge →
+  **DELIVERED + READ** (terminal-verified) on 917972672473. Quiet hours 23:00–06:00 IST enforced
+  (night steps auto-defer to 06:00 IST). Session endpoint CONFIRMED (`/api/v1/sendSessionMessage`).
+  Tenant-scoped only (doc-13 §5, NO PartnerGroup). **Remaining for full autonomy on OTHER prospects:**
+  wire Wati inbound-message webhook → `POST /api/wati/inbound` (header `X-Wati-Webhook-Key`), or a
+  polling window-feed — until then a window/cadence is opened by the inbound webhook or a manual
+  `record_inbound`. See COORDINATION 2026-07-24 GO-LIVE.
 - **M-WATI-1 (one-tap `/share/{channel}/{client_id}` endpoint) is LIVE** (2026-07-24, owner "make it
   live now"): PR #28 merged (`f7f8656`); the 6 code files deployed to prod (file-copy, backup
   `.predeploy-backup-20260724-150205`), `ENABLE_SHARE_INTENT=true` in prod `.env`, both services
