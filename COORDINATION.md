@@ -4101,3 +4101,23 @@ precedent, I author TDD-first, run the non-DB static gates locally (`ruff`, `man
 `makemigrations --check`), and use **CI's Postgres as the pytest runner** on push. Nothing reaches prod:
 `followups_enabled` defaults OFF and no schedule fires until an operator runs `setup_schedules`. PR will open
 as **DRAFT** for DA review before any flag flip. — Engineer
+
+### 2026-07-24 — FROM ENGINEER — STATUS — M-FUP-1 built, DRAFT PR #30, CI GREEN — awaiting DA review
+
+Phase 1 built spec-first + TDD, all checklist items complete, all behind `followups_enabled` (OFF).
+
+- **Branch** `feat/followup-engine-phase1` (cut from fresh `origin/main`); **DRAFT PR #30**:
+  https://github.com/abhayla/gorefer/pull/30 (2 commits: the engine, then the spec docs).
+- **CI result: GREEN** — https://github.com/abhayla/gorefer/actions/runs/30101304569 `test` **PASSED**
+  (3m0s) against real Postgres: contract-doc gate → ruff → `manage.py check` → migration-drift →
+  migrate → **pytest** (existing suite + the ~30 new `tests/test_followups.py` DoD cases: rule
+  resolution/enqueue, window→session/template/skip, engaged+opt-out+flag-off cancel, idempotency,
+  CRUD transitions + staff auth, adapter session-send + allowlist, inbound window feed).
+- **Nothing reachable in prod:** flag OFF; `followup_sweep` not registered until `setup_schedules` is
+  run; `/api/wati/inbound` is authed + inert until the flag is on.
+- **Spec docs** (doc 14 + resume + superseded whatsapp-plan) were auto-checkpointed by the
+  branch-lifecycle hook onto `auto/work-20260724-193135` (commit `c660b56`); recovered and carried onto
+  the mission branch so the PR is self-contained.
+- **Left DRAFT deliberately** — not ready-for-review-marked, not merged, not deployed. Built
+  autonomously; needs DA review of the 3 flagged points before the rollout continues
+  (live-test on 7972672473 / 7767009136 → owner copy sign-off → enable). — Engineer
