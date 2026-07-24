@@ -33,6 +33,12 @@ SCHEDULES = {
     # leaderboard show real referrer names instead of "name not on file" for anyone
     # Zoho knows. Unmatched ClientIds stay honestly nameless; never overwrites.
     "zoho_sync_referrer_names": ("apps.integrations.zoho.tasks.sync_referrer_names", 1440),
+    # Every 5 min (M-FUP-1): sweep due follow-ups over the ScheduledFollowup due-table
+    # (the same "recurring sweep over a due-table" idiom as wati_reconcile_pending). Each
+    # due row is locked, gated (opt-out / engaged / window), then sent or cancelled/skipped.
+    # 5-min granularity is fine for ≥15-min follow-up targets; nothing fires until
+    # `followups_enabled` is on (re-checked at fire time).
+    "followup_sweep": ("apps.followups.tasks.fire_due_followups", 5),
 }
 
 

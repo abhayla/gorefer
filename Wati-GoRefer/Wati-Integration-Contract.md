@@ -114,9 +114,52 @@ a role turned off is recorded `skipped` with a reason, never silently dropped.
 | `ENABLE_WATI_SEND` | live adapter vs log-only. Resolved via the **config cascade** (ConfigGlobal override → env), not the frozen `flags` snapshot |
 | `WATI_ALLOW_ALL_RECIPIENTS` | the fail-closed recipient gate (§3) |
 | `WATI_TEST_RECIPIENTS` | the allowlist when allow-all is off |
-| `WATI_WEBHOOK_KEY` / `_IP_ALLOWLIST` | inbound assisted-capture webhook auth (fail-closed on a blank key) |
+| `WATI_WEBHOOK_KEY` / `_IP_ALLOWLIST` | inbound assisted-capture **and** inbound-message webhook auth (fail-closed on a blank key) |
+| `followups_enabled` | the follow-up engine (§8). **Cascade key**, tenant-tier, default OFF — gates enqueue AND the send gate |
 
-## 8. Related
+## 8. `send_session_text` + the 24h-window follow-up engine (M-FUP-1)
+
+The follow-up engine (`apps/followups/`, spec doc 14) adds one send method and one inbound
+touch-point on this adapter boundary. Everything is gated by `followups_enabled` (cascade,
+default OFF), so with the flag off nothing here sends or schedules.
+
+**`LiveWatiAdapter.send_session_text(to, message)`** — a **free-form session message**, only
+valid while the recipient's 24h window is open. Same contract spine as `send_template`:
+
+- Inherits the SAME fail-closed allowlist (`_recipient_allowed`, §3) — a session send can no
+  more reach a non-allowlisted number than a template can. Blocked → `raw_status = 'blocked'`,
+  **no network call**.
+- Returns **ACCEPTED, never delivery**. A session message carries no template name, so the
+  §4 `getMessages`-by-template reconcile cannot key on it; terminal delivery for session sends
+  is therefore **verified at the destination on the live test** (rollout gate), not inferred.
+  Reconcile-by-conversation for session text is a Phase-2 enhancement, tracked — not built here.
+- Endpoint: the v1 tenant-server session surface
+  `POST {base}/api/v1/sendSessionMessage/{number}?messageText=…`, consistent with the proven
+  `/api/v1/` calls this adapter already makes (§2, §4). ✅ **CONFIRMED (2026-07-24 live probe):** a
+  real POST to this endpoint for a CLOSED window returned
+  `{"result":false,"message":"Ticket has been expired.","ticketStatus":"CLOSED"}` — proving this is
+  the correct endpoint (the Phase-1 checklist's v3 `/conversations/messages/text` path was wrong; it
+  does not compose with the v1 tenant base) and that `result:false` is the out-of-window signal the
+  adapter parses. In-window session delivery is verified against `getMessages` `statusString`. The
+  log-only adapter simulates an accepted session send (no network) so the flow is testable offline.
+
+**Inbound-message webhook → window feed.** `POST /api/wati/inbound` (auth = the §3/§7 static key
++ IP allowlist, fail-closed, identical to the assisted webhook) stamps `last_inbound_at` for the
+**customer's** number (`apps.integrations.wati.webhook.record_inbound`). OUTBOUND events
+(`owner`/`fromMe` truthy) are ignored — a business-sent message does not open a customer window.
+On a **fresh** window open (no prior inbound, or ≥24h since the last) it starts the AP's cadence
+(one `ScheduledFollowup` per enabled `FollowupRule` step); a subsequent inbound inside the window
+refreshes the timestamp (and counts as a reply for engaged-exit) but does not re-enqueue. Wati
+must be configured to POST inbound messages to this endpoint — a rollout step, done with the flag
+still off (enqueue is inert until `followups_enabled` is on).
+
+**Send gate (per due row, at fire time).** Opt-out (per-AP, tenant+mobile) → cancel; replied /
+converted since the window opened (`stop_on_reply`) → cancel; window open → session send; window
+closed → template if the step has one (and it isn't session-only), else skip. Delivery is recorded
+on the `ScheduledFollowup` row (SENT/FAILED/SKIPPED/CANCELLED) and a PII-free `notification` funnel
+event is emitted (no mobile, per #16).
+
+## 9. Related
 
 - Channel health, template approvals, nightly report: `C:\Abhay\5Wealths\Wati-Project\`
 - Templates GoRefer uses: [`Wati-GoRefer-Templates.md`](./Wati-GoRefer-Templates.md)

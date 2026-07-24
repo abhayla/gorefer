@@ -27,7 +27,9 @@ from apps.integrations.wati.webhook import (
     AssistedCaptureError,
     authenticate,
     process_assisted_capture,
+    record_inbound,
 )
+from apps.tenants.resolve import get_current_tenant
 
 router = Router()
 
@@ -81,3 +83,62 @@ def assisted_webhook(request):
     except AssistedCaptureError as exc:
         raise HttpError(422, str(exc)) from exc
     return result
+
+
+@router.post("/inbound")
+def inbound_message(request):
+    """Wati inbound-message webhook → 24h-window state feed (M-FUP-1).
+
+    AUTH FIRST (same static key + IP allowlist as the assisted webhook, fail-closed).
+    Stamps `last_inbound_at` for the CUSTOMER's number and, on a fresh 24h-window open,
+    starts the AP's follow-up cadence. OUTBOUND events (owner/fromMe true) are ignored —
+    a business-sent message does not open a customer window. Inert until
+    `followups_enabled` is on (enqueue is flag-gated), so wiring Wati to this endpoint is
+    safe ahead of the flag flip.
+    """
+    if not authenticate(request):
+        raise HttpError(401, "unauthenticated")
+    try:
+        raw = json.loads(request.body or b"{}")
+    except (ValueError, TypeError) as exc:
+        raise HttpError(422, "malformed JSON body") from exc
+    if not isinstance(raw, dict):
+        raise HttpError(422, "body must be a JSON object")
+
+    # OUTBOUND (business → customer) never opens a customer window. Wati marks direction
+    # with `owner`/`fromMe` (both mean "sent by us"); treat either truthy as outbound.
+    if _as_bool(raw.get("owner")) or _as_bool(raw.get("fromMe")):
+        return {"status": "ignored", "reason": "outbound"}
+
+    mobile = raw.get("waId") or raw.get("phone") or raw.get("mobile") or raw.get("senderId") or ""
+    if not str(mobile).strip():
+        return {"status": "ignored", "reason": "no mobile"}
+
+    tenant = get_current_tenant(request)
+    result = record_inbound(tenant, str(mobile), _parse_ts(raw.get("timestamp")))
+    return {"status": "ok", **result}
+
+
+def _as_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def _parse_ts(value):
+    """Parse a Wati inbound timestamp (epoch seconds, str or int) → aware datetime.
+
+    Returns None (→ 'now' downstream) on anything unparseable — a missing/garbled
+    timestamp must never crash the window feed.
+    """
+    if value in (None, ""):
+        return None
+    try:
+        from datetime import datetime
+        from datetime import timezone as _tz
+
+        return datetime.fromtimestamp(int(value), tz=_tz.utc)
+    except (ValueError, TypeError, OSError):
+        return None

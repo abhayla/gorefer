@@ -4057,3 +4057,93 @@ so this was a code deploy, not just a flag flip.
 - **Rollback:** set `ENABLE_SHARE_INTENT=false` + restart → route unregisters (Constitution §4, no dead route).
 
 M-WATI-1 status: BUILT+DRAFT → **LIVE**. — Engineer [skip-contract-doc]
+
+### 2026-07-24 — FROM ENGINEER — STATUS — Sprint-2 mission OPENED: M-FUP-1 24h-window Follow-up Engine (Phase 1) — §6 deferral lifted (owner-authorized)
+
+**Mission opened per owner (Design Authority) authorization.** GoRefer `CLAUDE.md §6` defers the
+"WATI stale-lead auto-nudge" to Sprint 2+. The owner has lifted that deferral and authorized this as
+a **Sprint-2 mission**. Building spec-first against `docs/architecture/14-24h-Window-Followup-Engine.md`,
+constrained by `docs/architecture/13 §5` (Phase 1 is **TENANT-SCOPED only — NO PartnerGroup, NO
+5-tier resolution**). This entry is the paper trail that the deferral was lifted deliberately, not drifted.
+
+**Scope (Phase 1, PIFS-as-sole-AP):** new `apps/followups/` (FollowupRule + ScheduledFollowup +
+window-state), `followup_sweep` 5-min schedule, `send_session_text` on the Wati adapter, `last_inbound_at`
+stamp from the Wati inbound webhook, the send gate (opt-out/engaged/window), CRUD API + admin, and tests.
+All behind cascade flag **`followups_enabled` (default OFF)**. Contract-doc CI discipline (§6b) obeyed for
+the `apps/integrations/wati/**` changes.
+
+**Three points surfaced (none blocks Phase 1 — building with the recommendation, flagging for DA confirm):**
+
+1. **API framework — spec says "DRF", the LOCKED stack (ADR-024) is Django Ninja; DRF is NOT installed.**
+   Doc 14 §4 + the resume checklist say "DRF CRUD". The repo has no `djangorestframework` — every existing
+   API router (`api/*.py`) is **Django Ninja**, and ADR-024 locks the stack to Django + Ninja + HTMX. A
+   locked ADR + the actual installed stack outrank a loose word in a DESIGN-status doc, so I'm building the
+   CRUD as a **Django Ninja router** (`api/followups.py`) matching every other endpoint — NOT introducing DRF
+   (that would be architecture drift). **DA: confirm "DRF" in doc 14 was shorthand for "the REST API layer".**
+
+2. **`send_session_text` endpoint — checklist says Wati v3 `/conversations/messages/text`; the adapter's
+   base URL is the v1 tenant server (`live-mt-server.wati.io/<tenantId>/api/v1/…`).** Mixing a v3 path onto
+   the v1 base is likely wrong. I'm implementing session-send on the **same v1 base + auth as `send_template`**
+   (the proven-working surface) and documenting the exact request shape in the contract doc, marked
+   **CONFIRM-ON-LIVE-TEST**. The rollout already gates on a live test to the test numbers before enable, so the
+   endpoint is verified at the destination there — no fabricated "it works". **DA/owner: fine to confirm the
+   final endpoint during the 7972672473 / 7767009136 live test.**
+
+3. **`last_inbound_at` "contact field" realized as a dedicated tenant+mobile window-state row**
+   (`FollowupWindow`), not a column bolted onto `Prospect`. Window state is **mobile-keyed and must exist
+   before/without a Prospect** (a contact can message before they are ever a lead); keeping it in `apps/followups`
+   keeps the messaging-window concern out of the referrals PII model and self-contained. `ScheduledFollowup`
+   still carries a nullable `prospect` FK as the "contact" link. Spec-realization, not a scope change.
+
+**Verification path:** this dev box has **no reachable Postgres** (127.0.0.1:5432 refused; no Docker/podman;
+PG install needs admin this session lacks) — identical to the M-WATI-1 blocker. Per that owner-accepted
+precedent, I author TDD-first, run the non-DB static gates locally (`ruff`, `manage.py check`,
+`makemigrations --check`), and use **CI's Postgres as the pytest runner** on push. Nothing reaches prod:
+`followups_enabled` defaults OFF and no schedule fires until an operator runs `setup_schedules`. PR will open
+as **DRAFT** for DA review before any flag flip. — Engineer
+
+### 2026-07-24 — FROM ENGINEER — STATUS — M-FUP-1 built, DRAFT PR #30, CI GREEN — awaiting DA review
+
+Phase 1 built spec-first + TDD, all checklist items complete, all behind `followups_enabled` (OFF).
+
+- **Branch** `feat/followup-engine-phase1` (cut from fresh `origin/main`); **DRAFT PR #30**:
+  https://github.com/abhayla/gorefer/pull/30 (2 commits: the engine, then the spec docs).
+- **CI result: GREEN** — https://github.com/abhayla/gorefer/actions/runs/30101304569 `test` **PASSED**
+  (3m0s) against real Postgres: contract-doc gate → ruff → `manage.py check` → migration-drift →
+  migrate → **pytest** (existing suite + the ~30 new `tests/test_followups.py` DoD cases: rule
+  resolution/enqueue, window→session/template/skip, engaged+opt-out+flag-off cancel, idempotency,
+  CRUD transitions + staff auth, adapter session-send + allowlist, inbound window feed).
+- **Nothing reachable in prod:** flag OFF; `followup_sweep` not registered until `setup_schedules` is
+  run; `/api/wati/inbound` is authed + inert until the flag is on.
+- **Spec docs** (doc 14 + resume + superseded whatsapp-plan) were auto-checkpointed by the
+  branch-lifecycle hook onto `auto/work-20260724-193135` (commit `c660b56`); recovered and carried onto
+  the mission branch so the PR is self-contained.
+- **Left DRAFT deliberately** — not ready-for-review-marked, not merged, not deployed. Built
+  autonomously; needs DA review of the 3 flagged points before the rollout continues
+  (live-test on 7972672473 / 7767009136 → owner copy sign-off → enable). — Engineer
+
+### 2026-07-24 — FROM ENGINEER — STATUS — M-FUP-1: quiet hours + 3h cadence added; session endpoint CONFIRMED; test message DELIVERED
+
+Owner (this session) asked to add the real cadence + quiet hours and send a test message.
+
+- **Quiet hours 23:00–06:00 IST** — built into the send gate on a FIXED IST offset (UTC+5:30, no
+  tzdata dep). A would-be send in quiet hours → `DEC_HOLD`: fire_at deferred to the next 06:00 IST,
+  row stays SCHEDULED (delivered later, never overnight, never dropped). Owner chose **defer-to-6AM**
+  over skip. Bounds are per-tenant cascade keys (`followup_quiet_start_hour`/`_end_hour`).
+- **Cadence** — `manage.py seed_followup_cadence` (idempotent): default **every 3h through 24h** = 7
+  session steps +3h…+21h (+24h excluded, window closes then). Configurable interval/horizon/stop-on-reply.
+  Does NOT flip `followups_enabled`.
+- **CI GREEN** on both pushes (runs 30105935577 etc.) — the new quiet-hours + cadence tests pass on Postgres.
+- **Flagged point #2 RESOLVED — `send_session_text` endpoint CONFIRMED.** Live probe (real POST via
+  the shared Wati creds) to `POST /api/v1/sendSessionMessage/917972672473` on a CLOSED window returned
+  `{"result":false,"message":"Ticket has been expired.","ticketStatus":"CLOSED"}` — proves the v1
+  endpoint the adapter uses is correct (checklist's v3 `/conversations/messages/text` was wrong) and
+  that `result:false` is the out-of-window signal we parse. Contract doc + adapter note updated.
+- **Test message DELIVERED (terminal-verified).** Owner chose "one confirmed message now". Window was
+  closed, so sent the UTILITY template `gorefer_zerodha_reopen_en` (param name=Abhay) to the owner's own
+  test number **917972672473** via the real Wati API — accepted, then **terminal status DELIVERED**
+  (`getMessages` statusString, 2026-07-24T15:46Z) — not trusting the accept. Allowlist held (`allow_all=false`,
+  only the two test numbers permitted). A free-form SESSION nudge becomes testable the moment that number
+  replies (opens the 24h window); the engine's session path + endpoint are already confirmed.
+- **Still flag-off / not deployed.** No prod deploy done; `followups_enabled` remains OFF; PR #30 still
+  DRAFT. The test send was a direct Wati API call (owner-authorized), NOT the engine on prod. — Engineer
