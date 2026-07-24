@@ -8,6 +8,7 @@ DECISION; tasks.py applies it (sends + records). Mirrors how the codebase keeps
 from __future__ import annotations
 
 from datetime import timedelta
+from datetime import timezone as dt_timezone
 
 from django.utils import timezone
 
@@ -22,11 +23,22 @@ FOLLOWUPS_ENABLED_KEY = "followups_enabled"
 
 WINDOW = timedelta(hours=24)
 
+# --- Quiet hours (owner: no sends 23:00–06:00 IST) ---------------------------
+# IST is a FIXED offset (UTC+5:30, no DST), so we shift the wall clock by a constant
+# rather than depend on the `tzdata` package (absent on Windows/CI by default). The
+# bounds are per-tenant cascade keys so an AP can widen/narrow their own quiet window.
+IST_OFFSET = timedelta(hours=5, minutes=30)
+QUIET_START_KEY = "followup_quiet_start_hour"  # inclusive, IST hour (default 23)
+QUIET_END_KEY = "followup_quiet_end_hour"      # exclusive, IST hour (default 6)
+QUIET_START_DEFAULT = 23
+QUIET_END_DEFAULT = 6
+
 # Gate decisions.
 DEC_SEND_SESSION = "send_session"
 DEC_SEND_TEMPLATE = "send_template"
 DEC_CANCEL = "cancel"
 DEC_SKIP = "skip"
+DEC_HOLD = "hold"  # would send, but it's quiet hours → defer fire_at, stay SCHEDULED
 
 
 def _as_bool(value) -> bool:
@@ -125,11 +137,49 @@ def body_for(rule: FollowupRule, pref_lang: str) -> str:
     return rule.body_en
 
 
+def _quiet_bounds(tenant_id: int | None) -> tuple[int, int]:
+    """(start, end) IST hours for quiet hours — cascade keys, default 23→6."""
+    def _hour(key, default):
+        try:
+            return int(resolve(key, tenant_id=tenant_id, default=default))
+        except Exception:
+            return default
+    return _hour(QUIET_START_KEY, QUIET_START_DEFAULT), _hour(QUIET_END_KEY, QUIET_END_DEFAULT)
+
+
+def _ist_wall(now):
+    """The IST wall clock for an aware UTC `now` (labelled UTC, but its H:M read IST)."""
+    return now.astimezone(dt_timezone.utc) + IST_OFFSET
+
+
+def in_quiet_hours(now, tenant_id: int | None = None) -> bool:
+    """True when `now` falls in the AP's quiet window (default 23:00–06:00 IST)."""
+    start, end = _quiet_bounds(tenant_id)
+    hour = _ist_wall(now).hour
+    if start <= end:            # same-day window
+        return start <= hour < end
+    return hour >= start or hour < end   # wraps midnight (the 23→6 default)
+
+
+def next_active_time(now, tenant_id: int | None = None):
+    """The next instant quiet hours END (the `end` hour IST), as an aware UTC datetime.
+
+    A send deferred at night lands at 06:00 IST — the message still reaches the contact,
+    just not overnight (owner rule). Computed on the fixed IST offset, no tzdata needed.
+    """
+    _, end = _quiet_bounds(tenant_id)
+    ist = _ist_wall(now)
+    target = ist.replace(hour=end, minute=0, second=0, microsecond=0)
+    if ist.hour >= end:        # already past `end` today → the next `end` is tomorrow
+        target = target + timedelta(days=1)
+    return target - IST_OFFSET  # shift the IST wall time back to the real UTC instant
+
+
 def evaluate_gate(sf: ScheduledFollowup, now=None) -> tuple[str, str]:
     """Decide what to do with a due follow-up at fire time. Pure — no side effects.
 
-    Order (doc 14 §D): flag → rule enabled → opt-out → engaged-exit → window.
-    Returns (decision, reason).
+    Order (doc 14 §D + quiet hours): flag → rule enabled → opt-out → engaged-exit →
+    window decision → quiet-hours hold. Returns (decision, reason).
     """
     now = now or timezone.now()
     rule = sf.rule
@@ -150,6 +200,17 @@ def evaluate_gate(sf: ScheduledFollowup, now=None) -> tuple[str, str]:
         if has_converted(sf.tenant, sf.mobile):
             return DEC_CANCEL, "engaged: converted"
 
+    decision, reason = _window_decision(rule, window, now)
+
+    # Quiet hours suppress SENDS only (never a cancel/skip): defer a would-be send to
+    # 06:00 IST so nobody is messaged 23:00–06:00 IST (owner rule).
+    if decision in (DEC_SEND_SESSION, DEC_SEND_TEMPLATE) and in_quiet_hours(now, sf.tenant_id):
+        return DEC_HOLD, "quiet hours — deferred to 06:00 IST"
+    return decision, reason
+
+
+def _window_decision(rule: FollowupRule, window, now) -> tuple[str, str]:
+    """The window-state branch of the gate (pre quiet-hours)."""
     if window_is_open(window, now):
         if rule.channel == FollowupRule.CHANNEL_TEMPLATE and rule.template_name:
             return DEC_SEND_TEMPLATE, "window open, template channel"

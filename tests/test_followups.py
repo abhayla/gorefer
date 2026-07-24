@@ -13,7 +13,8 @@ config.cascade.set_tenant, mirroring how an admin would.
 from __future__ import annotations
 
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
+from datetime import timezone as dt_timezone
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -271,7 +272,7 @@ def test_future_rows_not_fired(enabled):
 
     counts = tasks.fire_due_followups()
 
-    assert counts == {"sent": 0, "cancelled": 0, "skipped": 0, "failed": 0}
+    assert counts == {"sent": 0, "cancelled": 0, "skipped": 0, "failed": 0, "held": 0}
     sf.refresh_from_db()
     assert sf.status == ScheduledFollowup.STATUS_SCHEDULED
 
@@ -449,6 +450,84 @@ def test_api_delete_rule_cancels_pending(staff_client, enabled):
     assert r.status_code == 200
     sf.refresh_from_db()
     assert sf.status == ScheduledFollowup.STATUS_CANCELLED  # pending row cancelled (doc 14 §3)
+
+
+# --- quiet hours (23:00–06:00 IST, no sends) ---------------------------------
+
+# A UTC instant that reads 01:00 IST (inside quiet) and one that reads 12:00 IST (active).
+QUIET_UTC = datetime(2026, 7, 24, 19, 30, tzinfo=dt_timezone.utc)   # 25th 01:00 IST
+ACTIVE_UTC = datetime(2026, 7, 24, 6, 30, tzinfo=dt_timezone.utc)   # 12:00 IST
+
+
+def test_in_quiet_hours_ist():
+    assert services.in_quiet_hours(QUIET_UTC) is True
+    assert services.in_quiet_hours(ACTIVE_UTC) is False
+
+
+def test_next_active_time_is_6am_ist():
+    # 01:00 IST → the next 06:00 IST is the same IST day = 00:30 UTC.
+    assert services.next_active_time(QUIET_UTC) == datetime(2026, 7, 25, 0, 30, tzinfo=dt_timezone.utc)
+
+
+def test_gate_holds_a_send_during_quiet_hours(enabled):
+    rule = _rule(enabled)
+    win = FollowupWindow.objects.create(
+        tenant=enabled, mobile=MOBILE, last_inbound_at=QUIET_UTC - timedelta(hours=1)
+    )
+    sf = _scheduled(enabled, rule, window=win)
+
+    decision, reason = services.evaluate_gate(sf, now=QUIET_UTC)
+
+    assert decision == services.DEC_HOLD
+    assert "quiet hours" in reason
+
+
+def test_gate_sends_during_active_hours(enabled):
+    rule = _rule(enabled)
+    win = FollowupWindow.objects.create(
+        tenant=enabled, mobile=MOBILE, last_inbound_at=ACTIVE_UTC - timedelta(hours=1)
+    )
+    sf = _scheduled(enabled, rule, window=win)
+
+    decision, _ = services.evaluate_gate(sf, now=ACTIVE_UTC)
+
+    assert decision == services.DEC_SEND_SESSION
+
+
+def test_fire_defers_due_row_during_quiet_hours(enabled, monkeypatch):
+    # Force "quiet hours" regardless of the real clock so the sweep takes the HOLD path.
+    monkeypatch.setattr(services, "in_quiet_hours", lambda *a, **k: True)
+    rule = _rule(enabled)
+    win = _open_window(enabled, ago_hours=1)
+    sf = _scheduled(enabled, rule, window=win)
+
+    counts = tasks.fire_due_followups()
+
+    assert counts["held"] == 1
+    assert counts["sent"] == 0
+    sf.refresh_from_db()
+    assert sf.status == ScheduledFollowup.STATUS_SCHEDULED  # deferred, not sent/cancelled
+    assert sf.fire_at > timezone.now()                      # pushed to the next 06:00 IST
+    assert "quiet hours" in sf.reason
+
+
+# --- cadence config command --------------------------------------------------
+
+def test_seed_cadence_creates_every_3h_through_24h(tenant):
+    call_command("seed_followup_cadence")  # defaults: 3h interval, 24h horizon, tenant pifs
+
+    rules = FollowupRule.objects.filter(tenant=tenant).order_by("offset_minutes")
+    assert [r.step_key for r in rules] == [
+        "nudge_3h", "nudge_6h", "nudge_9h", "nudge_12h", "nudge_15h", "nudge_18h", "nudge_21h",
+    ]
+    assert [r.offset_minutes for r in rules] == [180, 360, 540, 720, 900, 1080, 1260]
+    assert all(r.channel == FollowupRule.CHANNEL_SESSION and r.enabled for r in rules)
+
+
+def test_seed_cadence_is_idempotent(tenant):
+    call_command("seed_followup_cadence")
+    call_command("seed_followup_cadence")  # re-run must not duplicate
+    assert FollowupRule.objects.filter(tenant=tenant).count() == 7
 
 
 # --- schedule registration ---------------------------------------------------

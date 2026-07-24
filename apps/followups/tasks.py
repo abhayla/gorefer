@@ -95,7 +95,7 @@ def fire_due_followups(limit: int = 200) -> dict:
         .order_by("fire_at")
         .values_list("id", flat=True)[:limit]
     )
-    counts = {"sent": 0, "cancelled": 0, "skipped": 0, "failed": 0}
+    counts = {"sent": 0, "cancelled": 0, "skipped": 0, "failed": 0, "held": 0}
     for sid in due_ids:
         try:
             with transaction.atomic():
@@ -127,6 +127,14 @@ def _apply(sf: ScheduledFollowup, decision: str, reason: str, now, counts: dict)
         sf.reason = reason
         sf.save(update_fields=["status", "reason", "updated_at"])
         counts["skipped"] += 1
+        return
+    if decision == services.DEC_HOLD:
+        # Quiet hours — DON'T send; defer to 06:00 IST and stay SCHEDULED so a later
+        # sweep sends it. Never messages anyone 23:00–06:00 IST (owner rule).
+        sf.fire_at = services.next_active_time(now, sf.tenant_id)
+        sf.reason = reason
+        sf.save(update_fields=["fire_at", "reason", "updated_at"])
+        counts["held"] += 1
         return
 
     adapter = get_wati_adapter()
