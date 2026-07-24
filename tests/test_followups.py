@@ -130,7 +130,12 @@ def test_enqueue_is_idempotent_per_window_open(enabled):
 
 # --- send gate: window open → session ----------------------------------------
 
-def test_window_open_sends_session(enabled):
+def test_window_open_sends_session(enabled, monkeypatch):
+    # Pin outside quiet hours (23:00-06:00 IST) — this test asserts a real SEND, and the
+    # real wall clock crossing into quiet hours must not turn it into a HOLD (regression:
+    # this test is flaky-by-time without pinning, e.g. it fails whenever CI happens to run
+    # between 23:00-06:00 IST).
+    monkeypatch.setattr(services, "in_quiet_hours", lambda *a, **k: False)
     rule = _rule(enabled, channel=FollowupRule.CHANNEL_SESSION)
     win = _open_window(enabled, ago_hours=1)
     _scheduled(enabled, rule, window=win)
@@ -143,7 +148,8 @@ def test_window_open_sends_session(enabled):
     assert sf.sent_at is not None
 
 
-def test_session_send_emits_pii_free_funnel_event(enabled):
+def test_session_send_emits_pii_free_funnel_event(enabled, monkeypatch):
+    monkeypatch.setattr(services, "in_quiet_hours", lambda *a, **k: False)
     rule = _rule(enabled)
     win = _open_window(enabled, ago_hours=1)
     _scheduled(enabled, rule, window=win)
@@ -172,7 +178,8 @@ def test_window_closed_session_only_skips(enabled):
     assert "window closed" in sf.reason
 
 
-def test_window_closed_falls_back_to_template(enabled):
+def test_window_closed_falls_back_to_template(enabled, monkeypatch):
+    monkeypatch.setattr(services, "in_quiet_hours", lambda *a, **k: False)
     rule = _rule(enabled, channel=FollowupRule.CHANNEL_SESSION,
                  only_if_window_open=False, template_name="gr_followup_tmpl")
     win = _open_window(enabled, ago_hours=25)
@@ -184,7 +191,8 @@ def test_window_closed_falls_back_to_template(enabled):
     assert ScheduledFollowup.objects.get().status == ScheduledFollowup.STATUS_SENT
 
 
-def test_template_channel_sends_template_even_in_window(enabled):
+def test_template_channel_sends_template_even_in_window(enabled, monkeypatch):
+    monkeypatch.setattr(services, "in_quiet_hours", lambda *a, **k: False)
     rule = _rule(enabled, channel=FollowupRule.CHANNEL_TEMPLATE, template_name="gr_tmpl")
     win = _open_window(enabled, ago_hours=1)
     _scheduled(enabled, rule, window=win)
