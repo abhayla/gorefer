@@ -11,7 +11,11 @@
 > wins; if either disagrees with the live system, **the live system wins** — verify, don't
 > trust (commands at the bottom).
 >
-> **Last updated:** 2026-07-24 (M-FUP-1 follow-up engine deployed + LIVE on prod, `bbc32c8`, `followups_enabled=True`, live session nudge DELIVERED+READ) — earlier same day M-WATI-1 `/share` LIVE (`f7f8656`). Flag values below carry the 2026-07-21 verification date.
+> **Last updated:** 2026-07-24 (main CI RESTORED GREEN, `347947a` — PR #33, test-only fix for a
+> quiet-hours wall-clock flake in `tests/test_followups.py`; no production code changed, nothing
+> redeployed) — same day M-FUP-1 follow-up engine deployed + LIVE on prod, `bbc32c8`,
+> `followups_enabled=True`, live session nudge DELIVERED+READ; earlier same day M-WATI-1 `/share`
+> LIVE (`f7f8656`). Flag values below carry the 2026-07-21 verification date.
 
 ## Production
 
