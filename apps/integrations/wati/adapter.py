@@ -227,13 +227,15 @@ class LiveWatiAdapter:
 
         Endpoint: the Wati v1 session-message surface on the tenant base URL
         (`/api/v1/sendSessionMessage/{number}?messageText=…`), consistent with the proven
-        `/api/v1/` calls this adapter already makes. NB: the Phase-1 build checklist named
-        a v3 `/conversations/messages/text` path; that path does not compose with this v1
-        tenant base, so the exact endpoint is CONFIRMED ON THE LIVE TEST (test numbers)
-        before the flag is enabled — see Wati-GoRefer/Wati-Integration-Contract.md. Returns
+        `/api/v1/` calls this adapter already makes. CONFIRMED correct by a live probe on
+        2026-07-24: a real POST to this endpoint for a closed window returned
+        `{"result":false,"message":"Ticket has been expired.","ticketStatus":"CLOSED"}` —
+        proving both that this is the right endpoint (the Phase-1 checklist's v3
+        `/conversations/messages/text` path was wrong — it does not compose with the v1
+        tenant base) and that `result:false` is the out-of-window signal we parse. Returns
         ACCEPTED (never treated as delivery); a session message carries no template to
-        reconcile terminal status by, so delivery is verified at the destination on the
-        live test (rollout gate), not fabricated here.
+        reconcile terminal status by, so in-window delivery is verified at the destination
+        (getMessages statusString), not fabricated here.
         """
         number = "".join(ch for ch in str(to) if ch.isdigit())
 

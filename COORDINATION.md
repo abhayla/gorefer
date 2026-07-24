@@ -4121,3 +4121,29 @@ Phase 1 built spec-first + TDD, all checklist items complete, all behind `follow
 - **Left DRAFT deliberately** — not ready-for-review-marked, not merged, not deployed. Built
   autonomously; needs DA review of the 3 flagged points before the rollout continues
   (live-test on 7972672473 / 7767009136 → owner copy sign-off → enable). — Engineer
+
+### 2026-07-24 — FROM ENGINEER — STATUS — M-FUP-1: quiet hours + 3h cadence added; session endpoint CONFIRMED; test message DELIVERED
+
+Owner (this session) asked to add the real cadence + quiet hours and send a test message.
+
+- **Quiet hours 23:00–06:00 IST** — built into the send gate on a FIXED IST offset (UTC+5:30, no
+  tzdata dep). A would-be send in quiet hours → `DEC_HOLD`: fire_at deferred to the next 06:00 IST,
+  row stays SCHEDULED (delivered later, never overnight, never dropped). Owner chose **defer-to-6AM**
+  over skip. Bounds are per-tenant cascade keys (`followup_quiet_start_hour`/`_end_hour`).
+- **Cadence** — `manage.py seed_followup_cadence` (idempotent): default **every 3h through 24h** = 7
+  session steps +3h…+21h (+24h excluded, window closes then). Configurable interval/horizon/stop-on-reply.
+  Does NOT flip `followups_enabled`.
+- **CI GREEN** on both pushes (runs 30105935577 etc.) — the new quiet-hours + cadence tests pass on Postgres.
+- **Flagged point #2 RESOLVED — `send_session_text` endpoint CONFIRMED.** Live probe (real POST via
+  the shared Wati creds) to `POST /api/v1/sendSessionMessage/917972672473` on a CLOSED window returned
+  `{"result":false,"message":"Ticket has been expired.","ticketStatus":"CLOSED"}` — proves the v1
+  endpoint the adapter uses is correct (checklist's v3 `/conversations/messages/text` was wrong) and
+  that `result:false` is the out-of-window signal we parse. Contract doc + adapter note updated.
+- **Test message DELIVERED (terminal-verified).** Owner chose "one confirmed message now". Window was
+  closed, so sent the UTILITY template `gorefer_zerodha_reopen_en` (param name=Abhay) to the owner's own
+  test number **917972672473** via the real Wati API — accepted, then **terminal status DELIVERED**
+  (`getMessages` statusString, 2026-07-24T15:46Z) — not trusting the accept. Allowlist held (`allow_all=false`,
+  only the two test numbers permitted). A free-form SESSION nudge becomes testable the moment that number
+  replies (opens the 24h window); the engine's session path + endpoint are already confirmed.
+- **Still flag-off / not deployed.** No prod deploy done; `followups_enabled` remains OFF; PR #30 still
+  DRAFT. The test send was a direct Wati API call (owner-authorized), NOT the engine on prod. — Engineer

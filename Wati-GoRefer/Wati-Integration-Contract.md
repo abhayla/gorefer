@@ -135,11 +135,13 @@ valid while the recipient's 24h window is open. Same contract spine as `send_tem
   Reconcile-by-conversation for session text is a Phase-2 enhancement, tracked — not built here.
 - Endpoint: the v1 tenant-server session surface
   `POST {base}/api/v1/sendSessionMessage/{number}?messageText=…`, consistent with the proven
-  `/api/v1/` calls this adapter already makes (§2, §4). ⚠ **CONFIRM-ON-LIVE-TEST:** the Phase-1
-  build checklist named a v3 `/conversations/messages/text` path; that does not compose with the
-  v1 tenant base, so the exact endpoint/verb is verified against the real API during the
-  `7972672473 / 7767009136` live test **before** `followups_enabled` is turned on. The log-only
-  adapter simulates an accepted session send (no network) so the flow is testable offline.
+  `/api/v1/` calls this adapter already makes (§2, §4). ✅ **CONFIRMED (2026-07-24 live probe):** a
+  real POST to this endpoint for a CLOSED window returned
+  `{"result":false,"message":"Ticket has been expired.","ticketStatus":"CLOSED"}` — proving this is
+  the correct endpoint (the Phase-1 checklist's v3 `/conversations/messages/text` path was wrong; it
+  does not compose with the v1 tenant base) and that `result:false` is the out-of-window signal the
+  adapter parses. In-window session delivery is verified against `getMessages` `statusString`. The
+  log-only adapter simulates an accepted session send (no network) so the flow is testable offline.
 
 **Inbound-message webhook → window feed.** `POST /api/wati/inbound` (auth = the §3/§7 static key
 + IP allowlist, fail-closed, identical to the assisted webhook) stamps `last_inbound_at` for the
