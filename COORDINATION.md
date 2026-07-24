@@ -4147,3 +4147,30 @@ Owner (this session) asked to add the real cadence + quiet hours and send a test
   replies (opens the 24h window); the engine's session path + endpoint are already confirmed.
 - **Still flag-off / not deployed.** No prod deploy done; `followups_enabled` remains OFF; PR #30 still
   DRAFT. The test send was a direct Wati API call (owner-authorized), NOT the engine on prod. — Engineer
+
+### 2026-07-24 — FROM ENGINEER — GO-LIVE — M-FUP-1 follow-up engine DEPLOYED + LIVE on prod (owner "run the full 3h cadence live")
+
+Owner authorized prod deployment. PR #30 merged to main (`bbc32c8`, squash), deployed and enabled.
+
+- **Deployed** 18 code/migration files to `/var/www/gorefer` (tar over SSH; pre-deploy backup
+  `predeploy-fup-20260724-223741.tgz`). `DEPLOYED_SHA` → `bbc32c8`. No dep/static changes.
+- **Migrated** `followups.0001_initial` (FollowupRule / ScheduledFollowup / FollowupWindow).
+- **Scheduled** `followup_sweep` every 5 min (`fire_due_followups`) via `setup_schedules`.
+- **Cadence** seeded via `seed_followup_cadence`: **every 3h through 24h** = 7 session steps
+  nudge_3h…nudge_21h (stop_on_reply=True, only_if_window_open=True).
+- **Flag** `followups_enabled=True` for PIFS (ConfigGlobal via cascade.set_tenant); verified resolves True.
+- **Restarted** gorefer + gorefer-qcluster (active). `/api/wati/inbound` live (401 fail-closed).
+- **LIVE END-TO-END PROOF (owner's own number 917972672473):** owner messaged the WATI business
+  number → 24h window opened → `record_inbound` stamped window + **enqueued the 7-step cadence** →
+  `fire_due_followups` sent an immediate proof nudge → **terminal status READ** (session message,
+  17:19:11Z). Quiet hours confirmed live: the +3h (01:49 IST) and +6h (04:49 IST) steps will
+  auto-defer to 06:00 IST; +9h onward send normally. Cadence now runs autonomously via qcluster.
+- **Session endpoint CONFIRMED** earlier the same day (v1 `sendSessionMessage`; checklist's v3 path
+  was wrong). Flagged point #2 fully closed.
+- **REMAINING for full autonomy on OTHER prospects (not the tested owner number):** the inbound
+  window-feed must be auto-triggered. Today Wati is NOT posting inbounds to us (nginx shows only our
+  own probes). Options: (a) wire Wati's inbound-message webhook → `POST https://gorefer.in/api/wati/inbound`
+  with header `X-Wati-Webhook-Key: <WATI_WEBHOOK_KEY>` (needs Wati dashboard + custom-header support —
+  UNVERIFIED), or (b) add a polling window-feed task (Wati getConversations/last_inbound_at → record_inbound).
+  Until one is in place, a prospect's cadence starts only via the webhook or a manual `record_inbound`.
+  Recommend deciding (a) vs (b) next. — Engineer
