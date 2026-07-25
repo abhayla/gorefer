@@ -681,3 +681,83 @@ def test_followup_schedules_registered():
 
     assert SCHEDULES["followup_sweep"] == ("apps.followups.tasks.fire_due_followups", 5)
     assert SCHEDULES["followup_inbound_poll"] == ("apps.followups.tasks.poll_inbound_windows", 5)
+
+
+# --- doc 15: recipient-aware send (link substitution + referrer suppression) ----
+
+class _RecordingAdapter:
+    """Captures the exact message the send path produces (demo mode, no HTTP)."""
+
+    def __init__(self):
+        self.sent = []
+
+    def send_session_text(self, *, to, message):
+        from apps.integrations.wati import status
+        from apps.integrations.wati.adapter import SendResult
+
+        self.sent.append((to, message))
+        return SendResult(accepted=True, provider_message_id=None, raw_status=status.STATUS_ACCEPTED)
+
+    def send_template(self, *, to, template, params):
+        from apps.integrations.wati import status
+        from apps.integrations.wati.adapter import SendResult
+
+        return SendResult(accepted=True, provider_message_id=None, raw_status=status.STATUS_ACCEPTED)
+
+
+def test_prospect_send_substitutes_referrer_link(enabled, monkeypatch):
+    monkeypatch.setattr(services, "in_quiet_hours", lambda *a, **k: False)
+    from apps.common.phone import normalize_phone
+    from apps.referrals import lead_service, redirect_service
+
+    program = redirect_service.get_active_program(enabled)
+    referral = redirect_service._lazy_get_or_create_referral(enabled, program, "RJ4521")
+    lead_service.capture_lead(
+        tenant=enabled, referral=referral, name="Riya", mobile="9812345678",
+        email="", city="", consent=True,
+    )
+    mobile = normalize_phone("9812345678")
+
+    rec = _RecordingAdapter()
+    monkeypatch.setattr(tasks, "get_wati_adapter", lambda: rec)
+
+    rule = _rule(enabled, channel=FollowupRule.CHANNEL_SESSION)
+    rule.body_en = "Your account is still pending. {link}"
+    rule.save(update_fields=["body_en"])
+    win = _open_window(enabled, ago_hours=1, mobile=mobile)
+    _scheduled(enabled, rule, mobile=mobile, window=win)
+
+    counts = tasks.fire_due_followups()
+
+    assert counts["sent"] == 1
+    assert rec.sent, "adapter received no message"
+    _to, msg = rec.sent[0]
+    assert "gorefer.in/r/wa/RJ4521" in msg   # the referrer's link, credit preserved
+    assert "{link}" not in msg                # placeholder fully substituted
+
+
+def test_referrer_recipient_is_suppressed(enabled, monkeypatch):
+    monkeypatch.setattr(services, "in_quiet_hours", lambda *a, **k: False)
+    from apps.referrals import redirect_service
+    from apps.referrals.models import Customer
+
+    program = redirect_service.get_active_program(enabled)
+    Customer.objects.create(
+        tenant=enabled, program=program, partner=program.partner,
+        client_id="RJ4521", mobile="919833330000",
+    )
+
+    rec = _RecordingAdapter()
+    monkeypatch.setattr(tasks, "get_wati_adapter", lambda: rec)
+
+    rule = _rule(enabled, channel=FollowupRule.CHANNEL_SESSION)
+    win = _open_window(enabled, ago_hours=1, mobile="919833330000")
+    _scheduled(enabled, rule, mobile="919833330000", window=win)
+
+    counts = tasks.fire_due_followups()
+
+    assert counts["skipped"] == 1
+    assert not rec.sent, "a referrer must never receive the prospect nudge"
+    sf = ScheduledFollowup.objects.get()
+    assert sf.status == ScheduledFollowup.STATUS_SKIPPED
+    assert "referrer" in sf.reason
