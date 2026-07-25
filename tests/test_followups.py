@@ -280,7 +280,7 @@ def test_future_rows_not_fired(enabled):
 
     counts = tasks.fire_due_followups()
 
-    assert counts == {"sent": 0, "cancelled": 0, "skipped": 0, "failed": 0, "held": 0}
+    assert counts == {"sent": 0, "cancelled": 0, "skipped": 0, "failed": 0, "held": 0, "referrer_nudged": 0}
     sf.refresh_from_db()
     assert sf.status == ScheduledFollowup.STATUS_SCHEDULED
 
