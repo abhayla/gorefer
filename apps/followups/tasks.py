@@ -129,9 +129,11 @@ def _apply(sf: ScheduledFollowup, decision: str, reason: str, now, counts: dict)
         counts["skipped"] += 1
         return
     if decision == services.DEC_HOLD:
-        # Quiet hours — DON'T send; defer to 06:00 IST and stay SCHEDULED so a later
-        # sweep sends it. Never messages anyone 23:00–06:00 IST (owner rule).
-        sf.fire_at = services.next_active_time(now, sf.tenant_id)
+        # DON'T send now (quiet hours or min-gap); defer and stay SCHEDULED so a later
+        # sweep sends it. compute_defer picks the earliest instant that is BOTH outside
+        # quiet hours AND ≥ MIN_GAP after this contact's last send — so night steps can
+        # never collapse into a same-minute burst.
+        sf.fire_at = services.compute_defer(now, sf.tenant, sf.mobile, sf.tenant_id)
         sf.reason = reason
         sf.save(update_fields=["fire_at", "reason", "updated_at"])
         counts["held"] += 1
