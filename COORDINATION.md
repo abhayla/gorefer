@@ -4328,3 +4328,14 @@ imports + runs (unknown→gorefer.in/open). Live prospect nudges now carry the c
 referral link; referrer recipients suppressed from prospect copy; language from referrer_language.
 Rollback = restore backup files + `rm apps/referrals/recipient_identity.py` + re-seed + restart.
 NOT deployed: §6.1 referrer-nudge send path (pending Meta approval of the v2 templates). — Engineer
+
+### 2026-07-26 — §6.1 referrer-nudge deployed INERT + template positional-fix (v3) — Engineer
+PR #46 merged (`dd165c6`), deployed to prod file-copy (recipient_identity.py + followups/tasks.py),
+flag `followup_referrer_nudge_on` default FALSE → inert. Verified imports load on prod.
+LIVE-TEST FINDING: the gorefer adapter remaps template params POSITIONALLY (`{{1}}/{{2}}/{{3}}`),
+so the named-placeholder v2 template returned HTTP 400. Resubmitted POSITIONAL
+`gorefer_referrer_prospect_pending_{en,hi}_2026_07_25_v3` (PENDING Meta) + updated the code default
+to _v3. ACTIVATION (still pending, one external gate): once v3 is APPROVED → test-send to a test
+number → flip `followup_referrer_nudge_on` true (+ optional `followup_referrer_nudge_step`, default
+nudge_12h). Superseded templates (v1 en PENDING/hi APPROVED, v2 en+hi APPROVED-but-named) →
+dashboard delete. — Engineer
