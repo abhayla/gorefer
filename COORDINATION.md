@@ -4260,3 +4260,29 @@ Fixed (PR #37, merged `6e3072d`, deployed to prod):
 - Note: quiet-hours send tests keep PR #33's `in_quiet_hours` monkeypatch (no wall-clock flake).
   Lesson logged: verified DELIVERY earlier but missed the recipient-experience (burst + identical
   copy) — delivery-status ≠ delivered-well. — Engineer
+
+## 2026-07-25 — Live Wati chatbot flow fixes (#5 / #3 / #1) applied by API — Engineer
+
+Applied + verified the three owner-caught defects in the LIVE Wati dashboard flows (NOT gorefer
+repo code, so no CI contract-doc gate; reusable know-how captured in the `wati-dashboard-automation`
+skill LEARNING LOG). Method: the cracked 74-field `updateFlow` write-format via API (bearer + browser
+UA) — no browser/SPA needed. Each: POST `updateFlow?confirmed=true` → `ok:true` → GET-verify.
+
+- **#5 — "Open free account" lost referral credit.** "Our Services" welcome flow (flowId
+  `661110de…eda75`), node `main_message-f0o` now shares `gorefer.in/open` (→
+  `signup.zerodha.com/?c=ZMPHZC`). 4/4 nodes preserved, flowVersion 4→5. Verified.
+- **#3 — typo.** Personal-link handler `gorefer_get_personal_referral_link_from_client_id` (flowId
+  `6442649b…2553`), node `main_message-qamDN`: "Here is **you** personal…" → "Here is **your**
+  personal referral link". Link `gorefer.in/r/wa/@user_input_zerodha_client_id` intact. Verified.
+- **#1 — Client-ID validation.** Same handler, question `main_question-cpler`: added
+  `answerValidation` Regex `^[A-Za-z0-9]{4,16}$` (Wati stored type 2) + re-prompt fallback, so junk
+  like "Talk to advisor" no longer builds `gorefer.in/r/wa/Talk to advisor`. Stored-verified; regex
+  sanity-checked (accepts RJ4521/ZK8139, rejects menu labels + spaces). NEW enum: write "None"→3
+  (no validation), "Regex"→2 (enforced).
+- Contact number in the handler (`7388882020`) LEFT as-is — that is the Zerodha advisor (human)
+  line, correct per owner (`70806 42020` is automated-only).
+
+RESIDUAL / open: (a) `failsCount:3` — after 3 invalid tries Wati may proceed with the last input;
+(b) live enforcement of #1 (junk re-prompts, valid ID → link) needs a REAL inbound test — chatbot
+`start` API is Pro-only, so I can't self-trigger; owner to send a test on 7972672473 or confirm;
+(c) SSOT conversation map (Wati-Project) update for #3/#1 pending. — Engineer
