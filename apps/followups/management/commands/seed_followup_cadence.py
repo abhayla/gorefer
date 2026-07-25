@@ -48,12 +48,22 @@ def _as_bool(raw) -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
+# A ready prospect should be able to open right away, credited to their referrer — the
+# send path (apps.followups.tasks._apply) substitutes {link} with the resolved referral
+# link (gorefer.in/r/wa/{referrer_client_id}, or gorefer.in/open as a fallback), per doc 15.
+LINK_CTA = "\n\nReady now? Open your account here: {link}"
+
+
 def _body_for_step(index: int) -> str:
-    """Distinct copy for step `index` (0-based); cycles + numbers if steps exceed the list."""
+    """Distinct copy for step `index` (0-based); cycles + numbers if steps exceed the list.
+
+    Every body carries the {link} placeholder so a ready prospect gets a one-tap,
+    credit-preserving open link (resolved + substituted at send time).
+    """
     base = STEP_BODIES[index % len(STEP_BODIES)]
-    if index < len(STEP_BODIES):
-        return base
-    return f"{base} (reminder {index + 1})"
+    if index >= len(STEP_BODIES):
+        base = f"{base} (reminder {index + 1})"
+    return f"{base}{LINK_CTA}"
 
 
 class Command(BaseCommand):

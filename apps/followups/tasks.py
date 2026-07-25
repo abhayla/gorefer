@@ -139,10 +139,34 @@ def _apply(sf: ScheduledFollowup, decision: str, reason: str, now, counts: dict)
         counts["held"] += 1
         return
 
-    adapter = get_wati_adapter()
     rule = sf.rule
+
+    # doc 15 — resolve WHO this is before sending: role, language (from the existing
+    # referrer_language rule), and the referral link to embed.
+    from apps.referrals.recipient_identity import (
+        ROLE_REFERRER,
+        nudge_link_for,
+        resolve_recipient,
+    )
+
+    identity = resolve_recipient(sf.tenant, sf.mobile)
+    if identity.role == ROLE_REFERRER:
+        # A referrer must never get the prospect's "your account is still pending" copy.
+        # The referrer-oriented nudge (doc 15 §6.1) is a separate template-based path,
+        # pending its Meta-approved template — until then, suppress (never send wrong copy).
+        sf.status = ScheduledFollowup.STATUS_SKIPPED
+        sf.reason = "referrer recipient — prospect nudge suppressed (referrer-nudge pending template)"
+        sf.save(update_fields=["status", "reason", "updated_at"])
+        counts["skipped"] += 1
+        return
+
+    lang = identity.lang or sf.pref_lang
+
+    adapter = get_wati_adapter()
     if decision == services.DEC_SEND_SESSION:
-        message = services.body_for(rule, sf.pref_lang)
+        message = services.body_for(rule, lang)
+        if "{link}" in message:
+            message = message.replace("{link}", nudge_link_for(identity, tenant_id=sf.tenant_id))
         result = adapter.send_session_text(to=sf.mobile, message=message)
     else:  # DEC_SEND_TEMPLATE
         result = adapter.send_template(
