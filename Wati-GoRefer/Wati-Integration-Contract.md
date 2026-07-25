@@ -159,6 +159,20 @@ closed → template if the step has one (and it isn't session-only), else skip. 
 on the `ScheduledFollowup` row (SENT/FAILED/SKIPPED/CANCELLED) and a PII-free `notification` funnel
 event is emitted (no mobile, per #16).
 
+**Window feed — POLLING is the reliable trigger (the inbound webhook is chatbot-suppressed).**
+Verified on the live tenant: Wati's "New Contact Message" webhook does NOT fire for an inbound the
+account chatbot auto-replies to (the "Welcome" flow swallows it), and no "Message Received" (fire-on-
+every-inbound) event is offered in this Wati version — so the webhook can't reliably open windows.
+Because a follow-up can only be SENT to a prospect whose mobile GoRefer already knows, the reliable
+trigger is a bounded poll: `LiveWatiAdapter.get_latest_inbound_at(mobile)` reads the newest
+customer-inbound (`owner=false`) time from `getMessages/{number}` (the same real-time endpoint as
+delivery reconcile), and `apps.followups.tasks.poll_inbound_windows` (schedule `followup_inbound_poll`,
+every 5 min) checks each candidate mobile — a per-AP config watch-list (`followup_poll_watch_mobiles`)
+plus recent `Prospect` mobiles — and calls `record_inbound` when the inbound is newer than the last
+recorded, opening the window + starting the cadence on a fresh 24h open. Inert until
+`followups_enabled`. The `/api/wati/inbound` webhook endpoint stays in place (harmless; it would fire
+as a bonus for any event Wati does deliver).
+
 ## 9. Related
 
 - Channel health, template approvals, nightly report: `C:\Abhay\5Wealths\Wati-Project\`

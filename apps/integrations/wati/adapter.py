@@ -95,6 +95,10 @@ class LogOnlyWatiAdapter:
             status=status.STATUS_SIMULATED_DELIVERED, meta_error_code=None, classification=None
         )
 
+    def get_latest_inbound_at(self, mobile: str):
+        # Demo/dev: no real inbound to read (no network) — the poll finds nothing to do.
+        return None
+
 
 class LiveWatiAdapter:
     """Real WATI adapter. Reads secrets from env/secret store (never inline).
@@ -338,6 +342,45 @@ class LiveWatiAdapter:
             meta_code = _extract_meta_code(failed_detail)
             classification = status.classify_failure(meta_code)
         return DeliveryResult(status=mapped, meta_error_code=meta_code, classification=classification)
+
+    def get_latest_inbound_at(self, mobile: str):
+        """Return the newest CUSTOMER-inbound timestamp for a number (aware UTC), or None.
+
+        The window-feed poll (apps.followups.tasks.poll_inbound_windows) uses this to
+        detect when a known prospect has messaged the business (opening/refreshing their
+        24h window) — the reliable trigger given Wati's inbound webhook is chatbot-
+        suppressed. Reads getMessages/{number} (the SAME real-time endpoint get_message_status
+        uses) and returns the newest item that is a customer message (owner is False; Wati
+        marks business-sent items owner=True and broadcasts owner=None). Returns None on any
+        error/absence — the poll then simply skips that contact this round.
+        """
+        from datetime import datetime
+        from datetime import timezone as _tz
+
+        number = "".join(ch for ch in str(mobile or "") if ch.isdigit())
+        if not number:
+            return None
+        url = f"{self.base_url}/api/v1/getMessages/{urllib.parse.quote(number)}?pageSize=15"
+        try:
+            code, text = self._transport("GET", url, self._auth_headers(json_body=False), None)
+            if not (200 <= code < 300):
+                return None
+            items = (((json.loads(text or "{}").get("messages") or {}).get("items")) or [])
+        except (ValueError, AttributeError, TypeError):
+            return None
+        for it in items:  # newest-first
+            if it.get("owner") is False:  # a genuine customer inbound (not True/None)
+                raw = it.get("created") or it.get("timestamp")
+                if not raw:
+                    continue
+                try:
+                    # Wati 'created' is ISO-8601 Z; 'timestamp' may be epoch seconds.
+                    if isinstance(raw, str) and "T" in raw:
+                        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                    return datetime.fromtimestamp(int(raw), tz=_tz.utc)
+                except (ValueError, TypeError, OSError):
+                    return None
+        return None
 
 
 def _redact_param_names(params: dict) -> str:

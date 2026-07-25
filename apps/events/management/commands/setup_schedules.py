@@ -39,6 +39,10 @@ SCHEDULES = {
     # 5-min granularity is fine for ≥15-min follow-up targets; nothing fires until
     # `followups_enabled` is on (re-checked at fire time).
     "followup_sweep": ("apps.followups.tasks.fire_due_followups", 5),
+    # Every 5 min (M-FUP-1): poll Wati for known prospects' recent inbounds and open their
+    # 24h windows / start cadences — the reliable window-feed (Wati's inbound webhook is
+    # chatbot-suppressed). Bounded to known/watch-listed mobiles; inert until followups_enabled.
+    "followup_inbound_poll": ("apps.followups.tasks.poll_inbound_windows", 5),
 }
 
 
