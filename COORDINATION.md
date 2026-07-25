@@ -4174,3 +4174,39 @@ Owner authorized prod deployment. PR #30 merged to main (`bbc32c8`, squash), dep
   UNVERIFIED), or (b) add a polling window-feed task (Wati getConversations/last_inbound_at → record_inbound).
   Until one is in place, a prospect's cadence starts only via the webhook or a manual `record_inbound`.
   Recommend deciding (a) vs (b) next. — Engineer
+
+### 2026-07-24 — FROM ENGINEER — STATUS — main CI RED fixed (T-026): quiet-hours test flake, not a send-path regression
+
+Fleet task T-026: main's `Tests (pytest)` job went red on run 30115641685 (the PR #31 merge commit),
+4 failures in `tests/test_followups.py` — all looked like the M-FUP-1 send path had regressed
+(`counts["sent"] == 0`, no funnel Event, `ScheduledFollowup.status` stuck at `scheduled`).
+
+- **Root cause: NOT a send-path bug.** That CI run executed at 18:41 UTC = **00:11 IST** — inside
+  the quiet-hours window (23:00–06:00 IST) the same PR added in `bbc32c8`. `evaluate_gate()` did
+  exactly what it's supposed to: deferred every would-be send to `DEC_HOLD` (row stays
+  `SCHEDULED`, `fire_at` pushed to next 06:00 IST, no funnel Event emitted — correct, per the
+  owner's "never message 23:00–06:00 IST" rule). The 4 failing tests assert a SEND outcome via
+  `tasks.fire_due_followups()` but never pin "now" outside quiet hours, so they pass or fail
+  depending on the real wall clock at run time. Only one existing test
+  (`test_fire_defers_due_row_during_quiet_hours`) had accounted for this. Re-ran the same time
+  math against the current moment (19:11 UTC = 00:41 IST) and it's still inside quiet hours,
+  confirming the failure is reproducible right now, not a one-off CI fluke.
+- **Fix (test-only):** `monkeypatch.setattr(services, "in_quiet_hours", lambda *a, **k: False)`
+  in the 4 affected tests (`test_window_open_sends_session`,
+  `test_session_send_emits_pii_free_funnel_event`, `test_window_closed_falls_back_to_template`,
+  `test_template_channel_sends_template_even_in_window`) — same technique the existing HOLD test
+  already used. No assertion weakened or stubbed; the engine still has to genuinely send for
+  these to pass. **No production code touched** — `apps/followups/tasks.py` and `services.py`
+  are unchanged; the send path itself was never broken.
+- **Branch** `fix/followup-quiet-hours-test-flake` (cut from fresh `origin/main`); **PR #33**:
+  https://github.com/abhayla/gorefer/pull/33 (1 commit, `[skip-contract-doc]` — test-only, no
+  adapter/contract surface touched).
+- **CI verified GREEN twice:** on the PR branch (run 30120076910, `test` PASS 3m9s) and again on
+  `main` itself post-merge (run 30120283308, direct-push CI against merge commit `347947a` — full
+  job incl. contract-doc gate, Tailwind freshness, ruff, `manage.py check`, migration-drift,
+  migrate, **Tests (pytest)** — all green).
+- **Merged** `gh pr merge 33 --squash --delete-branch` only after confirming checks green via
+  `gh pr checks --watch`; auto-merge was never armed (private repo, no branch protection to
+  enforce it — DoD respected manually). `main` is now at `347947a`, CI green.
+- Nothing deployed/redeployed — this was a test-suite fix only; prod state (M-FUP-1 live,
+  `followups_enabled=True`, `bbc32c8` deployed) is unaffected. — Engineer

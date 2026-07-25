@@ -54,13 +54,26 @@ def authenticate(request) -> bool:
     IPs; an EMPTY allowlist means "any IP" only in DEBUG (dev/CI) — in production
     (DEBUG=false) an empty allowlist is refused fail-closed (Fable5 H2). The key
     requirement is mandatory in every mode.
+
+    The shared key may arrive EITHER as the `X-Wati-Webhook-Key` header OR as a
+    `?token=` query param — Wati's own webhook sender delivers the secret as a query
+    param (verified against the live tenant's existing webhooks, which post
+    `…?token=<key>`), and it cannot attach a custom header. Both carry the SAME secret
+    and are constant-time compared; the query form is what makes Wati's native
+    inbound-message webhook usable without relaxing the check. (Trade-off: a query-string
+    secret is visible in access logs — acceptable for a rotatable shared webhook token,
+    and the same posture the pre-existing firekaro webhook already uses.)
     """
     expected = (getattr(settings, "WATI_WEBHOOK_KEY", "") or "").strip()
     if not expected:
         # Fail closed: no key configured => reject all (do not process the webhook).
         logger.warning("WATI webhook rejected: WATI_WEBHOOK_KEY not configured (fail-closed)")
         return False
-    provided = (request.headers.get("X-Wati-Webhook-Key", "") or "").strip()
+    provided = (
+        request.headers.get("X-Wati-Webhook-Key", "")
+        or request.GET.get("token", "")
+        or ""
+    ).strip()
     if not hmac.compare_digest(provided, expected):
         return False
     allowlist = [ip for ip in getattr(settings, "WATI_WEBHOOK_IP_ALLOWLIST", "").split(",") if ip]

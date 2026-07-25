@@ -1,0 +1,107 @@
+ **Type:** `Text` is not present, selected Single Line
+Getting this error while saving function -  Failed to update function Not able to find 'toEpoch' function (Line : 38)
+
+
+
+https://wa.me/{wati_business_number}?text=Hi%2C%20I'd%20like%20to%20refer%20someone%20for%20a%20Zerodha%20account.%20Referral%20ID%3A%20{client_id}
+
+सीधे Refer करें
+WhatsApp पर शेयर करें
+
+ज़ेरोधा (Zerodha) भारत का सबसे बड़ा ब्रोकर है, जिस पर 1.6 करोड़ से ज़्यादा ग्राहकों का भरोसा है। इसके पास 6 लाख करोड़ रुपये का इक्विटी निवेश है और यह रोज़ाना के रिटेल एक्सचेंज वॉल्यूम में 15% का योगदान देता है।
+
+📈 ज़ेरोधा में मुफ़्त डीमैट अकाउंट खोलें
+
+👉 यहाँ खोलें: 
+https://gorefer.in/r/wa/{{client_id}}
+
+मुफ़्त और तेज़ी से अकाउंट खोलने के लिए, इस नंबर पर कॉल या WhatsApp करें:
+73888 82020
+
+ऊपर दिए गए मैसेज को दोस्तों और WhatsApp ग्रुप्स में भेजें
+
+या
+
+इसे अपने WhatsApp स्टेटस पर एक पर्सनल मैसेज के साथ पोस्ट करें।
+
+सीधे रेफर करने के लिए ये जानकारी शेयर करें।
+
+नाम
+
+फ़ोन नंबर
+
+ईमेल
+
+अपनी Zerodha ID कन्फ़र्म करें या दें (आपके रेफ़रल को रजिस्टर करने के लिए ज़रूरी है)
+
+
+gorefer_zerodha_hin_2026_07_10_v2
+
+
+अपनी ज़ेरोधा आईडी दें
+
+रेफ़रल की जानकारी शेयर करने के लिए धन्यवाद।
+
+हम रेफ़रल को रजिस्टर करेंगे और आपका रेफ़रेंस जोड़ेंगे, जिससे आप रिवॉर्ड पाने के लिए योग्य हो जाएँगे 💰
+
+
+ Failed to update function Not able to find 'toEpoch' function (Line : 38)
+
+हम मुफ़्त और तेज़ी से अकाउंट खोलने में मदद करने के लिए आपको फ़ोन भी करेंगे।
+
+Created these templates. Created their chatbots for quick replies. Inspect them
+gorefer_zerodha_eng_leads_2026_07_10 - for unknown who are not in Zoho and I don't know their Zeordha client id
+gorefer_zerodha_hin_2026_07_10_v2 - Hindi
+gorefer_zerodha_eng_2026_07_10_v2 - English
+
+https://flow.zoho.in/60078252763/flow/webhook/incoming?zapikey=1001.46092111b8db6816f76b06d09024ddba.213230240ba061d42c94437a97d87094&isdebug=false
+
+Disabled Workflows:
+Zerodha_Referrer_Reminder
+Zerodha_client_referral
+Zerodha_new_account_opened
+
+Enabled Workflows:
+New_Zerodha_Referrer_Reminder
+New_Zerodha_client_referral
+New_Zerodha_new_account_opened
+
+
+GoRefer_Webhook_Signer
+
+void schedule.schedule_wa_referrers()
+{
+res = standalone.wa_gatekeeper_referrers();
+info res;
+}
+
+
+void schedule.schedule_wa_status()
+{
+res = standalone.wa_reconcile_status();
+info res;
+}
+
+TASK 1 - DOne
+TASK 2 — PART A - Done
+TASK 2 — PART B - Done
+
+See the attached screenshot, flags are not visible correctly
+Find out why was it missed and fix the reason why this was missed and then fix this issue.
+
+gr_<partnerGroup>_<partner>_<purpose>_<lang>_<YYYY_MM_DD>
+
+I am worried that did you really checked the status as you were wrong about the workflows. Here is the latest status
+New_Zerodha_new_account_opened Enabled
+Zerodha_new_account_opened Disabled
+
+New_Zerodha_client_referral Enabled
+Zerodha_client_referral Disabled
+
+New_Zerodha_Referrer_Reminder Enabled
+Zerodha_Referrer_Reminder Disabled
+
+Verify yourself before considering anything for taking decision
+
+FLBR2 certification
+

@@ -143,15 +143,25 @@ valid while the recipient's 24h window is open. Same contract spine as `send_tem
   adapter parses. In-window session delivery is verified against `getMessages` `statusString`. The
   log-only adapter simulates an accepted session send (no network) so the flow is testable offline.
 
-**Inbound-message webhook → window feed.** `POST /api/wati/inbound` (auth = the §3/§7 static key
-+ IP allowlist, fail-closed, identical to the assisted webhook) stamps `last_inbound_at` for the
-**customer's** number (`apps.integrations.wati.webhook.record_inbound`). OUTBOUND events
-(`owner`/`fromMe` truthy) are ignored — a business-sent message does not open a customer window.
-On a **fresh** window open (no prior inbound, or ≥24h since the last) it starts the AP's cadence
-(one `ScheduledFollowup` per enabled `FollowupRule` step); a subsequent inbound inside the window
-refreshes the timestamp (and counts as a reply for engaged-exit) but does not re-enqueue. Wati
-must be configured to POST inbound messages to this endpoint — a rollout step, done with the flag
-still off (enqueue is inert until `followups_enabled` is on).
+**Inbound-message webhook → window feed.** `POST /api/wati/inbound` (auth = the §3/§7 shared key,
+fail-closed) stamps `last_inbound_at` for the **customer's** number
+(`apps.integrations.wati.webhook.record_inbound`). OUTBOUND events (`owner`/`fromMe` truthy) are
+ignored — a business-sent message does not open a customer window. On a **fresh** window open (no
+prior inbound, or ≥24h since the last) it starts the AP's cadence (one `ScheduledFollowup` per
+enabled `FollowupRule` step); a subsequent inbound inside the window refreshes the timestamp (and
+counts as a reply for engaged-exit) but does not re-enqueue.
+
+**Auth accepts the key as a header OR a `?token=` query param.** Wati's native webhook sender
+delivers the secret as `…?token=<WATI_WEBHOOK_KEY>` (verified on the live tenant — its pre-existing
+webhooks post `https://…?token=<key>`) and cannot attach a custom header, so `authenticate()` accepts
+the key from EITHER `X-Wati-Webhook-Key` or `?token=`, constant-time compared, still fail-closed on a
+blank/absent key. (A query-string secret is access-log-visible — acceptable for a rotatable shared
+webhook token; same posture as the existing firekaro webhook.)
+
+**Wiring (Wati dashboard → Webhooks, "New Contact Message" event):** add a webhook to
+`https://gorefer.in/api/wati/inbound?token=<WATI_WEBHOOK_KEY>`. The "New Contact Message" event is the
+customer-inbound trigger; its payload carries the sender in `waId` (which `record_inbound`'s number
+resolver reads). Safe to wire with the flag still off — enqueue is inert until `followups_enabled` is on.
 
 **Send gate (per due row, at fire time).** Opt-out (per-AP, tenant+mobile) → cancel; replied /
 converted since the window opened (`stop_on_reply`) → cancel; window open → session send; window
