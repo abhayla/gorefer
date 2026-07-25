@@ -4305,3 +4305,16 @@ Referrer-nudge templates SUBMITTED to Meta (DA #1 / §6.1, parallel — PENDING 
 disclosure + AP footer; mirrors the approved gorefer_referrer_day10 format).
 Follow-ups (not in #42): §6.1 referrer-nudge SEND path (template-gated, next slice);
 prod re-seed of the nudge copy (deploy step); SSOT conversation-map update. — Engineer
+
+### 2026-07-25 — §6.1.1 unknown-prospect handling (owner Q) + template v2 — Engineer
+Owner flagged: prospect name/number often unknown. Resolution (doc 15 §6.1.1 added):
+- The referrer-nudge goes to the REFERRER's number → the prospect's NUMBER is never needed.
+- Prospect NAME degrades: Lead name → click-derived descriptor (VisitorPII.city + Event
+  channel/timestamp by visitor_id, all PII-safe to the referrer) → generic "one of your recent
+  referrals". Template var never empty (Meta rule); descriptor sits at sentence-END so any value
+  reads naturally.
+- Enables nudging referrers about click-only (no-mobile) prospects too.
+Template: v1 pair read wrong for non-name values; submitted corrected
+`gorefer_referrer_prospect_pending_{en,hi}_2026_07_25_v2` (PENDING). v1 pair superseded —
+delete in dashboard (WATI exposes no template-delete API). Descriptor builder lands in the
+§6.1 send slice (after Meta approval). — Engineer

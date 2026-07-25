@@ -127,6 +127,28 @@ Design:
 - **Opt-out / routing** honored (referrer opt-out + the existing `referrer` routing toggle).
 - **Attribution unaffected** — this is a message, not a status write (guardrail #2).
 
+#### 6.1.1 Unknown prospect identity (owner Q, 2026-07-25) — the template MUST degrade
+We frequently do **not** know the prospect's name or mobile: a referral-link **click** captures only
+PII-free signals — the referrer's `client_id`, the `?s=` **channel**, the **city** (from the erasable
+`VisitorPII`, keyed by `visitor_id`), and the **click timestamp**; name/mobile arrive only on **form
+submit** (`Lead`/`Prospect`). The template handles this as follows:
+- **Prospect mobile is NEVER required** — the nudge is delivered to the *referrer's* number; the
+  prospect's number plays no part. "We don't know their number" is a non-issue here.
+- **Prospect name/descriptor = a fallback chain** (a WhatsApp template variable is never sent empty):
+  1. Lead/Prospect **name** (+ optional last-4 of mobile) when a form was submitted;
+  2. else a **click-derived descriptor** from what the click *did* capture, e.g. *"a WhatsApp click
+     from Mumbai on 20 Jul"* — enough for the referrer to recognize who they sent it to;
+  3. else generic *"one of your recent referrals"*.
+  A `prospect_descriptor(identity)` helper (built in the §6.1 slice) reads `VisitorPII.city` +
+  `Event(channel, created_at)` by `visitor_id`, all PII-safe to show the referrer (their own contact).
+- **Copy must read naturally with ANY slot value.** Put the descriptor at the END, not mid-sentence:
+  *"…hasn't finished opening their account yet — {descriptor}."* reads correctly for a name, a
+  click-descriptor, or the generic fallback. (The first draft, "Your referral {{prospect}} hasn't…",
+  reads wrong for a non-name value — corrected in the submitted template.)
+- **Extension enabled by this:** because the referrer-nudge needs only the referrer's number, it can
+  also cover **click-only prospects** (clicked, never gave a mobile) — nudge the referrer with the
+  click descriptor. (Guard against noise: bots never create a journey; apply the same per-prospect cap.)
+
 ## 7. Where it plugs in
 - **Resolve at SEND (fire) time, not enqueue time** — a prospect may become a Lead *after* the window
   opens; resolving in `fire_due_followups` / the gate (`apps/followups/`) keeps the link fresh.
