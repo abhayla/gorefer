@@ -33,12 +33,21 @@ QUIET_END_KEY = "followup_quiet_end_hour"      # exclusive, IST hour (default 6)
 QUIET_START_DEFAULT = 23
 QUIET_END_DEFAULT = 6
 
+# --- Anti-burst minimum gap between sends to one contact ---------------------
+# Two nudges must never reach a contact close together. Without this, quiet-hours
+# deferral collapses multiple night steps onto the same 06:00 IST slot and they fire
+# together — the "two identical messages at 06:03" defect the owner caught. The gate
+# holds a send that would land within MIN_GAP of the contact's last SENT nudge, so
+# a burst is impossible regardless of scheduling. Per-AP cascade key.
+MIN_GAP_KEY = "followup_min_gap_minutes"
+MIN_GAP_DEFAULT = 90
+
 # Gate decisions.
 DEC_SEND_SESSION = "send_session"
 DEC_SEND_TEMPLATE = "send_template"
 DEC_CANCEL = "cancel"
 DEC_SKIP = "skip"
-DEC_HOLD = "hold"  # would send, but it's quiet hours → defer fire_at, stay SCHEDULED
+DEC_HOLD = "hold"  # would send, but quiet hours OR min-gap → defer fire_at, stay SCHEDULED
 
 
 def _as_bool(value) -> bool:
@@ -175,6 +184,55 @@ def next_active_time(now, tenant_id: int | None = None):
     return target - IST_OFFSET  # shift the IST wall time back to the real UTC instant
 
 
+def _min_gap(tenant_id: int | None) -> timedelta:
+    try:
+        return timedelta(minutes=int(resolve(MIN_GAP_KEY, tenant_id=tenant_id, default=MIN_GAP_DEFAULT)))
+    except Exception:
+        return timedelta(minutes=MIN_GAP_DEFAULT)
+
+
+def last_sent_at(tenant, mobile: str):
+    """The most recent SENT nudge time for this contact (aware UTC), or None."""
+    row = (
+        ScheduledFollowup.objects.filter(
+            tenant=tenant, mobile=mobile, status=ScheduledFollowup.STATUS_SENT, sent_at__isnull=False
+        )
+        .order_by("-sent_at")
+        .values_list("sent_at", flat=True)
+        .first()
+    )
+    return row
+
+
+def within_min_gap(tenant, mobile: str, now, tenant_id: int | None) -> bool:
+    """True when sending now would land within MIN_GAP of this contact's last send."""
+    last = last_sent_at(tenant, mobile)
+    return last is not None and (now - last) < _min_gap(tenant_id)
+
+
+def compute_defer(now, tenant, mobile, tenant_id: int | None):
+    """Earliest instant a held send may fire: outside quiet hours AND ≥ last_send + MIN_GAP.
+
+    Iterates because the two constraints interact (bumping past the gap can land back in
+    quiet hours, and vice-versa); converges in a couple of passes, capped so a pathological
+    config can never loop forever.
+    """
+    gap = _min_gap(tenant_id)
+    t = now
+    for _ in range(4):
+        moved = False
+        if in_quiet_hours(t, tenant_id):
+            t = next_active_time(t, tenant_id)
+            moved = True
+        last = last_sent_at(tenant, mobile)
+        if last is not None and t < last + gap:
+            t = last + gap
+            moved = True
+        if not moved:
+            break
+    return t
+
+
 def evaluate_gate(sf: ScheduledFollowup, now=None) -> tuple[str, str]:
     """Decide what to do with a due follow-up at fire time. Pure — no side effects.
 
@@ -202,10 +260,18 @@ def evaluate_gate(sf: ScheduledFollowup, now=None) -> tuple[str, str]:
 
     decision, reason = _window_decision(rule, window, now)
 
-    # Quiet hours suppress SENDS only (never a cancel/skip): defer a would-be send to
-    # 06:00 IST so nobody is messaged 23:00–06:00 IST (owner rule).
-    if decision in (DEC_SEND_SESSION, DEC_SEND_TEMPLATE) and in_quiet_hours(now, sf.tenant_id):
-        return DEC_HOLD, "quiet hours — deferred to 06:00 IST"
+    # A would-be SEND is deferred (never cancelled) for two reasons, both to protect the
+    # recipient's experience:
+    #  1) Quiet hours — nobody is messaged 23:00–06:00 IST (owner rule).
+    #  2) Min-gap — two nudges must never reach a contact close together; without this,
+    #     multiple quiet-hours-deferred steps collapse onto one 06:00 slot and fire as an
+    #     identical-looking burst (the defect the owner caught). Either → DEC_HOLD; the
+    #     sweep re-computes fire_at via compute_defer (satisfies BOTH constraints).
+    if decision in (DEC_SEND_SESSION, DEC_SEND_TEMPLATE):
+        if in_quiet_hours(now, sf.tenant_id):
+            return DEC_HOLD, "quiet hours — deferred to 06:00 IST"
+        if within_min_gap(sf.tenant, sf.mobile, now, sf.tenant_id):
+            return DEC_HOLD, "min-gap — spacing sends to avoid a burst"
     return decision, reason
 
 
