@@ -55,10 +55,11 @@ A single pure resolver in the referrals domain (reusable by follow-ups, M5 notif
 class RecipientIdentity:
     role: str                 # "prospect" | "referrer" | "unknown"
     referrer_client_id: str   # the client_id whose link a PROSPECT should get (their referrer); "" if none
+    referrer_mobile: str      # the referrer's phone IF GoRefer knows it (Customer/M5 _referrer_if_known); "" — for the referrer-nudge (§6.1)
     self_client_id: str       # a REFERRER's own client_id (to build their share link); "" if n/a
     prospect_id: int | None
     lead_id: int | None
-    lang: str                 # "en" | "hi"  (best-effort; defaults "en")
+    lang: str                 # "en" | "hi" — from the EXISTING referrer_language cascade key (§8), NOT a new signal
     confidence: str           # "customer_match" | "lead_join" | "zoho_credited" | "none"
 
 def resolve_recipient(tenant, mobile: str) -> RecipientIdentity: ...
@@ -100,11 +101,31 @@ link — `gorefer.in/open` is a fallback *only* when no referrer is resolvable, 
 would steal credit to partner-direct.
 
 ## 6. Message selection by role
-- **prospect** → the account-completion cadence (doc-14), copy templated with `{link}` from §5.
-- **referrer** → **Phase 1: SUPPRESS** the prospect nudges (a referrer must never receive
-  "your account opening is still pending"). A referrer-specific cadence is a later mission.
+- **prospect** → the account-completion cadence (doc-14), copy templated with `{link}` from §5
+  (their referrer's `/r/{client_id}`), in the resolved language (§8).
 - **unknown** → send the generic prospect nudge with the `gorefer.in/open` fallback link (preserves
   today's behavior; identity only *improves* the link). Watch-list test numbers land here.
+  *(DA decision #2, 2026-07-25.)*
+
+### 6.1 Referrer also gets nudged about their idle prospect (DA decision #1, 2026-07-25)
+**Reverses the earlier "suppress referrers" recommendation.** When a prospect is idle/pending, GoRefer
+ALSO nudges **that prospect's originating referrer** (when we know their phone) so the referrer — who
+often knows the prospect personally — can give a direct, personal push. Owner rationale: **a personal
+nudge from the referrer lifts conversion** more than a platform reminder alone.
+
+Design:
+- **Recipient** = the prospect's referrer, from `RecipientIdentity.referrer_mobile` (resolved via the
+  M5 `Customer`/`_referrer_if_known` path; **skip silently if the phone is unknown — never guess**,
+  matching `notify.py`'s referrer rule).
+- **Channel/mechanics** — the referrer's own 24h window is usually CLOSED, so this is a **template**
+  send (out-of-window), reusing the approved `referrer` template family via
+  `notify_template_name("referrer", lang, tenant_id)`. Copy: names the prospect (best-effort) + gives
+  the referrer their share link `gorefer.in/r/{self_client_id}` + a "give them a nudge" CTA.
+- **Frequency cap (recommended default):** **one referrer-nudge per idle prospect**, fired at a single
+  configured step (e.g. after the prospect crosses a longer-idle threshold), **not once per prospect
+  cadence step** — so the referrer is never spammed. Tunable via a cascade key (§8).
+- **Opt-out / routing** honored (referrer opt-out + the existing `referrer` routing toggle).
+- **Attribution unaffected** — this is a message, not a status write (guardrail #2).
 
 ## 7. Where it plugs in
 - **Resolve at SEND (fire) time, not enqueue time** — a prospect may become a Lead *after* the window
@@ -116,13 +137,22 @@ would steal credit to partner-direct.
 - Reuse in M5 `queue_lead_notifications` (`notify.py`) is optional and out of scope for Phase 1.
 
 ## 8. Data model / config
-- **No new PII, no schema change required** for the resolve-on-send design (the resolver reads
-  existing tables). *Optional* observability: add `resolved_role`/`resolved_client_id` columns to
-  `ScheduledFollowup` — **defer unless needed** (keep PII out of the event log, #16).
+- **No new PII, no schema change** — **resolve-on-send only** (DA decision #4, 2026-07-25). The
+  resolver reads existing tables; no `resolved_role`/`resolved_client_id` columns are added (keeps PII
+  out of the event log, #16, and avoids a migration).
+- **Language — reuse the EXISTING rule, do NOT add a new one** (DA decision #3, 2026-07-25). Source
+  `lang` from the existing `REFERRER_LANGUAGE` (`"referrer_language"`) cascade key + the
+  `notify_template_name(role, lang, tenant_id)` mapping already in `apps/config/preferences.py:55,88`.
+  The only change is **wiring the engine to READ it**: `notify.py:123` currently hardcodes
+  `lang = LANG_EN` ("dormant until customer login") — replace that with
+  `resolve(REFERRER_LANGUAGE, tenant_id)` (tenant-tier resolves today; a PIFS `referrer_language=hi`
+  override then flows to prospect + referrer sends). No new field, no new signal, no new rule.
 - **Config keys (cascade, tenant tier)** — `followup_link_mode` = `referrer_then_open` (default) |
-  `open_only` | `none`; reuses `REFERRAL_INCENTIVE_CLAIM`, disclosure block (compliance-locked,
-  central-only). Zerodha specifics (`ZMPHZC`, URL template) already come from
-  `ProgramRedirectRule` (`redirect_service.assemble_destination`, `redirect_service.py:43-64`).
+  `open_only` | `none`; `followup_referrer_nudge_step` (which step fires the §6.1 referrer nudge;
+  default = one, late step) + `followup_referrer_nudge_on` (bool, default true). Reuses
+  `REFERRAL_INCENTIVE_CLAIM`, disclosure block (compliance-locked, central-only). Zerodha specifics
+  (`ZMPHZC`, URL template) already come from `ProgramRedirectRule`
+  (`redirect_service.assemble_destination`, `redirect_service.py:43-64`).
 
 ## 9. Compliance
 - Disclosure block + market-risk warning are auto-injected/baked (context processor) — a link does
@@ -157,22 +187,31 @@ follow-up's program), else returns the most-recent.
 - Hindi prospect → `lang="hi"` (once a lang signal exists; default en until then).
 - resolver never raises → schema-error path returns `unknown`.
 
-## 13. Open decisions for the DA (please confirm)
-1. **Referrer recipients:** Phase 1 **suppress** prospect nudges to referrers (recommended), or send a
-   minimal referrer message now?
-2. **Unknown recipients:** send generic nudge + `gorefer.in/open` (recommended, preserves behavior),
-   or **suppress until identified**?
-3. **Language:** ship with `en` default + best-effort now, and add a real language signal
-   (inbound-language or a Prospect `pref_lang`) as a fast-follow — OK?
-4. **Observability columns** on `ScheduledFollowup` (`resolved_role`/`resolved_client_id`): add now
-   for auditability, or resolve-on-send only (recommended: resolve-on-send)?
+## 13. DA decisions — LOCKED 2026-07-25 (owner)
+1. **Referrers are NOT suppressed — they get nudged about their idle prospect** so they can push the
+   prospect personally (conversion lift). See §6.1 (template-based, phone-known-only, frequency-capped).
+2. **Unknown recipients:** send the generic nudge + `gorefer.in/open` fallback (preserves behavior). ✓
+3. **Language:** reuse the EXISTING `referrer_language` rule + `notify_template_name` — **wire the
+   engine to read it**, add NO new rule/field. See §8.
+4. **Observability:** resolve-on-send only, **no new columns**, no migration. ✓
+
+Residual sub-decisions (my recommended defaults, tunable via config — flag if you want different):
+- §6.1 referrer-nudge fires **once per idle prospect** at a late step (`followup_referrer_nudge_step`),
+  not every step.
+- `followup_link_mode` default `referrer_then_open`.
 
 ## 14. Build order / DoD
-1. `recipient_identity.py` + resolver tests (TDD, §12) — pure, no engine coupling.
-2. Wire into `fire_due_followups`/gate; add `{link}` substitution to the cadence copy; role-based
-   suppression (§6).
-3. Update `STEP_BODIES` copy to include `{link}` (the doc-14 nudges) — behind `followups_enabled`.
-4. Update the SSOT conversation map (`Wati-Project/wati-chat-flow.html`) to encode recipient-role →
-   message + link.
-5. DoD: three guardrail tests pass; demo mode works flags-off; no PII in the event log; migrations
-   only if the optional columns are chosen; PR per doc-14 mission conventions.
+1. `recipient_identity.py` + resolver tests (TDD, §12) — pure, no engine coupling; returns
+   `referrer_mobile` + `lang` (from `referrer_language`).
+2. Wire into `fire_due_followups`/gate; add `{link}` substitution to the prospect cadence copy
+   (their referrer's `/r/{client_id}`, else `/open`); resolve `lang` from `REFERRER_LANGUAGE`
+   (replace the hardcoded `lang = LANG_EN`).
+3. **Referrer-nudge path (§6.1)** — at `followup_referrer_nudge_step`, template-send the prospect's
+   referrer (phone-known-only, capped, opt-out-aware) via `notify_template_name("referrer", lang)`.
+   New referrer-nudge template copy may need Meta approval → gate behind the flag until approved.
+4. Update `STEP_BODIES` copy to include `{link}` (the doc-14 nudges) — behind `followups_enabled`.
+5. Update the SSOT conversation map (`Wati-Project/wati-chat-flow.html`) to encode recipient-role →
+   message + link (prospect nudge + link, referrer-about-prospect nudge).
+6. DoD: three guardrail tests pass; demo mode works flags-off; no PII in the event log; **no
+   migration** (resolve-on-send); referrer nudge skips cleanly when phone unknown; PR per doc-14
+   mission conventions.
