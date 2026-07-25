@@ -95,7 +95,7 @@ def fire_due_followups(limit: int = 200) -> dict:
         .order_by("fire_at")
         .values_list("id", flat=True)[:limit]
     )
-    counts = {"sent": 0, "cancelled": 0, "skipped": 0, "failed": 0, "held": 0}
+    counts = {"sent": 0, "cancelled": 0, "skipped": 0, "failed": 0, "held": 0, "referrer_nudged": 0}
     for sid in due_ids:
         try:
             with transaction.atomic():
@@ -151,11 +151,11 @@ def _apply(sf: ScheduledFollowup, decision: str, reason: str, now, counts: dict)
 
     identity = resolve_recipient(sf.tenant, sf.mobile)
     if identity.role == ROLE_REFERRER:
-        # A referrer must never get the prospect's "your account is still pending" copy.
-        # The referrer-oriented nudge (doc 15 §6.1) is a separate template-based path,
-        # pending its Meta-approved template — until then, suppress (never send wrong copy).
+        # A referrer whose OWN mobile is in the cadence must never get the prospect's
+        # "your account is still pending" copy (wrong audience). The referrer-oriented
+        # nudge (doc 15 §6.1) is fired the other way — off an idle PROSPECT's cadence — below.
         sf.status = ScheduledFollowup.STATUS_SKIPPED
-        sf.reason = "referrer recipient — prospect nudge suppressed (referrer-nudge pending template)"
+        sf.reason = "referrer recipient — prospect nudge suppressed"
         sf.save(update_fields=["status", "reason", "updated_at"])
         counts["skipped"] += 1
         return
@@ -179,6 +179,9 @@ def _apply(sf: ScheduledFollowup, decision: str, reason: str, now, counts: dict)
         sf.reason = reason
         counts["sent"] += 1
         _emit_funnel_event(sf, decision)
+        # doc 15 §6.1 — at the configured step, ALSO nudge this idle prospect's referrer
+        # (if we know their phone) so they can push their friend personally. Flag-gated.
+        _maybe_referrer_nudge(sf, identity, counts)
     elif result.raw_status == st.STATUS_BLOCKED:
         # Fail-closed allowlist blocked it — a suppression, not a delivery failure.
         sf.status = ScheduledFollowup.STATUS_SKIPPED
@@ -272,3 +275,73 @@ def _emit_funnel_event(sf: ScheduledFollowup, decision: str) -> None:
         )
     except Exception:
         logger.warning("followup funnel event emit failed", exc_info=True)
+
+
+def _maybe_referrer_nudge(sf: ScheduledFollowup, identity, counts: dict) -> None:
+    """doc 15 §6.1 — nudge an idle prospect's referrer so they can push their friend directly.
+
+    Fires ONLY when: the flag is on, this is the configured step, and GoRefer KNOWS the
+    referrer's phone (a Customer row — never guess). Template send (the referrer's own 24h
+    window is usually closed). One nudge per idle prospect (implicit: it rides a single
+    cadence step). Fully wrapped — a referrer-nudge failure must never sink the prospect
+    send that already succeeded.
+    """
+    from apps.config.cascade import resolve
+    from apps.referrals.models import Customer
+    from apps.referrals.recipient_identity import prospect_descriptor
+
+    tid = sf.tenant_id
+    try:
+        on = resolve("followup_referrer_nudge_on", tenant_id=tid, default=False)
+        if not (on is True or str(on).strip().lower() in {"1", "true", "yes", "on"}):
+            return
+        step = str(resolve("followup_referrer_nudge_step", tenant_id=tid, default="nudge_12h")).strip()
+        if sf.rule.step_key != step:
+            return
+        if not identity.referrer_mobile or not identity.referrer_client_id:
+            return  # never guess a referrer's phone
+
+        cust = (
+            Customer.objects.filter(
+                tenant=sf.tenant, client_id=identity.referrer_client_id, deleted_at__isnull=True
+            )
+            .exclude(mobile="")
+            .first()
+        )
+        ref_name = (f"{cust.first_name} {cust.last_name}".strip() if cust else "") or "there"
+        descr = prospect_descriptor(sf.tenant, sf.mobile)
+        lang = identity.lang or "en"
+        tmpl = str(
+            resolve(
+                f"followup_referrer_nudge_template_{lang}",
+                tenant_id=tid,
+                default=f"gorefer_referrer_prospect_pending_{lang}_2026_07_25_v2",
+            )
+        ).strip()
+
+        adapter = get_wati_adapter()
+        result = adapter.send_template(
+            to=identity.referrer_mobile,
+            template=tmpl,
+            params={
+                "template_params": [
+                    {"name": "name", "value": ref_name},
+                    {"name": "prospect", "value": descr},
+                    {"name": "client_id", "value": identity.referrer_client_id},
+                ]
+            },
+        )
+        if result.accepted:
+            counts["referrer_nudged"] = counts.get("referrer_nudged", 0) + 1
+            try:
+                Event.objects.create(
+                    tenant=sf.tenant,
+                    event_type=vocab.NOTIFICATION,
+                    source=vocab.SRC_WATI,
+                    user_type="system",
+                    metadata={"kind": "referrer_nudge", "step": sf.rule.step_key},
+                )
+            except Exception:
+                logger.warning("referrer-nudge funnel event emit failed", exc_info=True)
+    except Exception:
+        logger.warning("referrer-nudge failed for sf=%s", getattr(sf, "pk", None), exc_info=True)

@@ -155,6 +155,29 @@ def resolve_recipient(tenant, mobile: str) -> RecipientIdentity:
         return RecipientIdentity(role=ROLE_UNKNOWN, lang=lang)
 
 
+def prospect_descriptor(tenant, mobile: str) -> str:
+    """A referrer-facing label for an idle prospect (doc 15 §6.1.1).
+
+    name (when a Lead/Prospect was captured) → generic. NEVER empty (a WhatsApp template
+    variable cannot be blank). The click-derived descriptor (city/channel/date) is a future
+    enhancement — it needs a mobile→visitor_id link that GoRefer does not store today.
+    """
+    try:
+        from apps.referrals.models import Prospect
+
+        canonical = normalize_phone(mobile)
+        p = (
+            Prospect.objects.filter(tenant=tenant, mobile=canonical, deleted_at__isnull=True)
+            .order_by("-created_at")
+            .first()
+        )
+        if p and (p.name or "").strip():
+            return p.name.strip()
+    except Exception:
+        pass
+    return "one of your recent referrals"
+
+
 def _public_host() -> str:
     base = (settings.PUBLIC_BASE_URL or "").rstrip("/")
     for prefix in ("https://", "http://"):

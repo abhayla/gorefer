@@ -280,7 +280,7 @@ def test_future_rows_not_fired(enabled):
 
     counts = tasks.fire_due_followups()
 
-    assert counts == {"sent": 0, "cancelled": 0, "skipped": 0, "failed": 0, "held": 0}
+    assert counts == {"sent": 0, "cancelled": 0, "skipped": 0, "failed": 0, "held": 0, "referrer_nudged": 0}
     sf.refresh_from_db()
     assert sf.status == ScheduledFollowup.STATUS_SCHEDULED
 
@@ -690,6 +690,7 @@ class _RecordingAdapter:
 
     def __init__(self):
         self.sent = []
+        self.templates = []
 
     def send_session_text(self, *, to, message):
         from apps.integrations.wati import status
@@ -702,6 +703,7 @@ class _RecordingAdapter:
         from apps.integrations.wati import status
         from apps.integrations.wati.adapter import SendResult
 
+        self.templates.append((to, template, params))
         return SendResult(accepted=True, provider_message_id=None, raw_status=status.STATUS_ACCEPTED)
 
 
@@ -761,3 +763,93 @@ def test_referrer_recipient_is_suppressed(enabled, monkeypatch):
     sf = ScheduledFollowup.objects.get()
     assert sf.status == ScheduledFollowup.STATUS_SKIPPED
     assert "referrer" in sf.reason
+
+
+# --- doc 15 §6.1: referrer-nudge off an idle prospect's cadence -------------------
+
+def _prospect_with_known_referrer(tenant, *, client_id, prospect_mobile, prospect_name,
+                                  referrer_mobile, referrer_first="Asha"):
+    from apps.common.phone import normalize_phone
+    from apps.referrals import lead_service, redirect_service
+    from apps.referrals.models import Customer
+
+    program = redirect_service.get_active_program(tenant)
+    referral = redirect_service._lazy_get_or_create_referral(tenant, program, client_id)
+    lead_service.capture_lead(
+        tenant=tenant, referral=referral, name=prospect_name, mobile=prospect_mobile,
+        email="", city="", consent=True,
+    )
+    Customer.objects.create(
+        tenant=tenant, program=program, partner=program.partner,
+        client_id=client_id, mobile=referrer_mobile, first_name=referrer_first,
+    )
+    return normalize_phone(prospect_mobile)
+
+
+def _fire_referrer_nudge_setup(enabled, monkeypatch, *, flag_on, step="nudge_12h",
+                               rule_step="nudge_12h", with_referrer=True):
+    monkeypatch.setattr(services, "in_quiet_hours", lambda *a, **k: False)
+    if flag_on:
+        set_tenant("followup_referrer_nudge_on", True, tenant_id=enabled.id)
+    set_tenant("followup_referrer_nudge_step", step, tenant_id=enabled.id)
+    if with_referrer:
+        pm = _prospect_with_known_referrer(
+            enabled, client_id="RJ4521", prospect_mobile="9812345678", prospect_name="Riya",
+            referrer_mobile="919844440000",
+        )
+    else:
+        from apps.common.phone import normalize_phone
+        from apps.referrals import lead_service, redirect_service
+        program = redirect_service.get_active_program(enabled)
+        referral = redirect_service._lazy_get_or_create_referral(enabled, program, "RJ4521")
+        lead_service.capture_lead(tenant=enabled, referral=referral, name="Riya",
+                                  mobile="9812345678", email="", city="", consent=True)
+        pm = normalize_phone("9812345678")
+    rec = _RecordingAdapter()
+    monkeypatch.setattr(tasks, "get_wati_adapter", lambda: rec)
+    rule = _rule(enabled, step_key=rule_step, channel=FollowupRule.CHANNEL_SESSION)
+    win = _open_window(enabled, ago_hours=1, mobile=pm)
+    _scheduled(enabled, rule, mobile=pm, window=win)
+    return rec
+
+
+def test_referrer_nudge_fires_at_step_when_enabled(enabled, monkeypatch):
+    rec = _fire_referrer_nudge_setup(enabled, monkeypatch, flag_on=True)
+    counts = tasks.fire_due_followups()
+
+    assert counts["sent"] == 1                 # prospect still got their session nudge
+    assert counts["referrer_nudged"] == 1
+    assert len(rec.templates) == 1
+    to, template, params = rec.templates[0]
+    assert to == "919844440000"                # the referrer's phone
+    assert "referrer_prospect_pending" in template
+    vals = [p["value"] for p in params["template_params"]]
+    assert vals == ["Asha", "Riya", "RJ4521"]  # name, prospect descriptor, referrer link id
+
+
+def test_referrer_nudge_off_by_default(enabled, monkeypatch):
+    rec = _fire_referrer_nudge_setup(enabled, monkeypatch, flag_on=False)
+    counts = tasks.fire_due_followups()
+
+    assert counts["sent"] == 1
+    assert counts["referrer_nudged"] == 0
+    assert rec.templates == []
+
+
+def test_referrer_nudge_skipped_when_phone_unknown(enabled, monkeypatch):
+    rec = _fire_referrer_nudge_setup(enabled, monkeypatch, flag_on=True, with_referrer=False)
+    counts = tasks.fire_due_followups()
+
+    assert counts["sent"] == 1
+    assert counts["referrer_nudged"] == 0      # never guess a referrer's phone
+    assert rec.templates == []
+
+
+def test_referrer_nudge_only_at_configured_step(enabled, monkeypatch):
+    rec = _fire_referrer_nudge_setup(enabled, monkeypatch, flag_on=True,
+                                     step="nudge_99h", rule_step="nudge_3h")
+    counts = tasks.fire_due_followups()
+
+    assert counts["sent"] == 1
+    assert counts["referrer_nudged"] == 0      # this step isn't the referrer-nudge step
+    assert rec.templates == []
