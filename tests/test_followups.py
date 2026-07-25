@@ -555,6 +555,41 @@ def test_fire_defers_due_row_during_quiet_hours(enabled, monkeypatch):
     assert "quiet hours" in sf.reason
 
 
+# --- anti-burst min-gap ------------------------------------------------------
+
+def test_min_gap_defers_a_second_send_close_together(enabled, monkeypatch):
+    # Isolate the min-gap rule from quiet hours (which PR#33 taught us not to leave to the
+    # real clock). Two steps are due at once for the SAME contact → the first sends, the
+    # second is HELD (deferred) so the recipient never gets two nudges back-to-back — the
+    # burst defect the owner caught (two identical messages at 06:03).
+    monkeypatch.setattr(services, "in_quiet_hours", lambda *a, **k: False)
+    r1 = _rule(enabled, step_key="a", offset=1, order=1)
+    r2 = _rule(enabled, step_key="b", offset=2, order=2)
+    win = _open_window(enabled, ago_hours=1)
+    _scheduled(enabled, r1, window=win)
+    _scheduled(enabled, r2, window=win)
+
+    counts = tasks.fire_due_followups()
+
+    assert counts["sent"] == 1
+    assert counts["held"] == 1
+    held = ScheduledFollowup.objects.get(status=ScheduledFollowup.STATUS_SCHEDULED)
+    assert held.fire_at > timezone.now()          # pushed out by the min-gap
+    assert "min-gap" in held.reason
+
+
+def test_min_gap_lets_a_lone_send_through(enabled, monkeypatch):
+    # No prior send → no gap to violate → the single nudge sends normally.
+    monkeypatch.setattr(services, "in_quiet_hours", lambda *a, **k: False)
+    rule = _rule(enabled)
+    win = _open_window(enabled, ago_hours=1)
+    _scheduled(enabled, rule, window=win)
+
+    counts = tasks.fire_due_followups()
+
+    assert counts["sent"] == 1 and counts["held"] == 0
+
+
 # --- cadence config command --------------------------------------------------
 
 def test_seed_cadence_creates_every_3h_through_24h(tenant):
@@ -572,6 +607,14 @@ def test_seed_cadence_is_idempotent(tenant):
     call_command("seed_followup_cadence")
     call_command("seed_followup_cadence")  # re-run must not duplicate
     assert FollowupRule.objects.filter(tenant=tenant).count() == 7
+
+
+def test_seed_cadence_gives_each_step_distinct_copy(tenant):
+    call_command("seed_followup_cadence")
+    bodies = list(FollowupRule.objects.filter(tenant=tenant).values_list("body_en", flat=True))
+    assert len(bodies) == 7
+    assert len(set(bodies)) == 7          # every step's copy is unique (no identical spam)
+    assert all(b.strip() for b in bodies)  # none empty
 
 
 # --- inbound poll (window-feed) ----------------------------------------------
