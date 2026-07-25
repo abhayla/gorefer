@@ -4339,3 +4339,11 @@ to _v3. ACTIVATION (still pending, one external gate): once v3 is APPROVED → t
 number → flip `followup_referrer_nudge_on` true (+ optional `followup_referrer_nudge_step`, default
 nudge_12h). Superseded templates (v1 en PENDING/hi APPROVED, v2 en+hi APPROVED-but-named) →
 dashboard delete. — Engineer
+
+### 2026-07-26 — §6.1 referrer-nudge ACTIVATED (`7870052`) — Engineer
+v3 positional templates Meta-APPROVED (en+hi). Deployed v3-default tasks.py (PR #47),
+live-test send accepted to 917972672473, flipped `followup_referrer_nudge_on=True` (tenant pifs,
+step nudge_12h, template ..._v3). §6.1 LIVE: idle prospect at nudge_12h → also nudges the prospect's
+referrer IF their phone is a known Customer (never guess), capped one/step, name→generic descriptor.
+DEPLOYED_SHA=7870052. SSOT map updated + republished. ALL pending items complete except cosmetic
+dashboard delete of superseded template drafts (v1/v2). — Engineer
