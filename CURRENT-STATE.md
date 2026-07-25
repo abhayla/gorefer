@@ -84,6 +84,7 @@ template: v3 `gr_platform_gorefer_funnel_report_en_2026_07_21` **PENDING at Meta
   window (from its "Hi") and enqueued the 7-step cadence with ZERO manual action; idempotent on re-run.
   The `?token=`-authed `/api/wati/inbound` webhook stays wired (harmless bonus). Full loop live:
   prospect messages business → poll (≤5 min) → window → 3h cadence → sweep sends (session, quiet-hours).
+  **Burst+copy fix LIVE (`6e3072d`, 2026-07-25):** anti-burst min-gap (default 90 min via `compute_defer`, satisfies quiet-hours AND spacing) + DISTINCT per-step copy (seed_followup_cadence STEP_BODIES) — fixes the owner-caught 06:03 duplicate burst + identical messages; applies to pending sends too (copy read at fire time).
 - **M-WATI-1 (one-tap `/share/{channel}/{client_id}` endpoint) is LIVE** (2026-07-24, owner "make it
   live now"): PR #28 merged (`f7f8656`); the 6 code files deployed to prod (file-copy, backup
   `.predeploy-backup-20260724-150205`), `ENABLE_SHARE_INTENT=true` in prod `.env`, both services
