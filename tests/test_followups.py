@@ -321,6 +321,42 @@ def test_record_inbound_refresh_does_not_reenqueue(enabled):
     assert ScheduledFollowup.objects.filter(mobile=MOBILE).count() == 1
 
 
+def test_inbound_endpoint_accepts_query_token(enabled, settings):
+    # Wati's native webhook delivers the secret as ?token=<key> (not a header).
+    settings.WATI_WEBHOOK_KEY = "testkey123"
+    _rule(enabled, step_key="s1")
+    r = Client().post(
+        "/api/wati/inbound?token=testkey123",
+        data={"waId": "917000000001"}, content_type="application/json",
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "ok" and body["opened_fresh"] is True
+    assert FollowupWindow.objects.filter(mobile="917000000001").exists()
+    assert ScheduledFollowup.objects.filter(mobile="917000000001").count() == 1
+
+
+def test_inbound_endpoint_rejects_wrong_query_token(seeded, settings):
+    settings.WATI_WEBHOOK_KEY = "testkey123"
+    r = Client().post(
+        "/api/wati/inbound?token=WRONG",
+        data={"waId": "917000000002"}, content_type="application/json",
+    )
+    assert r.status_code == 401
+
+
+def test_inbound_endpoint_ignores_outbound(enabled, settings):
+    settings.WATI_WEBHOOK_KEY = "testkey123"
+    _rule(enabled, step_key="s1")
+    r = Client().post(
+        "/api/wati/inbound?token=testkey123",
+        data={"waId": "917000000003", "owner": True}, content_type="application/json",
+    )
+    assert r.status_code == 200
+    assert r.json()["reason"] == "outbound"
+    assert not ScheduledFollowup.objects.filter(mobile="917000000003").exists()
+
+
 # --- adapter: session send ---------------------------------------------------
 
 def test_logonly_adapter_session_send_accepted():
