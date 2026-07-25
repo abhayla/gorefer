@@ -4286,3 +4286,22 @@ RESIDUAL / open: (a) `failsCount:3` — after 3 invalid tries Wati may proceed w
 (b) live enforcement of #1 (junk re-prompts, valid ID → link) needs a REAL inbound test — chatbot
 `start` API is Pro-only, so I can't self-trigger; owner to send a test on 7972672473 or confirm;
 (c) SSOT conversation map (Wati-Project) update for #3/#1 pending. — Engineer
+
+## 2026-07-25 — M recipient-identity resolver: PR #42 + referrer templates submitted — Engineer
+
+Spec: `docs/architecture/15-Recipient-Identity-Resolver.md` (DA-signed-off, 4 decisions locked).
+PR #42 (`feat/recipient-identity-resolver`):
+- `apps/referrals/recipient_identity.py` — `resolve_recipient(tenant, mobile)` → role
+  (prospect|referrer|unknown), referrer_client_id (Zoho credited wins), referrer_mobile,
+  self_client_id, lang; `nudge_link_for()` → `/r/wa/{id}` (credit) or `/open` fallback.
+- `fire_due_followups` — suppress referrer recipients (never the prospect copy; §6.1 is a
+  separate template path); language from the EXISTING `referrer_language` rule (DA #3, no
+  new rule); `{link}` substitution.
+- `seed_followup_cadence` — every nudge body carries the `{link}` open CTA.
+- Tests: resolver (9) + send wiring (2). Local gates GREEN (ruff, `manage.py check`,
+  migration drift = No changes → DA #4 no-schema honored). CI running on PR #42.
+Referrer-nudge templates SUBMITTED to Meta (DA #1 / §6.1, parallel — PENDING review):
+`gorefer_referrer_prospect_pending_{en,hi}_2026_07_25` (UTILITY; link + market-risk
+disclosure + AP footer; mirrors the approved gorefer_referrer_day10 format).
+Follow-ups (not in #42): §6.1 referrer-nudge SEND path (template-gated, next slice);
+prod re-seed of the nudge copy (deploy step); SSOT conversation-map update. — Engineer
