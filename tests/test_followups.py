@@ -574,12 +574,67 @@ def test_seed_cadence_is_idempotent(tenant):
     assert FollowupRule.objects.filter(tenant=tenant).count() == 7
 
 
+# --- inbound poll (window-feed) ----------------------------------------------
+
+class _FakeAdapter:
+    def __init__(self, ts_by_mobile):
+        self._ts = ts_by_mobile
+
+    def get_latest_inbound_at(self, mobile):
+        return self._ts.get(mobile)
+
+
+def test_poll_opens_window_and_enqueues_from_watchlist(enabled, monkeypatch):
+    _rule(enabled, step_key="s1")
+    set_tenant("followup_poll_watch_mobiles", MOBILE, tenant_id=enabled.id)
+    monkeypatch.setattr(tasks, "get_wati_adapter", lambda: _FakeAdapter({MOBILE: timezone.now()}))
+
+    counts = tasks.poll_inbound_windows()
+
+    assert counts["opened"] == 1 and counts["enqueued"] == 1
+    assert FollowupWindow.objects.filter(mobile=MOBILE).exists()
+    assert ScheduledFollowup.objects.filter(mobile=MOBILE).count() == 1
+
+
+def test_poll_skips_already_seen_inbound(enabled, monkeypatch):
+    _rule(enabled, step_key="s1")
+    set_tenant("followup_poll_watch_mobiles", MOBILE, tenant_id=enabled.id)
+    t0 = timezone.now()
+    monkeypatch.setattr(tasks, "get_wati_adapter", lambda: _FakeAdapter({MOBILE: t0}))
+
+    first = tasks.poll_inbound_windows()
+    second = tasks.poll_inbound_windows()  # same inbound timestamp → nothing new
+
+    assert first["opened"] == 1 and second["opened"] == 0
+    assert ScheduledFollowup.objects.filter(mobile=MOBILE).count() == 1
+
+
+def test_poll_noop_when_no_inbound(enabled, monkeypatch):
+    _rule(enabled, step_key="s1")
+    set_tenant("followup_poll_watch_mobiles", MOBILE, tenant_id=enabled.id)
+    monkeypatch.setattr(tasks, "get_wati_adapter", lambda: _FakeAdapter({}))
+
+    counts = tasks.poll_inbound_windows()
+
+    assert counts["opened"] == 0
+    assert not ScheduledFollowup.objects.filter(mobile=MOBILE).exists()
+
+
+def test_poll_refuses_when_flag_off(tenant, monkeypatch):
+    _rule(tenant, step_key="s1")  # flag NOT enabled (tenant fixture, not `enabled`)
+    set_tenant("followup_poll_watch_mobiles", MOBILE, tenant_id=tenant.id)
+    monkeypatch.setattr(tasks, "get_wati_adapter", lambda: _FakeAdapter({MOBILE: timezone.now()}))
+
+    counts = tasks.poll_inbound_windows()
+
+    assert counts["checked"] == 0  # disabled tenant skipped entirely
+    assert not FollowupWindow.objects.filter(mobile=MOBILE).exists()
+
+
 # --- schedule registration ---------------------------------------------------
 
-def test_followup_sweep_is_registered():
+def test_followup_schedules_registered():
     from apps.events.management.commands.setup_schedules import SCHEDULES
 
-    assert "followup_sweep" in SCHEDULES
-    func, minutes = SCHEDULES["followup_sweep"]
-    assert func == "apps.followups.tasks.fire_due_followups"
-    assert minutes == 5
+    assert SCHEDULES["followup_sweep"] == ("apps.followups.tasks.fire_due_followups", 5)
+    assert SCHEDULES["followup_inbound_poll"] == ("apps.followups.tasks.poll_inbound_windows", 5)
