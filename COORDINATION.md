@@ -4238,3 +4238,25 @@ real wall, pivoted to polling (owner-approved sequence).
   business → poll ≤5 min → window → 3h cadence → sweep sends (session, quiet-hours-aware).
 - **Note:** a wall-clock flake in the quiet-hours send tests was fixed on main via PR #33 (`347947a`,
   test-only) — CI green. M-FUP-1 Phase 1 + auto-trigger: COMPLETE + LIVE. — Engineer
+
+### 2026-07-25 — FROM ENGINEER — FIX+DEPLOY — M-FUP-1 owner-caught defects fixed (burst + identical copy), LIVE `6e3072d`
+
+Owner's screenshot (917972672473) showed two identical nudges at 06:03 + a third at 07:53. Diagnosed:
+(1) quiet-hours "defer to 06:00 IST" collapsed multiple night steps onto one slot → they fired
+together; (2) every cadence step shared the same body → identical/spammy.
+
+Fixed (PR #37, merged `6e3072d`, deployed to prod):
+- **Anti-burst min-gap:** the send gate HOLDs a would-be send landing within
+  `followup_min_gap_minutes` (default 90) of the contact's last SENT nudge; the sweep re-computes
+  `fire_at` via `services.compute_defer`, which satisfies BOTH quiet-hours AND the min-gap — so
+  night-deferred steps can no longer collapse into a same-minute burst.
+- **Distinct copy:** `seed_followup_cadence` assigns unique in-progress-framed copy per step
+  (STEP_BODIES); re-ran on prod → 7 rules updated. Because the send reads `rule.body_en` at fire
+  time, the already-scheduled pending rows (917767009136 ×7, 917972672473 remaining) now send DISTINCT
+  copy too.
+- Tests: min-gap defers a back-to-back send / lone send passes / distinct copy per step. CI green.
+- **Verified on prod:** 7/7 rule copies distinct; pending 917767009136 steps map to 7 different
+  messages; `_min_gap` resolves 90 min. Services restarted. `followups_enabled` still ON.
+- Note: quiet-hours send tests keep PR #33's `in_quiet_hours` monkeypatch (no wall-clock flake).
+  Lesson logged: verified DELIVERY earlier but missed the recipient-experience (burst + identical
+  copy) — delivery-status ≠ delivered-well. — Engineer
