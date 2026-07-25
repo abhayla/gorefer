@@ -4318,3 +4318,13 @@ Template: v1 pair read wrong for non-name values; submitted corrected
 `gorefer_referrer_prospect_pending_{en,hi}_2026_07_25_v2` (PENDING). v1 pair superseded —
 delete in dashboard (WATI exposes no template-delete API). Descriptor builder lands in the
 §6.1 send slice (after Meta approval). — Engineer
+
+### 2026-07-25 — GO-LIVE: recipient-identity resolver + referral link in nudges (`c050d19`) — Engineer
+Deployed PR #42 to prod (VPS 72.61.240.224, /var/www/gorefer, file-copy): recipient_identity.py
+(new) + followups/tasks.py + seed_followup_cadence.py. Re-seeded → 7 rules updated with the `{link}`
+CTA. No migration. Backup `/root/predeploy-20260725-235128`. Services restarted (gorefer +
+gorefer-qcluster active). DEPLOYED_SHA=c050d19. Verified live: rule nudge_3h has `{link}`; resolver
+imports + runs (unknown→gorefer.in/open). Live prospect nudges now carry the credit-preserving
+referral link; referrer recipients suppressed from prospect copy; language from referrer_language.
+Rollback = restore backup files + `rm apps/referrals/recipient_identity.py` + re-seed + restart.
+NOT deployed: §6.1 referrer-nudge send path (pending Meta approval of the v2 templates). — Engineer

@@ -11,7 +11,12 @@
 > wins; if either disagrees with the live system, **the live system wins** — verify, don't
 > trust (commands at the bottom).
 >
-> **Last updated:** 2026-07-25 (M-FUP-1 auto-trigger LIVE via polling `f0fa385` — scheduled
+> **Last updated:** 2026-07-25 (recipient-identity resolver LIVE, `c050d19` — PR #42; prospect
+> nudges now carry the credit-preserving referral link `gorefer.in/r/wa/{referrer_client_id}` (or
+> `/open` fallback), referrer recipients suppressed from the prospect copy, language from the
+> existing `referrer_language` rule; re-seeded 7 rules with the `{link}` CTA; resolve-on-send, no
+> migration; verified live. Referrer-nudge §6.1 slice pending Meta approval of
+> `gorefer_referrer_prospect_pending_{en,hi}_..._v2`.) — earlier same day M-FUP-1 auto-trigger LIVE via polling `f0fa385` — scheduled
 > `followup_inbound_poll` opens windows + enqueues cadences autonomously, verified on 917767009136)
 > — earlier 2026-07-24 (main CI RESTORED GREEN, `347947a` — PR #33, test-only fix for a
 > quiet-hours wall-clock flake in `tests/test_followups.py`; no production code changed, nothing
@@ -23,7 +28,7 @@
 
 | Fact | Value |
 |---|---|
-| Deployed SHA | `f7f8656` (M-WATI-1 one-tap `/share` LIVE 2026-07-24 — `ENABLE_SHARE_INTENT=true`; deployed over `da060a5`, no migrations/deps/static). Prior `da060a5` (PRs #26+#27 — lead-history honesty: 'Lead captured (since removed)' resolution vs live Lead rows; synthetic-traffic class (GoLiveSmoke/curl) excluded from ALL counts; live-verified EKU497 2/0/2/0, DA1707 39/12/1/0) |
+| Deployed SHA | `c050d19` (recipient-identity resolver + referral link in nudges, PR #42, LIVE 2026-07-25 — file-copy of `recipient_identity.py` + `followups/tasks.py` + `seed_followup_cadence.py`, re-seeded 7 rules with `{link}`, no migration; backup `/root/predeploy-20260725-235128`). Prior `6e3072d` (M-FUP-1 burst+copy fix), `bbc32c8` (M-FUP-1 engine), `f7f8656` (M-WATI-1 `/share`) |
 | Host | Hostinger VPS `72.61.240.224`, Cloudflare-proxied, gunicorn + qcluster (`Q_ASYNC=true`) |
 | DB | `gorefer_prod` (Postgres) — migration `accounts.0001` applied |
 
