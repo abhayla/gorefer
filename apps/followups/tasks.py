@@ -166,6 +166,71 @@ def _apply(sf: ScheduledFollowup, decision: str, reason: str, now, counts: dict)
     sf.save(update_fields=["status", "sent_at", "reason", "updated_at"])
 
 
+def poll_inbound_windows(limit: int = 50) -> dict:
+    """Poll Wati for known prospects' recent inbounds → open windows / start cadences.
+
+    The reliable window-feed trigger (Wati's inbound webhook is chatbot-suppressed and its
+    real-time conversation-list API isn't exposed). Because a follow-up can only be SENT to a
+    prospect whose mobile we already know, the candidate set is bounded and knowable:
+      - a per-AP config watch-list (`followup_poll_watch_mobiles`, comma-separated), plus
+      - recent Prospect mobiles (last 3 days).
+    For each, read the newest customer-inbound time (adapter.get_latest_inbound_at, the
+    confirmed real-time getMessages endpoint); if it's newer than what we've recorded, call
+    record_inbound → stamp the window + (on a fresh 24h open) enqueue the cadence. Runs on the
+    `followup_inbound_poll` schedule. Inert unless `followups_enabled` (record_inbound re-checks).
+    """
+    from datetime import timedelta
+
+    from apps.common.phone import normalize_phone
+    from apps.config.cascade import resolve
+    from apps.integrations.wati.webhook import record_inbound
+    from apps.referrals.models import Prospect
+    from apps.tenants.models import Tenant
+
+    from .models import FollowupWindow
+
+    counts = {"checked": 0, "opened": 0, "enqueued": 0}
+    for tenant in Tenant.objects.filter(is_active=True):
+        if not services.followups_enabled(tenant.id):
+            continue
+        adapter = get_wati_adapter()
+        mobiles: set[str] = set()
+        try:
+            raw = resolve("followup_poll_watch_mobiles", tenant_id=tenant.id, default="")
+        except Exception:
+            raw = ""
+        for m in str(raw or "").split(","):
+            n = normalize_phone(m)
+            if n:
+                mobiles.add(n)
+        cutoff = timezone.now() - timedelta(days=3)
+        for m in (
+            Prospect.objects.filter(tenant=tenant, created_at__gte=cutoff, deleted_at__isnull=True)
+            .values_list("mobile", flat=True)[:limit]
+        ):
+            n = normalize_phone(m)
+            if n:
+                mobiles.add(n)
+
+        for mobile in list(mobiles)[:limit]:
+            counts["checked"] += 1
+            try:
+                latest = adapter.get_latest_inbound_at(mobile)
+            except Exception:
+                logger.warning("poll: get_latest_inbound_at failed", exc_info=True)
+                continue
+            if latest is None:
+                continue
+            win = FollowupWindow.objects.filter(tenant=tenant, mobile=mobile).first()
+            if win is not None and win.last_inbound_at is not None and latest <= win.last_inbound_at:
+                continue  # already recorded this inbound — nothing new
+            res = record_inbound(tenant, mobile, latest)
+            if res.get("opened_fresh"):
+                counts["opened"] += 1
+            counts["enqueued"] += res.get("enqueued", 0)
+    return counts
+
+
 def _emit_funnel_event(sf: ScheduledFollowup, decision: str) -> None:
     """Emit a PII-free funnel event so a follow-up send is observable (Constitution §5).
 
