@@ -4210,3 +4210,31 @@ Fleet task T-026: main's `Tests (pytest)` job went red on run 30115641685 (the P
   enforce it — DoD respected manually). `main` is now at `347947a`, CI green.
 - Nothing deployed/redeployed — this was a test-suite fix only; prod state (M-FUP-1 live,
   `followups_enabled=True`, `bbc32c8` deployed) is unaffected. — Engineer
+
+### 2026-07-25 — FROM ENGINEER — GO-LIVE — M-FUP-1 auto-trigger LIVE via POLLING (webhook was chatbot-suppressed)
+
+Owner asked to make the 3h cadence auto-trigger for prospects. Chased the Wati webhook first, hit a
+real wall, pivoted to polling (owner-approved sequence).
+
+- **Webhook finding (why not webhook):** Wati's only inbound event, "New Contact Message", does NOT
+  fire when the account chatbot ("Welcome to PIFS!") auto-replies to the inbound (verified: owner's
+  08:14 IST test fired READ receipts to firekaro but NO "New Contact Message" to anyone). No
+  "Message Received" (fire-on-every-inbound) event is offered in this Wati version. The flow-HTTP-node
+  workaround needs an HTTP-node format not in our notes + a structural edit to a live flow that broke
+  once before — too risky, and the flow-builder wasn't drivable by automation this session. Wati caps
+  Growth at 2 webhooks (firekaro + a now-removed Zoho slot). Webhook path abandoned.
+- **Polling (the fix, deployed `f0fa385`):** since a follow-up can only be SENT to a prospect whose
+  mobile we know, the candidate set is bounded → `LiveWatiAdapter.get_latest_inbound_at(mobile)` reads
+  the newest customer-inbound from `getMessages/{number}`; `poll_inbound_windows` (schedule
+  `followup_inbound_poll`, every 5 min) checks a per-AP watch-list (`followup_poll_watch_mobiles`) +
+  recent Prospect mobiles, and on a new inbound calls `record_inbound` → window opens + cadence
+  enqueues. `?token=` webhook auth (#34) + `/api/wati/inbound` stay wired as a harmless bonus.
+- **Deployed:** merged #34 (`?token=`) + #35 (polling); `f0fa385` on prod (adapter/tasks/setup_schedules),
+  `followup_inbound_poll` registered, watch-list = `917767009136,917972672473`, qcluster restarted.
+- **VERIFIED AUTONOMOUS:** the scheduled poll opened **917767009136**'s window (from its "Hi" at
+  02:44Z) and enqueued the **7-step cadence** (nudge_3h…nudge_21h, source `wati_inbound`) with ZERO
+  manual action; a manual re-run returned opened:0 (idempotent). Night steps (nudge_15h/18h/21h →
+  23:14/02:14/05:14 IST) will auto-defer to 06:00 IST (quiet hours). Full loop live: prospect messages
+  business → poll ≤5 min → window → 3h cadence → sweep sends (session, quiet-hours-aware).
+- **Note:** a wall-clock flake in the quiet-hours send tests was fixed on main via PR #33 (`347947a`,
+  test-only) — CI green. M-FUP-1 Phase 1 + auto-trigger: COMPLETE + LIVE. — Engineer

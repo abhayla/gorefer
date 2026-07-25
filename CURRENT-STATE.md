@@ -11,7 +11,9 @@
 > wins; if either disagrees with the live system, **the live system wins** — verify, don't
 > trust (commands at the bottom).
 >
-> **Last updated:** 2026-07-24 (main CI RESTORED GREEN, `347947a` — PR #33, test-only fix for a
+> **Last updated:** 2026-07-25 (M-FUP-1 auto-trigger LIVE via polling `f0fa385` — scheduled
+> `followup_inbound_poll` opens windows + enqueues cadences autonomously, verified on 917767009136)
+> — earlier 2026-07-24 (main CI RESTORED GREEN, `347947a` — PR #33, test-only fix for a
 > quiet-hours wall-clock flake in `tests/test_followups.py`; no production code changed, nothing
 > redeployed) — same day M-FUP-1 follow-up engine deployed + LIVE on prod, `bbc32c8`,
 > `followups_enabled=True`, live session nudge DELIVERED+READ; earlier same day M-WATI-1 `/share`
@@ -72,10 +74,16 @@ template: v3 `gr_platform_gorefer_funnel_report_en_2026_07_21` **PENDING at Meta
   opened → `record_inbound` enqueued the 7-step cadence → the sweep sent a session nudge →
   **DELIVERED + READ** (terminal-verified) on 917972672473. Quiet hours 23:00–06:00 IST enforced
   (night steps auto-defer to 06:00 IST). Session endpoint CONFIRMED (`/api/v1/sendSessionMessage`).
-  Tenant-scoped only (doc-13 §5, NO PartnerGroup). **Remaining for full autonomy on OTHER prospects:**
-  wire Wati inbound-message webhook → `POST /api/wati/inbound` (header `X-Wati-Webhook-Key`), or a
-  polling window-feed — until then a window/cadence is opened by the inbound webhook or a manual
-  `record_inbound`. See COORDINATION 2026-07-24 GO-LIVE.
+  Tenant-scoped only (doc-13 §5, NO PartnerGroup).
+  **AUTO-TRIGGER now LIVE via POLLING** (2026-07-25, `f0fa385`): the Wati inbound webhook is
+  chatbot-suppressed ("New Contact Message" doesn't fire when the Welcome flow auto-replies; no
+  "Message Received" event exists), so windows are opened by `followup_inbound_poll` (every 5 min →
+  `poll_inbound_windows`): it reads `getMessages` for a per-AP watch-list (`followup_poll_watch_mobiles`,
+  set to the test numbers) + recent Prospect mobiles, and on a new inbound calls `record_inbound` →
+  window opens + cadence enqueues. **Verified autonomous:** the scheduled poll opened 917767009136's
+  window (from its "Hi") and enqueued the 7-step cadence with ZERO manual action; idempotent on re-run.
+  The `?token=`-authed `/api/wati/inbound` webhook stays wired (harmless bonus). Full loop live:
+  prospect messages business → poll (≤5 min) → window → 3h cadence → sweep sends (session, quiet-hours).
 - **M-WATI-1 (one-tap `/share/{channel}/{client_id}` endpoint) is LIVE** (2026-07-24, owner "make it
   live now"): PR #28 merged (`f7f8656`); the 6 code files deployed to prod (file-copy, backup
   `.predeploy-backup-20260724-150205`), `ENABLE_SHARE_INTENT=true` in prod `.env`, both services
