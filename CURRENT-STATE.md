@@ -28,7 +28,7 @@
 
 | Fact | Value |
 |---|---|
-| Deployed SHA | `dd165c6` (§6.1 referrer-nudge code, PR #46, deployed INERT 2026-07-25 — `followup_referrer_nudge_on` default FALSE; file-copy of `recipient_identity.py` + `followups/tasks.py`, backup `/root/predeploy-20260726-001529`, no migration). **§6.1 NOT yet activated:** the referrer-nudge template must be POSITIONAL (adapter remaps params to `{{1}}/{{2}}`); v2 was named→400, resubmitted `gorefer_referrer_prospect_pending_{en,hi}_2026_07_25_v3` (PENDING Meta). Activation = v3 approved → test send → flip `followup_referrer_nudge_on` true. Prior `c050d19` (recipient-identity resolver + referral link in nudges, PR #42, LIVE — nudges carry `/r/wa/{referrer}` or `/open`), `6e3072d`/`bbc32c8` (M-FUP-1), `f7f8656` (M-WATI-1 `/share`) |
+| Deployed SHA | `7870052` (§6.1 referrer-nudge **LIVE + ACTIVATED** 2026-07-26 — PRs #46+#47; `followup_referrer_nudge_on=True` (tenant pifs), step `nudge_12h`, template `gorefer_referrer_prospect_pending_en_2026_07_25_v3` (POSITIONAL, Meta-APPROVED, live-test send accepted to 917972672473). Nudges an idle prospect's referrer — only when the referrer's phone is a known `Customer`; capped one/step; name→generic descriptor. Prior `c050d19` (recipient-identity resolver + referral link in prospect nudges, PR #42, LIVE — `/r/wa/{referrer}` or `/open`), `6e3072d`/`bbc32c8` (M-FUP-1), `f7f8656` (M-WATI-1 `/share`) |
 | Host | Hostinger VPS `72.61.240.224`, Cloudflare-proxied, gunicorn + qcluster (`Q_ASYNC=true`) |
 | DB | `gorefer_prod` (Postgres) — migration `accounts.0001` applied |
 
