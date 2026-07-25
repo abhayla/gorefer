@@ -315,7 +315,7 @@ def _maybe_referrer_nudge(sf: ScheduledFollowup, identity, counts: dict) -> None
             resolve(
                 f"followup_referrer_nudge_template_{lang}",
                 tenant_id=tid,
-                default=f"gorefer_referrer_prospect_pending_{lang}_2026_07_25_v2",
+                default=f"gorefer_referrer_prospect_pending_{lang}_2026_07_25_v3",
             )
         ).strip()
 
