@@ -288,7 +288,7 @@ def _maybe_referrer_nudge(sf: ScheduledFollowup, identity, counts: dict) -> None
     """
     from apps.config.cascade import resolve
     from apps.referrals.models import Customer
-    from apps.referrals.recipient_identity import prospect_descriptor
+    from apps.referrals.recipient_identity import nudge_link_for, prospect_descriptor
 
     tid = sf.tenant_id
     try:
@@ -311,11 +311,26 @@ def _maybe_referrer_nudge(sf: ScheduledFollowup, identity, counts: dict) -> None
         ref_name = (f"{cust.first_name} {cust.last_name}".strip() if cust else "") or "there"
         descr = prospect_descriptor(sf.tenant, sf.mobile)
         lang = identity.lang or "en"
+
+        # The link comes from `nudge_link_for` — the ONE canonical builder — never from the
+        # template body. The body used to hardcode `gorefer.in/r/{{3}}?s=wa`, i.e. the legacy
+        # M11 query form, while the canonical form is the channel PATH `/r/wa/{client_id}`
+        # (B1 / Q-M-CHANNELPATH). `?s=` exists only because a WhatsApp URL *button* requires
+        # its variable LAST so nothing can follow it — a constraint that does not apply to a
+        # message BODY. Passing the whole link as one variable means a template can never
+        # again disagree with the builder about URL shape.
+        link = nudge_link_for(identity, tenant_id=tid)
+        if not link:
+            # link_mode="none" — the operator has switched embedded links off. A nudge whose
+            # entire point is "share your link again" is meaningless without one, and a blank
+            # template variable is rejected by Meta, so skip rather than send something broken.
+            return
+
         tmpl = str(
             resolve(
                 f"followup_referrer_nudge_template_{lang}",
                 tenant_id=tid,
-                default=f"gorefer_referrer_prospect_pending_{lang}_2026_07_25_v3",
+                default=f"gorefer_referrer_prospect_pending_{lang}_2026_07_26_v5",
             )
         ).strip()
 
@@ -327,7 +342,8 @@ def _maybe_referrer_nudge(sf: ScheduledFollowup, identity, counts: dict) -> None
                 "template_params": [
                     {"name": "name", "value": ref_name},
                     {"name": "prospect", "value": descr},
-                    {"name": "client_id", "value": identity.referrer_client_id},
+                    # position 3 is the FULL link (v5+), not a bare client_id (v3/v4)
+                    {"name": "link", "value": link},
                 ]
             },
         )
