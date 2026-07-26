@@ -56,12 +56,12 @@
       `gorefer_referrer_prospect_pending_en_2026_07_25` (v2/v3/v4/v5 supersede it). NOTE: Wati
       DELETE returns `ok:true` but Meta keeps the language content (`2388024`), so the name
       cannot be reused afterwards.
-- [ ] **Sync prod's `tests/` tree** — prod is missing **4** files (`test_followups.py`,
-      `test_m_wati1_share_intent.py`, `test_recipient_identity.py`, `urls_share_intent.py` —
-      the review found the earlier "3 files" count wrong). Prod correctness isn't affected,
-      but anyone testing on the host gets a false green.
-- [ ] **Fix `CURRENT-STATE.md` staleness** — it says the funnel-report template is PENDING at
-      Meta; the live inventory says APPROVED.
+- [x] **Sync prod's `tests/` tree** — DONE 2026-07-26 (review session): 4 files copied
+      (`test_followups.py`, `test_m_wati1_share_intent.py`, `test_recipient_identity.py`,
+      `urls_share_intent.py` — the earlier "3 files" count was wrong), prod now 48/48 vs repo.
+- [x] **Fix `CURRENT-STATE.md` staleness** — DONE 2026-07-26 (review session): funnel-report
+      line corrected to APPROVED (verified vs live inventory); deployed-SHA row rewritten to
+      `324a1b8` (PR #52); OTP P0 recorded on the `ENABLE_OTP_LOGIN` row.
 - [ ] **Landing page + capture form (Phase 11).** Needs a temporary `set_landing_mode page`
       flip (revert after). Only way to exercise the JS beacon / confirmed-human click.
 - [ ] **Hindi, DPDP, rollups, cross-tenant (Phase 12).** `pref_lang='hi'` end-to-end; PII out of

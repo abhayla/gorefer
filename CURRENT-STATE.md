@@ -28,7 +28,7 @@
 
 | Fact | Value |
 |---|---|
-| Deployed SHA | `7870052` (§6.1 referrer-nudge **LIVE + ACTIVATED** 2026-07-26 — PRs #46+#47; `followup_referrer_nudge_on=True` (tenant pifs), step `nudge_12h`, template `gorefer_referrer_prospect_pending_en_2026_07_25_v3` (POSITIONAL, Meta-APPROVED, live-test send accepted to 917972672473). Nudges an idle prospect's referrer — only when the referrer's phone is a known `Customer`; capped one/step; name→generic descriptor. Prior `c050d19` (recipient-identity resolver + referral link in prospect nudges, PR #42, LIVE — `/r/wa/{referrer}` or `/open`), `6e3072d`/`bbc32c8` (M-FUP-1), `f7f8656` (M-WATI-1 `/share`) |
+| Deployed SHA | **`324a1b8`** (PR #52 merged + deployed 2026-07-26 ~14:35 IST — E2E-session fixes: `4ab05b8` `first_click_at` stamping (16 rows backfilled), `8219e6d` §6.1 nudge link → canonical `/r/wa/{id}` via `nudge_link_for()` with **v5 templates** (`gorefer_referrer_prospect_pending_{en,hi}_2026_07_26_v5`, APPROVED; Meta kept MARKETING), `55f1886` review reconciliation (observable `link_mode=none` skip + drift fixes). Config rows changed same day (ConfigGlobal, tenant 1): `otp_whatsapp_template` → `gr_platform_gorefer_login_otp_en_2026_07_21` (**P0 fix** — old value `gorefer_login_otp` never existed at Meta), `followup_referrer_nudge_template_{en,hi}` → v5. `tests/` tree synced to repo (48 files). Verify-live: files hash-match `main`; suite 596/0 in CI-parity env. Prior: `7870052` (§6.1 nudge LIVE+ACTIVATED — PRs #46+#47; `followup_referrer_nudge_on=True` (tenant pifs), step `nudge_12h`. Nudges an idle prospect's referrer — only when the referrer's phone is a known `Customer`; capped one/step; name→generic descriptor. Prior `c050d19` (recipient-identity resolver + referral link in prospect nudges, PR #42, LIVE — `/r/wa/{referrer}` or `/open`), `6e3072d`/`bbc32c8` (M-FUP-1), `f7f8656` (M-WATI-1 `/share`) |
 | Host | Hostinger VPS `72.61.240.224`, Cloudflare-proxied, gunicorn + qcluster (`Q_ASYNC=true`) |
 | DB | `gorefer_prod` (Postgres) — migration `accounts.0001` applied |
 
@@ -41,7 +41,7 @@
 | `ENABLE_ZOHO_READ` | **ON** | Settings override ~17-Jul |
 | `ENABLE_ZOHO_WEBHOOK_HMAC` | **ON** | 18-Jul; Deluge signer pasted + workflow rule active in Zoho; seal proven end-to-end |
 | `ENABLE_CUSTOMER_LOGIN` | **ON** | 21-Jul (M13 go-live, owner "go"): prod `.env` true. `/login/` live (Google OAuth primary + OTP fallback), `/my/referrals` live, admin Verifications queue live |
-| `ENABLE_OTP_LOGIN` | **ON** | 21-Jul: AUTH template `gr_platform_gorefer_login_otp_en_2026_07_21` APPROVED by Meta + live-verified DELIVERED (`waTemplateId 27564734539863645`) |
+| `ENABLE_OTP_LOGIN` | **ON** | 21-Jul: AUTH template `gr_platform_gorefer_login_otp_en_2026_07_21` APPROVED + delivery-verified. **26-Jul P0 found+fixed:** prod config `otp_whatsapp_template` had been set to `gorefer_login_otp` — a name that NEVER existed at Meta — so every WhatsApp OTP got HTTP 400 and silently degraded to the `manual` channel while this flag read ON. Config corrected to the real template; re-probed `accepted=True`, real OTP delivered. Lesson codified in CLAUDE.md §6c |
 
 The prod `.env` lines say `false` for the three integration flags — those are **overridden
 defaults**; the truth is the ConfigGlobal override read through `resolve_flag()`. Never read
@@ -58,8 +58,8 @@ same evening). Zoho Variable `gorefer_webhook_secret` exists and matches prod.
 Three-sided (Zoho supposed-to-send ⋈ Wati delivered ⋈ GoRefer funnel), scheduled 21:30 IST
 (`Wati-DailyDeliveryReport` task; engine `5Wealths\Wati-Project\daily_report.py`).
 `GOREFER_ZOHO_INGEST_LIVE=true` — accounts-opened line shows real numbers. WhatsApp summary
-template: v3 `gr_platform_gorefer_funnel_report_en_2026_07_21` **PENDING at Meta**
-(auto-cutover v3→v2→v1 on approval).
+template: v3 `gr_platform_gorefer_funnel_report_en_2026_07_21` **APPROVED at Meta**
+(verified against the live inventory 2026-07-26; the earlier "PENDING" here was stale).
 
 ## In flight
 

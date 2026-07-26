@@ -4347,3 +4347,33 @@ step nudge_12h, template ..._v3). §6.1 LIVE: idle prospect at nudge_12h → als
 referrer IF their phone is a known Customer (never guess), capped one/step, name→generic descriptor.
 DEPLOYED_SHA=7870052. SSOT map updated + republished. ALL pending items complete except cosmetic
 dashboard delete of superseded template drafts (v1/v2). — Engineer
+
+### 2026-07-26 — Independent review of the E2E session: verified, reconciled, PR #52 MERGED + deployed (`324a1b8`) — Engineer (review session)
+
+**STATUS.** An independent reviewer session adversarially reviewed the 2026-07-26 E2E work
+(brief: `docs/integrations/REVIEW-BRIEF-E2E-Testing-2026-07-26.md`). Headline claims all
+reproduced: suite **596/0** from repo HEAD in CI-parity env (VPS, twice — before and after the
+reconciliation commit); prod probes match (`first_click_at` 17/18, the null is the zero-click
+`zoho_import` row; flags ON via DB override; OTP + v5 nudge config correct and APPROVED at Meta).
+
+**Top findings, all fixed this turn:**
+1. Prod ran code that existed on no merged branch and `DEPLOYED_SHA` still said `7870052` →
+   **PR #52 opened, CI green, merged; prod redeployed from `main`; `DEPLOYED_SHA=324a1b8`;
+   services restarted; health 200; files hash-match `main`.**
+2. CURRENT-STATE.md + this log had not been updated for the session's prod changes (OTP P0,
+   two deploys, three ConfigGlobal rows) → both updated now.
+3. The session's own anti-drift artifacts had drifted: manifest said v5 EN PENDING/UTILITY while
+   Meta says APPROVED/MARKETING; the coverage matrix lacked v4/v4b/v5 entirely → reconciled
+   (`55f1886`), plus an explicit matrix SCOPE RULE (26 non-GoRefer live templates on the shared
+   tenant were silently out of scope).
+4. Loop hardening: attempt budget (3 → BLOCKED) + sends-not-idempotent rail; prereq markers
+   expire after 7 days; `link_mode=none` nudge skip now observable (counter + log).
+5. Prod `tests/` synced (44→48 files — the gap was 4 files, not 3: `urls_share_intent.py`).
+
+**QUESTIONs for the DA/owner (also in E2E-TEST-QUEUE BLOCKED):** legacy `zerodha_*` referral
+broadcasts on the shared tenant are a Zerodha-AP compliance surface nobody owns — re-verify or
+delete; §6c SSOT governance — recommend a git-tracked card manifest that GENERATES the HTML map
+(artifact stays the owner view, git becomes the diffable truth); plus the standing four
+(`/open` path, M11 OG vs bot 302, 9 unwired templates, junk `TALK`/`ZMPHZC` identities).
+
+**Cleanup note:** review probes created throwaway prod identity `REVW2607` (one click event).
