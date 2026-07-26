@@ -243,3 +243,57 @@ Unchanged: the `Conversion` row is still tombstoned rather than deleted (audit r
 
 Guardrail 2 is respected: this write happens inside `apps/integrations/zoho/ingest.py`, the sole
 Zoho-sourced path permitted to change account/conversion status.
+
+## Conversion reconciler — the webhook is no longer the only delivery path (P0, 2026-07-26)
+
+**What went wrong.** For a month the webhook delivered **nothing**, and nobody could tell.
+Two independent causes:
+
+1. **Wrong module.** The ingest is built around Zoho **Leads** (`zoho_lead_id`; and
+   `followups.services.has_converted` reads `Lead.status`) — but a Zoho lead that converts
+   **becomes a Contact**. The account-opened event never occurs in the module anything watched, so
+   the workflow rule never fired and `POST /api/zoho/status-webhook` was never called. Evidence:
+   0 Zoho-originated POSTs across 14 days of continuous nginx logs; all 17 were internal tooling.
+2. **Nothing reconciled.** Without a sweep, *"no conversions arrived"* and *"no conversions
+   happened"* are indistinguishable. Six real openings — three referred — sat uncredited while the
+   dashboard and the 21:30 report both reported `accounts_opened: 0`.
+
+**What now exists.** `apps/integrations/zoho/reconcile.py` +
+`manage.py reconcile_conversions`, registered as the scheduled task `zoho_reconcile_conversions`
+(every 15 min). It polls Zoho Contacts and ingests anything GoRefer is missing.
+
+**It does not replace the webhook — it makes webhook delivery non-critical.** A missed, failed or
+mis-triggered webhook self-heals on the next sweep. That property is worth more than fixing the
+trigger alone, because the trigger can silently break again.
+
+**Field map (Zoho `Contacts` → ingest payload):**
+
+| Ingest field | Zoho Contacts field |
+|---|---|
+| `opener_zerodha_account_id` | `ClientId` |
+| `referrer_client_id` | `Referrer_Client_Id` — blank stays blank, credit NOBODY |
+| `account_opened_at` | `Account_Opened_On` (the TRUE date, ADR-017) |
+| `status` | `Account_Status` (null in practice; ingest defaults to account-opened) |
+| `opener_name` | `Full_Name` |
+
+**Endpoint choice is deliberate: `/crm/v8/Contacts/search`, NOT COQL.** The live refresh token has
+no COQL scope — `/crm/v8/coql` returns `OAUTH_SCOPE_MISMATCH`. Using COQL would require the owner to
+re-authorise Zoho before conversions could flow again. Search is the same endpoint `read.py` already
+uses in production, so it needs no new permission. Results are paginated (200/page, hard stop at 20
+pages); processing only the first page would look like success while dropping conversions.
+
+**The account-pattern filter is load-bearing, not cosmetic.** The same Contacts module holds
+non-Zerodha accounts — `AACK095261` (AngelOne) sits beside the Zerodha rows. Without
+`zoho_reconcile_account_pattern` (default `^[A-Z]{2,3}[0-9]{3,4}$`) the sweep would invent PIFS
+conversions for another broker's customers and credit PIFS referrers for accounts PIFS never opened.
+
+**Guardrail 2 intact:** the reconciler only READS Zoho and hands each row to
+`ingest.ingest_conversion`, the sole sanctioned writer of conversion/account status. It never sets
+status itself and never infers a conversion Zoho does not assert.
+
+**Config keys** (per `CLAUDE.md` §6d — behaviour is configuration): `zoho_reconcile_enabled`,
+`zoho_reconcile_since`, `zoho_reconcile_account_pattern`.
+
+**Idempotent** on `event_id` (`reconcile:<contactId>:<openedOn>`) via `ZohoSyncIdempotency`, so the
+15-minute sweep is safe forever. Verified live: a second run re-processed the same 6 rows and the
+conversion count did not change.
