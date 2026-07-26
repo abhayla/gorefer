@@ -23,6 +23,12 @@
 - Never test in `/var/www/gorefer` — sync to `/tmp/glocal` and use the CI-parity env.
 - Deleting Meta templates or prod rows, and any spec decision, goes to **BLOCKED**.
 - Append a STATUS line to `COORDINATION.md` each iteration.
+- **Attempt budget (anti-wedge):** an item that fails **3 attempts** moves to BLOCKED with the
+  evidence of each attempt — the loop always takes the FIRST `[ ]` item, so without this rule one
+  persistently-failing item wedges the entire queue (independent review finding, 2026-07-26).
+  Mark attempts inline: `(attempt 2/3: <what failed>)`.
+- **Sends are not idempotent:** re-running a send item re-messages real numbers. Before retrying
+  any item that already sent something, check what actually went out (Wati `getMessages`) first.
 
 ## READY
 
@@ -50,8 +56,9 @@
       `gorefer_referrer_prospect_pending_en_2026_07_25` (v2/v3/v4/v5 supersede it). NOTE: Wati
       DELETE returns `ok:true` but Meta keeps the language content (`2388024`), so the name
       cannot be reused afterwards.
-- [ ] **Sync prod's `tests/` tree** — prod has 41 files, repo has 44 (missing `test_followups`,
-      `test_m_wati1_share_intent`, `test_recipient_identity`). Prod correctness isn't affected,
+- [ ] **Sync prod's `tests/` tree** — prod is missing **4** files (`test_followups.py`,
+      `test_m_wati1_share_intent.py`, `test_recipient_identity.py`, `urls_share_intent.py` —
+      the review found the earlier "3 files" count wrong). Prod correctness isn't affected,
       but anyone testing on the host gets a false green.
 - [ ] **Fix `CURRENT-STATE.md` staleness** — it says the funnel-report template is PENDING at
       Meta; the live inventory says APPROVED.
