@@ -400,6 +400,38 @@ def test_login_surfaces_carry_no_partner_code_or_zerodha_url(
 
 
 @pytest.mark.urls("tests.urls_m13")
+def test_my_referrals_with_activity_carries_no_partner_code(
+    client, admin_client, seeded, onfile_customer, otp_on
+):
+    """Guardrail #3 on the LOGGED-IN self view — the surface the test above missed.
+
+    Found live on prod 2026-07-26 (during D8): `/my/referrals` rendered PIFS's Zerodha
+    partner code `ZMPHZC` as a badge on the "Referral links" card, because the self
+    view and the admin Referral Profile share one template (ADR-026) and it renders
+    `{{ card.partner_code }}`.
+
+    Two reasons the existing coverage did not catch it, both reproduced here:
+      1. the guardrail-3 test above only visits ANONYMOUS login surfaces;
+      2. `per_link_cards` returns [] with no activity, so even visiting /my/referrals
+         while logged in renders NO card — a click is REQUIRED to expose the badge.
+    So this test drives a real click first, then asserts the card is actually on the
+    page (otherwise it would pass vacuously) before asserting the code is absent.
+    """
+    client.get(f"/r/{CID}", **HUMAN)
+    _login_via_otp(client, seeded)
+
+    html = client.get("/my/referrals").content.decode()
+    # The card must be RENDERED — otherwise the assertion below proves nothing.
+    assert "Referral links" in html and "Zerodha" in html
+    assert "ZMPHZC" not in html, "partner code leaked into the referrer self view"
+    assert "signup.zerodha.com" not in html
+
+    # The ADMIN screen is not client-facing and keeps the full detail (ADR-026).
+    admin = admin_client.get(f"/admin-panel/referrer/{CID}/").content.decode()
+    assert "ZMPHZC" in admin, "admin profile must still show the partner code"
+
+
+@pytest.mark.urls("tests.urls_m13")
 def test_my_referrals_works_with_zero_activity(client, seeded, onfile_customer, otp_on):
     """A just-bound referrer with no clicks sees their link, not an error."""
     _login_via_otp(client, seeded)

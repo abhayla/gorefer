@@ -68,7 +68,8 @@
       <div class="rounded-2xl bg-white border border-line card px-4 py-3 min-w-[240px]">
         <div class="flex items-center justify-between">
           <span class="font-bold text-ink-900 text-[13px]">{{ card.partner_name }}</span>
-          <span class="font-mono text-[10px] text-cobalt-600 bg-cobalt-50 rounded-full px-2 py-0.5">{{ card.partner_code }}</span>
+          {# Blank on the self-view: selfview.py strips the code at DATA level (guardrail 3). #}
+          {% if card.partner_code %}<span class="font-mono text-[10px] text-cobalt-600 bg-cobalt-50 rounded-full px-2 py-0.5">{{ card.partner_code }}</span>{% endif %}
         </div>
         <div class="font-mono text-[11px] text-ink-500 mt-1.5">{{ card.link }}</div>
         <div class="flex gap-4 mt-2.5 text-[11px]">
