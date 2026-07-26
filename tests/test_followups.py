@@ -858,6 +858,9 @@ def test_referrer_nudge_skipped_when_link_mode_none(enabled, monkeypatch):
     counts = tasks.fire_due_followups()
     assert counts.get("referrer_nudged", 0) == 0
     assert len(rec.templates) == 0
+    # The skip must be OBSERVABLE, not silent — an operator reading the sweep tally can
+    # tell "nudge suppressed because link_mode=none" apart from "nudge never attempted".
+    assert counts.get("referrer_nudge_skipped_no_link", 0) == 1
 
 
 def test_referrer_nudge_off_by_default(enabled, monkeypatch):
