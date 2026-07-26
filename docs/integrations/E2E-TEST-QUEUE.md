@@ -11,7 +11,7 @@
 > **Stop condition for the loop:** READY is empty. Then post the summary and end the loop.
 > Items that need Abhay move to BLOCKED — never guess, never stall the whole queue on one.
 >
-> **Last updated:** 2026-07-26
+> **Last updated:** 2026-07-26 (Phase 5 complete)
 
 ## Rails (apply to every iteration)
 
@@ -32,12 +32,7 @@
 
 ## READY
 
-- [ ] **Zoho conversion webhook (Phase 5) — highest value.** `POST /api/zoho/status-webhook`
-      with a valid HMAC seal (`ZOHO_WEBHOOK_HMAC_SECRET`): conversion ingests, true Zoho
-      opening date stored distinct from sync date (ADR-017), referrer credited by client_id,
-      single-winner, no-referrer ⇒ credit nobody. Tampered/missing/replayed seal ⇒ rejected
-      (replay must fail on the nonce). **Guardrail 2:** attempt an internal status write and
-      assert refusal. Writes one real conversion — record its id for cleanup.
+- [x] **Zoho conversion webhook (Phase 5) — DONE 2026-07-26, all green.** See DONE section.
 - [ ] **Follow-up engine remaining gates (Phase 6).** Quiet-hours deferral (see a real
       deferral, not just the gate), 90-min anti-burst, distinct per-step copy, converted-
       suppression, window-closed ⇒ `skipped` not `failed`.
@@ -85,11 +80,42 @@
 - [ ] **M11 OG preview vs bot 302.** Crawlers get a 302 to Zerodha, so WhatsApp would render
       *Zerodha's* card, not PIFS's — yet M11 claims forwarded links render a PIFS card.
       Contradiction to resolve.
+- [ ] **SECURITY: the Zoho webhook IP allowlist is effectively DISABLED in production.**
+      `ZOHO_WEBHOOK_IP_ALLOWLIST=''` and `WEBHOOK_REQUIRE_IP_ALLOWLIST=False` with `DEBUG=False`,
+      so `_ip_allowed()` falls through to allow-any. The code's own comment says an empty allowlist
+      in production is meant to fail closed, and `CURRENT-STATE` describes the posture as
+      "HMAC + the same IP allowlist" — neither is true today. **Impact: defence-in-depth is one
+      layer, not two.** Forgery still needs the HMAC secret (verified: I could not forge without
+      it), so this is not an open door — but a leaked secret would have nothing behind it.
+      **Not fixed unilaterally:** populating the allowlist with the wrong IPs would silently stop
+      real conversion ingestion. Needs Zoho's current outbound IP ranges from the owner, then set
+      both settings together and re-verify a live conversion arrives.
 - [ ] **Meta quality restriction on `917972672473`.** Diagnosed as per-recipient (v4 failed
       there while succeeding on the other number), not copy-related. Recovery is Meta-side
       ("retry in a few days") plus lowering marketing volume — not a code fix.
 
 ## DONE
+
+- [x] **Phase 5 — Zoho conversion ingest, verified live end to end (2026-07-26).**
+      Negative cases all **401 with a flat, reason-free body** (no probing oracle):
+      tampered signature · missing signature header · body swapped after signing ·
+      stale timestamp (>300s). Positive: valid seal → **200 `applied:true`** (conversion 4);
+      **replay of byte-identical ts+nonce+body → 401** (nonce burned); no-referrer payload →
+      **200 but credited NOBODY** (`referrer_client_id=''`), i.e. it does not guess.
+      **ADR-017 proven:** `account_opened_at` = 2026-05-13T18:30Z (the true date I sent, 14 May IST)
+      while `synced_at` = 2026-07-26 — and the ingest marked **2026-05-14** dirty, so monthly
+      `accounts_opened` reads May=3 / June=1 / **July=0**. Backdated conversions land in their real
+      period; no fake import-day spike. Referral 17 updated: `conversion_status=account_opened`,
+      `credited_referrer=E2E0726`, `conversion_source=zoho`.
+      **Guardrail 2** is enforced by a static source scan (`test_conversion_status_only_written_by_zoho_ingest_path`
+      + a meta-test proving the scanner catches a bulk-update bypass + `test_lead_capture_never_sets_account_opened`)
+      — all green in the 596. No new regression tests needed: `tests/test_zoho_webhook_waxseal.py`
+      already covers all 14 seal cases including the IP allowlist.
+      **Chased and cleared:** conversion 3 (RJ4521, opened 18-Jul) is invisible in July analytics
+      because `is_reversed=True` and the rollup correctly excludes reversed rows — system is right.
+      Note `CURRENT-STATE` presents that row as a live ingest without saying it was later reversed.
+      **CLEANUP OWED:** prod conversions **id 4 (`E2ECONV01`)** and **id 5 (`E2ECONV02`)**, plus
+      referral 17's conversion fields. Zoho lead `475281000041836002` still outstanding too.
 
 - [x] Guardrails 1/2-partial/3, `/r/{ch}/{id}`, `/open`, `/share`, bot suppression (Phase 1)
 - [x] Capture loop → Wati template → Zoho lead write (Phase 4); lead `475281000041836002`
