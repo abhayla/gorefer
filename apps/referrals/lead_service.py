@@ -45,16 +45,41 @@ def capture_lead(*, tenant, referral: Referral, name: str, mobile: str, email: s
     """
     canonical_mobile = normalize_phone(mobile)
 
-    prospect, _ = Prospect.objects.get_or_create(
+    prospect, created = Prospect.objects.get_or_create(
         tenant=tenant,
         mobile=canonical_mobile,
         defaults={"name": name, "email": email, "city": city, "lead_source": lead_source},
     )
+    if not created:
+        _fill_blanks(prospect, name=name, email=email, city=city)
 
+    # ONE LEAD PER MOBILE (owner decision 2026-07-26) — dedupe on the PROSPECT alone, not on
+    # (referral, prospect) as before. The old key meant a second referrer submitting the same
+    # number created a SECOND lead for the same human: prod carried two leads for
+    # 919876543210. It also diverged from Zoho, which already upserts by mobile, so the two
+    # systems disagreed about how many leads existed.
     existing = Lead.objects.filter(
-        tenant=tenant, referral=referral, prospect=prospect, deleted_at__isnull=True
-    ).first()
+        tenant=tenant, prospect=prospect, deleted_at__isnull=True
+    ).order_by("id").first()
     if existing is not None:
+        # A re-submission under a DIFFERENT referral is not an error and must not vanish
+        # silently — record it on the new referral's journey so the second referrer's
+        # involvement stays visible. Credit is unaffected: Zoho remains the single source of
+        # truth for who is credited (ADR-013/016), and this writes no conversion status.
+        if existing.referral_id != referral.pk:
+            transaction.on_commit(
+                lambda: Event.objects.create(
+                    tenant=tenant,
+                    event_type=vocab.LEAD_CAPTURED,
+                    source=vocab.SRC_FORM,
+                    referral=referral,
+                    user_type="prospect",
+                    person_ref_id=prospect.pk,
+                    # No PII (Round-2 #16) — ids only.
+                    metadata={"duplicate_of_lead": existing.pk,
+                              "already_captured_on_referral": existing.referral_id},
+                )
+            )
         return existing
 
     consent_at = timezone.now() if consent else None
@@ -98,6 +123,29 @@ def capture_lead(*, tenant, referral: Referral, name: str, mobile: str, email: s
     # local-only. Behind ENABLE_ZOHO_WRITE → log-only adapter in demo (no network).
     transaction.on_commit(lambda: enqueue_upsert(lead.pk))
     return lead
+
+
+def _fill_blanks(prospect, *, name: str, email: str, city: str) -> None:
+    """Fill EMPTY prospect fields from a later submission; never overwrite a populated one.
+
+    Owner decision 2026-07-26. Before this, `get_or_create` silently discarded everything a
+    returning prospect typed: prod carried Prospect 5 (`919876543210`) created 17-Jul as
+    "Deploy Verify" with a blank email, and a later submission supplying a real name, email
+    and city left it untouched — `updated_at` still equalled `created_at`. Meanwhile Zoho DID
+    receive the new values, so the two systems drifted apart on the same person.
+
+    Fill-blanks rather than last-write-wins is the deliberate middle: you finally capture the
+    email you never had, but a typo or a spam submission cannot wipe a good name.
+    """
+    updates = {}
+    for field, value in (("name", name), ("email", email), ("city", city)):
+        if (value or "").strip() and not (getattr(prospect, field, "") or "").strip():
+            updates[field] = value.strip()
+    if not updates:
+        return
+    for field, value in updates.items():
+        setattr(prospect, field, value)
+    prospect.save(update_fields=[*updates, "updated_at"])
 
 
 def _referrer_client_id(referral) -> str:

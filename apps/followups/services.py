@@ -124,6 +124,20 @@ def window_is_open(window: FollowupWindow | None, now=None) -> bool:
     return (now - window.last_inbound_at) < WINDOW
 
 
+# Owner rule (CLAUDE.md §6d): message behaviour is configuration, not code. Default ON —
+# never nudge someone whose account is already open — but switchable without a deploy.
+SUPPRESS_WHEN_CONVERTED_KEY = "followup_stop_when_converted"
+SUPPRESS_WHEN_CONVERTED_DEFAULT = True
+
+
+def _suppress_when_converted(tenant_id: int | None) -> bool:
+    try:
+        return _as_bool(resolve(SUPPRESS_WHEN_CONVERTED_KEY, tenant_id=tenant_id,
+                                default=SUPPRESS_WHEN_CONVERTED_DEFAULT))
+    except Exception:
+        return SUPPRESS_WHEN_CONVERTED_DEFAULT
+
+
 def has_converted(tenant, mobile: str) -> bool:
     """Best-effort engaged-exit: this mobile's account has been opened, per Zoho.
 
@@ -266,13 +280,25 @@ def evaluate_gate(sf: ScheduledFollowup, now=None) -> tuple[str, str]:
         return DEC_CANCEL, "opted out"
 
     window = get_window(sf.tenant, sf.mobile)
+
+    # Converted-exit is UNCONDITIONAL — deliberately NOT nested under `stop_on_reply`.
+    #
+    # These are two unrelated concerns that used to share one switch. Someone who replied may
+    # still want reminders; someone whose account is ALREADY OPEN never does. Telling a
+    # customer their account is "still pending" is embarrassing and makes the AP look
+    # careless, and it must not become possible again by unticking a reply setting on some
+    # future rule created through the CRUD API. Owner decision, 2026-07-26.
+    #
+    # Checked BEFORE the reply branch so a contact who both replied and converted reports the
+    # stronger, more actionable reason.
+    if _suppress_when_converted(sf.tenant_id) and has_converted(sf.tenant, sf.mobile):
+        return DEC_CANCEL, "engaged: converted"
+
     if rule.stop_on_reply:
         # A reply = an inbound strictly AFTER the window that scheduled this step.
         if window is not None and window.last_inbound_at is not None \
                 and window.last_inbound_at > sf.window_opened_at:
             return DEC_CANCEL, "engaged: replied"
-        if has_converted(sf.tenant, sf.mobile):
-            return DEC_CANCEL, "engaged: converted"
 
     decision, reason = _window_decision(rule, window, now)
 

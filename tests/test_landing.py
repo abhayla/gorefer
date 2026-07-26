@@ -3,6 +3,8 @@ import pytest
 from django.core.management import call_command
 from django.test import Client
 
+from apps.common.phone import normalize_phone
+from apps.events import vocab
 from apps.events.models import ClickNonce, Event
 from apps.referrals.models import Lead, Prospect
 
@@ -207,3 +209,59 @@ def test_share_records_event(seeded, client):
     )
     assert resp.status_code == 202
     assert Event.objects.filter(event_type="share_clicked").count() == 1
+
+
+# --- D4: repeat submissions (owner decision 2026-07-26) ---------------------
+
+def test_repeat_submission_fills_blank_fields_but_never_overwrites(seeded):
+    """Prod carried Prospect 5 created as "Deploy Verify" with a blank email; a later
+    submission supplying a real name+email left it untouched while Zoho DID get the new
+    values, so the two systems drifted. Fill blanks; never clobber a populated field."""
+    from apps.referrals import redirect_service
+    from apps.referrals.lead_service import capture_lead
+    from apps.referrals.models import Prospect
+
+    program = redirect_service.get_active_program(seeded)
+    referral = redirect_service._lazy_get_or_create_referral(seeded, program, "RJ4521")
+    capture_lead(tenant=seeded, referral=referral, name="First Name", mobile="9812345678",
+                 email="", city="", consent=True)
+
+    capture_lead(tenant=seeded, referral=referral, name="Overwrite Attempt",
+                 mobile="9812345678", email="real@example.com", city="Pune", consent=True)
+
+    p = Prospect.objects.get(mobile=normalize_phone("9812345678"))
+    assert p.name == "First Name", "a populated field must NOT be overwritten"
+    assert p.email == "real@example.com", "a BLANK field must be filled from the new submission"
+    assert p.city == "Pune"
+
+
+def test_one_lead_per_mobile_even_across_different_referrers(
+    seeded, django_capture_on_commit_callbacks
+):
+    """D4: dedupe on the prospect alone. The old key was (referral, prospect), so a second
+    referrer submitting the same number created a SECOND lead for the same human."""
+    from apps.events.models import Event
+    from apps.referrals import redirect_service
+    from apps.referrals.lead_service import capture_lead
+    from apps.referrals.models import Lead
+
+    program = redirect_service.get_active_program(seeded)
+    ref_a = redirect_service._lazy_get_or_create_referral(seeded, program, "RJ4521")
+    ref_b = redirect_service._lazy_get_or_create_referral(seeded, program, "GW5500")
+
+    lead_a = capture_lead(tenant=seeded, referral=ref_a, name="Riya", mobile="9812345678",
+                          email="", city="", consent=True)
+    # the duplicate-submission event is emitted on_commit, so capture + execute it
+    with django_capture_on_commit_callbacks(execute=True):
+        lead_b = capture_lead(tenant=seeded, referral=ref_b, name="Riya", mobile="9812345678",
+                              email="", city="", consent=True)
+
+    assert lead_a.pk == lead_b.pk, "same mobile must reuse the one lead"
+    assert Lead.objects.filter(prospect=lead_a.prospect, deleted_at__isnull=True).count() == 1
+
+    # the second referrer's attempt must stay VISIBLE, not vanish
+    ev = Event.objects.filter(referral=ref_b, event_type=vocab.LEAD_CAPTURED).first()
+    assert ev is not None, "the duplicate submission must be recorded on the new referral"
+    assert ev.metadata.get("duplicate_of_lead") == lead_a.pk
+    for key in ("name", "mobile", "email", "city"):
+        assert key not in ev.metadata, "no PII in the event log (Round-2 #16)"
