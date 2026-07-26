@@ -23,6 +23,22 @@ def _mask_clicks(rows: list[dict]) -> list[dict]:
     return masked
 
 
+def _strip_partner_code(cards: list[dict]) -> list[dict]:
+    """GUARDRAIL 3: the partner code is server-side only — never a client-facing body.
+
+    `/my/referrals` and the admin Referral Profile share ONE template (ADR-026), and
+    that template renders `{{ card.partner_code }}` as a badge. Harmless on the
+    staff screen; on the referrer's own page it published PIFS's Zerodha partner code
+    `ZMPHZC` to every logged-in referrer (found live 2026-07-26 during D8).
+
+    Stripped HERE, at the data level, for the same reason `_mask_clicks` is — the
+    template must never receive what the referrer may not see, so a future template
+    edit cannot re-expose it. The card still shows `partner_name` ("Zerodha"), which
+    is what the referrer actually needs; the code carried no meaning for them.
+    """
+    return [{**card, "partner_code": ""} for card in cards]
+
+
 def my_referrals_ctx(tenant, client_id: str) -> dict:
     """The full profile ctx, referrer-scoped + masked. Works with ZERO activity too
     (a just-bound referrer with no clicks sees zeros + their link, not an error)."""
@@ -36,7 +52,7 @@ def my_referrals_ctx(tenant, client_id: str) -> dict:
         "client_id": client_id,
         "band": band,
         "ring_fractions": profile.ring_fractions(band["aggregates"]),
-        "cards": profile.per_link_cards(tenant, client_id),
+        "cards": _strip_partner_code(profile.per_link_cards(tenant, client_id)),
         "clicks": clicks,
         "people": profile.referred_people(tenant, client_id),
         "config": profile.PROFILE_CONFIG,
