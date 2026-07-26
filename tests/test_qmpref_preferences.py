@@ -306,3 +306,32 @@ def test_landing_mode_is_not_a_settings_flag(seeded):
     from django.conf import settings
 
     assert not hasattr(settings, "LANDING_MODE")
+
+
+def test_every_notify_template_default_exists_at_meta(seeded=None):
+    """Guard against the P0 class: a DEFAULT naming a template that does not exist.
+
+    `otp_whatsapp_template` pointed at `gorefer_login_otp` — a name that never existed at
+    Meta — so every WhatsApp login OTP got HTTP 400 and silently degraded to the `manual`
+    channel while the flag still read ON. Defaults are the fallback when config is cleared,
+    so they must name templates we actually have.
+
+    Checked against the coverage matrix (the reconciled record of the live Wati inventory)
+    rather than the network, so this stays a fast, offline unit test.
+    """
+    import pathlib
+    import re
+
+    from apps.config.preferences import NOTIFY_TEMPLATE_DEFAULTS
+
+    matrix = pathlib.Path("docs/integrations/WhatsApp-Template-Coverage-Matrix.md")
+    if not matrix.exists():  # pragma: no cover - doc always present in-repo
+        import pytest
+
+        pytest.skip("coverage matrix not present")
+    known = set(re.findall(r"`(g[rw]_[a-z0-9_]+|gorefer_[a-z0-9_]+)`", matrix.read_text(encoding="utf-8")))
+    missing = [name for name in NOTIFY_TEMPLATE_DEFAULTS.values() if name not in known]
+    assert not missing, (
+        f"notify-template DEFAULTS name templates absent from the coverage matrix: {missing}. "
+        "Either the template was deleted at Meta or the matrix is stale — both are the P0 shape."
+    )

@@ -187,29 +187,29 @@ integration works".
 message behaviour belongs in the config cascade + Preferences, never hard-coded. Apply to every
 item below and to future work.
 
-- [ ] **D1 · `/open` destination → default `https://signup.zerodha.com/?c=ZMPHZC`, but CONFIGURABLE.**
+- [x] **D1 · DONE 2026-07-26 — `/open` → plain signup, configurable via `partner_direct_url_template` → default `https://signup.zerodha.com/?c=ZMPHZC`, but CONFIGURABLE.**
       Owner wants to switch it to `/api/lead/?c=ZMPHZC` or any other URL without a code change.
       So: add a cascade key + Preferences field, default to the bare signup (the CLAUDE.md value),
       which also CHANGES current live behaviour away from `/api/lead/`.
-- [ ] **D2 · Crawlers get a PIFS preview card, and its text is CONFIGURABLE.** Real humans still
+- [x] **D2 · DONE 2026-07-26 — crawlers get the PIFS card (200), copy config-driven, and its text is CONFIGURABLE.** Real humans still
       302 to Zerodha; only the crawler fetch changes. Title/description from config.
 - [ ] **D3 · Turn the Zoho webhook IP allowlist ON.** Owner: fetch Zoho's ranges myself — no Zoho
       login needed (they are published publicly). Order: fetch ranges → cross-check against real
       inbound webhook IPs → set `ZOHO_WEBHOOK_IP_ALLOWLIST` + `WEBHOOK_REQUIRE_IP_ALLOWLIST=true`
       → **immediately send a live sealed conversion to prove ingestion still works.** Wrong IPs
       silently stop real conversions, so the live re-test is mandatory, not optional.
-- [ ] **D4 · Repeat form submissions: FILL BLANKS ONLY + ONE LEAD PER MOBILE.** Empty field → take
+- [x] **D4 · DONE 2026-07-26 — fill-blanks + one lead per mobile: FILL BLANKS ONLY + ONE LEAD PER MOBILE.** Empty field → take
       the new value; already-populated field → keep it (so spam/typos can't overwrite good data).
       Plus: a mobile gets **one** Lead — a re-submission updates that Lead instead of creating a
       second. (Prod today has 2 leads on `919876543210`.) This also aligns GoRefer with Zoho, which
       already upserts by mobile. **Flag when implementing:** decide what a *different* referrer
       re-submitting the same mobile means for attribution — Zoho stays the single source of credit.
-- [ ] **D5 · Decouple converted-suppression from `stop_on_reply`, and make it CONFIGURABLE.**
+- [x] **D5 · DONE 2026-07-26 — decoupled + configurable (`followup_stop_when_converted`) from `stop_on_reply`, and make it CONFIGURABLE.**
       "Account already open → never nudge" must always apply regardless of the reply setting, and
       be switchable from config without code.
-- [ ] **D6 · Delete the superseded duplicate templates, keep genuinely different ones.** Only ones
+- [x] **D6 · DONE 2026-07-26 — deleted 11 superseded templates, keep genuinely different ones.** Only ones
       that are an older version of a message already in use. Note Meta holds a deleted name ~30 days.
-- [ ] **D7 · Soft-delete the junk `TALK` and `ZMPHZC` referrer records** (reversible; rows retained).
+- [x] **D7 · DONE 2026-07-26 — `TALK` + `ZMPHZC` soft-deleted (identity + referral); click events kept** (reversible; rows retained).
 - [ ] **D8 · Test the WhatsApp-OTP login path only; SKIP Google OAuth for now.** Owner will paste the
       6-digit code when asked (WhatsApp hides OTPs from linked devices, so this cannot be automated).
       Google sign-in — the PRIMARY referrer login — therefore stays UNTESTED; keep saying so.

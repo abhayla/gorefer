@@ -64,18 +64,24 @@ def test_meta_error_classification():
 # --- config-driven template names (no hardcoded names in notify.py) ------------
 
 def test_notify_template_names_resolve_to_approved(db):
-    """The lead-time notifications resolve their Meta template name from config,
-    defaulting to the 2026-07-17 approved gr_brokers_zerodha_* names."""
+    """The lead-time notifications resolve their Meta template name from config.
+
+    Defaults realigned 2026-07-26 to the names production ACTUALLY resolves (office ..._19,
+    referrer_update ..._19/hin_19). Previously the defaults still named the 2026-07-17 office
+    alert and the older referrer THANK-YOU, both of which prod had overridden — so the
+    defaults were a stale fallback. That matters beyond tidiness: a default naming a template
+    that has been deleted at Meta fails silently at send time, which is exactly the OTP P0
+    (`gorefer_login_otp` never existed → HTTP 400 → silent degrade to `manual`)."""
     from apps.config.preferences import notify_template_name
 
-    office = "gr_brokers_zerodha_office_lead_alert_en_2026_07_17"
+    office = "gr_brokers_zerodha_office_lead_alert_en_2026_07_19"
     prospect_en = "gr_brokers_zerodha_prospect_welcome_en_2026_07_17_v2"
     prospect_hi = "gr_brokers_zerodha_prospect_welcome_hi_2026_07_17_v2"
     assert notify_template_name("office", lang="en") == office
     assert notify_template_name("prospect", lang="en") == prospect_en
     assert notify_template_name("prospect", lang="hi") == prospect_hi
-    assert notify_template_name("referrer", lang="en") == "gr_brokers_zerodha_referrer_thankyou_en_2026_07_17"
-    assert notify_template_name("referrer", lang="hi") == "gr_brokers_zerodha_referrer_thankyou_hi_2026_07_17"
+    assert notify_template_name("referrer", lang="en") == "gr_brokers_zerodha_referrer_update_en_2026_07_19"
+    assert notify_template_name("referrer", lang="hi") == "gr_brokers_zerodha_referrer_update_hin_2026_07_19"
     # office has no Hindi variant → falls back to the English office template
     assert notify_template_name("office", lang="hi") == office
     # unknown language → English
@@ -108,7 +114,7 @@ def test_notifications_use_approved_names_and_named_params():
     _capture_lead(Client())
 
     office = Notification.objects.get(recipient_role="office")
-    assert office.template == "gr_brokers_zerodha_office_lead_alert_en_2026_07_17"
+    assert office.template == "gr_brokers_zerodha_office_lead_alert_en_2026_07_19"
     names = [p["name"] for p in office.template_params]
     assert names == ["prospect_name", "prospect_mobile", "referrer_name", "referrer_client_id"]
     by = {p["name"]: p["value"] for p in office.template_params}
@@ -122,7 +128,7 @@ def test_notifications_use_approved_names_and_named_params():
     ]
 
     referrer = Notification.objects.get(recipient_role="referrer")
-    assert referrer.template == "gr_brokers_zerodha_referrer_thankyou_en_2026_07_17"
+    assert referrer.template == "gr_brokers_zerodha_referrer_update_en_2026_07_19"
     assert [p["name"] for p in referrer.template_params] == ["referrer_name", "prospect_name"]
 
 
