@@ -92,3 +92,38 @@
    Harmless today (office sends use EN) but it is latent drift.
 6. **24 of 46 templates are owned outside GoRefer.** A GoRefer-only E2E run can never cover them;
    covering "all templates in all scenarios" requires driving the Zoho journeys and Wati flows too.
+
+## Sweep results — 2026-07-26, all 8 GoRefer-owned templates (EN + HI)
+
+Sent via the live prod adapter with **positional** params; verified at destination by reading
+Wati's own terminal `statusString`, not the send ack.
+
+| # | Template | Lang | Cat | Terminal status | Body rendered |
+|---|---|---|---|---|---|
+| 1 | `gr_brokers_zerodha_office_lead_alert_en_2026_07_19` | en | UTIL | **READ** | all 4 vars filled |
+| 2 | `gr_brokers_zerodha_prospect_welcome_en_2026_07_17_v2` | en | UTIL | **READ** | ok |
+| 3 | `gr_brokers_zerodha_prospect_welcome_hi_2026_07_17_v2` | hi | UTIL | **READ** | Devanagari + vars ok |
+| 4 | `gr_brokers_zerodha_referrer_update_en_2026_07_19` | en | UTIL | **READ** | ok |
+| 5 | `gr_brokers_zerodha_referrer_update_hin_2026_07_19` | hi | UTIL | **READ** | Devanagari + vars ok |
+| 6 | `gr_platform_gorefer_login_otp_en_2026_07_21` | en | AUTH | **DELIVERED** | code rendered |
+| 7 | `gorefer_referrer_prospect_pending_en_2026_07_25_v3` | en | MARK | **FAILED** (Meta) | copy correct |
+| 8 | `gorefer_referrer_prospect_pending_hi_2026_07_25_v3` | hi | MARK | **FAILED** (Meta) | copy correct |
+
+**6/8 delivered or read. 2 accepted by Wati but blocked by Meta** — per the owner's pass bar
+(`sent`), those count as PASS; the block is not a GoRefer defect.
+
+### New findings from the sweep
+
+7. **The §6.1 referrer nudge is being QUALITY-restricted by Meta**, not merely rate-capped. Failure
+   detail: *"Message undeliverable as Meta has restricted it for higher quality messaging — retry
+   again in a few days."* Distinct from `131049` (per-user cap). Both EN and HI v3 failed. This is
+   GoRefer's newest live feature and its template is **MARKETING** — so in production it is
+   currently throttled. Re-cutting it as **UTILITY** (it is transactional: "your referral hasn't
+   finished") is the likely fix, and would also lift it out of the cap that dominates the 43%
+   delivery rate.
+8. **Named vs positional params: no bug.** All 8 templates declare positional params (`1,2,3,4`)
+   while `apps/otp/adapters.py` sends *named* (`otp_code`, `expiry_minutes`). Both rendered the code
+   correctly (named → READ, positional → DELIVERED), so Wati accepts either. Flagged and cleared.
+9. **Hindi is now covered.** Templates 3, 5, 8 rendered correct Devanagari with variables
+   substituted. Nothing in the default code path sets `pref_lang='hi'`, so Hindi only gets exercised
+   by an explicit sweep like this one — keep it in every run.
