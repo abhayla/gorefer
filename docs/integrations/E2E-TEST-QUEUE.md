@@ -156,8 +156,11 @@ decision needed: bring Zoho up to date as the real SSOT, or accept a second reco
       + `manage.py reconcile_conversions`). Verified 2026-07-27: the `zoho_reconcile_conversions`
       schedule is registered and the qcluster is actively processing it. This entry was stale.
 - [x] **P0-C · DONE 2026-07-26 — backfilled the 6 openings** once A/B land, so referrer credit and July analytics are correct.
-- [ ] **P0-D · Correct `CURRENT-STATE.md`** — "Zoho ingest LIVE / conversions ingesting" is false;
-      no real conversion has ever arrived.
+- [x] **P0-D · DONE 2026-07-27.** `CURRENT-STATE.md` §"Zoho ingest" rewritten: the endpoint is
+      live and proven, but **nothing feeds it** — 0 Zoho POSTs in 14 days of nginx logs, and the
+      `RJ4521` "webhook-ingested" row was a manual curl that was later reversed. Records that
+      July's six openings were BACKFILLED, that P0-A is still open, and that P0-B's reconciler
+      is the shipped mitigation.
 
 **D3 (webhook IP allowlist) is now clearly PREMATURE** — arming a second lock on a door that has
 never been used would only add another silent-failure mode. Do P0-A/B first, observe real Zoho
