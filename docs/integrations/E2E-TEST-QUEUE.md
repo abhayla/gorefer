@@ -57,6 +57,52 @@
       functions (`ZOHO_FN_ZAPIKEY_WA_JOURNEY_*` in `GLOBAL.env`) and Wati flows directly.
       A GoRefer-only run cannot reach these; do not report them as covered until driven.
 
+## 🔴 P0 — CONVERSION INGEST IS INERT: GoRefer watches the WRONG ZOHO MODULE (found 2026-07-26)
+
+**Not one real conversion has ever reached GoRefer.** Every `Conversion` row in prod is synthetic
+(two 09-Jul imports with placeholder ids, one blank-opener row, two of my own test rows).
+
+**Evidence chain, each step verified:**
+1. Owner's records: **6 accounts opened this month** — `UGF159` (18-Jul), `EUG979`←`YTW629` (17-Jul),
+   `CWD202`←`EKU497` (13-Jul), `EKU497` (09-Jul), `MZK185`←`FWW808` (06-Jul), `KWE338` (02-Jul).
+2. **0 of the 6 exist in GoRefer.** Two of the three referrers (`YTW629`, `FWW808`) are not even
+   known as `ReferralIdentity` rows.
+3. **0 webhook POSTs from Zoho** in 14 days of continuous nginx logs (12–26 Jul). All 17 logged
+   calls were my own tooling (`curl/8.15.0`, `GoRefer-E2E/1.0`). There was **no POST at all on
+   18-Jul** — so `CURRENT-STATE`'s "RJ4521 webhook-ingested 18-Jul" is unsupported; it was a manual curl.
+4. **Not in Zoho `Leads`** — newest Lead created 2024-11; the only non-null `Lead_Status` values are
+   "Not Interested" (newest April). No lead is "Account Opened with Us".
+5. **They ARE in Zoho `Contacts`**, with matching dates: Uday Kumar Singh 18-Jul, Malvika Gupta
+   16-Jul, Ram Chandra Gupta 09-Jul, Aayush Mehrotra 06-Jul. Malvika's Contact carries
+   `Lead_Source: "Referral"`.
+
+**ROOT CAUSE: GoRefer's ingest is built around the Zoho *Leads* module — it matches on
+`zoho_lead_id` and `followups.services.has_converted()` reads `Lead.status` — but a Zoho lead that
+converts BECOMES A CONTACT. The account-opened event never occurs in the module GoRefer watches, so
+the workflow rule never fires and the webhook never gets called.**
+
+The code is NOT broken: Phase 5 proved the sealed webhook ingests correctly, credits by client id,
+stores the true opening date and rejects forgeries. **Nothing is feeding it.**
+
+**Impact:** 3 referrers uncredited for real openings · GoRefer analytics report `accounts_opened=0`
+for July when 6 opened · the 21:30 daily report has been stating 0 **falsely** · the whole
+conversion/reward half of the product is inert.
+
+- [ ] **P0-A · DA DECISION + fix: point the Zoho trigger at Contacts.** Change the workflow rule to
+      fire on lead→contact conversion (or Contact create where `Lead_Source="Referral"`) and POST the
+      Contact's Zerodha client id + referrer client id to the existing sealed webhook. Needs the
+      CUSTOM field API names on Contacts that hold those two ids — not in the standard field set.
+- [ ] **P0-B · Add a reconciler, do not rely on a single webhook delivery.** A scheduled job that
+      reads Contacts created since the last watermark and replays them through the same sealed
+      endpoint, so a missed or failed webhook self-heals. This is what would have caught it in July.
+- [ ] **P0-C · Backfill the 6 openings** once A/B land, so referrer credit and July analytics are correct.
+- [ ] **P0-D · Correct `CURRENT-STATE.md`** — "Zoho ingest LIVE / conversions ingesting" is false;
+      no real conversion has ever arrived.
+
+**D3 (webhook IP allowlist) is now clearly PREMATURE** — arming a second lock on a door that has
+never been used would only add another silent-failure mode. Do P0-A/B first, observe real Zoho
+traffic, then enforce the allowlist against IPs actually seen.
+
 ## DECIDED by the owner 2026-07-26 — now actionable (was BLOCKED)
 
 **Standing principle stated by the owner:** *"All such message settings should be configurable"* —
