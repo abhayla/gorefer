@@ -152,9 +152,9 @@ decision needed: bring Zoho up to date as the real SSOT, or accept a second reco
       fire on lead→contact conversion (or Contact create where `Lead_Source="Referral"`) and POST the
       Contact's Zerodha client id + referrer client id to the existing sealed webhook. Needs the
       CUSTOM field API names on Contacts that hold those two ids — not in the standard field set.
-- [ ] **P0-B · Add a reconciler, do not rely on a single webhook delivery.** A scheduled job that
-      reads Contacts created since the last watermark and replays them through the same sealed
-      endpoint, so a missed or failed webhook self-heals. This is what would have caught it in July.
+- [x] **P0-B · DONE — reconciler SHIPPED and RUNNING** (`4919036`; `apps/integrations/zoho/reconcile.py`
+      + `manage.py reconcile_conversions`). Verified 2026-07-27: the `zoho_reconcile_conversions`
+      schedule is registered and the qcluster is actively processing it. This entry was stale.
 - [x] **P0-C · DONE 2026-07-26 — backfilled the 6 openings** once A/B land, so referrer credit and July analytics are correct.
 - [ ] **P0-D · Correct `CURRENT-STATE.md`** — "Zoho ingest LIVE / conversions ingesting" is false;
       no real conversion has ever arrived.
@@ -186,13 +186,21 @@ P0-A (point the trigger at Contacts) and P0-B (the reconciler) are **still open*
 account opening will be missed exactly as these six were. Do not read "July is correct" as "the
 integration works".
 
-- [ ] **P0-H · LATENT: month-boundary off-by-one in the rollup.** `account_opened_at` is stored as
-      IST-midnight-in-UTC (`18:30` the previous day), but `_accounts_opened_for_range` compares
-      against **naive** datetimes (Django logged `received a naive datetime … while time zone
-      support is active`). So an account opened on the **1st of a month IST** is stored at
-      `<last-day-of-previous-month>T18:30Z` and would be counted in the **previous month**. None of
-      the current 6 falls on a 1st, so no live error today — but it will silently misdate a month's
-      conversions the first time one does.
+- [x] **P0-H · DONE 2026-07-27 — the reported bug was a FALSE ALARM; a real latent trap was found
+      one layer up and fixed (`179eb27`).** The claim was that `_accounts_opened_for_range` compares
+      **naive** datetimes. It does not: `TIME_ZONE = "Asia/Kolkata"` and `_recompute_month` uses
+      `make_aware`, so month boundaries are IST-aligned and correct.
+      **The real hazard:** both `mark_dirty` call sites in `zoho/ingest.py` passed
+      `account_opened_at.date()`. That value is IST midnight stored as UTC (1 Aug IST =
+      `2026-07-31T18:30Z`), so `.date()` yields the **UTC** date and marks the **wrong month**
+      dirty — the right month then never gets recomputed and the conversion vanishes from it.
+      **Probed, not assumed:** in-memory `.date()` → `2026-08-01` (correct); after
+      `refresh_from_db()` → `2026-07-31` (wrong). So the live webhook path is correct only *by
+      accident* — the parsed value still carries its IST offset. Any path that RE-READS a
+      Conversion gets the UTC date, and the **reconciler and backfill jobs are exactly that shape**.
+      Both sites now use `timezone.localtime(...).date()`. The regression test calls
+      `refresh_from_db()` first so it exercises the re-read state, not the accidentally-correct one.
+      Suite 638/0, deployed.
 
 ## DECIDED by the owner 2026-07-26 — now actionable (was BLOCKED)
 
