@@ -824,7 +824,40 @@ def test_referrer_nudge_fires_at_step_when_enabled(enabled, monkeypatch):
     assert to == "919844440000"                # the referrer's phone
     assert "referrer_prospect_pending" in template
     vals = [p["value"] for p in params["template_params"]]
-    assert vals == ["Asha", "Riya", "RJ4521"]  # name, prospect descriptor, referrer link id
+    # position 3 is the FULL canonical link (v5+), not a bare client_id
+    assert vals[:2] == ["Asha", "Riya"]        # name, prospect descriptor
+    assert vals[2].endswith("/r/wa/RJ4521")    # channel IN the path, not a trailing ?s=
+
+
+def test_referrer_nudge_link_uses_channel_path_not_legacy_query(enabled, monkeypatch):
+    """Owner-reported: the nudge rendered `gorefer.in/r/RJ4521?s=wa` (channel as a trailing
+    query param) instead of the canonical `/r/wa/RJ4521`.
+
+    Root cause was that this path bypassed `nudge_link_for` and let the TEMPLATE BODY
+    hardcode the URL shape. The link must come from the canonical builder, so assert the
+    shape here rather than trusting a template body we do not control from code.
+    """
+    rec = _fire_referrer_nudge_setup(enabled, monkeypatch, flag_on=True)
+    tasks.fire_due_followups()
+
+    _to, _template, params = rec.templates[0]
+    link = [p["value"] for p in params["template_params"]][2]
+    assert "/r/wa/RJ4521" in link, f"channel must be a path segment, got {link!r}"
+    assert "?s=" not in link, f"legacy query-param channel form leaked back in: {link!r}"
+    assert link.startswith("gorefer.in") or "://" not in link  # bare host, kit-message convention
+
+
+def test_referrer_nudge_skipped_when_link_mode_none(enabled, monkeypatch):
+    """link_mode="none" means no embedded link — a "share your link again" nudge with a blank
+    variable would be rejected by Meta, so it must be skipped, not sent broken."""
+    monkeypatch.setattr(tasks, "nudge_link_for", lambda *a, **k: "", raising=False)
+    rec = _fire_referrer_nudge_setup(enabled, monkeypatch, flag_on=True)
+    monkeypatch.setattr(
+        "apps.referrals.recipient_identity.nudge_link_for", lambda *a, **k: "", raising=True
+    )
+    counts = tasks.fire_due_followups()
+    assert counts.get("referrer_nudged", 0) == 0
+    assert len(rec.templates) == 0
 
 
 def test_referrer_nudge_off_by_default(enabled, monkeypatch):

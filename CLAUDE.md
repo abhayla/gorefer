@@ -204,6 +204,36 @@ GoRefer's side of each vendor boundary is documented next to the code, in a fold
 
 **Why:** a stale contract doc is worse than no doc — it sounds confident and the next person (or the next session) trusts it. The two live bugs behind the Wati reconcile matching both came from reality drifting away from what we believed. Filing rule: *vendor changed it, or it's reusable vendor know-how* → the platform folder (`Wati-Project` / `Zoho-Project`); *a GoRefer code change can invalidate it* → here, next to the code. **Adapter code itself does NOT move** — swappability comes from the adapter interface (LiveWatiAdapter / LogOnlyWatiAdapter already swap by config), not from folder location.
 
+## 6c. WhatsApp templates — the HTML map is the SINGLE SOURCE OF TRUTH (owner rule, 2026-07-26)
+
+The published conversation-map artifact **"PIFS WhatsApp — the conversation, card by card"**
+([artifact 18a28208](https://claude.ai/code/artifact/18a28208-60ae-456d-a534-f745a87acb5d)) is the
+**SSOT for every WhatsApp template and every conversation scenario.** Code, config, and the Wati
+dashboard are downstream of it — if they disagree, the HTML is what we intend and the difference is
+a defect to be reconciled, not a fact to be accepted.
+
+**Mandatory ordering for ANY template change — no exceptions:**
+
+1. **Update the HTML map FIRST** — add/edit the card with the new copy, category, variables, buttons,
+   and a state tag. Nothing is submitted from an unrecorded draft.
+2. **THEN submit to Meta** (via Wati) for approval.
+3. **When Meta approves (or rejects), update the HTML map AGAIN** — flip the state tag, record the
+   final approved name/version, and delete superseded drafts from both the map and the dashboard.
+
+A template that exists at Meta but not on the map, or a map card whose state contradicts Meta, is a
+**bug**. Reconcile in the same turn you notice it.
+
+**Also true of scenarios, not just templates:** every conversation path (keyword, chatbot flow,
+journey nudge, report, OTP) belongs on the map. "It works but isn't on the map" is not done.
+
+**Template names are config, and config drifts.** Never assume a configured template name exists —
+resolve it and check it against the live Wati inventory. Precedent: on 2026-07-26 prod's
+`otp_whatsapp_template` was `gorefer_login_otp`, a name that had **never existed** at Meta, so every
+WhatsApp login OTP was rejected (HTTP 400) and silently degraded to the `manual` channel while
+`ENABLE_OTP_LOGIN` read ON. The adapter's correct hardcoded default was bypassed because the bad
+config value was truthy. The coverage matrix in
+`docs/integrations/WhatsApp-Template-Coverage-Matrix.md` exists to make that class of drift visible.
+
 ## 7. Definition of Done + expectations
 
 Reference `implementation/10-Claude-Code-Implementation-Guide.md` (§3 standards, §6 tests, §7 git, §8 migrations, §9 DoD, §10 demo mode). A mission is **done** only when all hold:

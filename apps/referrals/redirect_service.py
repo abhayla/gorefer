@@ -113,7 +113,7 @@ def _record_event(
         pii = VisitorPII.objects.create(tenant=tenant, visitor_id=visitor_id or "", raw_ip=raw_ip)
         person_ref_id = pii.pk
     metadata = {"channel": share_channel} if share_channel else {}  # NEVER PII (CI-enforced)
-    return Event.objects.create(
+    event = Event.objects.create(
         tenant=tenant,
         event_type=event_type,
         source=source,
@@ -126,6 +126,30 @@ def _record_event(
         person_ref_id=person_ref_id,
         metadata=metadata,
     )
+    if event_type == vocab.CLICK:
+        _stamp_first_click(referral, event.timestamp)
+    return event
+
+
+def _stamp_first_click(referral, when) -> None:
+    """Stamp `Referral.first_click_at` on the FIRST click only, never on later ones.
+
+    Every click path (landing view, direct redirect, continue, partner-direct) funnels
+    through `_record_event`, so this is the one place that needs to know. Done as a
+    CONDITIONAL UPDATE rather than a read-then-save: two simultaneous first clicks on the
+    same referral would both read None and the later write would win, silently moving the
+    "first" click later. `filter(first_click_at__isnull=True).update(...)` lets the database
+    decide, and a no-op on a referral that already has one costs nothing.
+
+    Deliberately not `referral.save()` — Referral is an AuditedModel, and a full save here
+    would bump `version` and stomp concurrently-updated fields on a hot redirect path.
+    """
+    updated = Referral.objects.filter(pk=referral.pk, first_click_at__isnull=True).update(
+        first_click_at=when
+    )
+    if updated:
+        # keep the in-memory instance consistent for callers that read it after this
+        referral.first_click_at = when
 
 
 def handle_landing_view(*, tenant, client_id: str, visitor_id, user_agent, raw_ip, share_channel=None):
