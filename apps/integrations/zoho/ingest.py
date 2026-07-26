@@ -219,9 +219,21 @@ def _apply_reversal(tenant, program, conversion, payload):
                 "conversion_status", "credited_referrer", "reward_status", "account_opened_at",
                 "conversion_source", "conversion_synced_at", "status", "updated_at",
             ])
-        # Recompute the affected period off the TRUE open date.
+        # Recompute the affected period off the TRUE open date, in IST.
+        #
+        # `.date()` alone is a TRAP here (P0-H). `account_opened_at` is IST midnight stored
+        # as UTC — 1 Aug 2026 IST is `2026-07-31T18:30Z` — so `.date()` yields the UTC date
+        # (31 Jul) and would mark the WRONG MONTH dirty, leaving the right month never
+        # recomputed. It happens to be correct on THIS path only because the value still
+        # carries its parsed IST offset in-memory; the moment a Conversion is re-read from
+        # the DB (the reconciler, any backfill) `.date()` flips to the UTC date. Verified by
+        # probe: in-memory `.date()` -> 2026-08-01, after `refresh_from_db()` -> 2026-07-31.
+        # `localtime()` is correct regardless of how the value was obtained.
         if conversion.account_opened_at:
-            mark_dirty(tenant=tenant, program=program, on_date=conversion.account_opened_at.date())
+            mark_dirty(
+                tenant=tenant, program=program,
+                on_date=timezone.localtime(conversion.account_opened_at).date(),
+            )
     return conversion
 
 
@@ -235,7 +247,11 @@ def _emit_conversion_events(tenant, referral, stage, conversion, open_dt):
             metadata={"account": conversion.opener_zerodha_account_id},
         )
         if open_dt:
-            mark_dirty(tenant=tenant, program=referral.program, on_date=open_dt.date())
+            # IST date, not `.date()` — see the P0-H note in apply_conversion above.
+            mark_dirty(
+                tenant=tenant, program=referral.program,
+                on_date=timezone.localtime(open_dt).date(),
+            )
     if conversion.reward_status:  # only if Zoho supplied a reward signal
         Event.objects.create(
             tenant=tenant, event_type=vocab.REWARD_STATUS_CHANGED, source=vocab.SRC_ZOHO,
