@@ -97,3 +97,47 @@ def test_guardrail_no_partner_code_or_zerodha_url_in_location(seeded, client):
     location = unquote(resp.headers["Location"])
     assert "ZMPHZC" not in location
     assert "signup.zerodha.com" not in location
+
+
+# --- compliance + §6d: the prefill carries the disclosure and is config-driven ---
+
+def test_share_prefill_carries_the_disclosure_anchor(seeded, client):
+    """The prefill is a GENERATED ASSET a referrer forwards to prospects, so §4 requires
+    the disclosure on it.
+
+    Found 2026-07-27: this builder emitted only "Open a free Zerodha account — my referral
+    link: <link>" while the sibling builder in apps/accounts/selfview.py already appended
+    "· Disclosures: …". One product, two share messages, disagreeing on compliance.
+    """
+    import urllib.parse
+
+    from apps.referrals import share_intent_service as sis
+    from apps.tenants.models import Tenant
+
+    tenant = Tenant.objects.get(slug="pifs")
+    msg = sis._kit_message("wa", "RJ4521", tenant.id)
+    assert "/d/pifs" in msg, f"disclosure anchor missing from the share prefill: {msg!r}"
+    assert "/r/wa/RJ4521" in msg
+    assert "ZMPHZC" not in msg and "signup.zerodha.com" not in msg  # guardrail 3
+
+    resp = client.get("/share/wa/RJ4521", **HUMAN)
+    assert resp.status_code == 302
+    text = urllib.parse.parse_qs(urllib.parse.urlparse(resp["Location"]).query).get("text", [""])[0]
+    assert "/d/pifs" in text, "the DELIVERED wa.me prefill lost the disclosure"
+
+
+def test_share_prefill_copy_is_config_driven_not_a_code_literal(seeded):
+    """CLAUDE.md §6d — message settings are CONFIGURATION. An operator must be able to
+    reword the prefill with no deploy; the disclosure must survive their edit."""
+    from apps.config.cascade import set_tenant
+    from apps.referrals import share_intent_service as sis
+    from apps.tenants.models import Tenant
+
+    tenant = Tenant.objects.get(slug="pifs")
+    set_tenant(sis.SHARE_KIT_MESSAGE_KEY, "Totally new copy: {link}", tenant_id=tenant.id)
+    msg = sis._kit_message("wa", "RJ4521", tenant.id)
+    assert msg.startswith("Totally new copy: "), "cascade override was ignored"
+    assert "/r/wa/RJ4521" in msg
+    # The anchor is appended by the builder, NOT part of the editable template — so an
+    # operator cannot drop the compliance line by rewording.
+    assert "/d/pifs" in msg
