@@ -1,6 +1,6 @@
 ---
-name: e2e-live-verify
-description: Run the full autonomous end-to-end verification of GoRefer against LIVE production — click → record, template send → terminal Wati status, session-nudge cadence, Zoho lead write, and the three guardrails. Use when asked to "test end to end", "run the E2E", "verify prod", "full round of testing", or after any deploy touching redirect / Wati / Zoho / followups.
+name: test-live-site-end-to-end
+description: Test the live GoRefer site end to end against real production — click a referral link and check the record was created, send a WhatsApp message and check it actually went out, run the follow-up nudge cadence, write a lead to Zoho, and check the safety guardrails hold. Use when asked to "test end to end", "run the E2E", "test everything", "verify prod", "full round of testing", or after any deploy touching redirect / Wati / Zoho / followups.
 ---
 
 # GoRefer — live end-to-end verification
@@ -115,6 +115,47 @@ and assert a NEW `click` event lands on that referral. This is the leg the owner
   cadence. Do not report this as a repeat-visitor bug.
 - Wati's `sendTemplateMessage` ack carries **no message id**, so `provider_message_id` stays empty;
   terminal status is matched by recipient+template+time by the reconciler.
+
+## Coverage ledger — what phases A–D do NOT cover
+
+Keep this honest. "E2E passed" means the referral pipe passed, not the whole product.
+
+**Untested, highest value first**
+1. **Conversion / account-opened leg** — `POST /api/zoho/status-webhook`. The money path, and
+   guardrail 2 ("status only ever from Zoho") is unverified live. Testable: craft an HMAC-sealed
+   webhook using `ZOHO_WEBHOOK_HMAC_SECRET` from `GLOBAL.env`. Writes a real conversion → owner approval.
+2. **M13 login surface** (`apps/accounts`, LIVE with both flags ON) — `/login/`, Google OAuth
+   start/callback/bind, OTP request/verify, Path-B `/login/verify-ownership`, `/my/referrals`.
+3. **Admin dashboard** (`apps/admin-panel`) — dashboard, explorer, journey detail, referrer
+   search/profile, preferences, verifications queue. Needs admin credentials.
+4. **`POST /api/leads/` over HTTP** — phase B uses `golive_smoke`, which calls the service layer and
+   therefore bypasses HTTP validation, consent enforcement, and rate limiting.
+5. **Follow-up engine remainder** — 6 of 7 cadence steps, actual quiet-hours deferral, the 90-min
+   anti-burst in action, `stop_on_reply`, opt-out, converted-suppression, and the §6.1 referrer
+   nudge (newest code, deployed 2026-07-26, never exercised).
+6. **Remaining API** — `/api/analytics/{funnel,journey,sync-health}`, `/api/click/confirm`,
+   `/api/click/referrer/{id}`, `/api/share/`, `/api/wati/webhook` (assert it is **closed**: 401),
+   `/api/wati/inbound`.
+7. **Landing page + capture form (M3)** — unreachable while `LANDING_MODE=direct`. Needs a
+   page-mode tenant or a temporary flip.
+8. **Bot filter breadth** — only `facebookexternalhit` + `WhatsApp` are probed. Not Telegrambot,
+   Slackbot, Twitterbot, LinkedInBot, Googlebot.
+9. **Hindi / `pref_lang`** — `body_hi` never exercised.
+10. **Rate limiting, DPDP purge + erasure, rollup arithmetic, cross-tenant isolation.**
+
+**Also note:** the 44-file pytest suite is separate from this skill and is NOT run by it.
+Run `python -m pytest -q -n 4` for logic coverage; this skill only proves the live system.
+
+## WhatsApp Web on the VPS — what it unlocks
+
+With an authenticated `web.whatsapp.com` session in the VPS Chrome, drive it via browser
+automation to remove the last human step and reach paths that were previously untestable:
+- Send the inbound "Hi" → **Phase C becomes fully autonomous** (no owner action at all).
+- **Receive and read the login OTP** → unlocks end-to-end M13 OTP login testing.
+- **Reply mid-cadence** → tests `stop_on_reply`.
+- **Send "STOP"** → tests opt-out suppression.
+
+Guard: only ever drive conversations with the sanctioned test numbers.
 
 ## Cleanup checklist
 
