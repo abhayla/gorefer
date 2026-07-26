@@ -420,3 +420,55 @@ def test_preferences_screen_clamps_bad_otp_values(admin_client, seeded):
     cfg = prefkeys.get_preferences(seeded.id)
     assert cfg[prefkeys.OTP_CODE_TTL_SECONDS] >= 60
     assert cfg[prefkeys.OTP_MAX_VERIFY_ATTEMPTS] >= 1
+
+
+def test_whatsapp_otp_not_yet_delivered_is_QUEUED_not_a_failure(monkeypatch, db):
+    """The adapter checked terminal delivery MICROSECONDS after sending.
+
+    WhatsApp delivery takes seconds, so the check always failed and the WhatsApp channel
+    always cascaded to `manual`. Found 2026-07-26: OtpChallenge id=1 was the first challenge
+    ever recorded on prod and had already fallen back — no login OTP had ever been delivered
+    over WhatsApp. Not-yet-delivered must report QUEUED (accepted, unproven), never FAILED.
+    """
+    from apps.integrations.wati.adapter import SendResult
+    from apps.otp import adapters
+    from apps.otp.ports import STATUS_QUEUED
+
+    class _InFlight:
+        def send_template(self, **kw):
+            return SendResult(accepted=True, provider_message_id="")
+
+        def get_message_status(self, **kw):
+            class _S:
+                status = "sent"          # accepted by Wati, not yet terminal
+                meta_error_code = None
+            return _S()
+
+    monkeypatch.setattr(adapters, "get_wati_adapter", lambda: _InFlight())
+    res = adapters.WatiWhatsAppOtpAdapter().send(
+        recipient="917767009136", code="123456", ttl_seconds=300, context={}
+    )
+    assert res.status == STATUS_QUEUED, f"in-flight delivery must not be a failure, got {res.status}"
+
+
+def test_whatsapp_otp_terminal_failure_still_cascades(monkeypatch, db):
+    """A REAL rejection must still fail so the fallback channel takes over."""
+    from apps.integrations.wati.adapter import SendResult
+    from apps.otp import adapters
+    from apps.otp.ports import STATUS_FAILED
+
+    class _Rejected:
+        def send_template(self, **kw):
+            return SendResult(accepted=True, provider_message_id="")
+
+        def get_message_status(self, **kw):
+            class _S:
+                status = "failed"        # terminal
+                meta_error_code = 131049
+            return _S()
+
+    monkeypatch.setattr(adapters, "get_wati_adapter", lambda: _Rejected())
+    res = adapters.WatiWhatsAppOtpAdapter().send(
+        recipient="917767009136", code="123456", ttl_seconds=300, context={}
+    )
+    assert res.status == STATUS_FAILED
