@@ -193,6 +193,32 @@ def _apply_reversal(tenant, program, conversion, payload):
             referral=referral, user_type="system",
             metadata={"account": conversion.opener_zerodha_account_id},
         )
+        # Un-mirror onto the referral — but ONLY when this was its LAST live conversion.
+        #
+        # The forward path above mirrors conversion state onto the Referral; the reversal
+        # used to tombstone the Conversion and stop there, leaving the Referral still
+        # reading conversion_status="account_opened" with the referrer still credited and
+        # zero live conversions behind it. Demonstrated live 2026-07-26 on referral 17:
+        # the referrer stayed credited, the dashboard still showed a conversion, and
+        # `followups.services.has_converted()` kept returning True, so the prospect was
+        # permanently suppressed from follow-ups over a conversion Zoho had de-mapped.
+        #
+        # Conditional because a referral may carry several conversions (referral 1 has a
+        # live ZA9001 plus a reversed row) — reversing one must not un-credit a referral
+        # that is still legitimately converted by another.
+        still_live = Conversion.objects.filter(referral=referral, is_reversed=False).exists()
+        if not still_live:
+            referral.conversion_status = ""
+            referral.credited_referrer = ""
+            referral.reward_status = ""
+            referral.account_opened_at = None
+            referral.conversion_source = SOURCE  # Zoho remains the source of the change
+            referral.conversion_synced_at = timezone.now()
+            referral.status = "opened"  # back to an in-progress journey, not "confirmed"
+            referral.save(update_fields=[
+                "conversion_status", "credited_referrer", "reward_status", "account_opened_at",
+                "conversion_source", "conversion_synced_at", "status", "updated_at",
+            ])
         # Recompute the affected period off the TRUE open date.
         if conversion.account_opened_at:
             mark_dirty(tenant=tenant, program=program, on_date=conversion.account_opened_at.date())
