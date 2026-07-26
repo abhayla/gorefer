@@ -12,10 +12,30 @@
       "recipient_role": "office",
       "disclosure": false,
       "variables": [
-        {"position": 1, "name": "prospect_name", "sample": "Rahul Sharma", "fallback": "A new lead"},
-        {"position": 2, "name": "prospect_mobile", "sample": "9876543210", "fallback": "not provided"},
-        {"position": 3, "name": "referrer_name", "sample": "Ramesh Kumar", "fallback": "not on file"},
-        {"position": 4, "name": "referrer_client_id", "sample": "RJ4521", "fallback": null}
+        {
+          "position": 1,
+          "name": "prospect_name",
+          "sample": "Rahul Sharma",
+          "fallback": "A new lead"
+        },
+        {
+          "position": 2,
+          "name": "prospect_mobile",
+          "sample": "9876543210",
+          "fallback": "not provided"
+        },
+        {
+          "position": 3,
+          "name": "referrer_name",
+          "sample": "Ramesh Kumar",
+          "fallback": "not on file"
+        },
+        {
+          "position": 4,
+          "name": "referrer_client_id",
+          "sample": "RJ4521",
+          "fallback": null
+        }
       ],
       "buttons": []
     },
@@ -24,14 +44,29 @@
       "name": "gr_brokers_zerodha_prospect_welcome_en_2026_07_17_v2",
       "category": "UTILITY",
       "metaCategory": "UTILITY",
-      "status": "PENDING",
+      "status": "APPROVED",
       "language": "en",
       "recipient_role": "prospect",
       "disclosure": true,
       "variables": [
-        {"position": 1, "name": "prospect_name", "sample": "Rahul", "fallback": "there"},
-        {"position": 2, "name": "referrer_name", "sample": "Ramesh Kumar", "fallback": "A friend"},
-        {"position": 3, "name": "office_number", "sample": "+91 73888 82020", "fallback": null}
+        {
+          "position": 1,
+          "name": "prospect_name",
+          "sample": "Rahul",
+          "fallback": "there"
+        },
+        {
+          "position": 2,
+          "name": "referrer_name",
+          "sample": "Ramesh Kumar",
+          "fallback": "A friend"
+        },
+        {
+          "position": 3,
+          "name": "office_number",
+          "sample": "+91 73888 82020",
+          "fallback": null
+        }
       ],
       "buttons": []
     },
@@ -40,14 +75,29 @@
       "name": "gr_brokers_zerodha_prospect_welcome_hi_2026_07_17_v2",
       "category": "UTILITY",
       "metaCategory": "UTILITY",
-      "status": "PENDING",
+      "status": "APPROVED",
       "language": "hi",
       "recipient_role": "prospect",
       "disclosure": true,
       "variables": [
-        {"position": 1, "name": "prospect_name", "sample": "Rahul", "fallback": "there"},
-        {"position": 2, "name": "referrer_name", "sample": "Ramesh Kumar", "fallback": "A friend"},
-        {"position": 3, "name": "office_number", "sample": "+91 73888 82020", "fallback": null}
+        {
+          "position": 1,
+          "name": "prospect_name",
+          "sample": "Rahul",
+          "fallback": "there"
+        },
+        {
+          "position": 2,
+          "name": "referrer_name",
+          "sample": "Ramesh Kumar",
+          "fallback": "A friend"
+        },
+        {
+          "position": 3,
+          "name": "office_number",
+          "sample": "+91 73888 82020",
+          "fallback": null
+        }
       ],
       "buttons": []
     },
@@ -61,8 +111,18 @@
       "recipient_role": "referrer",
       "disclosure": true,
       "variables": [
-        {"position": 1, "name": "referrer_name", "sample": "Ramesh Kumar", "fallback": "there"},
-        {"position": 2, "name": "prospect_name", "sample": "Rahul", "fallback": "someone"}
+        {
+          "position": 1,
+          "name": "referrer_name",
+          "sample": "Ramesh Kumar",
+          "fallback": "there"
+        },
+        {
+          "position": 2,
+          "name": "prospect_name",
+          "sample": "Rahul",
+          "fallback": "someone"
+        }
       ],
       "buttons": []
     },
@@ -76,8 +136,18 @@
       "recipient_role": "referrer",
       "disclosure": true,
       "variables": [
-        {"position": 1, "name": "referrer_name", "sample": "Ramesh Kumar", "fallback": "there"},
-        {"position": 2, "name": "prospect_name", "sample": "Rahul", "fallback": "someone"}
+        {
+          "position": 1,
+          "name": "referrer_name",
+          "sample": "Ramesh Kumar",
+          "fallback": "there"
+        },
+        {
+          "position": 2,
+          "name": "prospect_name",
+          "sample": "Rahul",
+          "fallback": "someone"
+        }
       ],
       "buttons": []
     },
@@ -174,12 +244,33 @@
       "body": "Hi {{name}}, turn your Zerodha account into rewards 💰 Refer friends to open a free Zerodha account and earn 10% brokerage share + 300 reward points per referral. Choose how you'd like to refer 👇\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing. Disclosures: gorefer.in/d/pifs",
       "footer": "Passive Income Financial Solutions",
       "variables": [
-        {"name": "name", "meaning": "referrer_name", "sample": "Abhay"}
+        {
+          "name": "name",
+          "meaning": "referrer_name",
+          "sample": "Abhay"
+        }
       ],
       "buttons": [
-        {"type": "url", "text": "Refer & earn", "url": "https://gorefer.in/r/wa/{{client_id}}", "url_variable": {"name": "client_id", "sample": "DA1707"}, "_note": "channel 'wa' as path prefix — WhatsApp requires the variable LAST, so ?s=wa can't follow it; needs ENG route /r/{channel}/{client_id} (Q-M-CHANNELPATH). No keyword routing (URL button)."},
-        {"type": "quick_reply", "text": "Share on WhatsApp", "_route": "keyword -> chatbot 'Zerodha Share on WhatsApp'"},
-        {"type": "quick_reply", "text": "Refer directly", "_route": "keyword -> chatbot 'Direct Zerodha Referral'; remove bare 'Refer' keyword from row 1 to avoid collision"}
+        {
+          "type": "url",
+          "text": "Refer & earn",
+          "url": "https://gorefer.in/r/wa/{{client_id}}",
+          "url_variable": {
+            "name": "client_id",
+            "sample": "DA1707"
+          },
+          "_note": "channel 'wa' as path prefix — WhatsApp requires the variable LAST, so ?s=wa can't follow it; needs ENG route /r/{channel}/{client_id} (Q-M-CHANNELPATH). No keyword routing (URL button)."
+        },
+        {
+          "type": "quick_reply",
+          "text": "Share on WhatsApp",
+          "_route": "keyword -> chatbot 'Zerodha Share on WhatsApp'"
+        },
+        {
+          "type": "quick_reply",
+          "text": "Refer directly",
+          "_route": "keyword -> chatbot 'Direct Zerodha Referral'; remove bare 'Refer' keyword from row 1 to avoid collision"
+        }
       ]
     },
     {
@@ -193,14 +284,99 @@
       "body": "{{otp_code}} is your GoRefer login code. For your security, do not share this code.",
       "footer": "This code expires in {{expiry_minutes}} minutes.",
       "variables": [
-        {"name": "otp_code", "meaning": "the one-time login code (CSPRNG, generated per issue — always present, no fallback needed)", "sample": "482913"},
-        {"name": "expiry_minutes", "meaning": "code validity in minutes, derived from the live OTP_CODE_TTL_SECONDS config at send time (always present)", "sample": "5"}
+        {
+          "name": "otp_code",
+          "meaning": "the one-time login code (CSPRNG, generated per issue — always present, no fallback needed)",
+          "sample": "482913"
+        },
+        {
+          "name": "expiry_minutes",
+          "meaning": "code validity in minutes, derived from the live OTP_CODE_TTL_SECONDS config at send time (always present)",
+          "sample": "5"
+        }
       ],
       "_variables_note": "NAMED variables per the house standard (never positional {{1}}/{{2}}; owner rule 2026-07-21). Order matters at the Wati send layer: otp_code first, expiry_minutes second — matches apps/otp/adapters.py template_params. Meta's AUTHENTICATION category enforces its own fixed body scaffolding at submit time; the submission skill maps otp_code onto Meta's OTP parameter and expiry_minutes onto the code_expiration_minutes setting.",
       "buttons": [
-        {"type": "otp", "otp_type": "copy_code", "text": "Copy code", "_note": "Meta AUTHENTICATION copy-code button — carries the same {{otp_code}} value as the body; no URL."}
+        {
+          "type": "otp",
+          "otp_type": "copy_code",
+          "text": "Copy code",
+          "_note": "Meta AUTHENTICATION copy-code button — carries the same {{otp_code}} value as the body; no URL."
+        }
       ],
       "_compliance_note": "AUTHENTICATION templates are exempt from the marketing disclosure block (no promotional content, no incentive claim). Delivery reliability MUST be fixed before OTP depends on this (S2-03 §15 caveat a; historical ~60% send failure is fatal for time-sensitive OTP). Re-confirm the ~₹0.115/msg auth rate at go-live."
+    },
+    {
+      "_set": "followup-referrer-nudge",
+      "name": "gorefer_referrer_prospect_pending_en_2026_07_26_v5",
+      "category": "UTILITY",
+      "metaCategory": null,
+      "status": "PENDING",
+      "language": "en",
+      "recipient_role": "referrer",
+      "disclosure": true,
+      "variables": [
+        {
+          "position": 1,
+          "name": "referrer_name",
+          "sample": "Ramesh Kumar",
+          "fallback": "there"
+        },
+        {
+          "position": 2,
+          "name": "prospect_descriptor",
+          "sample": "Rahul",
+          "fallback": "one of your recent referrals"
+        },
+        {
+          "position": 3,
+          "name": "link",
+          "sample": "gorefer.in/r/wa/RJ4521",
+          "fallback": null,
+          "_note": "FULL link from nudge_link_for() — the canonical builder. NEVER a bare client_id and NEVER a hardcoded URL shape in the body: v3/v4 hardcoded 'gorefer.in/r/{{3}}?s=wa' (legacy M11 query form) and drifted from the canonical channel-path /r/wa/{id} (B1/Q-M-CHANNELPATH). ?s= is only forced for URL BUTTONS, where WhatsApp requires the variable last."
+        }
+      ],
+      "buttons": [],
+      "_supersedes": [
+        "gorefer_referrer_prospect_pending_en_2026_07_25_v3",
+        "gorefer_referrer_prospect_pending_en_2026_07_26_v4"
+      ]
+    },
+    {
+      "_set": "followup-referrer-nudge",
+      "name": "gorefer_referrer_prospect_pending_hi_2026_07_26_v5",
+      "category": "UTILITY",
+      "metaCategory": null,
+      "status": "APPROVED",
+      "language": "hi",
+      "recipient_role": "referrer",
+      "disclosure": true,
+      "variables": [
+        {
+          "position": 1,
+          "name": "referrer_name",
+          "sample": "Ramesh Kumar",
+          "fallback": "there"
+        },
+        {
+          "position": 2,
+          "name": "prospect_descriptor",
+          "sample": "Rahul",
+          "fallback": "one of your recent referrals"
+        },
+        {
+          "position": 3,
+          "name": "link",
+          "sample": "gorefer.in/r/wa/RJ4521",
+          "fallback": null,
+          "_note": "FULL link from nudge_link_for() — the canonical builder. NEVER a bare client_id and NEVER a hardcoded URL shape in the body: v3/v4 hardcoded 'gorefer.in/r/{{3}}?s=wa' (legacy M11 query form) and drifted from the canonical channel-path /r/wa/{id} (B1/Q-M-CHANNELPATH). ?s= is only forced for URL BUTTONS, where WhatsApp requires the variable last."
+        }
+      ],
+      "buttons": [],
+      "_supersedes": [
+        "gorefer_referrer_prospect_pending_hi_2026_07_25_v3",
+        "gorefer_referrer_prospect_pending_hi_2026_07_26_v4b"
+      ]
     }
   ]
 }

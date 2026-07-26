@@ -109,3 +109,41 @@ operational record, deliberately not the immutable event log.
 - Full account catalogue + approval history: `Wati-Project/docs/wati-templates.json`,
   `Wati-Project/docs/wati-shared-template-category-rules.md`
 - Delivery health (52.29% and the 131049 story): `Wati-Project/docs/`
+
+## §6.1 referrer nudge — v5 (2026-07-26): the link is a VARIABLE, not template-hardcoded
+
+**Owner-reported bug.** The referrer nudge rendered `gorefer.in/r/{client_id}?s=wa` — the channel as a
+trailing query param (legacy M11 form) — instead of the canonical channel-path
+`gorefer.in/r/wa/{client_id}` (B1 / Q-M-CHANNELPATH).
+
+**Root cause — two link builders, one drifted.** `nudge_link_for()`
+(`apps/referrals/recipient_identity.py`) is the single canonical builder and already emits
+`/r/{channel}/{client_id}`. The **prospect** session nudge uses it. `_maybe_referrer_nudge()`
+did **not**: it passed a bare `client_id` as positional `{{3}}` and let the **template body**
+hardcode the URL shape. The `?s=` form exists only because a WhatsApp **URL button** requires its
+variable to be LAST, so nothing may follow it — a constraint that does **not** apply to a message
+**body**, so the body should never have adopted it.
+
+**Contract change (v5).**
+
+| | v3 / v4 | **v5** |
+|---|---|---|
+| `{{3}}` | bare `client_id` (`RJ4521`) | **full link** (`gorefer.in/r/wa/RJ4521`) |
+| Body around it | `gorefer.in/r/{{3}}?s=wa` | `{{3}}` alone on its line |
+| Source of the URL shape | the template body | `nudge_link_for()` — code only |
+
+Templates: `gorefer_referrer_prospect_pending_{en,hi}_2026_07_26_v5`. Body is otherwise byte-identical
+to v4; the mandatory market-risk + Disclosures block is unchanged and still follows the variable (Meta
+requires static text after the last variable).
+
+**Sequencing matters — do not flip one without the other.** Passing a full link to a v3/v4 template
+renders `gorefer.in/r/gorefer.in/r/wa/RJ4521?s=wa`. Code (full link) and config
+(`followup_referrer_nudge_template_{lang}` → v5) must ship together, and only once Meta has approved
+v5 in that language.
+
+**`link_mode="none"`** now skips the referrer nudge entirely rather than sending a blank variable
+(Meta rejects blank variables, and "share your link again" without a link is meaningless).
+
+**Operational note.** Wati's template `DELETE` returns `ok:true` but Meta retains the language content
+(`error_subcode 2388024`, *"Content in this language already exists"*), so an `elementName` **cannot be
+reused** after deletion — pick a new name (this is why the interim Hindi cut is `..._v4b`).

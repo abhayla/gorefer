@@ -232,6 +232,37 @@ This skill proves the live system behaves; it proves **nothing** about logic cov
 Also run `python -m pytest -q -n 4` (44 test files), `ruff check .`, and
 `python manage.py makemigrations --check --dry-run`.
 
+**If you run the suite on the prod HOST, you MUST neutralise prod's `.env` or you will
+chase 31 phantom failures.** Many tests assert flag-OFF / no-credentials behaviour, and
+`flags.py` freezes from env at import — so prod's live flags and real creds make them fail.
+This exact env produced **524 passed, 0 failed** on 2026-07-26 (verified), versus 31 failures
+with prod's env:
+
+```bash
+rsync -a --exclude .venv --exclude .git /var/www/gorefer/ /tmp/gtest/   # never test in-place
+ln -s /var/www/gorefer/.venv /tmp/gtest/.venv
+cd /tmp/gtest && env \
+  Q_ASYNC=false \
+  ENABLE_CUSTOMER_LOGIN=false ENABLE_OTP_LOGIN=false ENABLE_ZOHO_WEBHOOK_HMAC=false \
+  ENABLE_WATI_SEND=false ENABLE_ZOHO_WRITE=false ENABLE_ZOHO_READ=false \
+  WATI_ALLOW_ALL_RECIPIENTS=false \
+  WATI_API_ENDPOINT= WATI_API_TOKEN= \
+  ZOHO_CLIENT_ID= ZOHO_CLIENT_SECRET= ZOHO_REFRESH_TOKEN= \
+  GOOGLE_OAUTH_CLIENT_ID= GOOGLE_OAUTH_CLIENT_SECRET= \
+  TEST_DB_NAME=gorefer_test_ci .venv/bin/python -m pytest -q -n 4
+```
+
+Breakdown of the phantom failures, so the pattern is recognisable: **12** from `Q_ASYNC=true`
+(on-commit work queued, not inline → `zoho_sync_status='pending'` instead of `'synced'`); **15**
+from live flags ON (every `..._when_flag_off`, `demo_adapter_selected`, `obeys_the_override_not_raw_env`
+test); **4** from real creds being present (tests that prove the LIVE adapter *refuses to construct*
+without creds, plus `oauth_start_404_without_credentials`). Note the OAuth env vars are
+`GOOGLE_OAUTH_CLIENT_ID/_SECRET` — the `GOREFER_`-prefixed names in `GLOBAL.env` are a different
+convention and blanking those does nothing.
+
+**Before calling any failure a defect, get a baseline** from unmodified prod code in the same
+env and diff the failure *sets*, not just the counts.
+
 ---
 
 ## Gotchas that cost real time
