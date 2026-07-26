@@ -179,18 +179,83 @@ The only path allowed to write account status. Craft an HMAC-sealed webhook usin
 
 ## Phase 6 — Follow-up engine, all gates
 
-Beyond firing one nudge:
-- All **7** steps enqueue on window open (`status='scheduled'`); `dedupe_key = tenant|mobile|step|window_open_ts`.
-- **Quiet hours** 23:00–06:00 IST → a night step defers to 06:00 IST (see an actual deferral, don't
-  just read the gate).
-- **Anti-burst** 90-min min-gap via `compute_defer`.
-- **Distinct per-step copy** (copy is read at fire time, so re-seeding changes pending sends).
-- **`stop_on_reply`** — reply mid-cadence (Phase 7) → remaining steps cancel.
-- **Opt-out** — send STOP → suppression.
-- **Converted-suppression** — a `has_converted` mobile gets no nudges.
-- **Window closed** → step skips with `window closed (session-only)`, never a failed send.
-- **§6.1 referrer nudge** (`followup_referrer_nudge_on`) — fires only when the referrer's phone is a
-  known `Customer`, capped one per step, name→generic descriptor.
+**Why this phase is not optional.** All of this logic passes unit tests, but unit tests use fake
+clocks. Nobody had confirmed that on the real server, at real IST times, a night nudge actually
+waits until morning and then spaces itself. The owner already caught a live duplicate-burst at
+06:03 on 2026-07-25, which is precisely why the min-gap exists — so "the tests pass" is not
+evidence here.
+
+### The gate, in the exact order the code runs it
+
+`services.evaluate_gate(sf, now)` — pure, no side effects. First match wins:
+
+| # | Check | Outcome | Notes |
+|---|---|---|---|
+| 1 | `followups_enabled(tenant)` false | **CANCEL** | flag flipped off after scheduling kills pending rows |
+| 2 | `rule.enabled` false | **CANCEL** | |
+| 3 | `is_opted_out(tenant, mobile)` | **CANCEL** | |
+| 4 | replied since this window opened | **CANCEL** `engaged: replied` | only if `rule.stop_on_reply` |
+| 5 | `has_converted(tenant, mobile)` | **CANCEL** `engaged: converted` | **also only if `rule.stop_on_reply`** — see caveat |
+| 6 | window state | SEND_SESSION / SEND_TEMPLATE / **SKIP** | closed + `only_if_window_open` ⇒ `SKIP`, never a failed send |
+| 7 | `in_quiet_hours(now)` | **HOLD** `quiet hours — deferred to 06:00 IST` | only applies to a would-be SEND |
+| 8 | `within_min_gap(...)` | **HOLD** `min-gap — spacing sends to avoid a burst` | only applies to a would-be SEND |
+
+**HOLD ≠ CANCEL.** A held row stays `scheduled` and `fire_at` is recomputed by
+`services.compute_defer()`, which returns the earliest instant satisfying **both** quiet hours and
+the min-gap. That single function is what stops several night-deferred steps collapsing onto one
+06:00 slot.
+
+**Live config (verified 2026-07-26, tenant 1):**
+`followup_quiet_start_hour=23` · `followup_quiet_end_hour=6` (IST) · `followup_min_gap_minutes=90`
+· `followup_referrer_nudge_step=nudge_12h`. All 7 seeded rules: `enabled=True`,
+`stop_on_reply=True`, `only_if_window_open=True`, `channel=session`.
+
+**CAVEAT worth a decision.** Converted-suppression (#5) is nested *inside* the `stop_on_reply`
+branch. Today all 7 rules have `stop_on_reply=True` so it is active — but a rule created through the
+CRUD API with `stop_on_reply=False` would keep nudging someone who has **already opened their
+account**. Coupling two unrelated concerns; flag to the DA rather than silently re-wire it.
+
+### How to test each gate honestly
+
+**Quiet hours — the one that must not be faked.** Do NOT assert on `in_quiet_hours()` alone; that
+only proves the predicate. Observe a real deferral:
+
+1. Record the current values, then temporarily shift the window so "now" falls inside it — e.g. at
+   16:00 IST set `followup_quiet_start_hour=15`, `followup_quiet_end_hour=17`.
+2. Make one step due (`fire_at = now`) and run `fire_due_followups()`.
+3. Assert: `counts["held"] == 1`, row still `scheduled`, `reason` mentions quiet hours, and
+   `fire_at` has moved to `services.next_active_time(now)` — the configured end hour in IST.
+4. **RESTORE both config values in the same session**, then re-assert `in_quiet_hours()` is False.
+
+Shifting the *window* is legitimate — the clock, the sweep and the send path are all real, only the
+boundary moves. Leaving it shifted would suppress real nudges, so restoring is mandatory, including
+on failure.
+
+**Anti-burst (90 min).** Send one nudge, then make a second step due immediately. Assert **HOLD**
+with the min-gap reason and `fire_at ≥ last_sent_at + 90 min`. Then confirm the interaction that
+matters: with the quiet window *also* shifted, `compute_defer` must satisfy **both** — the result
+must be ≥ end-of-quiet AND ≥ last send + 90 min, not merely one of them.
+
+**Converted-suppression.** Mark the mobile converted **only via the Zoho ingest path**
+(`POST /api/zoho/status-webhook`, sealed — see Phase 5). Never write `conversion_status` directly:
+guardrail 2 forbids it and the static scan will fail the build. Then assert the next due step
+**CANCELs** with `engaged: converted`.
+
+**Window closed.** Let a window pass 24h (or point a step at a stale window) and assert
+`SKIP` + `window closed (session-only)` — and specifically that `counts["failed"] == 0`. A closed
+window is a normal outcome, not an error.
+
+**Distinct per-step copy.** Copy is read at **fire time**, so re-seeding changes pending sends.
+Assert the 7 bodies are mutually distinct (this is what the owner's "identical messages" complaint
+was about).
+
+**`stop_on_reply` / opt-out.** Need a real inbound — see Phase 7 (WhatsApp Web). Until that session
+exists, these two stay BLOCKED rather than faked: stamping `last_inbound_at` by hand proves only
+that the comparison works, not that a real reply cancels a cadence.
+
+**§6.1 referrer nudge.** Fires only at the configured step and only when the referrer's phone is a
+known `Customer` (never guessed); capped one per step; unknown prospect name → generic descriptor;
+`{{3}}` is the full link from `nudge_link_for()` (see the v5 contract).
 
 ## Phase 7 — WhatsApp Web on the VPS (removes the last human step)
 

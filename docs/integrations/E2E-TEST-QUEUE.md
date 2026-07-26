@@ -33,9 +33,18 @@
 ## READY
 
 - [x] **Zoho conversion webhook (Phase 5) — DONE 2026-07-26, all green.** See DONE section.
-- [ ] **Follow-up engine remaining gates (Phase 6).** Quiet-hours deferral (see a real
-      deferral, not just the gate), 90-min anti-burst, distinct per-step copy, converted-
-      suppression, window-closed ⇒ `skipped` not `failed`.
+- [ ] **Follow-up engine remaining gates (Phase 6).** Full gate order + per-gate test method now
+      documented in the skill. Live config verified: quiet **23:00–06:00 IST**, min-gap **90 min**,
+      all 7 rules `stop_on_reply=True` / `only_if_window_open=True` / session channel.
+      To cover: (a) **quiet-hours deferral OBSERVED** — temporarily shift the quiet window so "now"
+      is inside it, assert `held=1` + row stays `scheduled` + `fire_at` moves to
+      `next_active_time()`, then **RESTORE both config values in the same session**;
+      (b) **90-min anti-burst**, incl. `compute_defer` satisfying quiet-hours AND the gap together,
+      not just one; (c) **converted-suppression** — mark converted ONLY via the sealed Zoho webhook
+      (guardrail 2 forbids a direct write), assert `CANCEL engaged: converted`;
+      (d) **window closed** ⇒ `SKIP` with `failed == 0`; (e) **7 distinct bodies** (copy is read at
+      fire time). `stop_on_reply` + opt-out stay BLOCKED — they need a real inbound (Phase 7),
+      and hand-stamping `last_inbound_at` proves the comparison, not the behaviour.
 - [ ] **Admin dashboard routes (Phase 9).** Log in with `E2E_ADMIN_USER`/`E2E_ADMIN_PASSWORD`
       (already verified working), then exercise `/`, `/explorer/`, `/journey/{id}/`,
       `/referrers/`, `/referrer/{id}/`, `/preferences`, `/verifications/`. Assert PII masked,
@@ -80,6 +89,12 @@
 - [ ] **M11 OG preview vs bot 302.** Crawlers get a 302 to Zerodha, so WhatsApp would render
       *Zerodha's* card, not PIFS's — yet M11 claims forwarded links render a PIFS card.
       Contradiction to resolve.
+- [ ] **DA DECISION: converted-suppression is coupled to `stop_on_reply`.** In
+      `services.evaluate_gate`, the `has_converted` check (#5) sits INSIDE the `rule.stop_on_reply`
+      branch. All 7 live rules have it True, so suppression is active today and there is no live
+      defect — but a rule created via the CRUD API with `stop_on_reply=False` would keep nudging
+      someone who has **already opened their account**. Two unrelated concerns share one switch.
+      Surfaced for the DA rather than silently re-wired (CLAUDE.md §3).
 - [ ] **SECURITY: the Zoho webhook IP allowlist is effectively DISABLED in production.**
       `ZOHO_WEBHOOK_IP_ALLOWLIST=''` and `WEBHOOK_REQUIRE_IP_ALLOWLIST=False` with `DEBUG=False`,
       so `_ip_allowed()` falls through to allow-any. The code's own comment says an empty allowlist
