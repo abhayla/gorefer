@@ -20,6 +20,7 @@ import logging
 
 from django.db import transaction
 
+from apps.config.cascade import resolve
 from apps.events import vocab
 from apps.events.bots import is_bot_user_agent
 from apps.events.models import Event, VisitorPII
@@ -40,7 +41,8 @@ def _active_program(tenant) -> ReferralProgram:
     return program
 
 
-def assemble_destination(program: ReferralProgram, *, client_id: str | None) -> str:
+def assemble_destination(program: ReferralProgram, *, client_id: str | None,
+                        tenant_id: int | None = None) -> str:
     """Build the final destination URL SERVER-SIDE from the program's template.
 
     The partner code is injected here from the Partner row — it is NEVER taken from
@@ -57,11 +59,61 @@ def assemble_destination(program: ReferralProgram, *, client_id: str | None) -> 
 
     partner: Partner = program.partner
     if client_id is None:
-        # Partner-direct: strip the r= param from the template, keep c= only.
-        # Template form: https://signup.zerodha.com/api/lead/?c={partner_code}&r={client_id}
-        base = rule.destination_url_template.split("&r=")[0].split("?r=")[0]
-        return base.format(partner_code=partner.code, client_id="")
+        return partner_direct_destination(program, tenant_id=tenant_id)
     return rule.destination_url_template.format(partner_code=partner.code, client_id=client_id)
+
+
+PARTNER_DIRECT_URL_KEY = "partner_direct_url_template"
+
+
+def partner_direct_destination(program: ReferralProgram, *, tenant_id: int | None = None) -> str:
+    """Where `/open` sends a visitor who arrived without a referrer.
+
+    Owner decision 2026-07-26: default to the partner's plain signup page
+    (`https://<signup-host>/?c={partner_code}`, the value `CLAUDE.md` always specified) so a
+    self-serve visitor can complete the account themselves — but make it CHANGEABLE from
+    config, e.g. back to the lead-capture path, without a deploy (CLAUDE.md §6d).
+
+    Previously this was derived by stripping `&r=` off the referral template, which silently
+    inherited that template's PATH — so `/open` was sending people to `/api/lead/` (a
+    lead-capture form) rather than signup, disagreeing with the spec.
+
+    The default is derived from the program's OWN template host rather than a hard-coded
+    URL, so nothing here is Zerodha-specific and a future partner needs configuration, not
+    code (Constitution: configuration over code).
+    """
+    rule = (
+        ProgramRedirectRule.objects.filter(program=program, is_active=True)
+        .order_by("priority")
+        .first()
+    )
+    if rule is None:
+        raise ProgramRedirectRule.DoesNotExist("no active redirect rule for program")
+
+    template = _resolve_partner_direct_template(rule.destination_url_template, tenant_id)
+    return template.format(partner_code=program.partner.code, client_id="")
+
+
+def _resolve_partner_direct_template(referral_template: str, tenant_id: int | None) -> str:
+    override = ""
+    try:
+        override = str(resolve(PARTNER_DIRECT_URL_KEY, tenant_id=tenant_id, default="") or "")
+    except Exception:
+        override = ""
+    if override.strip():
+        return override.strip()
+    # Scheme/host split done by hand, deliberately WITHOUT the stdlib URL-parsing module.
+    # `test_redirect_service_imports_no_http_client` scans this file's raw source for any
+    # sign of an HTTP client, so nothing that resembles one may appear here — not even in a
+    # comment. That bluntness is what makes the guardrail hard to game, and this module must
+    # never grow an outbound call to the partner (redirect only, never submit).
+    if "://" in referral_template:
+        scheme, _, rest = referral_template.partition("://")
+        host = rest.split("/", 1)[0].split("?", 1)[0]
+        if scheme and host:
+            return f"{scheme}://{host}/?c={{partner_code}}"
+    # Malformed template — fall back to the old strip behaviour rather than 500 the redirect.
+    return referral_template.split("&r=")[0].split("?r=")[0]
 
 
 @transaction.atomic
@@ -261,7 +313,8 @@ def handle_partner_direct(*, tenant, visitor_id, user_agent, raw_ip, share_chann
     attribution (metadata["channel"]) but never propagated downstream.
     """
     program = _active_program(tenant)
-    destination = assemble_destination(program, client_id=None)
+    destination = assemble_destination(program, client_id=None,
+                                       tenant_id=getattr(tenant, "id", None))
 
     if is_bot_user_agent(user_agent):
         logger.info("bot/preview hit on /open — no journey created")

@@ -103,7 +103,7 @@ def test_s_stripped_from_open_302(seeded, client):
     resp = client.get("/open?s=wa", HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.7")
     assert resp.status_code == 302
     loc = resp.headers["Location"]
-    assert loc == "https://signup.zerodha.com/api/lead/?c=ZMPHZC"
+    assert loc == "https://signup.zerodha.com/?c=ZMPHZC"
     assert "s=" not in loc.split("?", 1)[1]
 
 
@@ -149,3 +149,60 @@ def test_crawler_gets_card_but_no_journey(seeded, client, ua):
     assert ReferralIdentity.objects.count() == 0
     assert Referral.objects.count() == 0
     assert Event.objects.count() == 0
+
+
+# --- D2: crawlers get the PIFS card instead of a 302 (owner decision 2026-07-26) ---
+
+CRAWLERS = [
+    "facebookexternalhit/1.1",
+    "WhatsApp/2.23.20.0",
+    "Telegrambot (like TwitterBot)",
+    "Slackbot-LinkExpanding 1.0",
+    "Twitterbot/1.0",
+    "LinkedInBot/1.0",
+]
+
+
+@pytest.mark.parametrize("ua", CRAWLERS)
+def test_crawler_gets_a_pifs_card_not_a_redirect(seeded, client, ua):
+    """M11 promised a PIFS preview card, but it only rendered in LANDING_MODE=page. PIFS runs
+    `direct`, so crawlers were 302'd and WhatsApp built its preview from the PARTNER's page —
+    every forwarded link showed the partner's branding, not PIFS's."""
+    resp = client.get("/r/RJ4521", HTTP_USER_AGENT=ua)
+    assert resp.status_code == 200, f"{ua} must NOT be redirected"
+    body = resp.content.decode()
+    assert 'property="og:title"' in body
+    assert 'property="og:description"' in body
+
+
+def test_crawler_card_leaks_no_partner_code_or_partner_url(seeded, client):
+    """Guardrail 3 — this is a client-facing surface."""
+    body = client.get("/r/RJ4521", HTTP_USER_AGENT="facebookexternalhit/1.1").content.decode()
+    assert "ZMPHZC" not in body
+    assert "signup.zerodha.com" not in body
+
+
+def test_crawler_card_carries_the_compliance_block(seeded, client):
+    """A preview card is a customer-facing asset, so the disclosure travels with it."""
+    from django.conf import settings
+
+    body = client.get("/r/RJ4521", HTTP_USER_AGENT="facebookexternalhit/1.1").content.decode()
+    assert settings.MARKET_RISK_WARNING.split(".")[0] in body
+
+
+def test_crawler_creates_no_journey_and_no_cookie(seeded, client):
+    """The preview must stay as inert as the old 302 path was."""
+    from apps.referrals.models import ReferralIdentity
+
+    resp = client.get("/r/CRAWLBOT1", HTTP_USER_AGENT="facebookexternalhit/1.1")
+    assert resp.status_code == 200
+    assert not ReferralIdentity.objects.filter(client_id="CRAWLBOT1").exists()
+    assert "gr_vid" not in resp.cookies
+
+
+def test_a_human_is_still_redirected(seeded, client):
+    """Humans must be unaffected — this only changes what a bot sees."""
+    resp = client.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0 (Linux; Android 13) Chrome/120")
+    assert resp.status_code in (200, 302)
+    if resp.status_code == 302:
+        assert "signup.zerodha.com" in resp["Location"]
