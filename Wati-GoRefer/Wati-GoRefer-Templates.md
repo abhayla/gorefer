@@ -136,6 +136,13 @@ Templates: `gorefer_referrer_prospect_pending_{en,hi}_2026_07_26_v5`. Body is ot
 to v4; the mandatory market-risk + Disclosures block is unchanged and still follows the variable (Meta
 requires static text after the last variable).
 
+**State (2026-07-26, verified against the live Wati inventory):** both v5 templates are **APPROVED**
+and are the live prod config (`followup_referrer_nudge_template_{en,hi}` → v5; code `8219e6d`
+deployed). Meta kept them **MARKETING** despite UTILITY being requested — same reclassification story
+as §2.1 — so the nudge remains exposed to the per-user marketing cap (`131049`) and to the separate
+per-recipient quality restriction observed on `917972672473`. The manifest records this split as
+`category` (requested) vs `metaCategory` (granted).
+
 **Sequencing matters — do not flip one without the other.** Passing a full link to a v3/v4 template
 renders `gorefer.in/r/gorefer.in/r/wa/RJ4521?s=wa`. Code (full link) and config
 (`followup_referrer_nudge_template_{lang}` → v5) must ship together, and only once Meta has approved

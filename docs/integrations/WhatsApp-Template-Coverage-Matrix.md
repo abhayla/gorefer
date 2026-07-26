@@ -1,8 +1,17 @@
 # WhatsApp Template Coverage Matrix
 
-> **Generated 2026-07-26** from the live Wati inventory (100 records: 74 APPROVED, 25 DELETED,
-> 1 PENDING) cross-referenced against template names **resolved on prod** (tenant 1) and the
-> GoRefer code paths that send them.
+> **Generated 2026-07-26, refreshed same day after the v5 cutover** from the live Wati inventory
+> (100 records: 75 APPROVED, 24 DELETED, 1 PENDING) cross-referenced against template names
+> **resolved on prod** (tenant 1) and the GoRefer code paths that send them.
+>
+> **Scope rule:** this matrix covers the **GoRefer-scoped** templates only. The shared Wati tenant
+> `105355` holds **26 further live templates owned by other projects** (`firekaro_*`, `notifier_*`,
+> `noter_*`, `realestate_*`, Angel One, and several **legacy `zerodha_*` referral broadcasts** such
+> as `zerodha_refer_earn_v3`, `zerodha_referral_eng_2026_06_14`, `zerodha_account_opening_2026_06_02`,
+> `leads_referrel_broadcast_2025_11_16`, `referrer_re_broadcast_2025_08_01`). They are deliberately
+> outside this matrix — **except that the legacy Zerodha-referral ones are a Zerodha-AP compliance
+> surface nobody currently owns**: they carry referral claims and predate the current disclosure
+> conventions. Owner decision needed: re-verify or delete them.
 >
 > **The HTML conversation map is SSOT** — see `CLAUDE.md` §6c. This matrix is a *derived
 > reconciliation view*: it exists to make config-vs-Meta drift visible. Where this matrix and the
@@ -24,8 +33,8 @@
 
 | Template | Status | Cat | Lang | Vars | Btn | Owner | Scenario | Config key |
 |---|---|---|---|---|---|---|---|---|
-| `gorefer_referrer_prospect_pending_en_2026_07_25_v3` | APPROVED | MARK | en | 3 | 0 | GoRefer code | S6.1 referrer nudge - idle prospect (EN) | `followup rule` |
-| `gorefer_referrer_prospect_pending_hi_2026_07_25_v3` | APPROVED | MARK | hi | 3 | 0 | GoRefer code | S6.1 referrer nudge - idle prospect (HI) | `followup rule` |
+| `gorefer_referrer_prospect_pending_en_2026_07_26_v5` | APPROVED | MARK* | en | 3 | 0 | GoRefer code | S6.1 referrer nudge - idle prospect (EN); `{{3}}` = FULL link from `nudge_link_for()` | `followup_referrer_nudge_template_en` |
+| `gorefer_referrer_prospect_pending_hi_2026_07_26_v5` | APPROVED | MARK* | hi | 3 | 0 | GoRefer code | S6.1 referrer nudge - idle prospect (HI); `{{3}}` = FULL link from `nudge_link_for()` | `followup_referrer_nudge_template_hi` |
 | `gr_brokers_zerodha_office_lead_alert_en_2026_07_19` | APPROVED | UTIL | en | 4 | 0 | GoRefer code | Lead captured -> office/Ashok alert | `notify_template_office_en` |
 | `gr_brokers_zerodha_prospect_welcome_en_2026_07_17_v2` | APPROVED | UTIL | en | 3 | 0 | GoRefer code | Lead captured -> prospect welcome (EN) | `notify_template_prospect_en` |
 | `gr_brokers_zerodha_prospect_welcome_hi_2026_07_17_v2` | APPROVED | UTIL | hi | 3 | 0 | GoRefer code | Lead captured -> prospect welcome (HI) | `notify_template_prospect_hi` |
@@ -65,13 +74,23 @@
 | `gorefer_referrer_prospect_pending_en_2026_07_25_v2` | APPROVED | MARK | en | 3 | 0 | **UNWIRED / superseded** | not sent by any known path | - |
 | `gorefer_referrer_prospect_pending_hi_2026_07_25` | APPROVED | MARK | hi | 3 | 0 | **UNWIRED / superseded** | not sent by any known path | - |
 | `gorefer_referrer_prospect_pending_hi_2026_07_25_v2` | APPROVED | MARK | hi | 3 | 0 | **UNWIRED / superseded** | not sent by any known path | - |
+| `gorefer_referrer_prospect_pending_en_2026_07_25_v3` | APPROVED | MARK | en | 3 | 0 | **UNWIRED / superseded** (was wired until v5, 2026-07-26) | not sent by any known path | - |
+| `gorefer_referrer_prospect_pending_hi_2026_07_25_v3` | APPROVED | MARK | hi | 3 | 0 | **UNWIRED / superseded** (was wired until v5, 2026-07-26) | not sent by any known path | - |
+| `gorefer_referrer_prospect_pending_en_2026_07_26_v4` | APPROVED | MARK | en | 3 | 0 | **UNWIRED / superseded** (UTILITY re-cut attempt; Meta kept MARKETING) | not sent by any known path | - |
+| `gorefer_referrer_prospect_pending_hi_2026_07_26_v4b` | APPROVED | MARK | hi | 3 | 0 | **UNWIRED / superseded** (`v4b` because Wati DELETE leaves Meta's language content — name unreusable) | not sent by any known path | - |
 | `gr_brokers_zerodha_office_lead_alert_en_2026_07_17` | APPROVED | MARK | en | 4 | 0 | **UNWIRED / superseded** | not sent by any known path | - |
 | `gr_brokers_zerodha_referrer_thankyou_en_2026_07_17` | APPROVED | MARK | en | 2 | 0 | **UNWIRED / superseded** | not sent by any known path | - |
 | `gr_brokers_zerodha_referrer_thankyou_hi_2026_07_17` | APPROVED | MARK | hi | 2 | 0 | **UNWIRED / superseded** | not sent by any known path | - |
 | `gr_brokers_zerodha_referrer_update_en_2026_07_19_v2` | APPROVED | UTIL | en | 2 | 1 | **UNWIRED / superseded** | not sent by any known path | - |
 | `gr_brokers_zerodha_referrer_update_hin_2026_07_19_v2` | APPROVED | UTIL | hi | 2 | 1 | **UNWIRED / superseded** | not sent by any known path | - |
 
-**Totals:** 46 live templates - Zoho/Wati journey *(inferred - verify)*: 24; **UNWIRED / superseded**: 9; GoRefer code: 8; Wati broadcast: 3; Wati-Project daily_report: 2
+**Totals:** 50 live GoRefer-scoped templates (of 76 live on the shared tenant — see scope rule) -
+Zoho/Wati journey *(inferred - verify)*: 24; **UNWIRED / superseded**: 13; GoRefer code: 8;
+Wati broadcast: 3; Wati-Project daily_report: 2
+
+\* `MARK*` on the v5 pair: **UTILITY was requested, Meta granted MARKETING** (same reclassification
+story as the 2026-07-17 five). The manifest records the split as `category` (requested) vs
+`metaCategory` (granted).
 
 ## Findings from the 2026-07-26 reconciliation
 
@@ -86,7 +105,8 @@
 3. **`prospect_welcome` v2 is UTILITY, v3 is MARKETING.** Bumping to v3 would push a must-arrive
    transactional welcome into the capped bucket. Do not treat that bump as routine.
 4. **`gorefer_referrer_prospect_pending_en_2026_07_25` (v1) is the account's only PENDING template**
-   and is superseded by v2/v3. Withdraw/delete it.
+   and is superseded by v2/v3/v4/v5. Withdraw/delete it (queue item exists; NOTE Wati DELETE
+   leaves Meta's language content behind, so the name cannot be reused).
 5. **The Hindi office alert points at the older English template.** `notify_template_office_hi` has
    no override, so it falls back to `..._en_2026_07_17` while EN resolves to `..._en_2026_07_19`.
    Harmless today (office sends use EN) but it is latent drift.
@@ -118,9 +138,10 @@ Wati's own terminal `statusString`, not the send ack.
    detail: *"Message undeliverable as Meta has restricted it for higher quality messaging — retry
    again in a few days."* Distinct from `131049` (per-user cap). Both EN and HI v3 failed. This is
    GoRefer's newest live feature and its template is **MARKETING** — so in production it is
-   currently throttled. Re-cutting it as **UTILITY** (it is transactional: "your referral hasn't
-   finished") is the likely fix, and would also lift it out of the cap that dominates the 43%
-   delivery rate.
+   currently throttled. ~~Re-cutting it as **UTILITY** is the likely fix~~ **DISPROVEN same day:**
+   the v4 UTILITY re-cut reproduced the identical failure on `917972672473`, and Meta kept v4/v5
+   as MARKETING anyway. The restriction is **per-recipient**, recovery is Meta-side (wait it out +
+   lower marketing volume to that number) — not copy- or category-fixable from our side.
 8. **Named vs positional params: no bug.** All 8 templates declare positional params (`1,2,3,4`)
    while `apps/otp/adapters.py` sends *named* (`otp_code`, `expiry_minutes`). Both rendered the code
    correctly (named → READ, positional → DELIVERED), so Wati accepts either. Flagged and cleared.

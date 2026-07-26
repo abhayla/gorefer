@@ -65,10 +65,15 @@ ssh -i "$VPS_KEY" -o BatchMode=yes -o ConnectTimeout=12 "$VPS" \
   'ls -d ~/.config/google-chrome*/Default/Local\ Storage 2>/dev/null | head -1' 2>/dev/null | grep -q . && r=1 || r=0
 check "Chrome profile on VPS" "$r" soft "prerequisite for the two sessions below"
 # A logged-in session cannot be proven from disk — require an explicit confirmation marker.
-ssh -i "$VPS_KEY" -o BatchMode=yes "$VPS" 'test -f /root/.gorefer-e2e/whatsapp-web.ok' 2>/dev/null && r=1 || r=0
-check "WhatsApp Web session" "$r" soft "Phase 7 autonomy; Phase 8 OTP; Phase 6 stop_on_reply/opt-out"
-ssh -i "$VPS_KEY" -o BatchMode=yes "$VPS" 'test -f /root/.gorefer-e2e/google-session.ok' 2>/dev/null && r=1 || r=0
-check "Google session" "$r" soft "Phase 8 — Google OAuth login (the PRIMARY login path)"
+# A marker OLDER THAN 7 DAYS is treated as missing (sessions expire; a stale marker is a lie) —
+# re-confirm by touching it again after checking the login still works. The marker is CONSENT,
+# not proof: Phase 7 must still probe liveness (chat-list DOM vs QR canvas) before relying on it.
+ssh -i "$VPS_KEY" -o BatchMode=yes -o ConnectTimeout=12 "$VPS" \
+  'find /root/.gorefer-e2e/whatsapp-web.ok -mtime -7 2>/dev/null' 2>/dev/null | grep -q . && r=1 || r=0
+check "WhatsApp Web session (marker <7d)" "$r" soft "Phase 7 autonomy; Phase 8 OTP; Phase 6 stop_on_reply/opt-out"
+ssh -i "$VPS_KEY" -o BatchMode=yes -o ConnectTimeout=12 "$VPS" \
+  'find /root/.gorefer-e2e/google-session.ok -mtime -7 2>/dev/null' 2>/dev/null | grep -q . && r=1 || r=0
+check "Google session (marker <7d)" "$r" soft "Phase 8 — Google OAuth login (the PRIMARY login path)"
 
 echo
 echo "=============================================================="

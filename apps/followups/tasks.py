@@ -324,6 +324,12 @@ def _maybe_referrer_nudge(sf: ScheduledFollowup, identity, counts: dict) -> None
             # link_mode="none" — the operator has switched embedded links off. A nudge whose
             # entire point is "share your link again" is meaningless without one, and a blank
             # template variable is rejected by Meta, so skip rather than send something broken.
+            logger.info(
+                "referrer-nudge skipped for sf=%s: link_mode=none (no link to embed)", sf.pk
+            )
+            counts["referrer_nudge_skipped_no_link"] = (
+                counts.get("referrer_nudge_skipped_no_link", 0) + 1
+            )
             return
 
         tmpl = str(
