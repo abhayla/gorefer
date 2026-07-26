@@ -88,6 +88,53 @@ stores the true opening date and rejects forgeries. **Nothing is feeding it.**
 for July when 6 opened · the 21:30 daily report has been stating 0 **falsely** · the whole
 conversion/reward half of the product is inert.
 
+**FIELD MAP FOUND (Zoho `Contacts`, 107 fields, 35 custom) — everything the webhook needs exists:**
+
+| GoRefer webhook field | Zoho Contacts field | Type |
+|---|---|---|
+| `opener_zerodha_account_id` | `ClientId` | text |
+| `referrer_client_id` | `Referrer_Client_Id` | text |
+| `account_opened_at` | `Account_Opened_On` | date |
+| `status` | `Account_Status` | picklist |
+| `opener_name` | `Full_Name` | — |
+
+Also available if wanted: `Referrer_Name`, `Referrer_Mobile`, `Referrer_Email`, `IsReferrer`,
+`Referral_Bonus`, `Referral_Bonus_Amount`, `Assisted`, `Couriered`, `Mapping_Verified`,
+`WhatsApp_Opt_Out`, `Is_Active_Investor`.
+
+## 🟠 SECOND, INDEPENDENT PROBLEM — Zoho's conversion data is INCOMPLETE vs the owner's own records
+
+Fixing the module bug alone will NOT make referrer credit correct, because Zoho itself disagrees
+with the owner's account list (verified 2026-07-26 against `Account_Opened_On >= 2026-07-01`):
+
+| Owner's record | In Zoho Contacts? | Referrer per owner | Referrer per Zoho |
+|---|---|---|---|
+| `UGF159` Uday Kumar Singh, 18-Jul | yes | (none) | (none) ✓ |
+| `EUG979` Malvika Gupta, 17-Jul | yes (16-Jul) | `YTW629` | **`YTW628`** ⚠ one digit apart |
+| `CWD202` Aradhana Gupta, 13-Jul | **ABSENT** | `EKU497` | — |
+| `EKU497` Ram Chandra Gupta, 09-Jul | yes | (none) | (none) ✓ |
+| `MZK185` Aayush Mehrotra, 06-Jul | yes | `FWW808` | **null** ⚠ no referrer recorded |
+| `KWE338` Anupam Pandey, 02-Jul | **ABSENT** | (none) | — |
+
+Also: `Account_Status` is **null on every row** — the picklist GoRefer's `statusmap` reads is not
+being maintained (the ingest's `or "account_opened"` fallback would cover it, but it is unmanaged).
+And `AACK095261` (Sneha Kumari, 24-Jul) IS in Zoho but is an **AngelOne** account, not Zerodha —
+so a Contacts trigger must not blindly treat every opened contact as a Zerodha/PIFS conversion.
+
+**Consequence:** even after P0-A, GoRefer would ingest 4 of 6 openings, credit **one** referrer —
+possibly the WRONG ONE (`YTW628` vs `YTW629` differ by a digit; one is a typo) — and miss two
+referrer credits entirely.
+
+**This directly challenges ADR-013/016 ("Zoho is the SINGLE authoritative source of truth for
+referral credit").** It is authoritative by design but demonstrably incomplete in practice. Owner
+decision needed: bring Zoho up to date as the real SSOT, or accept a second reconciliation source.
+
+- [ ] **P0-E · Reconcile the referrer discrepancies with the owner** — `YTW628` vs `YTW629`
+      (which is correct? one referrer is being credited wrongly), and `MZK185`'s missing `FWW808`.
+- [ ] **P0-F · Get `CWD202` and `KWE338` into Zoho**, or decide they are out of scope.
+- [ ] **P0-G · A Contacts trigger must filter to Zerodha/PIFS accounts** — `AACK095261` proves
+      non-Zerodha accounts share the module.
+
 - [ ] **P0-A · DA DECISION + fix: point the Zoho trigger at Contacts.** Change the workflow rule to
       fire on lead→contact conversion (or Contact create where `Lead_Source="Referral"`) and POST the
       Contact's Zerodha client id + referrer client id to the existing sealed webhook. Needs the
