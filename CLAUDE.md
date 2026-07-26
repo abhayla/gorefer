@@ -234,6 +234,27 @@ WhatsApp login OTP was rejected (HTTP 400) and silently degraded to the `manual`
 config value was truthy. The coverage matrix in
 `docs/integrations/WhatsApp-Template-Coverage-Matrix.md` exists to make that class of drift visible.
 
+## 6d. Message behaviour is CONFIGURATION, not code (owner rule, 2026-07-26)
+
+> *"All such message settings should be configurable."* — owner, 2026-07-26
+
+Anything that governs **what a message says, where a link points, or when a message is suppressed**
+must be changeable through the ADR-022 config cascade (and surfaced on the Preferences screen where
+an operator would reasonably look for it) — **never** a hard-coded literal requiring a deploy.
+
+Concretely, this rule was stated while deciding four things, and each is now config-driven:
+- the **partner-direct destination** for `/open` (default `https://signup.zerodha.com/?c=ZMPHZC`,
+  switchable to `/api/lead/?c=…` or any other URL);
+- the **crawler preview-card** title/description served to link-preview bots;
+- the **converted-suppression** switch ("account already open → never nudge"), which must apply
+  independently of `stop_on_reply`;
+- template **names** per role/language (already cascade-resolved — keep it that way).
+
+This is the same reasoning as `REFERRAL_INCENTIVE_CLAIM` living in one editable field: the owner
+must be able to change customer-facing behaviour without an engineer. When adding a new message
+surface, add its knob at the same time — a literal that "will probably never change" is exactly the
+one that changes on a Saturday.
+
 ## 7. Definition of Done + expectations
 
 Reference `implementation/10-Claude-Code-Implementation-Guide.md` (§3 standards, §6 tests, §7 git, §8 migrations, §9 DoD, §10 demo mode). A mission is **done** only when all hold:
