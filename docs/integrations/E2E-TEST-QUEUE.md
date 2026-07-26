@@ -33,18 +33,7 @@
 ## READY
 
 - [x] **Zoho conversion webhook (Phase 5) — DONE 2026-07-26, all green.** See DONE section.
-- [ ] **Follow-up engine remaining gates (Phase 6).** Full gate order + per-gate test method now
-      documented in the skill. Live config verified: quiet **23:00–06:00 IST**, min-gap **90 min**,
-      all 7 rules `stop_on_reply=True` / `only_if_window_open=True` / session channel.
-      To cover: (a) **quiet-hours deferral OBSERVED** — temporarily shift the quiet window so "now"
-      is inside it, assert `held=1` + row stays `scheduled` + `fire_at` moves to
-      `next_active_time()`, then **RESTORE both config values in the same session**;
-      (b) **90-min anti-burst**, incl. `compute_defer` satisfying quiet-hours AND the gap together,
-      not just one; (c) **converted-suppression** — mark converted ONLY via the sealed Zoho webhook
-      (guardrail 2 forbids a direct write), assert `CANCEL engaged: converted`;
-      (d) **window closed** ⇒ `SKIP` with `failed == 0`; (e) **7 distinct bodies** (copy is read at
-      fire time). `stop_on_reply` + opt-out stay BLOCKED — they need a real inbound (Phase 7),
-      and hand-stamping `last_inbound_at` proves the comparison, not the behaviour.
+- [x] **Follow-up engine gates (Phase 6) — DONE 2026-07-26, all 5 green.** See DONE section.
 - [ ] **Admin dashboard routes (Phase 9).** Log in with `E2E_ADMIN_USER`/`E2E_ADMIN_PASSWORD`
       (already verified working), then exercise `/`, `/explorer/`, `/journey/{id}/`,
       `/referrers/`, `/referrer/{id}/`, `/preferences`, `/verifications/`. Assert PII masked,
@@ -110,6 +99,27 @@
       ("retry in a few days") plus lowering marketing volume — not a code fix.
 
 ## DONE
+
+- [x] **Phase 6 — all five gates verified LIVE (2026-07-26).**
+      **P1 DEFECT FOUND + FIXED: converted-suppression was silently dead in production.**
+      `has_converted()` read only `Lead.status == "account_opened"`, but the Zoho ingest — the only
+      path allowed to record a conversion — writes `Referral.conversion_status` and never advances
+      `Lead.status`. Every prod Lead read `"new"`, so the gate always returned False and a customer
+      who had ALREADY opened their account kept getting "your account is still pending" nudges for
+      the full 21h cadence. Fixed to read the field Zoho actually maintains; verified live on a REAL
+      cadence row: `cancelled / engaged: converted`.
+      **Quiet hours OBSERVED, not asserted:** shifted the window to 16-18 IST, sweep returned
+      `held=1`, row stayed `scheduled`, and `fire_at` moved 11:12Z -> 12:30Z = exactly 18:00 IST =
+      `next_active_time()`. Config restored to (23,6) in a `finally`.
+      **Bug found while doing it:** the hold reason hardcoded "06:00 IST" while actually deferring to
+      the configured hour — a lie in the audit trail for any AP with a custom window. Fixed + test.
+      **Anti-burst:** `within_min_gap` True and `compute_defer` satisfied BOTH constraints
+      simultaneously (>= last_send + 90 min AND outside quiet hours).
+      **Window closed** -> `skipped` with `failed == 0`. **7 distinct bodies** confirmed.
+      **My own contamination, owned and reverted:** `stamp_inbound()` mutates the real window, so my
+      scaffolding briefly made the gate see a reply that never happened; true `last_inbound_at`
+      restored and the proof re-run. Rail added to the skill.
+      Suite 599 passed / 0 failed. Deployed.
 
 - [x] **Phase 5 — Zoho conversion ingest, verified live end to end (2026-07-26).**
       Negative cases all **401 with a flat, reason-free body** (no probing oracle):

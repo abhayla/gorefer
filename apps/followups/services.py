@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import timedelta
 from datetime import timezone as dt_timezone
 
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.config.cascade import resolve
@@ -124,16 +125,31 @@ def window_is_open(window: FollowupWindow | None, now=None) -> bool:
 
 
 def has_converted(tenant, mobile: str) -> bool:
-    """Best-effort engaged-exit: a lead for this mobile has reached account_opened.
+    """Best-effort engaged-exit: this mobile's account has been opened, per Zoho.
 
-    account_opened status is only ever set from Zoho (guardrail #2) — we read it here,
+    account_opened status is only ever SET from Zoho (guardrail #2) — we read it here,
     never write it. Wrapped defensively so a schema surprise can't crash the sweep.
+
+    Reads `Referral.conversion_status` FIRST because that is the field the Zoho ingest
+    actually maintains. `Lead.status` is kept as a secondary check only for
+    forward-compatibility.
+
+    Why: this gate was silently dead in production (found 2026-07-26). It checked ONLY
+    `Lead.status == "account_opened"`, but `apps/integrations/zoho/ingest.py` — the sole
+    path allowed to record a conversion — writes `Referral.conversion_status` /
+    `Conversion` and never advances `Lead.status`. Every Lead in prod still read `"new"`,
+    so `has_converted()` always returned False and a customer who had already opened their
+    account kept receiving "your account is still pending" nudges for the whole 21h cadence.
+    Two representations of one fact, and the gate read the one nobody wrote.
     """
     try:
         from apps.referrals.models import Lead
 
         return Lead.objects.filter(
-            tenant=tenant, prospect__mobile=mobile, status="account_opened", deleted_at__isnull=True
+            tenant=tenant, prospect__mobile=mobile, deleted_at__isnull=True
+        ).filter(
+            Q(referral__conversion_status="account_opened")
+            | Q(status="account_opened")
         ).exists()
     except Exception:
         return False
@@ -269,7 +285,12 @@ def evaluate_gate(sf: ScheduledFollowup, now=None) -> tuple[str, str]:
     #     sweep re-computes fire_at via compute_defer (satisfies BOTH constraints).
     if decision in (DEC_SEND_SESSION, DEC_SEND_TEMPLATE):
         if in_quiet_hours(now, sf.tenant_id):
-            return DEC_HOLD, "quiet hours — deferred to 06:00 IST"
+            # Report the CONFIGURED end hour, not a hardcoded 06:00 — an AP can widen or
+            # narrow its own quiet window, and a reason string that names the wrong hour is a
+            # lie in the audit trail (observed 2026-07-26: window shifted to 16-18 IST, the
+            # row correctly deferred to 18:00 while the reason still claimed 06:00).
+            _, _end = _quiet_bounds(sf.tenant_id)
+            return DEC_HOLD, f"quiet hours — deferred to {_end:02d}:00 IST"
         if within_min_gap(sf.tenant, sf.mobile, now, sf.tenant_id):
             return DEC_HOLD, "min-gap — spacing sends to avoid a burst"
     return decision, reason

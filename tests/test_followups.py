@@ -889,3 +889,67 @@ def test_referrer_nudge_only_at_configured_step(enabled, monkeypatch):
     assert counts["sent"] == 1
     assert counts["referrer_nudged"] == 0      # this step isn't the referrer-nudge step
     assert rec.templates == []
+
+
+def test_has_converted_reads_the_field_zoho_actually_maintains(enabled, monkeypatch):
+    """Regression: converted-suppression was silently DEAD in production.
+
+    `has_converted` checked only `Lead.status == "account_opened"`, but the Zoho ingest —
+    the sole path allowed to record a conversion — writes `Referral.conversion_status` and
+    never advances `Lead.status`. Every prod Lead read "new", so a customer who had already
+    opened their account kept getting "your account is still pending" nudges.
+    """
+    from apps.referrals.models import Lead, Referral
+
+    pm = _prospect_with_known_referrer(
+        enabled, client_id="RJ4521", prospect_mobile="9812345678", prospect_name="Riya",
+        referrer_mobile="919844440000",
+    )
+    assert services.has_converted(enabled, pm) is False, "should not be converted yet"
+
+    # Exactly the shape the Zoho ingest leaves behind: referral converted, Lead untouched.
+    lead = Lead.objects.get(prospect__mobile=pm)
+    assert lead.status == "new", "ingest does not advance Lead.status — that is the point"
+    Referral.objects.filter(pk=lead.referral_id).update(conversion_status="account_opened")
+
+    assert services.has_converted(enabled, pm) is True, (
+        "has_converted must read Referral.conversion_status — the field Zoho maintains"
+    )
+
+
+def test_converted_contact_is_cancelled_not_nudged(enabled, monkeypatch):
+    """The gate must CANCEL a due nudge once the account is open (engaged-exit)."""
+    from apps.referrals.models import Lead, Referral
+
+    from apps.common.phone import normalize_phone
+
+    rec = _fire_referrer_nudge_setup(enabled, monkeypatch, flag_on=False)
+    lead = Lead.objects.get(prospect__mobile=normalize_phone("9812345678"))
+    Referral.objects.filter(pk=lead.referral_id).update(conversion_status="account_opened")
+
+    counts = tasks.fire_due_followups()
+    assert counts["cancelled"] == 1, f"converted contact should be cancelled, got {counts}"
+    assert counts["sent"] == 0, "must not nudge someone whose account is already open"
+    assert len(rec.sent) == 0 and len(rec.templates) == 0
+    sf = ScheduledFollowup.objects.order_by("-id").first()
+    assert sf.reason == "engaged: converted"
+
+
+def test_quiet_hours_reason_names_the_configured_end_hour(enabled, monkeypatch):
+    """The hold reason hardcoded "06:00 IST" regardless of the tenant's configured window.
+
+    Observed live 2026-07-26: with the window shifted to 16-18 IST the row correctly deferred
+    to 18:00 while the reason still claimed 06:00 — a lie in the audit trail for any AP that
+    narrows or widens its quiet hours.
+    """
+    monkeypatch.setattr(services, "in_quiet_hours", lambda *a, **k: True)
+    set_tenant("followup_quiet_end_hour", 9, tenant_id=enabled.id)
+
+    rule = _rule(enabled, step_key="nudge_3h", channel=FollowupRule.CHANNEL_SESSION)
+    win = _open_window(enabled, ago_hours=1, mobile="919812345678")
+    sf = _scheduled(enabled, rule, mobile="919812345678", window=win)
+
+    decision, reason = services.evaluate_gate(sf, timezone.now())
+    assert decision == services.DEC_HOLD
+    assert "09:00 IST" in reason, f"reason must name the CONFIGURED end hour, got {reason!r}"
+    assert "06:00" not in reason
