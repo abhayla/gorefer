@@ -38,6 +38,38 @@ def _cfg(key: str, setting_name: str, tenant_id: int | None) -> str:
         return default
 
 
+def absolute_image_url(image: str) -> str:
+    """THE one way to turn a configured OG image into a crawler-usable absolute URL.
+
+    Open Graph requires an ABSOLUTE url — a crawler has no page context to resolve a
+    relative one against. Two things have to happen and both were missing here:
+      1. the value must be absolute, and
+      2. a bare path like the default `img/og-card.png` is a STATIC path, so it must go
+         through `static()` — the asset is served at `/static/img/...`, and `/img/...`
+         is a 404.
+
+    Found live 2026-07-26: the D2 crawler card emitted `og:image="img/og-card.png"`, so
+    every forwarded referral link rendered a preview with NO image — on precisely the
+    surface D2 exists to fix. M11's landing card (`views.py:_og_context`) already had this
+    logic; the crawler card did not reuse it. Both now call THIS function, so the two
+    cards cannot drift apart again (same reasoning as `nudge_link_for()` being the single
+    link builder).
+
+    An already-absolute configured value is returned untouched, so an operator can point
+    the cascade key at a CDN URL without code changes (CLAUDE.md §6d).
+    """
+    from django.conf import settings
+    from django.templatetags.static import static
+
+    image = (image or "").strip()
+    if not image:
+        return ""
+    if image.startswith(("http://", "https://", "//")):
+        return image
+    base = (getattr(settings, "PUBLIC_BASE_URL", "") or "").rstrip("/")
+    return base + static(image)
+
+
 def render_preview(request, *, tenant_id: int | None = None):
     """200 with an OG card. NEVER a redirect — a crawler that follows a 302 renders the
     partner's card, which is the whole bug this fixes."""
@@ -48,7 +80,7 @@ def render_preview(request, *, tenant_id: int | None = None):
             "og_title": _cfg(TITLE_KEY, "OG_TITLE", tenant_id),
             "og_description": _cfg(DESCRIPTION_KEY, "OG_DESCRIPTION", tenant_id),
             "og_site_name": _cfg(SITE_NAME_KEY, "OG_SITE_NAME", tenant_id),
-            "og_image": _cfg(IMAGE_KEY, "OG_IMAGE", tenant_id),
+            "og_image": absolute_image_url(_cfg(IMAGE_KEY, "OG_IMAGE", tenant_id)),
             "og_url": request.build_absolute_uri(),
         },
     )

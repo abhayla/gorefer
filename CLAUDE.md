@@ -226,6 +226,18 @@ A template that exists at Meta but not on the map, or a map card whose state con
 **Also true of scenarios, not just templates:** every conversation path (keyword, chatbot flow,
 journey nudge, report, OTP) belongs on the map. "It works but isn't on the map" is not done.
 
+**Category (UTILITY vs MARKETING) is an ENGINEERING constraint, not a copy preference.** MARKETING
+templates hit Meta's per-user cap `131049` — the dominant cause of our ~43% delivery rate — cost ~7×,
+and cannot be rescued by retrying. Meta re-categorizes a UTILITY submission to MARKETING **silently
+and approves it**, so `ok:true` proves nothing: **always read back the `category` field after
+submitting.** Before authoring or re-cutting any template, read
+`docs/integrations/Meta-Template-Categorization-Policy.md` — it holds the actual two-part test, Meta's
+worked examples, and the authoring checklist. Precedent: three consecutive submissions (v4/v5/v6 of
+the §6.1 referrer nudge) were flipped to MARKETING because each trimmed adjectives around the
+**referral link** — a cross-sell asset, and the disqualifier the policy names outright. v7 removed the
+link and held UTILITY first try. Repeated mis-categorization is detectable and penalized by Meta, so
+never churn resubmissions — read the policy first.
+
 **Template names are config, and config drifts.** Never assume a configured template name exists —
 resolve it and check it against the live Wati inventory. Precedent: on 2026-07-26 prod's
 `otp_whatsapp_template` was `gorefer_login_otp`, a name that had **never existed** at Meta, so every
