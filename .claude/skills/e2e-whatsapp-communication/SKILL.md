@@ -103,6 +103,45 @@ standing prod password exists anywhere (`CLAUDE.md` §4: never a seeded plaintex
   `131049` (per-user cap). Spread across both sanctioned numbers, prefer UTILITY variants, and treat
   a cap rejection as a **recorded outcome**, not a GoRefer failure — the pass bar is `sent`.
 
+## Phase 0c — Read the delivered message and TEST EVERY LINK IN IT (owner rule 2026-07-26)
+
+A template that reaches `sent` is only half-verified. **The message body is a deliverable**: its
+links must resolve and its data must be right. Read what actually arrived (Wati `getMessages`, or
+the conversation in WhatsApp Web) and check both.
+
+**Every link, clicked.** Extract each URL from the delivered body and follow it:
+
+| Link | Expect |
+|---|---|
+| `gorefer.in/r/wa/{id}` | 302 → `signup.zerodha.com/api/lead/?c=ZMPHZC&r={id}` |
+| `gorefer.in/r/{id}?s=wa` | 302, same destination (legacy form still supported) |
+| `gorefer.in/open` | 302 with **no `r=`** |
+| `gorefer.in/d/pifs` | 200 |
+
+**Extract the URL exactly as the CLIENT linkifies it, not as the copy intended.** WhatsApp
+auto-links a bare domain and swallows anything up to the next whitespace — so a missing space
+silently corrupts the URL. Found live 2026-07-26: the Wati welcome flow read
+`…here: gorefer.in/openOr reply Call me…` with no separator, WhatsApp linkified
+**`gorefer.in/openOr`**, and that **404s** — a dead CTA on the primary account-opening path.
+Confirm the anchor boundary visually (the link is underlined) or read the `href`; do not assume
+the copy's intent.
+
+**Data correctness in the body — verify, don't skim:**
+- Every `{{n}}` substituted; **no blank variable** and no leftover placeholder.
+- Names/ids match the source record; an unknown name falls back to a generic descriptor
+  (`"A friend referred you"`, `"one of your recent referrals"`) rather than rendering empty.
+- The **compliance block is present**: market-risk sentence + `Disclosures: https://gorefer.in/d/pifs`
+  (+ the `PIFS · Zerodha Authorised Person` footer where the template carries one).
+- **No partner code and no raw Zerodha URL** anywhere in the body (guardrail 3).
+- Contact numbers are consistent across templates. *Open nit found 2026-07-26:* the helpline appears
+  as `+91 73888 82020` in one template and `7388882020` in another — same number, two formats.
+- Hindi bodies render real Devanagari with variables substituted, not mojibake.
+
+**Constraint discovered 2026-07-26 — OTP codes are INVISIBLE on linked devices.** WhatsApp shows
+*"You received a one-time passcode. For added security, you can only see it on your primary device"*
+for AUTHENTICATION-category templates. So WhatsApp Web **cannot** read a login OTP, and Phase 8's
+OTP half still needs the owner to read the code off their phone. Do not plan around automating it.
+
 ## Phase 1 — Redirect, share, guardrails
 
 ```bash
