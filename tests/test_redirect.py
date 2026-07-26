@@ -123,3 +123,38 @@ def test_raw_ip_stored_on_erasable_record_not_in_event(client):
     # The click event references the PII record by id only.
     click = Event.objects.get(event_type="click")
     assert click.person_ref_id == pii.pk
+
+
+def test_first_click_at_is_stamped_on_first_click_only(seeded, client):
+    """`first_click_at` was declared + shown in admin but never written (always None).
+
+    It must be set by the first click and then stay put — a later click must not move it.
+    """
+    client.get("/r/FIRSTCLK1", HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.7")
+    referral = Referral.objects.get(referral_identity__client_id="FIRSTCLK1")
+    assert referral.first_click_at is not None, "first click did not stamp first_click_at"
+    stamped = referral.first_click_at
+
+    client.get("/r/FIRSTCLK1", HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.7")
+    referral.refresh_from_db()
+    assert referral.first_click_at == stamped, "a later click moved first_click_at"
+
+
+def test_first_click_at_stamped_for_partner_direct(
+    seeded, client, django_capture_on_commit_callbacks
+):
+    """The partner-direct journey is a click path too, so it must stamp as well.
+
+    `/open` writes its click on `transaction.on_commit` so the 302 is never blocked;
+    inside a test transaction that callback only runs if we capture + execute it.
+    """
+    with django_capture_on_commit_callbacks(execute=True):
+        client.get("/open", HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.7")
+    referral = Referral.objects.get(source="partner_direct")
+    assert referral.first_click_at is not None
+
+
+def test_bot_click_does_not_stamp_first_click_at(seeded, client):
+    """A bot preview never creates a journey, so nothing should be stamped for it."""
+    client.get("/r/BOTCLK1", HTTP_USER_AGENT="facebookexternalhit/1.1")
+    assert not ReferralIdentity.objects.filter(client_id="BOTCLK1").exists()
