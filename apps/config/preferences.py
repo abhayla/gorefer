@@ -72,16 +72,29 @@ def _notify_template_key(role: str, lang: str) -> str:
     return f"notify_template_{role}_{lang}"
 
 
+# These defaults MUST name templates that actually exist at Meta.
+#
+# They are the fallback when no config override is set, so a default naming a deleted or
+# never-created template is a live landmine: sends fail and cascade silently. That is exactly
+# the P0 found 2026-07-26 — `otp_whatsapp_template` pointed at `gorefer_login_otp`, a name
+# that had never existed, so every WhatsApp login OTP got HTTP 400 and silently degraded to
+# the `manual` channel while the flag still read ON.
+#
+# Realigned 2026-07-26 to the values production actually resolves, so that deleting the
+# genuinely-superseded older templates (owner decision D6) cannot resurrect that failure mode.
 NOTIFY_TEMPLATE_DEFAULTS = {
     # office has no Hindi variant → both map to the English office alert.
-    _notify_template_key("office", LANG_EN): "gr_brokers_zerodha_office_lead_alert_en_2026_07_17",
-    _notify_template_key("office", LANG_HI): "gr_brokers_zerodha_office_lead_alert_en_2026_07_17",
+    _notify_template_key("office", LANG_EN): "gr_brokers_zerodha_office_lead_alert_en_2026_07_19",
+    _notify_template_key("office", LANG_HI): "gr_brokers_zerodha_office_lead_alert_en_2026_07_19",
     # prospect: use the v2 UTILITY re-cut (the v1 pair reclassified to MARKETING, which
     # is capped — wrong for a must-arrive welcome). v2 dropped the promo phrasing.
     _notify_template_key("prospect", LANG_EN): "gr_brokers_zerodha_prospect_welcome_en_2026_07_17_v2",
     _notify_template_key("prospect", LANG_HI): "gr_brokers_zerodha_prospect_welcome_hi_2026_07_17_v2",
-    _notify_template_key("referrer", LANG_EN): "gr_brokers_zerodha_referrer_thankyou_en_2026_07_17",
-    _notify_template_key("referrer", LANG_HI): "gr_brokers_zerodha_referrer_thankyou_hi_2026_07_17",
+    # referrer: the live path sends the "your referral has started" UPDATE, not the older
+    # thank-you. The thank-you templates still exist at Meta and are a genuinely DIFFERENT
+    # message (not a superseded version), so they are kept — just not the default.
+    _notify_template_key("referrer", LANG_EN): "gr_brokers_zerodha_referrer_update_en_2026_07_19",
+    _notify_template_key("referrer", LANG_HI): "gr_brokers_zerodha_referrer_update_hin_2026_07_19",
 }
 
 
