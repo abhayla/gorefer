@@ -37,7 +37,20 @@
 - [x] **Admin dashboard routes (Phase 9) — DONE 2026-07-26, all 7 green.** See DONE section.
 - [x] **API surface (Phase 10) — DONE 2026-07-26; found + fixed broken access control.** See DONE.
 - [x] **`POST /api/leads/` over HTTP (Phase 3) — DONE 2026-07-26, all green.** See DONE section.
-- [ ] **Bot filter breadth (Phase 2).** All 8 crawler UAs, not the 2 already covered.
+- [x] **Phase 2 — bot filter breadth DONE 2026-07-26. PASSED; found + fixed a separate OG defect.**
+      All 8 crawler UAs (facebookexternalhit · WhatsApp · Telegrambot · Slackbot · Twitterbot ·
+      LinkedInBot · Googlebot · bingbot) → **zero `ReferralIdentity`, zero `Referral`, zero events**.
+      Card leaks no partner code / Zerodha URL. **Note the expectation in the skill is now STALE:**
+      crawlers get **200** (the D2 PIFS card), not a 302 — which also resolves the skill's open
+      question 1 (M11 OG preview vs bot 302).
+      **DEFECT FOUND + FIXED (`df1e25a`):** the D2 card emitted `og:image="img/og-card.png"` —
+      relative, and even resolved `/img/og-card.png` **404s** (asset is at `/static/img/...`). So
+      every forwarded referral link previewed with **no image**, on precisely the surface D2 exists
+      to fix. M11's landing card already resolved this correctly; the crawler card didn't reuse it.
+      `absolute_image_url()` is now the ONE builder, used by both. Existing assertion was
+      `'property="og:image"' in html` (presence, not usability) — replaced with absolute +
+      resolves-under-STATIC_URL, parametrised over human and crawler UAs. Disproof: reverting fails
+      only the crawler case. Verified live: image now fetches **200 image/png**. Suite 637/0.
 - [ ] **Withdraw the superseded PENDING v1 template**
       `gorefer_referrer_prospect_pending_en_2026_07_25` (v2/v3/v4/v5 supersede it). NOTE: Wati
       DELETE returns `ok:true` but Meta keeps the language content (`2388024`), so the name
@@ -210,13 +223,68 @@ item below and to future work.
 - [x] **D6 · DONE 2026-07-26 — deleted 11 superseded templates, keep genuinely different ones.** Only ones
       that are an older version of a message already in use. Note Meta holds a deleted name ~30 days.
 - [x] **D7 · DONE 2026-07-26 — `TALK` + `ZMPHZC` soft-deleted (identity + referral); click events kept** (reversible; rows retained).
-- [ ] **D8 · Test the WhatsApp-OTP login path only; SKIP Google OAuth for now.** Owner will paste the
-      6-digit code when asked (WhatsApp hides OTPs from linked devices, so this cannot be automated).
-      Google sign-in — the PRIMARY referrer login — therefore stays UNTESTED; keep saying so.
-- [ ] **D9 · Cut marketing volume and re-cut nudges as UTILITY.** UTILITY escapes Meta's per-user cap
-      (`131049`), the dominant cause of the ~43% delivery rate. Reframe copy as transactional
-      ("your account is still pending") not re-solicitation ("still want to open one?") — proven to
-      flip Meta's classification on this tenant. Leave `917972672473` to recover on its own.
+- [x] **D8 · DONE 2026-07-26 22:25 IST — WhatsApp-OTP login VERIFIED LIVE END TO END.** The two
+      undiagnosed tests were TEST-side (missing `raw_status` on `SendResult`; patch target must be
+      `apps.integrations.wati.adapter`, not `apps.otp.adapters`, because `send()` imports inside the
+      method). Adapter fix was correct. Widened to 4 cases covering every branch of the delivery
+      split; proved by disproof (reverting the fix fails exactly the 2 QUEUED tests with
+      `'failed' == 'queued'`). Live: challenge id=2 `channel=whatsapp_wati` / `delivery_status=delivered`,
+      message READ at Wati 2s after the challenge (vs id=1, the only prior challenge ever recorded,
+      which had already fallen back to `manual`). Verify → 302 `/my/referrals` + session; replay →
+      **400** (single-use); `/my/logout` → dead; referrer session refused both admin surfaces;
+      ADR-035 re-asserted (user-supplied `mobile` → 400). Suite 634/0, deployed `1be4c34`.
+      **Google OAuth — the PRIMARY referrer login — remains UNTESTED, as the owner chose. Keep
+      saying so in every report.**
+- [~] **D9 · IN FLIGHT 2026-07-26 — v7 submitted and HOLDING UTILITY; awaiting Meta approval.**
+      **Scope correction, verified first:** all 7 follow-up cadence rules are `channel=session` —
+      free-form messages inside the 24h window, which carry **no Meta category and no cap at all**.
+      Resolving every configured template name against the live Meta inventory shows office alert,
+      both prospect-welcome, both referrer-update and the login OTP are **already
+      UTILITY/AUTHENTICATION**. So the ONLY marketing-capped template GoRefer sends is the §6.1
+      referrer-nudge pair. D9 is real but far narrower than stated.
+      **v6 FAILED (third flip after v4/v5).** Root cause found by reading Meta's actual policy, not
+      by inferring from failures: UTILITY requires **non-promotional AND specific to the RECIPIENT's
+      own** transaction, forbids "promote, recommend, upsell, or cross-sell", and classifies
+      **retargeting as MARKETING even when user-requested** ("You left items in your cart! Checkout
+      now"). v4/v5/v6 were all that shape with a referral link standing in for the cart — the
+      **link** was the disqualifier, so trimming adjectives could never work.
+      **v7 removes the link and every CTA → holding UTILITY in BOTH languages (PENDING).**
+      Full policy + authoring checklist: `docs/integrations/Meta-Template-Categorization-Policy.md`.
+      **NEXT (blocked on Meta, then on an owner call):** (a) re-poll v7 to APPROVED; (b) **owner
+      decides** — v7 delivers reliably but carries **no link** (2 vars, not 3), vs v5 which carries
+      the link and is capped; (c) if v7 is chosen, `_maybe_referrer_nudge()` must stop passing
+      `nudge_link_for()` and the config flips; (d) delete v6 EN (approved-but-unwired).
+      Leave `917972672473` to recover on its own.
+
+## 🔴 GUARDRAIL 3 VIOLATED IN PRODUCTION — partner code on the referrer self view (found + FIXED 2026-07-26)
+
+`/my/referrals`, the LOGGED-IN referrer self view, rendered PIFS's Zerodha partner code `ZMPHZC`
+as a badge on the "Referral links" card. CLAUDE.md §7 guardrail 3 forbids the partner code in
+**any** client-facing response, and §4 restates it ("injected SERVER-SIDE ... never appears").
+
+**Root cause:** the self view and the admin Referral Profile share ONE template (ADR-026,
+`templates/dashboard/referrer_profile.html`), which renders `{{ card.partner_code }}`. Correct on
+the staff screen; a client-facing body for the referrer.
+
+**Fixed at the DATA level** in `apps/accounts/selfview.py` — the same place IP masking already
+happens, so a future template edit cannot re-expose it. Admin view untouched (test asserts it still
+shows the code). Verified live after deploy: `ZMPHZC` count **0**, card still renders with
+`partner_name` + link.
+
+**Why existing coverage missed it — both reproduced in the new regression test:**
+1. `test_login_surfaces_carry_no_partner_code_or_zerodha_url` claims to cover "every new
+   client-facing login surface" but visits only **anonymous** pages.
+2. `per_link_cards` returns `[]` with no activity, so merely visiting `/my/referrals` while logged
+   in renders **no card** — a real click is REQUIRED to expose the badge. The new test drives a
+   click and asserts the card is rendered before asserting the code is absent, so it cannot pass
+   vacuously.
+
+**Worth a sweep, not yet done:** other surfaces sharing admin templates with a customer role should
+be checked for the same class of leak. Added below.
+
+- [ ] **Sweep every shared admin/customer template for guardrail-3 and PII leakage.** ADR-026's
+      one-template-two-roles design means any admin-only field rendered unconditionally reaches the
+      customer. `partner_code` was one; enumerate the rest.
 
 ## BLOCKED — still needs Abhay
 

@@ -19,10 +19,12 @@ from django.utils import timezone
 
 from apps.config import preferences as prefkeys
 from apps.config.cascade import set_tenant
-from apps.otp import hashing
+from apps.integrations.wati import status as wstatus
+from apps.otp import adapters, hashing
 from apps.otp.channels import resolve_channel
 from apps.otp.models import OtpChallenge
 from apps.otp.ports import (
+    STATUS_DELIVERED,
     STATUS_FAILED,
     STATUS_QUEUED,
     STATUS_SUPPRESSED,
@@ -422,7 +424,36 @@ def test_preferences_screen_clamps_bad_otp_values(admin_client, seeded):
     assert cfg[prefkeys.OTP_MAX_VERIFY_ATTEMPTS] >= 1
 
 
-def test_whatsapp_otp_not_yet_delivered_is_QUEUED_not_a_failure(monkeypatch, db):
+def _stub_wati_otp_adapter(monkeypatch, *, delivery_status, meta_error_code=None):
+    """Patch the Wati adapter the OTP adapter resolves, and record what was sent.
+
+    `WatiWhatsAppOtpAdapter.send()` does `from apps.integrations.wati.adapter import
+    get_wati_adapter` INSIDE the method, so the patch target is the SOURCE module — a
+    patch on `apps.otp.adapters` would rebind nothing and the live adapter would run.
+    The stub returns the REAL `SendResult` / `DeliveryResult` dataclasses so the test is
+    checked against the actual adapter contract, not an assumed shape.
+    """
+    from apps.integrations.wati import adapter as wati_adapter
+
+    sent = {}
+
+    class _Stub:
+        def send_template(self, **kw):
+            sent.update(kw)
+            return wati_adapter.SendResult(
+                accepted=True, provider_message_id="", raw_status="accepted"
+            )
+
+        def get_message_status(self, **kw):
+            return wati_adapter.DeliveryResult(
+                status=delivery_status, meta_error_code=meta_error_code, classification=None
+            )
+
+    monkeypatch.setattr(wati_adapter, "get_wati_adapter", lambda: _Stub())
+    return sent
+
+
+def test_whatsapp_otp_not_yet_delivered_is_QUEUED_not_a_failure(monkeypatch):
     """The adapter checked terminal delivery MICROSECONDS after sending.
 
     WhatsApp delivery takes seconds, so the check always failed and the WhatsApp channel
@@ -430,45 +461,44 @@ def test_whatsapp_otp_not_yet_delivered_is_QUEUED_not_a_failure(monkeypatch, db)
     ever recorded on prod and had already fallen back — no login OTP had ever been delivered
     over WhatsApp. Not-yet-delivered must report QUEUED (accepted, unproven), never FAILED.
     """
-    from apps.integrations.wati.adapter import SendResult
-    from apps.otp import adapters
-    from apps.otp.ports import STATUS_QUEUED
-
-    class _InFlight:
-        def send_template(self, **kw):
-            return SendResult(accepted=True, provider_message_id="")
-
-        def get_message_status(self, **kw):
-            class _S:
-                status = "sent"          # accepted by Wati, not yet terminal
-                meta_error_code = None
-            return _S()
-
-    monkeypatch.setattr(adapters, "get_wati_adapter", lambda: _InFlight())
+    # 'accepted' is what the LIVE adapter returns when getMessages has no terminal row yet —
+    # the exact status that used to cascade every real login OTP to `manual`.
+    _stub_wati_otp_adapter(monkeypatch, delivery_status=wstatus.STATUS_ACCEPTED)
     res = adapters.WatiWhatsAppOtpAdapter().send(
         recipient="917767009136", code="123456", ttl_seconds=300, context={}
     )
     assert res.status == STATUS_QUEUED, f"in-flight delivery must not be a failure, got {res.status}"
 
 
-def test_whatsapp_otp_terminal_failure_still_cascades(monkeypatch, db):
+def test_whatsapp_otp_sent_but_not_yet_delivered_is_QUEUED(monkeypatch):
+    """'sent' is also non-terminal — the message is in flight, not rejected."""
+    _stub_wati_otp_adapter(monkeypatch, delivery_status=wstatus.STATUS_SENT)
+    res = adapters.WatiWhatsAppOtpAdapter().send(
+        recipient="917767009136", code="123456", ttl_seconds=300, context={}
+    )
+    assert res.status == STATUS_QUEUED
+
+
+def test_whatsapp_otp_proven_delivery_is_DELIVERED(monkeypatch):
+    """The other edge of the split: a terminal delivered status still reports DELIVERED.
+
+    Guards against the fix over-correcting into "everything is QUEUED", which would lose
+    the distinction between accepted and proven.
+    """
+    _stub_wati_otp_adapter(monkeypatch, delivery_status=wstatus.STATUS_DELIVERED)
+    res = adapters.WatiWhatsAppOtpAdapter().send(
+        recipient="917767009136", code="123456", ttl_seconds=300, context={}
+    )
+    assert res.status == STATUS_DELIVERED
+
+
+def test_whatsapp_otp_terminal_failure_still_cascades(monkeypatch):
     """A REAL rejection must still fail so the fallback channel takes over."""
-    from apps.integrations.wati.adapter import SendResult
-    from apps.otp import adapters
-    from apps.otp.ports import STATUS_FAILED
-
-    class _Rejected:
-        def send_template(self, **kw):
-            return SendResult(accepted=True, provider_message_id="")
-
-        def get_message_status(self, **kw):
-            class _S:
-                status = "failed"        # terminal
-                meta_error_code = 131049
-            return _S()
-
-    monkeypatch.setattr(adapters, "get_wati_adapter", lambda: _Rejected())
+    _stub_wati_otp_adapter(
+        monkeypatch, delivery_status=wstatus.STATUS_FAILED, meta_error_code=131049
+    )
     res = adapters.WatiWhatsAppOtpAdapter().send(
         recipient="917767009136", code="123456", ttl_seconds=300, context={}
     )
     assert res.status == STATUS_FAILED
+    assert "131049" in (res.error or "")
