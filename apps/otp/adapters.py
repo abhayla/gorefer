@@ -84,6 +84,30 @@ class WatiWhatsAppOtpAdapter:
         )
         if st.is_delivered(delivery.status):
             return DeliveryResult(status=STATUS_DELIVERED, provider_ref=result.provider_message_id)
+
+        # NOT-YET-DELIVERED IS NOT A FAILURE. This check runs microseconds after the send,
+        # and WhatsApp delivery takes seconds — so demanding a TERMINAL status here meant the
+        # WhatsApp channel ALWAYS reported failure and always cascaded to `manual`. Found
+        # 2026-07-26: OtpChallenge id=1 was the first challenge ever recorded and it had
+        # already fallen back to manual, i.e. no login OTP had ever actually been delivered
+        # over WhatsApp. (The template-name P0 fixed earlier the same day was a second,
+        # independent break on the same path.)
+        #
+        # doc-08 A3 — "verify the terminal status, never the HTTP 200" — is about BATCH
+        # notification sends, which can be reconciled later. A synchronous login request
+        # cannot block for delivery, so the honest split is:
+        #   terminal + delivered  -> DELIVERED (proven)
+        #   terminal + not delivered -> FAILED  (a real rejection; cascade is correct)
+        #   not terminal yet      -> QUEUED    (accepted; do NOT cascade, do NOT claim delivery)
+        # QUEUED stops the cascade without asserting delivery we have not proven.
+        if not st.is_terminal(delivery.status):
+            logger.info(
+                "OTP whatsapp_wati: accepted, delivery still in flight (status=%s) — "
+                "reporting QUEUED rather than cascading",
+                delivery.status,
+            )
+            return DeliveryResult(status=STATUS_QUEUED, provider_ref=result.provider_message_id)
+
         return DeliveryResult(
             status=STATUS_FAILED,
             provider_ref=result.provider_message_id,
