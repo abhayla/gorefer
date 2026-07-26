@@ -35,10 +35,7 @@
 - [x] **Zoho conversion webhook (Phase 5) — DONE 2026-07-26, all green.** See DONE section.
 - [x] **Follow-up engine gates (Phase 6) — DONE 2026-07-26, all 5 green.** See DONE section.
 - [x] **Admin dashboard routes (Phase 9) — DONE 2026-07-26, all 7 green.** See DONE section.
-- [ ] **API surface (Phase 10).** `/api/analytics/{funnel,journey,sync-health}`,
-      `/api/share/`, `/api/click/confirm` (nonce; 401 on forged/expired/used),
-      `/api/click/referrer/{id}` (401 without fresh nonce), `/api/health`. **Assert
-      `/api/wati/webhook` is CLOSED (401)** — it had a fail-open bug once.
+- [x] **API surface (Phase 10) — DONE 2026-07-26; found + fixed broken access control.** See DONE.
 - [ ] **`POST /api/leads/` over HTTP (Phase 3).** `golive_smoke` bypasses HTTP validation,
       consent enforcement and rate limiting — test those directly, and assert no PII in `Event`.
 - [ ] **Bot filter breadth (Phase 2).** All 8 crawler UAs, not the 2 already covered.
@@ -96,6 +93,25 @@
       ("retry in a few days") plus lowering marketing volume — not a code fix.
 
 ## DONE
+
+- [x] **Phase 10 — API surface verified LIVE (2026-07-26). P1 FOUND + FIXED: broken access control.**
+      `/api/analytics/funnel`, `/journey/{id}` and `/sync-health` had **NO auth** and answered any
+      anonymous caller on the internet: the AP's whole funnel (124 clicks, 44 landing views, 9 leads,
+      4 accounts opened, 25 confirmed-human, 84 approx unique visitors), an **enumerable** per-journey
+      event timeline (ids are sequential ints), and internal integration health. The `/admin-panel/`
+      screens showing the same figures were behind `login_required` + `is_staff` — the UI was gated,
+      the API feeding it was not. **No PII leaked** (the event log excludes PII by design, Round-2
+      #16 — that guardrail held), but the metrics are business-confidential.
+      Fixed by gating the router with `apps.followups.api.require_staff` — the SAME plain-callable
+      auth the follow-up CRUD router already uses, so there is one staff-auth mechanism, not two.
+      Safe to gate: grep proved nothing but tests called these endpoints (the dashboard computes
+      server-side). Verified live in BOTH directions — anonymous **401**, staff **200**, and the
+      dashboard byte-identical at 27,744 bytes.
+      **Already correct, confirmed:** `/api/wati/webhook` **401** (the old fail-OPEN bug is closed) ·
+      `/api/wati/inbound` **401** · `/api/click/referrer/{id}` **401** without a fresh nonce
+      (id→name enumeration shut) · `/api/health` 200 exposing no partner code or Zerodha URL ·
+      `/api/click/confirm`, `/api/share/`, `/api/leads/` all 422 on an empty body (schema validation).
+      Tests: 2 new access-control tests (anonymous AND authenticated-but-not-staff). Suite 601/0.
 
 - [x] **Phase 9 — admin dashboard, all 7 routes verified LIVE (2026-07-26).**
       Ephemeral credential created → login **302 → dashboard 200** → destroyed → session dead (302).

@@ -56,8 +56,21 @@ def test_funnel_excludes_bots(demo):
     assert after["click"] == before["click"]  # bot click not counted
 
 
+
+def _staff_client():
+    """Analytics is staff-only (see api/analytics.py) — an anonymous client gets 401."""
+    from django.contrib.auth import get_user_model
+
+    U = get_user_model()
+    u = U.objects.create(username="analytics-tester", is_staff=True, is_active=True)
+    u.set_password("x")
+    u.save()
+    c = Client()
+    c.force_login(u)
+    return c
+
 def test_funnel_api_labels_unique_as_approximate(demo):
-    body = Client().get("/api/analytics/funnel").json()
+    body = _staff_client().get("/api/analytics/funnel").json()
     assert "Approximate" in body["unique_visitors_note"]
     assert body["unique_visitors_approx"] >= 1
 
@@ -92,7 +105,7 @@ def test_rollup_recompute_is_idempotent(demo):
 # --- sync-health scaffold --------------------------------------------------
 
 def test_sync_health_shows_no_sync_in_demo(demo):
-    body = Client().get("/api/analytics/sync-health").json()
+    body = _staff_client().get("/api/analytics/sync-health").json()
     assert body["zoho_state"] == "no_sync"
     assert body["zoho_last_sync"] is None
 
@@ -112,3 +125,34 @@ def test_conversions_only_from_zoho_source_origin(demo):
     # Demo conversions exist, but ALL carry source_origin=zoho (mirrored, not made).
     assert Conversion.objects.exists()
     assert Conversion.objects.exclude(source_origin="zoho").count() == 0
+
+
+# --- access control: read-only is NOT public ------------------------------
+
+def test_analytics_endpoints_refuse_anonymous_callers(demo):
+    """Regression: this router had NO auth until 2026-07-26.
+
+    `/api/analytics/*` answered any anonymous caller over the internet — the AP's whole
+    funnel (clicks, leads, accounts opened), an enumerable per-journey timeline, and internal
+    integration health — while the /admin-panel/ screens showing the same numbers were behind
+    login_required + is_staff. The UI was gated; the API feeding it was not.
+    """
+    anon = Client()
+    referral = Referral.objects.filter(source="referral_link").first()
+    for path in (
+        "/api/analytics/funnel",
+        f"/api/analytics/journey/{referral.id}",
+        "/api/analytics/sync-health",
+    ):
+        assert anon.get(path).status_code == 401, f"{path} must not answer anonymous callers"
+
+
+def test_analytics_endpoints_refuse_a_non_staff_user(demo):
+    """is_authenticated is not enough — a logged-in customer must not read AP analytics."""
+    from django.contrib.auth import get_user_model
+
+    U = get_user_model()
+    u = U.objects.create(username="plain-customer", is_staff=False, is_active=True)
+    c = Client()
+    c.force_login(u)
+    assert c.get("/api/analytics/funnel").status_code == 401
