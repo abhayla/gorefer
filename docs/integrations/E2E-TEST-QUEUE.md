@@ -36,8 +36,7 @@
 - [x] **Follow-up engine gates (Phase 6) — DONE 2026-07-26, all 5 green.** See DONE section.
 - [x] **Admin dashboard routes (Phase 9) — DONE 2026-07-26, all 7 green.** See DONE section.
 - [x] **API surface (Phase 10) — DONE 2026-07-26; found + fixed broken access control.** See DONE.
-- [ ] **`POST /api/leads/` over HTTP (Phase 3).** `golive_smoke` bypasses HTTP validation,
-      consent enforcement and rate limiting — test those directly, and assert no PII in `Event`.
+- [x] **`POST /api/leads/` over HTTP (Phase 3) — DONE 2026-07-26, all green.** See DONE section.
 - [ ] **Bot filter breadth (Phase 2).** All 8 crawler UAs, not the 2 already covered.
 - [ ] **Withdraw the superseded PENDING v1 template**
       `gorefer_referrer_prospect_pending_en_2026_07_25` (v2/v3/v4/v5 supersede it). NOTE: Wati
@@ -72,6 +71,17 @@
 - [ ] **M11 OG preview vs bot 302.** Crawlers get a 302 to Zerodha, so WhatsApp would render
       *Zerodha's* card, not PIFS's — yet M11 claims forwarded links render a PIFS card.
       Contradiction to resolve.
+- [ ] **DA DECISION: a returning prospect's newly-submitted details are silently discarded.**
+      `capture_lead` upserts the Prospect **by mobile** (ADR-018/019 mobile-keyed identity), and on a
+      match it reuses the existing row **without applying the name/email/city just submitted**.
+      Proven live 2026-07-26: Prospect 5 (`919876543210`, created 17-Jul, name `"Deploy Verify"`,
+      email blank) — a fresh POST supplying name `"E2E Phase3 DELETE"`, an email and a city attached
+      Lead 10 but left the Prospect untouched; `updated_at` still equals `created_at`.
+      Consequence: a prospect who re-submits with a corrected name or supplies an email for the first
+      time is ignored, so GoRefer's own record stays stale while **Zoho received the new values** —
+      the two systems diverge. Merging journeys by mobile is clearly intended; "ignore the newer
+      data" may not be. NOT changed unilaterally: last-write-wins would also let a junk/spam
+      submission overwrite good data, so which write wins is a spec decision (CLAUDE.md §3).
 - [ ] **DA DECISION: converted-suppression is coupled to `stop_on_reply`.** In
       `services.evaluate_gate`, the `has_converted` check (#5) sits INSIDE the `rule.stop_on_reply`
       branch. All 7 live rules have it True, so suppression is active today and there is no live
@@ -93,6 +103,27 @@
       ("retry in a few days") plus lowering marketing volume — not a code fix.
 
 ## DONE
+
+- [x] **Phase 3 — `POST /api/leads/` over HTTP verified LIVE (2026-07-26). No defects.**
+      This is the path `golive_smoke` bypasses, so none of it had ever been exercised.
+      **Validation, all correct:** `consent:false` → **422 "consent is required"** (the DPDP gate) ·
+      consent field absent → 422 at the schema · mobile starting `5` → 422 · 1-char name → 422 ·
+      `client_id` with spaces/`!` → **400** · 40-char `client_id` → 400 · unknown `client_id` → 400
+      "no active referral journey". Every rejection happens BEFORE `capture_lead`, so an invalid
+      POST cannot reach Zoho.
+      **Rate limiter WORKS — 429 at request 11 of a 10/60s budget, in a 7-second burst.** First
+      attempt appeared to show it dead; that was my own test spread over more than the 60s window,
+      not a defect. Direct `check_rate` also blocked 5 of 15 at limit 10. Cache backend is the DB
+      table `gorefer_cache` (shared across gunicorn workers, as intended).
+      **Phone normalization:** `"+91 98765-43210"` → stored `919876543210`.
+      **PII stays out of the event log** (Round-2 #16): `lead_captured` metadata `{}`; zero hits for
+      the submitted name / mobile / email / city across every event on the referral; no metadata key
+      intersects the `PII_KEYS` guard (`address,city,email,ip,mobile,name,phone,raw_ip`). Raw IP
+      lives in the separate erasable `VisitorPII` table (143 rows).
+      **Response leaks nothing:** `continue_url` is `/r/E2E0726/continue` — no partner code, no
+      Zerodha URL (guardrail 3).
+      **CLEANUP OWED:** Lead 10 + Zoho lead `475281000030612001`.
+      Raised as a DA decision: the returning-prospect upsert discards newly-submitted details.
 
 - [x] **Phase 10 — API surface verified LIVE (2026-07-26). P1 FOUND + FIXED: broken access control.**
       `/api/analytics/funnel`, `/journey/{id}` and `/sync-health` had **NO auth** and answered any
