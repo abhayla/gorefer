@@ -212,3 +212,34 @@ logged in rendered nameless even when Zoho knew them (live finding 2026-07-22).
 - Zoho-side execution (Deluge, rules, Send Queue): `C:\Abhay\5Wealths\Zoho-Project\`
 - Current live state of this integration: [`Zoho-GoRefer-State.md`](./Zoho-GoRefer-State.md)
 - Original spec: `docs/integrations/08-Zoho-WATI-Integration.md`, ADR-013/016/017
+
+## Reversal must un-mirror the referral (fixed 2026-07-26)
+
+The forward ingest mirrors conversion state onto the `Referral` (`conversion_status`,
+`credited_referrer`, `reward_status`, `account_opened_at`, `status="confirmed"`). Reversal
+(`{"reversed": true}`) previously tombstoned the `Conversion` (`is_reversed=True`) and emitted
+`conversion_removed` — but **never un-mirrored the referral**.
+
+**Demonstrated live** on referral 17: after a sealed reversal the referral still read
+`conversion_status="account_opened"` with `credited_referrer` set and **zero** live conversions
+behind it. Three consequences:
+
+1. the referrer stayed **credited** for an account Zoho had de-mapped;
+2. the dashboard / Referral Profile still showed a conversion that no longer existed;
+3. `apps.followups.services.has_converted()` kept returning True, so the prospect was
+   **permanently suppressed** from follow-up nudges.
+
+**Now:** `_apply_reversal` clears `conversion_status`, `credited_referrer`, `reward_status` and
+`account_opened_at`, stamps `conversion_source`/`conversion_synced_at`, and returns
+`status` to `"opened"` — **but only when no non-reversed `Conversion` remains on that referral.**
+
+**The conditional matters.** A referral can carry several conversions (prod referral 1 has a live
+`ZA9001` alongside a reversed row). Reversing one must not un-credit a referral that another live
+conversion still legitimately supports. Reversal is therefore *last-one-out*, not per-row.
+
+Unchanged: the `Conversion` row is still tombstoned rather than deleted (audit retained), the
+`conversion_removed` event still fires, and the affected period is still marked dirty off the
+**true** `account_opened_at` (ADR-017), so a reversal lands in the month the account was opened.
+
+Guardrail 2 is respected: this write happens inside `apps/integrations/zoho/ingest.py`, the sole
+Zoho-sourced path permitted to change account/conversion status.

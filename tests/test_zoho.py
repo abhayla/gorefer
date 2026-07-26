@@ -168,6 +168,50 @@ def test_reversal_tombstones_and_emits_removed(settings):
     assert Event.objects.filter(event_type="conversion_removed").count() == 1
 
 
+@pytest.mark.django_db(transaction=True)
+def test_reversal_uncredits_the_referral_when_it_was_the_last_live_conversion(settings):
+    """Reversal used to tombstone the Conversion and stop, leaving the Referral converted.
+
+    Demonstrated live 2026-07-26: after Zoho de-mapped a conversion the referral still read
+    conversion_status="account_opened" with the referrer credited and zero live conversions,
+    so the dashboard showed a conversion that no longer existed and
+    followups.services.has_converted() kept the prospect permanently suppressed.
+    """
+    settings.ZOHO_WEBHOOK_KEY = "testkey"
+    call_command("seed_program")
+    c = Client()
+    _post(c, {"event_id": "r1", "opener_zerodha_account_id": "ZA200", "referrer_client_id": "RJ4521",
+              "status": "Account Opened", "account_opened_at": "2026-05-10T09:00:00"}, **KEY_HEADER)
+    ref = Referral.objects.get(referral_identity__client_id="RJ4521")
+    assert ref.conversion_status == "account_opened"
+    assert ref.credited_referrer == "RJ4521"
+
+    _post(c, {"event_id": "r2", "opener_zerodha_account_id": "ZA200", "reversed": True}, **KEY_HEADER)
+    ref.refresh_from_db()
+    assert ref.conversion_status == "", "a reversed conversion must not leave the referral converted"
+    assert ref.credited_referrer == "", "the referrer must not stay credited after a reversal"
+    assert ref.account_opened_at is None
+    assert ref.status == "opened", "journey returns to in-progress, not 'confirmed'"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_reversal_does_NOT_uncredit_while_another_live_conversion_remains(settings):
+    """A referral can carry several conversions — reversing one must not un-credit a referral
+    that is still legitimately converted by another (prod referral 1 is exactly this shape)."""
+    settings.ZOHO_WEBHOOK_KEY = "testkey"
+    call_command("seed_program")
+    c = Client()
+    for eid, acct in (("m1", "ZA301"), ("m2", "ZA302")):
+        _post(c, {"event_id": eid, "opener_zerodha_account_id": acct, "referrer_client_id": "RJ4521",
+                  "status": "Account Opened", "account_opened_at": "2026-05-11T09:00:00"}, **KEY_HEADER)
+    _post(c, {"event_id": "m3", "opener_zerodha_account_id": "ZA301", "reversed": True}, **KEY_HEADER)
+
+    ref = Referral.objects.get(referral_identity__client_id="RJ4521")
+    assert Conversion.objects.filter(referral=ref, is_reversed=False).count() == 1
+    assert ref.conversion_status == "account_opened", "still converted via the surviving conversion"
+    assert ref.credited_referrer == "RJ4521"
+
+
 # --- sync-freshness lights up ---------------------------------------------
 
 @pytest.mark.django_db(transaction=True)
