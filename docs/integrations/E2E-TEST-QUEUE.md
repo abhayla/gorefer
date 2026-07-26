@@ -11,7 +11,7 @@
 > **Stop condition for the loop:** READY is empty. Then post the summary and end the loop.
 > Items that need Abhay move to BLOCKED — never guess, never stall the whole queue on one.
 >
-> **Last updated:** 2026-07-26 (Phase 5 complete)
+> **Last updated:** 2026-07-26 (9 owner decisions captured — see DECIDED)
 
 ## Rails (apply to every iteration)
 
@@ -57,50 +57,44 @@
       functions (`ZOHO_FN_ZAPIKEY_WA_JOURNEY_*` in `GLOBAL.env`) and Wati flows directly.
       A GoRefer-only run cannot reach these; do not report them as covered until driven.
 
-## BLOCKED — needs Abhay (loop must skip, not stall)
+## DECIDED by the owner 2026-07-26 — now actionable (was BLOCKED)
 
-- [ ] **M13 login (Phase 8).** OTP half needs a logged-in **WhatsApp Web** session on the VPS
-      to read the code; Google OAuth half needs an authenticated **Google** session in that same
-      browser. Both offered, neither set up yet.
-- [ ] **Junk identities `TALK` and `ZMPHZC`** in prod, created by the (since-fixed) malformed
-      chatbot link `/r/wa/Talk to advisor`. Soft-delete is reversible but it is still prod data
-      — needs an explicit go.
-- [ ] **9 approved-but-unwired templates** — wire or delete? Product decision.
-- [ ] **`/open` destination.** Live sends `signup.zerodha.com/api/lead/?c=ZMPHZC`; `CLAUDE.md`
-      specifies `signup.zerodha.com/?c=ZMPHZC`. No `r=` either way. Which is intended?
-- [ ] **M11 OG preview vs bot 302.** Crawlers get a 302 to Zerodha, so WhatsApp would render
-      *Zerodha's* card, not PIFS's — yet M11 claims forwarded links render a PIFS card.
-      Contradiction to resolve.
-- [ ] **DA DECISION: a returning prospect's newly-submitted details are silently discarded.**
-      `capture_lead` upserts the Prospect **by mobile** (ADR-018/019 mobile-keyed identity), and on a
-      match it reuses the existing row **without applying the name/email/city just submitted**.
-      Proven live 2026-07-26: Prospect 5 (`919876543210`, created 17-Jul, name `"Deploy Verify"`,
-      email blank) — a fresh POST supplying name `"E2E Phase3 DELETE"`, an email and a city attached
-      Lead 10 but left the Prospect untouched; `updated_at` still equals `created_at`.
-      Consequence: a prospect who re-submits with a corrected name or supplies an email for the first
-      time is ignored, so GoRefer's own record stays stale while **Zoho received the new values** —
-      the two systems diverge. Merging journeys by mobile is clearly intended; "ignore the newer
-      data" may not be. NOT changed unilaterally: last-write-wins would also let a junk/spam
-      submission overwrite good data, so which write wins is a spec decision (CLAUDE.md §3).
-- [ ] **DA DECISION: converted-suppression is coupled to `stop_on_reply`.** In
-      `services.evaluate_gate`, the `has_converted` check (#5) sits INSIDE the `rule.stop_on_reply`
-      branch. All 7 live rules have it True, so suppression is active today and there is no live
-      defect — but a rule created via the CRUD API with `stop_on_reply=False` would keep nudging
-      someone who has **already opened their account**. Two unrelated concerns share one switch.
-      Surfaced for the DA rather than silently re-wired (CLAUDE.md §3).
-- [ ] **SECURITY: the Zoho webhook IP allowlist is effectively DISABLED in production.**
-      `ZOHO_WEBHOOK_IP_ALLOWLIST=''` and `WEBHOOK_REQUIRE_IP_ALLOWLIST=False` with `DEBUG=False`,
-      so `_ip_allowed()` falls through to allow-any. The code's own comment says an empty allowlist
-      in production is meant to fail closed, and `CURRENT-STATE` describes the posture as
-      "HMAC + the same IP allowlist" — neither is true today. **Impact: defence-in-depth is one
-      layer, not two.** Forgery still needs the HMAC secret (verified: I could not forge without
-      it), so this is not an open door — but a leaked secret would have nothing behind it.
-      **Not fixed unilaterally:** populating the allowlist with the wrong IPs would silently stop
-      real conversion ingestion. Needs Zoho's current outbound IP ranges from the owner, then set
-      both settings together and re-verify a live conversion arrives.
-- [ ] **Meta quality restriction on `917972672473`.** Diagnosed as per-recipient (v4 failed
-      there while succeeding on the other number), not copy-related. Recovery is Meta-side
-      ("retry in a few days") plus lowering marketing volume — not a code fix.
+**Standing principle stated by the owner:** *"All such message settings should be configurable"* —
+message behaviour belongs in the config cascade + Preferences, never hard-coded. Apply to every
+item below and to future work.
+
+- [ ] **D1 · `/open` destination → default `https://signup.zerodha.com/?c=ZMPHZC`, but CONFIGURABLE.**
+      Owner wants to switch it to `/api/lead/?c=ZMPHZC` or any other URL without a code change.
+      So: add a cascade key + Preferences field, default to the bare signup (the CLAUDE.md value),
+      which also CHANGES current live behaviour away from `/api/lead/`.
+- [ ] **D2 · Crawlers get a PIFS preview card, and its text is CONFIGURABLE.** Real humans still
+      302 to Zerodha; only the crawler fetch changes. Title/description from config.
+- [ ] **D3 · Turn the Zoho webhook IP allowlist ON.** Owner: fetch Zoho's ranges myself — no Zoho
+      login needed (they are published publicly). Order: fetch ranges → cross-check against real
+      inbound webhook IPs → set `ZOHO_WEBHOOK_IP_ALLOWLIST` + `WEBHOOK_REQUIRE_IP_ALLOWLIST=true`
+      → **immediately send a live sealed conversion to prove ingestion still works.** Wrong IPs
+      silently stop real conversions, so the live re-test is mandatory, not optional.
+- [ ] **D4 · Repeat form submissions: FILL BLANKS ONLY + ONE LEAD PER MOBILE.** Empty field → take
+      the new value; already-populated field → keep it (so spam/typos can't overwrite good data).
+      Plus: a mobile gets **one** Lead — a re-submission updates that Lead instead of creating a
+      second. (Prod today has 2 leads on `919876543210`.) This also aligns GoRefer with Zoho, which
+      already upserts by mobile. **Flag when implementing:** decide what a *different* referrer
+      re-submitting the same mobile means for attribution — Zoho stays the single source of credit.
+- [ ] **D5 · Decouple converted-suppression from `stop_on_reply`, and make it CONFIGURABLE.**
+      "Account already open → never nudge" must always apply regardless of the reply setting, and
+      be switchable from config without code.
+- [ ] **D6 · Delete the superseded duplicate templates, keep genuinely different ones.** Only ones
+      that are an older version of a message already in use. Note Meta holds a deleted name ~30 days.
+- [ ] **D7 · Soft-delete the junk `TALK` and `ZMPHZC` referrer records** (reversible; rows retained).
+- [ ] **D8 · Test the WhatsApp-OTP login path only; SKIP Google OAuth for now.** Owner will paste the
+      6-digit code when asked (WhatsApp hides OTPs from linked devices, so this cannot be automated).
+      Google sign-in — the PRIMARY referrer login — therefore stays UNTESTED; keep saying so.
+- [ ] **D9 · Cut marketing volume and re-cut nudges as UTILITY.** UTILITY escapes Meta's per-user cap
+      (`131049`), the dominant cause of the ~43% delivery rate. Reframe copy as transactional
+      ("your account is still pending") not re-solicitation ("still want to open one?") — proven to
+      flip Meta's classification on this tenant. Leave `917972672473` to recover on its own.
+
+## BLOCKED — still needs Abhay
 
 ## DONE
 
