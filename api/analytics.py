@@ -2,6 +2,17 @@
 
 Everything here reads the immutable event stream / rollups. No conversion is ever
 written or derived — account_opened stays source-only (Zoho, M6).
+
+**STAFF-ONLY.** Read-only is not the same as public. Until 2026-07-26 this router had no
+auth at all, so `/api/analytics/funnel`, `/journey/{id}` and `/sync-health` answered any
+anonymous caller over the internet — exposing the AP's whole funnel (clicks, leads,
+accounts opened, approximate unique visitors), an enumerable per-journey event timeline
+(ids are sequential integers), and internal integration health. The `/admin-panel/`
+screens showing the same figures were behind `login_required` + `is_staff`, so the UI was
+gated while the API feeding it was not. No PII leaked — the event log excludes PII by
+design (Round-2 amendment #16) and that held — but the business metrics are confidential.
+Reuses `apps.followups.api.require_staff`, the same plain-callable auth the follow-up CRUD
+router already uses, so there is one staff-auth mechanism rather than two.
 """
 from __future__ import annotations
 
@@ -15,10 +26,11 @@ from apps.events.analytics import (
     funnel_counts,
 )
 from apps.events.models import SyncHealth
+from apps.followups.api import require_staff
 from apps.referrals.models import Referral
 from apps.tenants.resolve import get_current_tenant
 
-router = Router()
+router = Router(auth=require_staff)
 
 
 class FunnelStage(Schema):
