@@ -33,6 +33,45 @@ Credentials: shared staff account in the project `.env` as `E2E_ADMIN_USER` / `E
 
 ---
 
+## Phase 0 — Reconcile the SSOT first (never skip; run BEFORE any send)
+
+**The HTML conversation map is SSOT** (`CLAUDE.md` §6c, owner rule). Template changes go
+**HTML → Meta submit → HTML again on approval.** Testing starts by proving the three views agree:
+
+1. Pull the live Wati inventory (`wati_list_templates`, page_size 100 — **`page_number` is ignored**,
+   100 is the whole set).
+2. Resolve every template name **on prod with `tenant_id`** — without it you read code defaults, not
+   reality, and they differ:
+   ```
+   notify_template_name(role, lang=lang, tenant_id=1)     # NOT tenant_id=None
+   ConfigGlobal.objects.filter(key__contains="template")   # the overrides that actually win
+   ```
+3. Regenerate `docs/integrations/WhatsApp-Template-Coverage-Matrix.md` and diff it.
+4. **Assert every configured template name EXISTS at Meta.** A name that resolves fine but doesn't
+   exist fails at send time and may cascade silently to a fallback channel. Cheap direct probe:
+   ```
+   get_wati_adapter().send_template(to=<test#>, template=<name>, params={...})  # accepted False + http=400 ⇒ name is bogus
+   ```
+5. Any disagreement (map card vs Meta status vs prod config) is a **defect** — fix it in the same
+   turn, then update the HTML map.
+
+## Phase 0b — Template sweep: every template, every scenario
+
+"End to end" means no scenario and no template is missed. Drive the matrix, not just the happy path.
+
+- **GoRefer-owned (8):** trigger each through its real code path — office alert, prospect welcome
+  EN+HI, referrer update EN+HI, login OTP, §6.1 referrer nudge EN+HI. Assert **terminal** status per
+  template. Force `pref_lang='hi'` to reach the Hindi half; nothing in the default path does.
+- **Reports (2):** delivery + funnel report at 21:30 IST.
+- **Wati broadcast (3) and Zoho/Wati journey (24):** owned outside this repo — cover by driving the
+  Wati flow / Zoho journey directly. A GoRefer-only run **cannot** cover these; say so explicitly
+  rather than implying full coverage.
+- **Unwired (9):** do not send. Report them for wire-or-delete — an approved template nobody sends is
+  a liability, not coverage.
+- **Capacity reality:** sending dozens of MARKETING templates to one number will trip Meta
+  `131049` (per-user cap). Spread across both sanctioned numbers, prefer UTILITY variants, and treat
+  a cap rejection as a **recorded outcome**, not a GoRefer failure — the pass bar is `sent`.
+
 ## Phase 1 — Redirect, share, guardrails
 
 ```bash
