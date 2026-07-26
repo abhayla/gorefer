@@ -129,9 +129,9 @@ referrer credits entirely.
 referral credit").** It is authoritative by design but demonstrably incomplete in practice. Owner
 decision needed: bring Zoho up to date as the real SSOT, or accept a second reconciliation source.
 
-- [ ] **P0-E · Reconcile the referrer discrepancies with the owner** — `YTW628` vs `YTW629`
+- [x] **P0-E · DONE — owner confirmed `YTW629` correct, `FWW808` to be added; both applied to Zoho** — `YTW628` vs `YTW629`
       (which is correct? one referrer is being credited wrongly), and `MZK185`'s missing `FWW808`.
-- [ ] **P0-F · Get `CWD202` and `KWE338` into Zoho**, or decide they are out of scope.
+- [x] **P0-F · DONE — both Contacts created in Zoho**, or decide they are out of scope.
 - [ ] **P0-G · A Contacts trigger must filter to Zerodha/PIFS accounts** — `AACK095261` proves
       non-Zerodha accounts share the module.
 
@@ -142,13 +142,44 @@ decision needed: bring Zoho up to date as the real SSOT, or accept a second reco
 - [ ] **P0-B · Add a reconciler, do not rely on a single webhook delivery.** A scheduled job that
       reads Contacts created since the last watermark and replays them through the same sealed
       endpoint, so a missed or failed webhook self-heals. This is what would have caught it in July.
-- [ ] **P0-C · Backfill the 6 openings** once A/B land, so referrer credit and July analytics are correct.
+- [x] **P0-C · DONE 2026-07-26 — backfilled the 6 openings** once A/B land, so referrer credit and July analytics are correct.
 - [ ] **P0-D · Correct `CURRENT-STATE.md`** — "Zoho ingest LIVE / conversions ingesting" is false;
       no real conversion has ever arrived.
 
 **D3 (webhook IP allowlist) is now clearly PREMATURE** — arming a second lock on a door that has
 never been used would only add another silent-failure mode. Do P0-A/B first, observe real Zoho
 traffic, then enforce the allowlist against IPs actually seen.
+
+## ✅ P0 PARTIAL RECOVERY — July data corrected end to end (2026-07-26 evening)
+
+**Zoho corrected first (4 writes, owner-confirmed values):** `EUG979` referrer `YTW628`→**`YTW629`**
+(the digit typo — it was crediting the wrong person) · `MZK185` referrer set to **`FWW808`** (was
+null) · **created** `CWD202` Aradhana Gupta (ref `EKU497`, opened 13-Jul) and `KWE338` Anupam Pandey
+(opened 02-Jul), both previously absent. Checked for duplicates by name+date before creating.
+
+**Then backfilled all 6 through the REAL sealed webhook** (not a direct DB write — so the backfill
+also re-proved the ingest path): conversions 6–11 created, `applied:true` each.
+
+**Result:** 3 referrers now credited — **`YTW629`**, **`EKU497`**, **`FWW808`** — and all three
+identities were created lazily by the import, exactly as ADR-018/019 specifies ("first click OR
+first Zoho-imported conversion"). **July `accounts_opened`: 0 → 6.**
+
+**Dates verified individually:** every row round-trips to IST midnight (`2026-07-18` → stored
+`2026-07-17T18:30Z` → IST `2026-07-18 00:00`). ADR-017 holding.
+
+### ⚠️ THIS WAS A BACKFILL, NOT A FIX — the pipe is still disconnected
+
+P0-A (point the trigger at Contacts) and P0-B (the reconciler) are **still open**. The next real
+account opening will be missed exactly as these six were. Do not read "July is correct" as "the
+integration works".
+
+- [ ] **P0-H · LATENT: month-boundary off-by-one in the rollup.** `account_opened_at` is stored as
+      IST-midnight-in-UTC (`18:30` the previous day), but `_accounts_opened_for_range` compares
+      against **naive** datetimes (Django logged `received a naive datetime … while time zone
+      support is active`). So an account opened on the **1st of a month IST** is stored at
+      `<last-day-of-previous-month>T18:30Z` and would be counted in the **previous month**. None of
+      the current 6 falls on a 1st, so no live error today — but it will silently misdate a month's
+      conversions the first time one does.
 
 ## DECIDED by the owner 2026-07-26 — now actionable (was BLOCKED)
 
