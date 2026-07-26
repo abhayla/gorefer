@@ -1,8 +1,10 @@
-# CLAUDE.md — GoRefer Operating Manual (Sprint 1: Foundation)
+# CLAUDE.md — GoRefer Operating Manual
 
 > **Read this first, before writing any code.** This is the entry point for Claude Code. It is a map + rulebook, **not** a re-spec. For depth, follow the pointers into `docs/` — the spec is authoritative, this file is not.
 >
-> **Owner:** Abhay Kumar Maurya / PIFS (Passive Income Financial Solutions), a Zerodha Authorised Person. **Compiled:** 2026-07-04. **Sprint:** 1 (Zerodha only).
+> **Owner:** Abhay Kumar Maurya / PIFS (Passive Income Financial Solutions), a Zerodha Authorised Person. **Compiled:** 2026-07-04. **Program:** Zerodha only.
+>
+> **Sprint state:** Sprint 1 is **shipped and live in production**; the project is in **Sprint 2** (share amplification, referrer login, follow-up engine). §5 below is Sprint 1's *build order*, kept as history — it is not the current worklist. **`CURRENT-STATE.md` is the authoritative now-state**; `ROADMAP-STATUS.md` is the per-feature ledger. **§6's "do NOT build" list is a Sprint-1-era freeze — several items have since been explicitly un-frozen by the owner; check §6's notes and `CURRENT-STATE.md` before treating anything there as forbidden.**
 
 ---
 
@@ -33,6 +35,8 @@ Document map (start at `README.md` for the index):
 | `implementation/10-Claude-Code-Implementation-Guide.md` | **The build guide**: tech direction, standards, tests, git, DoD, build order. |
 | `docs/deploy/DEPLOY-TARGET.md` | **AUTHORITATIVE deploy target** — GoRefer production runs on the Hostinger VPS `<PROD-VPS>` (Linux nginx + certbot), NOT the local box `<BACKUP-VPS>`. Read before any deploy/DNS/TLS decision; if any doc disagrees, this file wins. |
 | `CURRENT-STATE.md` | **Read FIRST, every session** — the verified now-state snapshot (deployed SHA, LIVE flag values, in-flight missions). Updated in the same turn as any state change; `COORDINATION.md` stays the append-only log of record. Read COORDINATION's tail by CONTENT (`tail -n 80`, confirm the last entry's date), never by a computed line offset — blank-line-skipping counters caused the 2026-07-21 stale-state incident. When docs disagree, the live system wins. |
+| `ROADMAP-STATUS.md` | Per-feature ledger across sprints — **Discussed / Implemented / Deployed** for every mission (M1…M13, B1–B4, M-WATI-1, M-FUP-1). Refreshed on milestones only; for live flag/deploy state `CURRENT-STATE.md` wins. |
+| `docs/sprint2/` | Sprint-2 specs + goal contracts (share amplification, Wati referral amplification, referral UX/disclosure, independent test brief, M13 login contract). |
 | `COORDINATION.md` | **DA ⇆ Engineer coordination log** — the async channel between the Design Authority (Cowork planning session) and the Engineer (Claude Code). Read it before each mission; append a STATUS entry when you open a PR; log any surfaced inconsistency as a QUESTION and pause rather than guess. |
 | `review/` | LLM review pack (`09`) + review bundle. |
 | `_source-archive/` | Historical source-of-truth captures (context only). |
@@ -76,22 +80,26 @@ npm run watch:css
 python manage.py golive_smoke --referrer EKU497 --mobile 9876543210 [--json]   # full capture loop, honors live flags
 python manage.py set_landing_mode page|direct
 python manage.py recompute_rollups
-python manage.py setup_schedules && python manage.py qcluster
+python manage.py setup_schedules && python manage.py qcluster   # registers followup_sweep + followup_inbound_poll
 python manage.py createcachetable    # once per deploy — DB cache backs the rate limiter
+python manage.py seed_followup_cadence   # idempotent: the 3h→21h FollowupRule cadence + per-step copy
 ```
 
 CI (`.github/workflows/ci.yml`, Postgres 16 service): contract-doc drift gate → Tailwind freshness → ruff → `manage.py check` → migration drift → migrate → pytest.
 
 ## 2c. Code map
 
-- `gorefer/` — project package. `settings.py` (loads `.env` **before** importing flags; Postgres fail-fast; canonical byte-exact compliance strings `AP_DISCLOSURE_BLOCK`/`MARKET_RISK_WARNING`). `flags.py` is the **single source of every feature flag**, frozen from env at import — code imports `flags` and reads attributes, never `os.environ`, for a flag. `urls.py`: home, `/open`, `/d/{slug}`, `/r/[{channel}/]{client_id}[/continue]`, `/api/` mount, flag-gated `/admin-panel/` + `/django-admin/`. `context_processors.py` auto-injects the compliance block into every page.
+- `gorefer/` — project package. `settings.py` (loads `.env` **before** importing flags; Postgres fail-fast; canonical byte-exact compliance strings `AP_DISCLOSURE_BLOCK`/`MARKET_RISK_WARNING`). `flags.py` is the **single source of every env-level feature flag**, frozen from env at import — code imports `flags` and reads attributes, never `os.environ`, for a flag. `urls.py`: home, `/open`, `/d/{slug}`, `/r/[{channel}/]{client_id}[/continue]`, `/api/` mount, flag-gated `/share/{channel}/{client_id}` (`ENABLE_SHARE_INTENT`), `/admin-panel/` + `/django-admin/`, and the `apps.accounts` login/self-serve routes (`ENABLE_CUSTOMER_LOGIN`). `context_processors.py` auto-injects the compliance block into every page.
 - `api/` — Django Ninja routers, aggregated by `api/router.py` and mounted at `/api/` (click, leads, share, analytics, wati + zoho webhooks, health).
 - `apps/tenants/` — Tenant/Domain registry + `TenantResolutionMiddleware`; single-schema isolation via tenant-scoped managers + composite unique constraints.
 - `apps/config/` — ADR-022 config cascade: `cascade.resolve(key)` walks user → tenant-global → central → default; **compliance-locked keys resolve from central only** (lower tiers can't weaken a claim). Also integration-flag persistence and the Preferences screen backend.
+  - **Flag truth is two-layered — read this before ever judging a flag's state.** `flags.py` holds the **env default**; the *effective* value of the integration flags (`ENABLE_WATI_SEND`, `ENABLE_ZOHO_WRITE`, `ENABLE_ZOHO_READ`) is whatever `apps/config/integration_flags.py:resolve_flag(key)` returns — a DB override beats env. **Prod `.env` says `false` for all three while the live overrides are ON.** Never conclude "the integration is off" from `.env` or `flags.py`; resolve it (verify-live command in `CURRENT-STATE.md`). Per-tenant behaviour keys (`followups_enabled`, `followup_quiet_start_hour`/`_end_hour`, `followup_min_gap_minutes`, `followup_referrer_nudge_on`, `followup_poll_watch_mobiles`) live only in the cascade — they are **not** in `flags.py`.
 - `apps/referrals/` — core domain: `redirect_service.py` (lazy referrer/journey creation + 302), `lead_service.py` (save lead first, then redirect), `landing_mode.py`, `validators.py` (client_id format check), views, and the seed/smoke management commands.
 - `apps/events/` — immutable event stream (PII excluded by design), `bots.py` (preview/bot UA filter — a bot never creates a journey), `analytics.py` + `rollups.py` (dirty-day daily/monthly recompute).
 - `apps/integrations/` — the adapter boundary. `wati/` (adapter, `notify.py`, terminal-status polling, webhook, queue tasks) and `zoho/` (adapter, client, `ingest.py` — **the only code path that writes account status**, `statusmap.py`, `waxseal.py` HMAC, webhook, `read.py` enrichment). Live vs log-only adapters swap by flag, so demo mode works with everything off. **Any change here must update `Wati-GoRefer/` / `Zoho-GoRefer/` contract docs — CI-enforced (§6b).**
-- `apps/otp/` — pluggable OTP delivery port (behind `ENABLE_OTP_LOGIN`); codes stored hashed + peppered, never plaintext.
+- `apps/otp/` — pluggable OTP delivery port (behind `ENABLE_OTP_LOGIN`); codes stored hashed + peppered, never plaintext. When the flag is OFF the DemoOtpAdapter logs instead of sending.
+- `apps/accounts/` — **M13 referrer login (Sprint 2, LIVE)**, mounted at the root behind `ENABLE_CUSTOMER_LOGIN`: `/login/` (`oauth.py` Google OAuth primary, `apps/otp` WhatsApp-OTP fallback), Path-B ownership verification (`/login/verify-ownership`), `/my/referrals` self view (`selfview.py`), and the admin Verifications queue. Models: `ReferrerAccount`, `VerificationRequest`. `onfile.py` enforces that an OTP only ever goes to a channel already on file — never to a user-supplied number.
+- `apps/followups/` — **M-FUP-1 WhatsApp follow-up engine (Sprint 2, LIVE)**. Models `FollowupRule` / `FollowupWindow` / `ScheduledFollowup`, all tenant-scoped. `services.py` is the gate: 24h-session-window check, opt-out, converted-suppression, IST quiet hours, and the anti-burst `compute_defer` min-gap. `tasks.py` runs the two scheduled jobs — `poll_inbound_windows` (opens windows by polling Wati `getMessages`, because the inbound webhook is chatbot-suppressed) and `fire_due_followups` (the sweep that actually sends). `api.py` is the staff-scoped CRUD router. Send copy is read **at fire time**, so re-seeding the cadence changes pending sends.
 - `apps/dashboard/` — M7 admin dashboard + M9 referral profile served at `/admin-panel/`.
 - `apps/common/` — `phone.py` (the one canonical phone normalization), `ratelimit.py` (DB-cache-backed so counters are shared across gunicorn workers), `netaddr.py` (trusted-proxy-hops X-Forwarded-For resolution for webhook IP allowlists).
 - `tests/` — single flat pytest-django suite (`pytest.ini` → `gorefer.settings`); the three guardrail tests live in `tests/test_guardrails.py`, third-party-origin ban in `tests/test_no_third_party_origin.py`.
@@ -151,9 +159,11 @@ You are the software **ENGINEER**, not the architect. Implement **exactly** what
 
 ---
 
-## 5. Sprint 1 build order (seven vertical slices)
+## 5. Sprint 1 build order (seven vertical slices) — HISTORY, all shipped
 
-Build in order; each slice leaves `main` deployable (see `implementation/10` §11).
+> Kept for the reasoning behind the layering. **All seven are deployed and live**; this is not the current worklist — see `ROADMAP-STATUS.md` and `CURRENT-STATE.md`.
+
+Each slice left `main` deployable (see `implementation/10` §11).
 
 1. **M1 — Repo / skeleton**: structure, config + feature-flag module, env bootstrap (incl. admin), migrations harness, CI green, README. Seed the single `ReferralProgram` (Zerodha, `ZMPHZC`).
 2. **M2 — Raw `client_id` redirect + lazy journey + click event**: format-validate the id; lazy create-or-find referrer + journey on first click; fast/edge redirect `/r/{client_id}` → log Click → 302 with `c=ZMPHZC` injected server-side. **Redirect only — never submit.**
@@ -167,12 +177,12 @@ M1–M4 need no external system (work offline in demo mode); M5/M6 integrate beh
 
 ---
 
-## 6. Explicitly NOT in Sprint 1 (do NOT build)
+## 6. Explicitly NOT built (do NOT build)
 
-The architecture supports these, but **do not implement** them in Sprint 1 — they stay off behind feature flags, never shown as dead UI:
+The architecture supports these, but **do not implement** them — they stay off behind feature flags, never shown as dead UI. **Two former entries have been UN-FROZEN by the owner and are now live; they are recorded here so a future session doesn't try to rip them out as out-of-scope:**
 
-- **Customer login / "My Referrals" self-service dashboard** (`ENABLE_CUSTOMER_LOGIN=false`).
-- **WATI stale-lead auto-nudge (REQ-F01)** — deferred to Sprint 2+; stale-lead follow-up is owned by Zoho; GoRefer shows only a read-only aging flag. Gated on the WATI delivery-dedup + opt-in fix.
+- ~~**Customer login / "My Referrals" self-service dashboard**~~ — **UN-FROZEN and LIVE** (M13, 2026-07-21). `ENABLE_CUSTOMER_LOGIN` + `ENABLE_OTP_LOGIN` are **ON in prod**. Code in `apps/accounts/`; contract `docs/sprint2/S2-05-M13-Referrer-Login-Goal-Contract.md`.
+- ~~**WATI stale-lead auto-nudge (REQ-F01)**~~ — **UN-FROZEN and LIVE** (M-FUP-1, 2026-07-24, owner-authorized Sprint-2 mission + prod deploy). Code in `apps/followups/`; `followups_enabled=True` for PIFS. Still scoped to the **24h WhatsApp session window** (session messages, not marketing templates) with quiet hours + anti-burst min-gap; **Zoho remains the owner of lead status** — the nudge engine never writes or infers it.
 - **Reward computation / calculations / payment integrations** (rewards live only in Zerodha Console).
 - **Multi-partner UI** (architecture is provider-agnostic; UI exposes only Zerodha).
 - **Public self-service registration**, **mobile app**, **poster/PDF asset generator** (`ENABLE_ASSET_GENERATOR=false`), **multi-language**.
