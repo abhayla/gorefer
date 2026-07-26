@@ -1,0 +1,48 @@
+{% comment %}
+Link-preview card served to CRAWLERS ONLY (WhatsApp, Facebook, Slack, Telegram, …), never to
+a human — humans still get the 302 exactly as before.
+
+Why it exists (owner decision 2026-07-26): a forwarded referral link used to redirect the
+crawler too, so WhatsApp built its preview from the PARTNER's page. Every shared link showed
+the partner's branding instead of PIFS's, on the one surface a friend actually sees before
+tapping. M11 always specified a PIFS card; this makes that true.
+
+GUARDRAIL 3: this page is client-facing, so it must never contain the partner code or the raw
+partner URL. Nothing here is templated from the destination — only from config.
+{% endcomment %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ og_title }}</title>
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{{ og_site_name }}">
+<meta property="og:title" content="{{ og_title }}">
+<meta property="og:description" content="{{ og_description }}">
+<meta property="og:url" content="{{ og_url }}">
+{% if og_image %}<meta property="og:image" content="{{ og_image }}">{% endif %}
+
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{{ og_title }}">
+<meta name="twitter:description" content="{{ og_description }}">
+
+<meta name="description" content="{{ og_description }}">
+{% comment %} A crawler must not index or follow this surface. {% endcomment %}
+<meta name="robots" content="noindex, nofollow">
+</head>
+<body>
+  <main>
+    <h1>{{ og_title }}</h1>
+    <p>{{ og_description }}</p>
+    {% comment %}
+      The compliance block is auto-injected into every page by the context processor
+      (SEBI/NSE AP disclosure + market-risk warning) — it must appear here too, because a
+      crawler preview is a customer-facing asset.
+    {% endcomment %}
+    <p>{{ MARKET_RISK_WARNING }}</p>
+    <p>{{ AP_DISCLOSURE_BLOCK }}</p>
+  </main>
+</body>
+</html>

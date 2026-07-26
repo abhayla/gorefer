@@ -19,6 +19,8 @@ from django.views.decorators.http import require_GET
 
 from apps.common.ratelimit import RateLimited, check_rate, client_ip
 from apps.config.cascade import resolve
+from apps.events.bots import is_bot_user_agent
+from apps.referrals.og import render_preview
 from apps.tenants.resolve import get_current_tenant
 from gorefer import flags as flagmod
 from gorefer.flags import flags, normalize_share_channel
@@ -161,6 +163,16 @@ def referral_redirect(request, client_id: str, channel: str | None = None):
         return render(request, "landing_invalid.html", status=400)
 
     tenant = get_current_tenant(request)
+
+    # D2 — a CRAWLER gets a PIFS link-preview card, never a 302.
+    #
+    # A forwarded link used to redirect the crawler too, so WhatsApp built its preview from
+    # the partner's page and every shared link showed the partner's branding instead of
+    # PIFS's — on the one surface a friend sees before tapping. Checked BEFORE visitor-cookie
+    # issuance and before any journey work, so a preview fetch still creates nothing.
+    if is_bot_user_agent(request.META.get("HTTP_USER_AGENT", "")):
+        return render_preview(request, tenant_id=getattr(tenant, "id", None))
+
     visitor_id, is_new = _ensure_visitor_id(request)
 
     # LANDING_MODE=direct (B3): log the click on-commit, then 302 straight to
@@ -294,6 +306,9 @@ def share_intent_redirect(request, channel: str, client_id: str):
 def partner_direct_redirect(request):
     """GET /open — partner-direct 302 (no r=); stays a direct redirect (no landing)."""
     tenant = get_current_tenant(request)
+    # D2 — crawlers get the PIFS card here too; /open is shared as often as a referral link.
+    if is_bot_user_agent(request.META.get("HTTP_USER_AGENT", "")):
+        return render_preview(request, tenant_id=getattr(tenant, "id", None))
     visitor_id, is_new = _ensure_visitor_id(request)
     try:
         destination, _is_human = handle_partner_direct(

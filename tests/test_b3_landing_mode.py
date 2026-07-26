@@ -104,8 +104,10 @@ def test_direct_mode_no_partner_code_leak_in_any_body(seeded, client):
 def test_direct_mode_bot_creates_no_journey(seeded, client):
     _set(_tenant(), "landing_mode", "direct")
     resp = client.get("/r/RJ4521", HTTP_USER_AGENT="facebookexternalhit/1.1")
-    # A bot still gets the destination but creates no click/journey.
-    assert resp.status_code == 302
+    # D2 (owner, 2026-07-26): a crawler now gets the PIFS link-preview card (200) instead of
+    # a 302 — previously WhatsApp built its preview from the PARTNER's page. Still creates
+    # no click/journey, which is the property this test really guards.
+    assert resp.status_code == 200
     assert not Event.objects.filter(event_type="click").exists()
 
 
