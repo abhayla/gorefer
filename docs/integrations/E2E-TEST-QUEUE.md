@@ -37,7 +37,20 @@
 - [x] **Admin dashboard routes (Phase 9) — DONE 2026-07-26, all 7 green.** See DONE section.
 - [x] **API surface (Phase 10) — DONE 2026-07-26; found + fixed broken access control.** See DONE.
 - [x] **`POST /api/leads/` over HTTP (Phase 3) — DONE 2026-07-26, all green.** See DONE section.
-- [ ] **Bot filter breadth (Phase 2).** All 8 crawler UAs, not the 2 already covered.
+- [x] **Phase 2 — bot filter breadth DONE 2026-07-26. PASSED; found + fixed a separate OG defect.**
+      All 8 crawler UAs (facebookexternalhit · WhatsApp · Telegrambot · Slackbot · Twitterbot ·
+      LinkedInBot · Googlebot · bingbot) → **zero `ReferralIdentity`, zero `Referral`, zero events**.
+      Card leaks no partner code / Zerodha URL. **Note the expectation in the skill is now STALE:**
+      crawlers get **200** (the D2 PIFS card), not a 302 — which also resolves the skill's open
+      question 1 (M11 OG preview vs bot 302).
+      **DEFECT FOUND + FIXED (`df1e25a`):** the D2 card emitted `og:image="img/og-card.png"` —
+      relative, and even resolved `/img/og-card.png` **404s** (asset is at `/static/img/...`). So
+      every forwarded referral link previewed with **no image**, on precisely the surface D2 exists
+      to fix. M11's landing card already resolved this correctly; the crawler card didn't reuse it.
+      `absolute_image_url()` is now the ONE builder, used by both. Existing assertion was
+      `'property="og:image"' in html` (presence, not usability) — replaced with absolute +
+      resolves-under-STATIC_URL, parametrised over human and crawler UAs. Disproof: reverting fails
+      only the crawler case. Verified live: image now fetches **200 image/png**. Suite 637/0.
 - [ ] **Withdraw the superseded PENDING v1 template**
       `gorefer_referrer_prospect_pending_en_2026_07_25` (v2/v3/v4/v5 supersede it). NOTE: Wati
       DELETE returns `ok:true` but Meta keeps the language content (`2388024`), so the name
@@ -222,10 +235,26 @@ item below and to future work.
       ADR-035 re-asserted (user-supplied `mobile` → 400). Suite 634/0, deployed `1be4c34`.
       **Google OAuth — the PRIMARY referrer login — remains UNTESTED, as the owner chose. Keep
       saying so in every report.**
-- [ ] **D9 · Cut marketing volume and re-cut nudges as UTILITY.** UTILITY escapes Meta's per-user cap
-      (`131049`), the dominant cause of the ~43% delivery rate. Reframe copy as transactional
-      ("your account is still pending") not re-solicitation ("still want to open one?") — proven to
-      flip Meta's classification on this tenant. Leave `917972672473` to recover on its own.
+- [~] **D9 · IN FLIGHT 2026-07-26 — v7 submitted and HOLDING UTILITY; awaiting Meta approval.**
+      **Scope correction, verified first:** all 7 follow-up cadence rules are `channel=session` —
+      free-form messages inside the 24h window, which carry **no Meta category and no cap at all**.
+      Resolving every configured template name against the live Meta inventory shows office alert,
+      both prospect-welcome, both referrer-update and the login OTP are **already
+      UTILITY/AUTHENTICATION**. So the ONLY marketing-capped template GoRefer sends is the §6.1
+      referrer-nudge pair. D9 is real but far narrower than stated.
+      **v6 FAILED (third flip after v4/v5).** Root cause found by reading Meta's actual policy, not
+      by inferring from failures: UTILITY requires **non-promotional AND specific to the RECIPIENT's
+      own** transaction, forbids "promote, recommend, upsell, or cross-sell", and classifies
+      **retargeting as MARKETING even when user-requested** ("You left items in your cart! Checkout
+      now"). v4/v5/v6 were all that shape with a referral link standing in for the cart — the
+      **link** was the disqualifier, so trimming adjectives could never work.
+      **v7 removes the link and every CTA → holding UTILITY in BOTH languages (PENDING).**
+      Full policy + authoring checklist: `docs/integrations/Meta-Template-Categorization-Policy.md`.
+      **NEXT (blocked on Meta, then on an owner call):** (a) re-poll v7 to APPROVED; (b) **owner
+      decides** — v7 delivers reliably but carries **no link** (2 vars, not 3), vs v5 which carries
+      the link and is capped; (c) if v7 is chosen, `_maybe_referrer_nudge()` must stop passing
+      `nudge_link_for()` and the config flips; (d) delete v6 EN (approved-but-unwired).
+      Leave `917972672473` to recover on its own.
 
 ## 🔴 GUARDRAIL 3 VIOLATED IN PRODUCTION — partner code on the referrer self view (found + FIXED 2026-07-26)
 
