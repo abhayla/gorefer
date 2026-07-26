@@ -22,6 +22,7 @@ from django.core.management import call_command
 from django.test import Client
 from django.utils import timezone
 
+from apps.common.phone import normalize_phone
 from apps.config.cascade import set_tenant
 from apps.events.models import PII_KEYS, Event
 from apps.followups import services, tasks
@@ -919,9 +920,8 @@ def test_has_converted_reads_the_field_zoho_actually_maintains(enabled, monkeypa
 
 def test_converted_contact_is_cancelled_not_nudged(enabled, monkeypatch):
     """The gate must CANCEL a due nudge once the account is open (engaged-exit)."""
-    from apps.referrals.models import Lead, Referral
-
     from apps.common.phone import normalize_phone
+    from apps.referrals.models import Lead, Referral
 
     rec = _fire_referrer_nudge_setup(enabled, monkeypatch, flag_on=False)
     lead = Lead.objects.get(prospect__mobile=normalize_phone("9812345678"))
@@ -953,3 +953,41 @@ def test_quiet_hours_reason_names_the_configured_end_hour(enabled, monkeypatch):
     assert decision == services.DEC_HOLD
     assert "09:00 IST" in reason, f"reason must name the CONFIGURED end hour, got {reason!r}"
     assert "06:00" not in reason
+
+
+def test_converted_exit_applies_even_when_stop_on_reply_is_OFF(enabled, monkeypatch):
+    """D5: converted-suppression must NOT be nested under `stop_on_reply`.
+
+    Two unrelated concerns used to share one switch, so a rule created with stop_on_reply=False
+    would keep messaging customers whose account was already open.
+    """
+    from apps.referrals.models import Lead, Referral
+
+    rec = _fire_referrer_nudge_setup(enabled, monkeypatch, flag_on=False)
+    rule = FollowupRule.objects.filter(step_key="nudge_12h").first()
+    rule.stop_on_reply = False           # the setting that used to disable converted-exit
+    rule.save(update_fields=["stop_on_reply"])
+
+    lead = Lead.objects.get(prospect__mobile=normalize_phone("9812345678"))
+    Referral.objects.filter(pk=lead.referral_id).update(conversion_status="account_opened")
+
+    counts = tasks.fire_due_followups()
+    assert counts["cancelled"] == 1, f"converted contact must still be cancelled, got {counts}"
+    assert counts["sent"] == 0
+    assert len(rec.sent) == 0
+    assert ScheduledFollowup.objects.order_by("-id").first().reason == "engaged: converted"
+
+
+def test_converted_exit_can_be_switched_off_by_config(enabled, monkeypatch):
+    """D5 second half — configurable without a deploy (CLAUDE.md §6d)."""
+    from apps.referrals.models import Lead, Referral
+
+    set_tenant(services.SUPPRESS_WHEN_CONVERTED_KEY, False, tenant_id=enabled.id)
+    rec = _fire_referrer_nudge_setup(enabled, monkeypatch, flag_on=False)
+    lead = Lead.objects.get(prospect__mobile=normalize_phone("9812345678"))
+    Referral.objects.filter(pk=lead.referral_id).update(conversion_status="account_opened")
+
+    counts = tasks.fire_due_followups()
+    assert counts["cancelled"] == 0, "config off ⇒ converted contact is NOT suppressed"
+    assert counts["sent"] == 1
+    assert len(rec.sent) == 1
