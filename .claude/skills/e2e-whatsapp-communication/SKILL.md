@@ -35,7 +35,7 @@ list and what each item unlocks.
 The gate distinguishes three kinds of prerequisite:
 - **HARD** — VPS ssh, Wati endpoint + token, `gorefer.in` reachable. Without these there is no run.
 - **PER-PHASE** — `ZOHO_WEBHOOK_HMAC_SECRET` (Phase 5), `ZOHO_REFRESH_TOKEN` (Phase 4),
-  `E2E_ADMIN_PASSWORD` (Phase 9), `WATI_TEST_RECIPIENTS` (all sends). Missing one blocks only its phase.
+  `phase9-admin.sh` (Phase 9), `WATI_TEST_RECIPIENTS` (all sends). Missing one blocks only its phase.
 - **OWNER-PROVIDED SESSIONS** — a logged-in WhatsApp Web session and a Google session on the VPS
   Chrome. These **cannot be auto-provisioned** and a login cannot be proven from disk, so the gate
   looks for an explicit confirmation marker the owner creates after logging in:
@@ -58,8 +58,9 @@ from apps.config.integration_flags import resolve_flag
 print([(f, resolve_flag(f)) for f in [\"ENABLE_WATI_SEND\",\"ENABLE_ZOHO_WRITE\",\"ENABLE_ZOHO_READ\"]])"'
 ```
 
-Credentials: shared staff account in the project `.env` as `E2E_ADMIN_USER` / `E2E_ADMIN_PASSWORD`
-(`is_staff`, not superuser — enough for all `/admin-panel` routes).
+Credentials: Phase 9's staff account is **ephemeral** — created on demand and destroyed after, so no
+standing prod password exists anywhere (`CLAUDE.md` §4: never a seeded plaintext credential):
+`bash .claude/skills/e2e-whatsapp-communication/phase9-admin.sh create|destroy|status`.
 
 ---
 
@@ -219,8 +220,14 @@ advance ONE step's `fire_at` while the window is genuinely open.
 
 ## Phase 9 — Admin dashboard (shared staff credential)
 
-Log in at `/admin-panel/login/` with `E2E_ADMIN_USER` / `E2E_ADMIN_PASSWORD` (grab the CSRF token
-from the login page first), then exercise every route:
+```bash
+bash .claude/skills/e2e-whatsapp-communication/phase9-admin.sh create   # prints user+pass ONCE
+# ... run the phase ...
+bash .claude/skills/e2e-whatsapp-communication/phase9-admin.sh destroy  # ALWAYS, even on failure
+```
+
+Log in at `/admin-panel/login/` with the printed credential (grab the CSRF token from the login page
+first — the POST needs it), then exercise every route:
 `/admin-panel/` · `/explorer/` · `/journey/{id}/` · `/referrers/` · `/referrer/{client_id}/` ·
 `/preferences` · `/verifications/`.
 

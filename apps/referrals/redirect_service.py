@@ -141,8 +141,21 @@ def _stamp_first_click(referral, when) -> None:
     "first" click later. `filter(first_click_at__isnull=True).update(...)` lets the database
     decide, and a no-op on a referral that already has one costs nothing.
 
-    Deliberately not `referral.save()` — Referral is an AuditedModel, and a full save here
-    would bump `version` and stomp concurrently-updated fields on a hot redirect path.
+    Deliberately not `referral.save()`: a full save would write back every field on this
+    in-memory instance, stomping anything a concurrent writer changed on a hot redirect path.
+    (Correction to an earlier version of this comment: it also claimed a save would bump
+    `version`. It would not — `AuditedModel` declares `version` but overrides no `save()`, so
+    nothing increments it automatically. The race-safety reason above is the real one.)
+
+    Note this is currently the ONLY `.filter(...).update(...)` on an audited model in the repo,
+    so treat it as a deliberate hot-path exception rather than an established pattern.
+
+    Bot clicks can never reach here: `_record_event` writes `is_bot=False` unconditionally, and
+    bot previews are recorded by a separate path, so the stamped value is always a real click.
+    (Verified on prod 2026-07-26: one Googlebot click exists against referral 1, and the stamp
+    matches the human click 26 ms earlier — but the one-off SQL backfill took `Min(timestamp)`
+    across ALL clicks, so a bot arriving first WOULD have poisoned it. Any future backfill or
+    recompute must filter `is_bot=False`.)
     """
     updated = Referral.objects.filter(pk=referral.pk, first_click_at__isnull=True).update(
         first_click_at=when

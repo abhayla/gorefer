@@ -54,8 +54,10 @@ has_key ZOHO_WEBHOOK_HMAC_SECRET "$GLOBAL_ENV" && r=1 || r=0
 check "ZOHO_WEBHOOK_HMAC_SECRET" "$r" soft "Phase 5 — conversion ingest / guardrail 2"
 has_key ZOHO_REFRESH_TOKEN "$GLOBAL_ENV"       && r=1 || r=0
 check "ZOHO_REFRESH_TOKEN" "$r" soft "Phase 4 — Zoho lead write"
-has_key E2E_ADMIN_PASSWORD "$PROJ_ENV"         && r=1 || r=0
-check "E2E_ADMIN_PASSWORD (.env)" "$r" soft "Phase 9 — admin dashboard routes"
+# Phase 9 uses an EPHEMERAL credential (created on demand, destroyed after) — there is
+# deliberately no standing prod password in .env. Check the tool, not a stored secret.
+[ -f "$(dirname "$0")/phase9-admin.sh" ] && r=1 || r=0
+check "phase9-admin.sh (ephemeral cred)" "$r" soft "Phase 9 — admin dashboard routes"
 has_key WATI_TEST_RECIPIENTS "$GLOBAL_ENV"     && r=1 || r=0
 check "WATI_TEST_RECIPIENTS" "$r" soft "every send phase (allowlist, fail-closed)"
 
