@@ -16,7 +16,37 @@ Tests the real production system at `gorefer.in`. Every leg is verified **at the
 Use a fresh throwaway client id per run (`E2E<DDMM>`) so real referrer stats stay clean.
 Sanctioned test recipients ONLY (`GLOBAL.env:WATI_TEST_RECIPIENTS`): `917972672473`, `917767009136`.
 
-## Preflight
+## STEP 0 — PREREQUISITE GATE (run FIRST, every time, before anything else)
+
+```bash
+bash .claude/skills/e2e-whatsapp-communication/check-prereqs.sh
+```
+
+**Report its output to the owner immediately — before running any phase.** Discovering a missing
+credential halfway through wastes the run; the owner gets asked ONCE, up front, with the exact
+list and what each item unlocks.
+
+| Exit | Meaning | What to do |
+|---|---|---|
+| **0** | Fully autonomous | Run every phase unattended. |
+| **1** | A HARD prerequisite is missing | **STOP.** Nothing can run. Tell the owner exactly which item and that the run cannot start without it. |
+| **2** | Partial autonomy | Run every unblocked phase. **Do NOT stall** on the blocked ones — list them for the owner and carry on. Report at the end which phases were skipped and why. |
+
+The gate distinguishes three kinds of prerequisite:
+- **HARD** — VPS ssh, Wati endpoint + token, `gorefer.in` reachable. Without these there is no run.
+- **PER-PHASE** — `ZOHO_WEBHOOK_HMAC_SECRET` (Phase 5), `ZOHO_REFRESH_TOKEN` (Phase 4),
+  `E2E_ADMIN_PASSWORD` (Phase 9), `WATI_TEST_RECIPIENTS` (all sends). Missing one blocks only its phase.
+- **OWNER-PROVIDED SESSIONS** — a logged-in WhatsApp Web session and a Google session on the VPS
+  Chrome. These **cannot be auto-provisioned** and a login cannot be proven from disk, so the gate
+  looks for an explicit confirmation marker the owner creates after logging in:
+  `/root/.gorefer-e2e/whatsapp-web.ok` and `/root/.gorefer-e2e/google-session.ok`.
+
+**Decisions are also prerequisites, and the gate cannot detect them.** Check the BLOCKED section of
+`docs/integrations/E2E-TEST-QUEUE.md` and surface any open owner decision in the same up-front
+message (currently: `/open` destination path, M11 OG-card vs bot 302, wire-or-delete the 9 unwired
+templates, cleanup of the junk `TALK`/`ZMPHZC` identities).
+
+## Preflight (after the gate passes)
 
 ```bash
 # SSH key is NOT id_rsa — bare `ssh root@...` fails with publickey
