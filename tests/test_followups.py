@@ -824,28 +824,45 @@ def test_referrer_nudge_fires_at_step_when_enabled(enabled, monkeypatch):
     to, template, params = rec.templates[0]
     assert to == "919844440000"                # the referrer's phone
     assert "referrer_prospect_pending" in template
-    vals = [p["value"] for p in params["template_params"]]
-    # position 3 is the FULL canonical link (v5+), not a bare client_id
-    assert vals[:2] == ["Asha", "Riya"]        # name, prospect descriptor
-    assert vals[2].endswith("/r/wa/RJ4521")    # channel IN the path, not a trailing ?s=
+    # D9 (2026-07-27): the referral link moved from a BODY variable into a dynamic URL
+    # BUTTON, so the code now supplies `client_id` (the button's input) and Wati builds
+    # the URL from the template's `gorefer.in/share/wa/{{client_id}}`.
+    assert params["template_params_named"] is True, (
+        "names must survive to Wati — a button variable has its own index space and "
+        "positional remapping can never fill it"
+    )
+    sent = {p["name"]: p["value"] for p in params["template_params"]}
+    assert sent["name"] == "Asha"
+    assert sent["prospect"] == "Riya"
+    assert sent["client_id"] == "RJ4521", "the button is filled from the REFERRER's client id"
 
 
-def test_referrer_nudge_link_uses_channel_path_not_legacy_query(enabled, monkeypatch):
-    """Owner-reported: the nudge rendered `gorefer.in/r/RJ4521?s=wa` (channel as a trailing
-    query param) instead of the canonical `/r/wa/RJ4521`.
+def test_referrer_nudge_sends_referrer_client_id_for_the_button(enabled, monkeypatch):
+    """The button is filled from the REFERRER's client id — never the prospect's, never a name.
 
-    Root cause was that this path bypassed `nudge_link_for` and let the TEMPLATE BODY
-    hardcode the URL shape. The link must come from the canonical builder, so assert the
-    shape here rather than trusting a template body we do not control from code.
+    History: this nudge once rendered `gorefer.in/r/RJ4521?s=wa` because the path bypassed
+    `nudge_link_for` and let the TEMPLATE hardcode the URL shape. D9 moves the link into a
+    dynamic URL button, which unavoidably puts the URL SHAPE back in the template
+    (`gorefer.in/share/wa/{{client_id}}`) — code can no longer assert it.
+
+    ACCEPTED RISK, recorded deliberately: template/code drift on the URL shape is possible
+    again. What code CAN still guarantee is the button's INPUT, so that is what is asserted
+    here — plus a live post-deploy check that the delivered button resolves correctly.
+    A near-miss proves this matters: submitting with POSITIONAL params made Wati silently
+    bind the button to `{{1}}`, i.e. the referrer's NAME, which would have rendered
+    `gorefer.in/share/wa/Ramesh Kumar` on every send.
     """
     rec = _fire_referrer_nudge_setup(enabled, monkeypatch, flag_on=True)
     tasks.fire_due_followups()
 
     _to, _template, params = rec.templates[0]
-    link = [p["value"] for p in params["template_params"]][2]
-    assert "/r/wa/RJ4521" in link, f"channel must be a path segment, got {link!r}"
-    assert "?s=" not in link, f"legacy query-param channel form leaked back in: {link!r}"
-    assert link.startswith("gorefer.in") or "://" not in link  # bare host, kit-message convention
+    sent = {p["name"]: p["value"] for p in params["template_params"]}
+    assert sent["client_id"] == "RJ4521"
+    assert sent["client_id"] != sent["name"], "button must not be fed the referrer's NAME"
+    assert sent["client_id"] != sent["prospect"], "button must not be fed the PROSPECT"
+    assert "/" not in sent["client_id"] and " " not in sent["client_id"], (
+        "the button takes a BARE client id — Wati appends it to the template's URL base"
+    )
 
 
 def test_referrer_nudge_skipped_when_link_mode_none(enabled, monkeypatch):
