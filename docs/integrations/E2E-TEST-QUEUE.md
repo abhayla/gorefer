@@ -243,26 +243,35 @@ item below and to future work.
       ADR-035 re-asserted (user-supplied `mobile` → 400). Suite 634/0, deployed `1be4c34`.
       **Google OAuth — the PRIMARY referrer login — remains UNTESTED, as the owner chose. Keep
       saying so in every report.**
-- [~] **D9 · IN FLIGHT 2026-07-26 — v7 submitted and HOLDING UTILITY; awaiting Meta approval.**
-      **Scope correction, verified first:** all 7 follow-up cadence rules are `channel=session` —
-      free-form messages inside the 24h window, which carry **no Meta category and no cap at all**.
-      Resolving every configured template name against the live Meta inventory shows office alert,
-      both prospect-welcome, both referrer-update and the login OTP are **already
-      UTILITY/AUTHENTICATION**. So the ONLY marketing-capped template GoRefer sends is the §6.1
-      referrer-nudge pair. D9 is real but far narrower than stated.
-      **v6 FAILED (third flip after v4/v5).** Root cause found by reading Meta's actual policy, not
-      by inferring from failures: UTILITY requires **non-promotional AND specific to the RECIPIENT's
-      own** transaction, forbids "promote, recommend, upsell, or cross-sell", and classifies
-      **retargeting as MARKETING even when user-requested** ("You left items in your cart! Checkout
-      now"). v4/v5/v6 were all that shape with a referral link standing in for the cart — the
-      **link** was the disqualifier, so trimming adjectives could never work.
-      **v7 removes the link and every CTA → holding UTILITY in BOTH languages (PENDING).**
-      Full policy + authoring checklist: `docs/integrations/Meta-Template-Categorization-Policy.md`.
-      **NEXT (blocked on Meta, then on an owner call):** (a) re-poll v7 to APPROVED; (b) **owner
-      decides** — v7 delivers reliably but carries **no link** (2 vars, not 3), vs v5 which carries
-      the link and is capped; (c) if v7 is chosen, `_maybe_referrer_nudge()` must stop passing
-      `nudge_link_for()` and the config flips; (d) delete v6 EN (approved-but-unwired).
-      Leave `917972672473` to recover on its own.
+- [x] **D9 · DONE 2026-07-27 (one step outstanding: the live verified send).** Shipped
+      `12cabaf`; config wired; verified against the live Meta inventory.
+      **Scope correction first:** all 7 cadence rules are `channel=session` — free-form, **no Meta
+      category, no cap**. Every other configured template already resolved UTILITY/AUTHENTICATION.
+      So the only marketing-capped template GoRefer sends is the §6.1 referrer nudge.
+      **Root cause (from Meta's policy, not from guessing):** UTILITY needs non-promotional AND
+      specific to the RECIPIENT's own transaction; **retargeting is MARKETING even when
+      user-requested**. v4/v5/v6 were all the cart-abandonment shape with a referral link.
+      **Label matrix, body held byte-identical so the button is the only variable — all APPROVED:**
+      `Share Referral Link` EN **UTILITY** / HI MARKETING · `My Referral Link` same ·
+      `Share on WhatsApp` same · `Refer` same · `Refer & Earn` **MARKETING in BOTH**.
+      → (a) a referral SHARE button holds UTILITY in English; (b) **"Earn" is the one fatal word**;
+      (c) **Hindi rejects the BUTTON itself** — four labels flipped, incl. one with no referral or
+      reward wording, while HI with no button is UTILITY.
+      **SHIPPED:** EN `..._en_2026_07_27_v9a` (button) · HI `..._hi_2026_07_27_v10` (no button).
+      Both APPROVED UTILITY, both uncapped. Verified: button URL
+      `gorefer.in/share/wa/{{client_id}}`, `buttonParamMapping.paramName = client_id`.
+      **Owner-spotted functional fix:** `/r/wa/{id}` 302s the tapper to Zerodha SIGNUP — wrong for a
+      REFERRER who already has an account. `/share/wa/{id}` opens WhatsApp's picker. Owner phone-tested.
+      **Near-miss recorded:** positional params made Wati silently bind the button to the referrer's
+      NAME → would have rendered `gorefer.in/share/wa/Ramesh Kumar`. `ok:true` proves nothing about
+      the button mapping; read it back.
+      **ACCEPTED RISK:** the URL shape is back in the template (what the `?s=wa` fix removed). Code
+      guarantees only the button's INPUT — hence the live send below is required, not optional.
+      - [ ] **LIVE VERIFIED SEND still owed** — deferred deliberately: it was ~01:00 IST and the
+            engine's quiet hours (23:00–06:00) exist so we don't message people at night. Send to
+            `917767009136` in working hours and confirm the delivered button resolves to
+            `gorefer.in/share/wa/DA1707` (NOT a name), then that the link opens WhatsApp's picker.
+      - [ ] Delete the losing variants (v9b/v9c/v9d/v9e, v6) once the winner is proven live.
 
 ## 🔴 GUARDRAIL 3 VIOLATED IN PRODUCTION — partner code on the referrer self view (found + FIXED 2026-07-26)
 

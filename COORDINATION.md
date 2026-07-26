@@ -4420,3 +4420,55 @@ back) but prod CONTENT hash-matched `main` on every changed file except `apps/ot
 the marker was stale, not the deploy. Established by hashing, not by trusting the file.
 
 **No new QUESTIONs.** Next: D9 (re-cut nudges as UTILITY).
+
+---
+
+### 2026-07-27 — D9 SHIPPED: referral link survives as a UTILITY URL button (EN); Hindi cannot — Engineer
+
+**STATUS.** `12cabaf` on `fix/d8-otp-delivery-race`. Suite **640 passed / 0 failed**; deployed;
+config wired and verified against the live Meta inventory. **One step outstanding: the live
+verified send**, deliberately deferred (see below).
+
+**Scope correction found first.** D9 was framed as "cut marketing volume, re-cut the nudges as
+UTILITY". All 7 cadence rules are `channel=session` — free-form messages inside the 24h window,
+which carry **no Meta category and no cap at all**. Every other configured template already
+resolved UTILITY/AUTHENTICATION. The only marketing-capped template GoRefer sends is the §6.1
+referrer nudge. D9 was real but far narrower than stated.
+
+**Root cause found by reading Meta's policy, after I had wrongly concluded it was impossible.**
+Three prior attempts (v4/v5/v6) were flipped to MARKETING and I was about to record "intrinsically
+marketing". The owner pushed back and told me to read the policy. It says UTILITY requires
+non-promotional AND specific to the RECIPIENT's own transaction, forbids "promote, recommend,
+upsell, or cross-sell", and classifies **retargeting as MARKETING even when user-requested**
+("You left items in your cart! Checkout now"). v4/v5/v6 were all exactly that shape with a
+referral link standing in for the cart. Captured in `docs/integrations/Meta-Template-Categorization-Policy.md`.
+
+**Label matrix — body byte-identical, button the only variable, all APPROVED:**
+`Share Referral Link` / `My Referral Link` / `Share on WhatsApp` / `Refer` → **EN UTILITY, HI
+MARKETING**; `Refer & Earn` → **MARKETING in both**. Conclusions: a referral SHARE button holds
+UTILITY in English; **"Earn" is the single fatal word**; **Hindi rejects the button itself** —
+four labels flipped including one with no referral or reward wording, while HI with no button is
+UTILITY. Shipped as a per-language split: EN `v9a` (button), HI `v10` (no button).
+
+**Owner-spotted functional defect, bigger than the classification question.** The button first
+pointed at `/r/wa/{client_id}`, which 302s the tapper to Zerodha's SIGNUP page — but the recipient
+is the REFERRER, who already has an account. It would have shared nothing, sent him to a signup
+form, and logged a click against his own referral. `/share/wa/{client_id}` opens WhatsApp's contact
+picker with his link pre-filled; owner tested it on a real phone.
+
+**Near-miss worth reading.** Submitting with POSITIONAL body params made Wati silently rewrite the
+button's `{{client_id}}` to `{{1}}` and bind it to the referrer's NAME — every send would have
+rendered `gorefer.in/share/wa/Ramesh Kumar`. `ok:true` on create says nothing about the button
+mapping; it must be read back. Fixed with named params + `template_params_named` in the adapter
+(positional remap stays the default, so no existing template is affected).
+
+**MISTAKE I MADE, recorded.** I deleted the Round-1 templates (v8c/v8d) by running a create-only
+task with a script that still contained a DELETE block; a failed transform step didn't stop the
+following commands. Meta holds a deleted name ~30 days. Nothing production broke (v5 and v7 were
+untouched) and the deleted design was the wrong one anyway, but the rule stands: never reuse a
+script containing a destructive block, and verify the artifact before running it.
+
+**QUESTIONs / owner decisions outstanding:** (1) the **live verified send** — deferred because it
+was ~01:00 IST and quiet hours exist so we don't message at night; (2) confirm `Share Referral
+Link` as the EN label (three others also hold UTILITY); (3) accepted risk — the URL shape now lives
+in the template again, so template/code drift on it is possible and only the live check catches it.
