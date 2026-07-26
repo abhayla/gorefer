@@ -217,6 +217,8 @@ account**. Coupling two unrelated concerns; flag to the DA rather than silently 
 
 ### How to test each gate honestly
 
+**Scaffolding can contaminate live data — check before you reach for a helper.** `services.stamp_inbound()` MUTATES the real `FollowupWindow.last_inbound_at`. Calling it to open a window for a test made the gate see a reply that never happened, so a genuinely-converted contact cancelled with `engaged: replied` instead of `engaged: converted` (2026-07-26). Record the true `last_inbound_at` first and restore it, or scaffold on a mobile with no real cadence. Prefer proving a gate on a REAL queued row over a synthetic one — a synthetic row can pass for the wrong reason.
+
 **Quiet hours — the one that must not be faked.** Do NOT assert on `in_quiet_hours()` alone; that
 only proves the predicate. Observe a real deferral:
 
