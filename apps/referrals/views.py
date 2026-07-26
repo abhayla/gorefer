@@ -99,13 +99,13 @@ def _og_context(request, client_id: str) -> dict:
     must not resemble/clone Zerodha — the copy is PIFS-branded and generic.
     """
     from django.conf import settings
-    from django.templatetags.static import static
+
+    from apps.referrals.og import absolute_image_url
 
     base = (settings.PUBLIC_BASE_URL or "").rstrip("/")
-    image = settings.OG_IMAGE
-    if not image.startswith(("http://", "https://")):
-        # Resolve a static path to an absolute URL for crawlers.
-        image = base + static(image)
+    # ONE canonical absolute-OG-image builder, shared with the D2 crawler card — the
+    # crawler card shipped with a relative og:image because it did not reuse this.
+    image = absolute_image_url(settings.OG_IMAGE)
     return {
         "og_title": settings.OG_TITLE,
         "og_description": settings.OG_DESCRIPTION,

@@ -8,7 +8,10 @@ Guardrails asserted here:
     raw Zerodha URL, and does not clone Zerodha.
   - A preview crawler UA gets the OG card but creates NO journey/click and never 302s.
 """
+import re
+
 import pytest
+from django.conf import settings
 from django.core.management import call_command
 from django.test import Client
 
@@ -124,6 +127,45 @@ def test_og_card_and_landing_have_no_partner_code_or_zerodha_url(seeded, client)
     html = _get_landing(client).content.decode()
     assert "ZMPHZC" not in html
     assert "signup.zerodha.com" not in html
+
+
+def _og_image_of(html: str) -> str:
+    m = re.search(r'property="og:image"\s+content="([^"]*)"', html)
+    assert m, "no og:image tag rendered"
+    return m.group(1)
+
+
+@pytest.mark.parametrize("ua", ["Mozilla/5.0 (Android)", "facebookexternalhit/1.1"])
+def test_og_image_is_an_absolute_url_on_both_cards(seeded, client, ua):
+    """og:image MUST be absolute — a crawler has no page context to resolve a relative one.
+
+    Found live on prod 2026-07-26: the D2 crawler card emitted `og:image="img/og-card.png"`,
+    so every forwarded referral link previewed with NO image — the exact surface D2 exists to
+    fix. Two separate faults, both asserted here:
+      1. the URL was relative;
+      2. even resolved, `/img/og-card.png` is a 404 — the asset is served under STATIC_URL.
+
+    The pre-existing check was `'property="og:image"' in html`, i.e. presence only, which is
+    why a useless value passed. This asserts the property that actually matters. Parametrised
+    over a human UA (M11 landing card) and a crawler UA (D2 preview card) because the bug was
+    that those two rendered through DIFFERENT code paths.
+    """
+    resp = client.get("/r/RJ4521?s=wa", HTTP_USER_AGENT=ua)
+    image = _og_image_of(resp.content.decode())
+    assert image.startswith(("http://", "https://")), f"og:image not absolute: {image!r}"
+    assert settings.STATIC_URL.rstrip("/") in image, (
+        f"og:image must resolve under STATIC_URL ({settings.STATIC_URL}), got {image!r} — "
+        "a bare /img/... path 404s in production"
+    )
+
+
+def test_absolute_image_url_passes_through_an_already_absolute_value(seeded):
+    """An operator may point the cascade key at a CDN URL (CLAUDE.md §6d) — don't mangle it."""
+    from apps.referrals.og import absolute_image_url
+
+    cdn = "https://cdn.example.com/card.png"
+    assert absolute_image_url(cdn) == cdn
+    assert absolute_image_url("") == ""
 
 
 # --- crawler-not-a-click: preview UA gets the card, no journey/click/redirect ---
