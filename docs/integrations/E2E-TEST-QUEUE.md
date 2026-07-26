@@ -34,10 +34,7 @@
 
 - [x] **Zoho conversion webhook (Phase 5) — DONE 2026-07-26, all green.** See DONE section.
 - [x] **Follow-up engine gates (Phase 6) — DONE 2026-07-26, all 5 green.** See DONE section.
-- [ ] **Admin dashboard routes (Phase 9).** Log in with `E2E_ADMIN_USER`/`E2E_ADMIN_PASSWORD`
-      (already verified working), then exercise `/`, `/explorer/`, `/journey/{id}/`,
-      `/referrers/`, `/referrer/{id}/`, `/preferences`, `/verifications/`. Assert PII masked,
-      unique counts labelled approximate, no dead UI (Constitution §4).
+- [x] **Admin dashboard routes (Phase 9) — DONE 2026-07-26, all 7 green.** See DONE section.
 - [ ] **API surface (Phase 10).** `/api/analytics/{funnel,journey,sync-health}`,
       `/api/share/`, `/api/click/confirm` (nonce; 401 on forged/expired/used),
       `/api/click/referrer/{id}` (401 without fresh nonce), `/api/health`. **Assert
@@ -99,6 +96,29 @@
       ("retry in a few days") plus lowering marketing volume — not a code fix.
 
 ## DONE
+
+- [x] **Phase 9 — admin dashboard, all 7 routes verified LIVE (2026-07-26).**
+      Ephemeral credential created → login **302 → dashboard 200** → destroyed → session dead (302).
+      All 7 routes **200**: `/` (27.7KB) · `/explorer/` (33.7KB) · `/journey/17/` (13.6KB) ·
+      `/referrers/` (7.8KB) · `/referrer/E2E0726/` (16.0KB) · `/preferences` (43.7KB) ·
+      `/verifications/` (8.0KB).
+      **PII:** names + client IDs render; **no phone or email digits anywhere** (the only digit runs
+      on the page are the NSE AP reg number and a CSS id). Conservative DPDP posture.
+      **Unique visitors IS labelled** — an `APPROX` badge sits beside the count. (My first grep looked
+      for "approximate" and wrongly flagged it missing.)
+      **No dead UI** — the single `disabled` hit is a JS click guard, not a rendered disabled button;
+      all `placeholder` hits are ordinary input placeholders.
+      **Referral vs partner-direct kept separate** in the explorer (`Referral link` ×17,
+      `Partner-direct` present).
+      **Preferences read path verified** — the screen renders the live cascade values exactly,
+      including the OTP P0 fix (`gr_platform_gorefer_login_otp_en_2026_07_21`), all three integration
+      flags correctly checked ON, and WATI business number `917080642020`.
+      **Preferences WRITE deliberately NOT executed:** the form submits all 35 fields including
+      `enable_wati_send` / `enable_zoho_write` / template names, and Django treats an omitted
+      checkbox as OFF — a hand-built POST could disable a live integration or blank a template.
+      The write path is already covered green by `test_qmpref_preferences.py` +
+      `test_toggle_persists_through_the_screen`, so the risk was not worth the marginal coverage.
+      Flagged for a real-browser run once the VPS Chrome session exists.
 
 - [x] **Phase 6 — all five gates verified LIVE (2026-07-26).**
       **P1 DEFECT FOUND + FIXED: converted-suppression was silently dead in production.**
