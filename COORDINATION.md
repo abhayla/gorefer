@@ -4377,3 +4377,46 @@ delete; §6c SSOT governance — recommend a git-tracked card manifest that GENE
 (`/open` path, M11 OG vs bot 302, 9 unwired templates, junk `TALK`/`ZMPHZC` identities).
 
 **Cleanup note:** review probes created throwaway prod identity `REVW2607` (one click event).
+
+---
+
+### 2026-07-26 (late) — D8 CLOSED: WhatsApp-OTP login verified live; guardrail-3 leak found + fixed — Engineer
+
+**STATUS.** Branch `fix/d8-otp-delivery-race` (`b2bac2c`, `1be4c34`). Suite **634 passed / 0 failed**
+in the CI-parity env; ruff, `manage.py check`, migration drift all clean; deployed, services
+restarted, health 200.
+
+**1. The two failing D8 tests were TEST-side; the committed adapter fix was correct.**
+(a) `SendResult(...)` omitted the required `raw_status` field. (b) `monkeypatch.setattr(adapters,
+"get_wati_adapter", ...)` patched a non-existent attribute — `send()` imports it INSIDE the method,
+so the target is `apps.integrations.wati.adapter`. A pre-existing test at `test_qmotp.py:160`
+already patched it correctly. Rewritten around a shared stub returning the REAL `SendResult` /
+`DeliveryResult` dataclasses, widened 2 → 4 cases covering every branch of the delivery split.
+Verified by DISPROOF: reverting the adapter's non-terminal branch fails exactly the two QUEUED
+tests with `'failed' == 'queued'` — the production symptom.
+
+**2. D8 verified live end to end** (owner present, read the code off WhatsApp): OTP requested for
+`DA1707` → on-file `917767009136` (sanctioned) → challenge id=2 `channel=whatsapp_wati` /
+`delivery_status=delivered`, broadcastMessage READ at the Wati destination 2s after the challenge.
+Compare id=1, the only prior challenge ever recorded: `channel=manual` / `provider_ref=manual-assisted`.
+Verify → **302 `/my/referrals`** + session; replay of the same code → **400** (single-use);
+`/my/logout` → session dead; referrer session refused `/admin-panel/` AND `/admin-panel/referrer/EKU497/`;
+ADR-035 re-asserted (user-supplied `mobile` → **400**). `ReferrerAccount` bound via `otp`, not staff,
+no usable password. **Google OAuth remains UNTESTED** per the owner's D8 decision.
+
+**3. NEW DEFECT found live and fixed — guardrail 3 violated on `/my/referrals`.** The logged-in
+referrer self view rendered PIFS's partner code `ZMPHZC` as a badge. Root cause: the self view and
+the admin Referral Profile share ONE template (ADR-026) which renders `{{ card.partner_code }}` —
+fine for staff, a client-facing body for the referrer. Fixed at the DATA level in `selfview.py`
+(the same place IP masking happens, so a future template edit cannot re-expose it); admin view
+unchanged and asserted to still show the code. **Why existing coverage missed it, both reproduced
+in the new test:** the guardrail-3 login-surface test visits only ANONYMOUS pages, and
+`per_link_cards` returns `[]` with no activity — a real click is REQUIRED to render the badge at
+all. Verified live after deploy: `ZMPHZC` count 0, card still renders.
+
+**4. Two handoff facts corrected.** (a) "main is 17 commits ahead of origin — unpushed" is false:
+`main` and `origin/main` are both `dfda4bc`. (b) prod `DEPLOYED_SHA` read `324a1b8` (19 commits
+back) but prod CONTENT hash-matched `main` on every changed file except `apps/otp/adapters.py` —
+the marker was stale, not the deploy. Established by hashing, not by trusting the file.
+
+**No new QUESTIONs.** Next: D9 (re-cut nudges as UTILITY).
