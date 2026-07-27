@@ -204,7 +204,49 @@ recorded, opening the window + starting the cadence on a fresh 24h open. Inert u
 `followups_enabled`. The `/api/wati/inbound` webhook endpoint stays in place (harmless; it would fire
 as a bonus for any event Wati does deliver).
 
-## 9. Related
+## 9. Assisted-capture `client_id` validation — strict, per-partner (B4)
+
+`apps/integrations/wati/webhook.py:process_assisted_capture()` — the Wati "Refer
+directly" flow — validates the referrer's `client_id` against
+**`validate_client_id_for(tenant, raw)`** (`apps/referrals/validators.py`), NOT the
+loose spec rule (`validate_client_id`) that the rest of the doc-06 §4.1 bound (4–16
+alphanumerics) still describes for lookup paths (admin search, login).
+
+**Why this path is stricter.** A leaked Wati chatbot menu label (`TALK`) satisfied the
+loose spec rule and was accepted here as a referrer `client_id` — creating a junk
+identity from a menu label, not a person. The same loose rule would also have accepted
+PIFS's own partner code (`ZMPHZC`) as a referrer. Because assisted-capture is an
+identity-**creating** path (same as `/r/` and `/share/`), it now validates against the
+active partner's stricter id pattern instead.
+
+**Pattern resolution — config, not code, per partner (CLAUDE.md §6d).** The pattern is
+resolved from the ADR-022 cascade, most specific first:
+
+1. `client_id_pattern__<PARTNER_CODE>` — e.g. `client_id_pattern__ZMPHZC` (per-partner
+   override).
+2. `client_id_pattern` — tenant/central default.
+3. The loose spec rule (4–16 alphanumerics) — used as-is when neither cascade key is
+   configured.
+
+`process_assisted_capture` resolves the active partner from the current tenant's
+program (`get_active_program`) and passes its `code` into the cascade lookup; nothing
+in the code is named after a partner, so onboarding a partner with a different id
+shape is a config change, not a code change.
+
+**A misconfigured pattern degrades, it never blocks all referrals.** The resolved
+pattern is compiled with `re.compile` at validation time. If it is not valid regex,
+`validate_client_id` catches `re.error`, logs it (`invalid client_id_pattern %r —
+falling back to the spec rule`), and **falls back to the loose spec rule** for that
+call — it does not raise and does not reject the capture. A bad config value therefore
+degrades assisted-capture back to pre-B4 looseness for that partner rather than taking
+the webhook down for every referrer.
+
+A `client_id` that fails validation (whether against the strict pattern or, on
+fallback, the spec rule) raises `AssistedCaptureError` and the capture is rejected —
+same external behavior as before, just a narrower set of accepted ids on the happy
+path.
+
+## 10. Related
 
 - Channel health, template approvals, nightly report: `C:\Abhay\5Wealths\Wati-Project\`
 - Templates GoRefer uses: [`Wati-GoRefer-Templates.md`](./Wati-GoRefer-Templates.md)
