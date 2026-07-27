@@ -34,7 +34,7 @@ from .redirect_service import (
     handle_partner_direct,
 )
 from .share_intent_service import handle_share_intent
-from .validators import InvalidClientId, validate_client_id
+from .validators import InvalidClientId, validate_client_id_for
 
 VISITOR_COOKIE = "gr_vid"
 # 60 days — matches the API spec (06 §4.1) AND Zerodha's 60-day attribution window, so
@@ -156,13 +156,15 @@ def referral_redirect(request, client_id: str, channel: str | None = None):
     /r/wa/RJ4521) for WhatsApp URL buttons where `?s=` can't trail the id. Legacy
     /r/{client_id}?s= still works — see _share_channel.
     """
+    tenant = get_current_tenant(request)
     try:
-        normalized = validate_client_id(client_id)
+        # STRICT, per-partner (owner decision 2026-07-27): this path CREATES an identity,
+        # so a leaked chatbot label like `TALK` — or the partner code `ZMPHZC` itself —
+        # must never become a referrer. Lookup paths keep the loose spec rule.
+        normalized = validate_client_id_for(tenant, client_id)
     except InvalidClientId:
         # Friendly branded fallback — never a raw error, no journey created.
         return render(request, "landing_invalid.html", status=400)
-
-    tenant = get_current_tenant(request)
 
     # D2 — a CRAWLER gets a PIFS link-preview card, never a 302.
     #
@@ -215,12 +217,12 @@ def referral_continue(request, client_id: str, channel: str | None = None):
     """GET /r/{client_id}/continue (or /r/{channel}/{client_id}/continue) — the
     Continue-to-Zerodha 302 (reuses M2 engine). `channel` is the optional B1 path
     prefix; captured for attribution, NEVER added to the Location."""
+    tenant = get_current_tenant(request)
     try:
-        normalized = validate_client_id(client_id)
+        # STRICT, per-partner — this path lazily creates the identity too.
+        normalized = validate_client_id_for(tenant, client_id)
     except InvalidClientId:
         return render(request, "landing_invalid.html", status=400)
-
-    tenant = get_current_tenant(request)
     identity = ReferralIdentity.objects.filter(
         tenant=tenant, client_id=normalized, id_source="native"
     ).first()
@@ -282,12 +284,12 @@ def share_intent_redirect(request, channel: str, client_id: str):
     except RateLimited as exc:
         return HttpResponse(status=429, headers={"Retry-After": str(exc.retry_after)})
 
+    tenant = get_current_tenant(request)
     try:
-        normalized = validate_client_id(client_id)
+        # STRICT, per-partner — this path lazily creates the identity too.
+        normalized = validate_client_id_for(tenant, client_id)
     except InvalidClientId:
         return render(request, "landing_invalid.html", status=400)
-
-    tenant = get_current_tenant(request)
     try:
         destination = handle_share_intent(
             tenant=tenant,
