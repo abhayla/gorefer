@@ -122,7 +122,51 @@ Investments in the securities market are subject to market risks.
 
 **The cost, stated honestly:** v7 has **2 variables, not 3** — no `nudge_link_for()` link. The
 referrer is informed but not handed a link. That is not an oversight; it is the price of condition
-(1). A template cannot both hand over a referral link and be UTILITY.
+(1). ~~A template cannot both hand over a referral link and be UTILITY.~~ **SUPERSEDED next day —
+true for the BODY only. §4b: a referral link in a URL *button* pointing at the share endpoint held
+UTILITY in English.**
+
+---
+
+## 4b. The button exception — the v9 label matrix (2026-07-27)
+
+With the v7 body held byte-identical, the button was made the only variable. All variants submitted
+and read at **APPROVED** (a pending-state category predicts nothing — identical designs showed
+opposite pending categories per language and settled differently):
+
+| Button label | EN | HI |
+|---|---|---|
+| *(no button — v7/v10 control)* | UTILITY | UTILITY |
+| Share Referral Link (v9a) | **UTILITY** | MARKETING |
+| My Referral Link (v9b) | **UTILITY** | MARKETING |
+| Share on WhatsApp (v9d) | **UTILITY** | MARKETING |
+| Refer (v9e) | **UTILITY** | UTILITY* |
+| Refer & Earn (v9c) | MARKETING | MARKETING |
+
+Three rules this establishes:
+
+1. **Placement + destination decide, not the link itself.** A referral link in the BODY, or a button
+   to the *acquisition* endpoint (`/r/wa/{id}` → Zerodha signup), is the cart-abandonment pattern —
+   MARKETING. A button to the **share endpoint** (`gorefer.in/share/wa/{id}` → opens the sender's own
+   WhatsApp share sheet) survives UTILITY in English. Functionally the button must be `/share/wa/`
+   anyway: the tapper is the referrer, who already has an account.
+2. **"Earn" is the one fatal word** — v9c flipped in both languages, the only variant to do so.
+3. **Hindi flips on the URL button itself**, label-independent (even "WhatsApp पर शेयर करें", which
+   contains no referral or reward wording). Hindi *quick-reply* buttons have held UTILITY
+   (`referrer_update_hin_2026_07_19_v2`). Ship per-language: EN with the URL button, HI without (or
+   quick-reply-only), via the per-language config keys.
+
+**Header images (verified against Meta's docs 2026-07-27):** UTILITY templates support an optional
+header of any type, including image — but the same page warns a utility template *"with marketing
+material… will automatically be re-categorized."* A benefits/offer poster is marketing material
+relocated, the same move as v4→v6. Neutral branded imagery: fine. Benefit claims in the image: treat
+as MARKETING.
+
+**Where the benefits DO go:** the session window. A quick-reply tap opens the 24h window, where
+messages have no category, no cap, and no cost — the full pitch (10% brokerage share, 300 points,
+rich media) is delivered there, one tap behind the template. This is the standing pattern (owner
+rules 2026-07-27, `CLAUDE.md` §6f): links in buttons, benefits in session, template body purely the
+recipient's own record.
 
 ---
 
@@ -130,8 +174,10 @@ referrer is informed but not handed a link. That is not an oversight; it is the 
 
 - [ ] **Is the subject the recipient's OWN order / account / transaction?** If it is about a third
       party, reframe it around the recipient's record of that relationship, or accept MARKETING.
-- [ ] **Is there a link that acquires, promotes, or re-solicits?** A referral link, a signup link, a
-      "checkout" link ⇒ MARKETING. A *tracking* or *status* reference is fine.
+- [ ] **Is there a link that acquires, promotes, or re-solicits in the BODY?** A referral link, a
+      signup link, a "checkout" link in the body ⇒ MARKETING. A *tracking* or *status* reference is
+      fine. A referral link in a **URL button → `/share/wa/{id}`** with an Earn-free label holds
+      UTILITY in English (§4b); Hindi gets no URL button.
 - [ ] **Any CTA urging action?** "Share again", "Renew today", "Don't miss", "Checkout now" ⇒ MARKETING.
 - [ ] **Any reward / earnings / discount / offer mention?** ⇒ MARKETING.
 - [ ] **Is it the cart-abandonment shape** (*something is incomplete + here's how to finish it*)? ⇒
