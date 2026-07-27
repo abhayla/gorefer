@@ -44,6 +44,32 @@ STEP_BODIES = [
 ]
 
 
+# Hindi cadence — ORIGINAL copy, NOT a translation of STEP_BODIES (owner instruction
+# 2026-07-27). Written for how a Hindi-speaking prospect is actually spoken to on WhatsApp:
+# polite आप-form, short sentences, and the natural Hindi/English code-mixing real users
+# write ("reply", "call", "account") rather than stilted pure-Devanagari equivalents. The
+# beats escalate like the English cadence, but the wording is its own — the 12h step offers
+# a call, the 21h step closes the day gently rather than pressing.
+#
+# Same discipline as the English: in-progress framing about the contact's OWN pending
+# account, reply-to-engage CTA, and NO promotional claims — so the nudge stays honestly
+# transactional.
+STEP_BODIES_HI = [
+    "नमस्ते! आपका Zerodha अकाउंट अभी पूरा नहीं हुआ है। कहीं कुछ अटक रहा हो तो यहीं बता "
+    "दीजिए — दो मिनट में पूरा करा देंगे।",
+    "थोड़ा ही बाकी है — आपका Zerodha अकाउंट लगभग तैयार है। यहीं reply कीजिए, आखिरी steps "
+    "हम साथ में पूरे कर देते हैं।",
+    "Zerodha अकाउंट खोलने में कोई मदद चाहिए? जो भी सवाल हो, यहीं पूछ लीजिए — आगे क्या "
+    "करना है, हम बता देंगे।",
+    "चाहें तो आज एक छोटी सी call पर आपका Zerodha अकाउंट पूरा करा देते हैं। यहीं reply "
+    "कीजिए, हम आपको कॉल कर लेंगे।",
+    "आपका Zerodha अकाउंट बस एक कदम दूर है। यहीं reply कीजिए — साथ मिलकर पूरा कर लेते हैं।",
+    "बस पूरा ही होने वाला है आपका Zerodha अकाउंट — यहीं reply कीजिए, बाकी हम संभाल लेते हैं।",
+    "आज के लिए आखिरी बार पूछ रहे हैं — आपका Zerodha अकाउंट अधूरा रह गया है। जब भी समय "
+    "मिले, यहीं reply कर दीजिए।",
+]
+
+
 def _as_bool(raw) -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
@@ -52,6 +78,7 @@ def _as_bool(raw) -> bool:
 # send path (apps.followups.tasks._apply) substitutes {link} with the resolved referral
 # link (gorefer.in/r/wa/{referrer_client_id}, or gorefer.in/open as a fallback), per doc 15.
 LINK_CTA = "\n\nReady now? Open your account here: {link}"
+LINK_CTA_HI = "\n\nअभी खोलना चाहें तो यहाँ से: {link}"
 
 
 def _body_for_step(index: int) -> str:
@@ -64,6 +91,19 @@ def _body_for_step(index: int) -> str:
     if index >= len(STEP_BODIES):
         base = f"{base} (reminder {index + 1})"
     return f"{base}{LINK_CTA}"
+
+
+def _body_for_step_hi(index: int) -> str:
+    """Hindi copy for step `index` (0-based). Same cycling rule as the English.
+
+    Seeded so `body_hi` is NEVER blank: an empty value makes `services.body_for()` fall
+    back to English, which is exactly how every Hindi-preferring prospect silently
+    received the English cadence until 2026-07-27.
+    """
+    base = STEP_BODIES_HI[index % len(STEP_BODIES_HI)]
+    if index >= len(STEP_BODIES_HI):
+        base = f"{base} (रिमाइंडर {index + 1})"
+    return f"{base}{LINK_CTA_HI}"
 
 
 class Command(BaseCommand):
@@ -101,7 +141,7 @@ class Command(BaseCommand):
                     channel=FollowupRule.CHANNEL_SESSION,
                     template_name="",
                     body_en=_body_for_step(order - 1),  # DISTINCT per step
-                    body_hi="",
+                    body_hi=_body_for_step_hi(order - 1),  # never blank — see _body_for_step_hi
                     enabled=True,
                     only_if_window_open=True,   # session-only; no out-of-window template fallback
                     stop_on_reply=stop_on_reply,
