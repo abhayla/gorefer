@@ -1,8 +1,12 @@
 # 16 — Configurable Platform Architecture Review (Actors · Rules · Config · Ports)
 
-> **Status: PROPOSAL — awaiting DA lock.** Engineer-authored 2026-07-27 at the owner's direct
-> instruction, from a code-grounded audit of the live repo (three parallel deep-reads: actor
-> model, config coverage, vendor coupling — findings cited as `path:line` throughout).
+> **Status: RATIFIED BY OWNER (Abhay), 2026-07-27.** All five §7 decisions were approved
+> in-session the same day (Q-16-1…Q-16-5 = YES, one at a time, recommendation shown per item —
+> see COORDINATION 2026-07-27). Formal ADR codification (ADR-042…) is the first act of the
+> Phase-0 mission, mirroring the doc-13 → ADR-036…041 precedent. Engineer-authored 2026-07-27
+> at the owner's direct instruction, from a code-grounded audit of the live repo (three
+> parallel deep-reads: actor model, config coverage, vendor coupling — findings cited as
+> `path:line` throughout).
 > **Builds ON doc 13 and ADR-036…041; re-decides nothing they lock.** No production code
 > changes ride with this document. The owner made four framing decisions on 2026-07-27 (§0);
 > everything else here is proposal, structured so each section can be locked or amended
@@ -334,15 +338,19 @@ progress metric; a growing one fails CI immediately even in observe mode.
 - **No persisted vendor-column renames in Phase 2** (churn without benefit; renamed at the
   first real second-vendor migration).
 
-## 7. Decisions requested from the DA/owner to lock this proposal
+## 7. Decisions requested from the DA/owner to lock this proposal — ALL APPROVED
 
-| # | Question | Engineer recommendation |
-|---|---|---|
-| Q-16-1 | Lock §3.1's actor model (levels-as-data, one parent, leaf prospects outside the level schema)? | Yes as written — it is the minimal shape satisfying O-2 under ADR-016/036. |
-| Q-16-2 | Lock §3.2's single `ScopedConfig` + registry (replacing the 3 tables) as the ADR-037 implementation vehicle? | Yes — it is the only shape where "adding a tier is data" holds, which ADR-037's 5-tier future needs anyway. |
-| Q-16-3 | Phase-0 scope: approve D-1 fix (compliance renders via resolver) now, ahead of the registry? | Yes — smallest possible diff, byte-identical output, closes the worst drift first. |
-| Q-16-4 | Approve the E-1…E-6 rails and the observe→enforce ladder? | Yes — rails without a ladder either break CI on day one or stay advisory forever. |
-| Q-16-5 | Ratify §6's not-building list? | Yes — it is where this proposal would otherwise grow silently. |
+> **Owner disposition (Abhay, 2026-07-27, in-session):** each question was asked individually
+> with the recommendation shown; every answer was YES. This section is retained verbatim as the
+> record of what was asked.
+
+| # | Question | Engineer recommendation | Owner |
+|---|---|---|---|
+| Q-16-1 | Lock §3.1's actor model (levels-as-data, one parent, leaf prospects outside the level schema)? | Yes as written — it is the minimal shape satisfying O-2 under ADR-016/036. | **APPROVED** |
+| Q-16-2 | Lock §3.2's single `ScopedConfig` + registry (replacing the 3 tables) as the ADR-037 implementation vehicle? | Yes — it is the only shape where "adding a tier is data" holds, which ADR-037's 5-tier future needs anyway. | **APPROVED** |
+| Q-16-3 | Phase-0 scope: approve D-1 fix (compliance renders via resolver) now, ahead of the registry? | Yes — smallest possible diff, byte-identical output, closes the worst drift first. | **APPROVED** |
+| Q-16-4 | Approve the E-1…E-6 rails and the observe→enforce ladder? | Yes — rails without a ladder either break CI on day one or stay advisory forever. | **APPROVED** |
+| Q-16-5 | Ratify §6's not-building list? | Yes — it is where this proposal would otherwise grow silently. | **APPROVED** |
 
 ---
 

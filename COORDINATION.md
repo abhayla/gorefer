@@ -4505,3 +4505,18 @@ entry preserved verbatim.
 **QUESTIONs for DA/owner:** doc 16 §7, Q-16-1…Q-16-5 (lock the actor model; lock the ScopedConfig
 registry; approve the Phase-0 D-1 fix; approve enforcement rails E-1…E-6; ratify the not-building
 list). Pausing on those points per protocol; Phases 0–5 are dispatchable missions once locked.
+
+---
+
+### 2026-07-27 — DOC 16 RATIFIED BY OWNER: all five lock decisions approved — Engineer
+
+**Owner (Abhay), in-session, 12:33–12:39 IST, one question at a time with recommendation shown
+per item: Q-16-1 YES · Q-16-2 YES · Q-16-3 YES · Q-16-4 YES · Q-16-5 YES.** Doc 16's status
+banner flipped to RATIFIED; §7 retained verbatim with an APPROVED column. Consequences:
+
+- **Phase 0 is now an authorized, dispatchable mission** (rails E-1…E-6 in observe mode; D-1
+  compliance-render fix with byte-identical output; D-3 dead `base.py` disposition; D-4 scoped
+  manager; D-5 dead-config removal). Q-16-3's approval covers starting it now.
+- **Formal ADR codification (ADR-042…)** of the ratified decisions is the first act of Phase 0,
+  mirroring the doc-13 → ADR-036…041 precedent.
+- PR #57 (this proposal) merges on green — the "do not merge until locked" condition is met.
