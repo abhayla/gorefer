@@ -4420,8 +4420,6 @@ back) but prod CONTENT hash-matched `main` on every changed file except `apps/ot
 the marker was stale, not the deploy. Established by hashing, not by trusting the file.
 
 **No new QUESTIONs.** Next: D9 (re-cut nudges as UTILITY).
-<<<<<<< HEAD
-=======
 
 ---
 
@@ -4474,4 +4472,36 @@ script containing a destructive block, and verify the artifact before running it
 was ~01:00 IST and quiet hours exist so we don't message at night; (2) confirm `Share Referral
 Link` as the EN label (three others also hold UTILITY); (3) accepted risk — the URL shape now lives
 in the template again, so template/code drift on it is possible and only the live check catches it.
->>>>>>> fix/d8-otp-delivery-race
+
+---
+
+### 2026-07-27 — STATUS: Configurable-Platform Architecture Review (doc 16) — PROPOSAL PR opened — Engineer
+
+**What.** Owner-directed (in-session, 2026-07-27) architecture review targeting: tenant-configurable
+actor hierarchy below the AP, config totality ("every behavior is a config row") with tenant
+self-serve, replaceable Wati/Zoho tech layers, and machine enforcement of all of it. Delivered as
+`docs/architecture/16-Configurable-Platform-Architecture-Review.md` + a published visual artifact.
+**Builds ON doc 13 / ADR-036…041 — re-decides nothing they lock.** Four owner framing decisions
+captured in doc 16 §0 (operating model C; ordered-levels hierarchy; everything-as-data with staged
+UI + tenant-admin self-serve; deliverable incl. enforcement rails). No production code changes ride
+with the PR.
+
+**Audit method.** Three parallel code deep-reads (actor model / config coverage / vendor coupling),
+findings cited `path:line` in doc 16 §2. Two agent findings were independently re-verified by the
+Engineer before recording; one was RECLASSIFIED on verification (the "per-referrer prefs written to
+tenant tier" claim is deliberate staging per `preferences_service.py:95-101` docstring — not a bug).
+
+**Headline findings (detail + severity in doc 16 §2.4):** D-1 the compliance lock guards rows
+nothing reads (mechanism works, zero production readers — dormant drift, P1); D-2 `Partner.code` /
+`Lead.zoho_lead_id` globally unique (the exact ADR-041-predicted defect); D-3 `apps/integrations/
+base.py` port layer is dead code (nothing imports it); D-4 "tenant-scoped managers" docstring
+describes machinery that does not exist; no actor hierarchy or role model of any kind exists
+(five uncoordinated role vocabularies); 57 behaviors config-driven vs 61 hardcoded sites.
+
+**Also fixed in this PR (found in passing):** COORDINATION.md carried committed merge-conflict
+markers on main (lines 4423/4424/4477, empty HEAD side vs the D9 entry) — markers removed, D9
+entry preserved verbatim.
+
+**QUESTIONs for DA/owner:** doc 16 §7, Q-16-1…Q-16-5 (lock the actor model; lock the ScopedConfig
+registry; approve the Phase-0 D-1 fix; approve enforcement rails E-1…E-6; ratify the not-building
+list). Pausing on those points per protocol; Phases 0–5 are dispatchable missions once locked.
