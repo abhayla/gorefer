@@ -36,6 +36,7 @@ Document map (start at `README.md` for the index):
 | `docs/deploy/DEPLOY-TARGET.md` | **AUTHORITATIVE deploy target** — GoRefer production runs on the Hostinger VPS `<PROD-VPS>` (Linux nginx + certbot), NOT the local box `<BACKUP-VPS>`. Read before any deploy/DNS/TLS decision; if any doc disagrees, this file wins. |
 | `CURRENT-STATE.md` | **Read FIRST, every session** — the verified now-state snapshot (deployed SHA, LIVE flag values, in-flight missions). Updated in the same turn as any state change; `COORDINATION.md` stays the append-only log of record. Read COORDINATION's tail by CONTENT (`tail -n 80`, confirm the last entry's date), never by a computed line offset — blank-line-skipping counters caused the 2026-07-21 stale-state incident. When docs disagree, the live system wins. |
 | `ROADMAP-STATUS.md` | Per-feature ledger across sprints — **Discussed / Implemented / Deployed** for every mission (M1…M13, B1–B4, M-WATI-1, M-FUP-1). Refreshed on milestones only; for live flag/deploy state `CURRENT-STATE.md` wins. |
+| `docs/architecture/16-Configurable-Platform-Architecture-Review.md` | **Ratified config-platform review (Phase 0)** — ADR-042…044, enforcement rails E-1…E-6 + D-1 compliance rail; grounds §6e and the CI architecture gate. |
 | `docs/sprint2/` | Sprint-2 specs + goal contracts (share amplification, Wati referral amplification, referral UX/disclosure, independent test brief, M13 login contract). |
 | `COORDINATION.md` | **DA ⇆ Engineer coordination log** — the async channel between the Design Authority (Cowork planning session) and the Engineer (Claude Code). Read it before each mission; append a STATUS entry when you open a PR; log any surfaced inconsistency as a QUESTION and pause rather than guess. |
 | `review/` | LLM review pack (`09`) + review bundle. |
@@ -81,12 +82,15 @@ npm run watch:css
 python manage.py golive_smoke --referrer EKU497 --mobile 9876543210 [--json]   # full capture loop, honors live flags
 python manage.py set_landing_mode page|direct
 python manage.py recompute_rollups
-python manage.py setup_schedules && python manage.py qcluster   # registers followup_sweep + followup_inbound_poll
+python manage.py setup_schedules && python manage.py qcluster   # registers ALL ~10 recurring jobs (rollups, Zoho backfill/reconcile/name-sync, PII retention purge, nonce purges, Wati pending-delivery reconcile, followup sweep + inbound poll)
 python manage.py createcachetable    # once per deploy — DB cache backs the rate limiter
 python manage.py seed_followup_cadence   # idempotent: the 3h→21h FollowupRule cadence + per-step copy
+python manage.py reconcile_conversions [--since YYYY-MM-DD] [--dry-run]   # sweep Zoho Contacts → conversions (webhook backstop)
+python manage.py erase_pii --mobile 98xxxxxxxx [--dry-run]                # DPDP manual erasure request (ADR-020)
+python manage.py purge_expired_pii [--days 365] [--dry-run]               # 12-month unconverted-PII retention sweep (also scheduled daily)
 ```
 
-CI (`.github/workflows/ci.yml`, Postgres 16 service): contract-doc drift gate → Tailwind freshness → ruff → `manage.py check` → migration drift → migrate → pytest.
+CI (`.github/workflows/ci.yml`, Postgres 16 service): contract-doc drift gate → Tailwind freshness → ruff → `manage.py check` → architecture boundary gate (`scripts/check_architecture.py`, rail E-3) → migration drift → migrate → pytest.
 
 ## 2c. Code map
 
