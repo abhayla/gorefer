@@ -282,6 +282,26 @@ or be explicitly justified as structural. This generalizes §6d from messages to
 test_architecture_rails.py`, `scripts/check_architecture.py`); this section is the
 authoring-time rule that keeps the rails from firing.
 
+## 6f. WhatsApp category strategy — marketing-primary, utility-everywhere-else (owner rules, 2026-07-27)
+
+- **Only the first-outburst referral-invite blast is MARKETING.** Every other recurring outbound
+  WhatsApp send must be, or convert to, UTILITY. Conversions go **one at a time** through owner
+  copy review → conversation-map update (§6c) → Meta submission — never batch-submitted unseen.
+- **Invite-blast fallback (marketing-primary → utility-secondary):** recipients whose MARKETING
+  invite fails with Meta `131049` (per-user marketing cap) or `130472` (re-engagement) get the
+  same-day UTILITY fallback (`gr_brokers_zerodha_refrecord_*` family) — known-Client-ID recipients
+  only; **never** on no-confirm or `131026` (invalid number); firing the fallback cancels that
+  recipient's 24–48h marketing retry; opt-out, touch caps and quiet hours all still gate it.
+- **Referral links ride in URL buttons, never in a UTILITY body.** Button destination is the share
+  endpoint `gorefer.in/share/wa/{client_id}` (opens the sender's own share sheet — the acquisition
+  endpoint `/r/wa/` is wrong for a button the referrer taps), label must not contain "Earn".
+  Hindi URL buttons flip templates to MARKETING → per-language split: EN with button, HI without
+  (or quick-reply-only). Evidence + label matrix: `docs/integrations/Meta-Template-Categorization-Policy.md` §4b.
+- **Universal quick-reply:** every new template carries **"Know More" / "और जानें"** wired to ONE
+  exact-match keyword route → the menu flow. Benefit claims (10% brokerage share, 300 points),
+  rich media, and link minting live **in-session** after that tap (no category, no cap) — never in
+  a UTILITY body or header image.
+
 ## 7. Definition of Done + expectations
 
 Reference `implementation/10-Claude-Code-Implementation-Guide.md` (§3 standards, §6 tests, §7 git, §8 migrations, §9 DoD, §10 demo mode). A mission is **done** only when all hold:
