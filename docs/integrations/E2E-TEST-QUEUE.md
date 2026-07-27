@@ -433,42 +433,38 @@ is a data decision, not cleanup. Flagged, not acted on.
       `E2E0726`): `475281000041836002` · `475281000041538002` · `475281000041592002` ·
       `475281000030612001`. Recoverable from Zoho's Recycle Bin if removed in error.
 
-## 🏗️ DESIGN ITEM (owner-requested 2026-07-27, build LATER) — hierarchical config
+## 🏗️ HIERARCHY — SUPERSEDED BY DOC 16 (RATIFIED 2026-07-27). Do not design from this entry.
 
-**Owner wants config settings to resolve down a four-level hierarchy**, with full control over
-how a rule propagates:
+**This section previously described the hierarchy as unscoped and "wants an ADR before code".
+That is now WRONG and the entry is retained only so the correction is visible.**
 
-    Category  →  Partner Group  →  Partner  →  Member
-    SEBI/NSE  →  Brokers        →  Zerodha  →  PIFS
+**Binding direction:** `docs/architecture/16-Configurable-Platform-Architecture-Review.md` —
+owner-ratified 2026-07-27, all five decisions (Q-16-1…Q-16-5) **APPROVED**. Read §0 (the four
+framing decisions O-1…O-4), §3 (target architecture) and §7 (the approvals) before touching
+anything here.
 
-**Propagation modes to offer per setting** (the "full freedom" the owner asked for):
-`inherit` (default — take the nearest ancestor's value) · `override` (this level sets its own) ·
-`locked` (an ancestor forbids descendants changing it — this is what `COMPLIANCE_LOCKED_KEYS`
-already does, generalised) · `required` (descendants must set it; no silent inherit) ·
-`merge` (for list/dict settings, combine with the ancestor instead of replacing).
+**What I got wrong.** I framed this as `Category → Partner Group → Partner → Member` with the
+complaint that "the model is inverted" (code calls PIFS the Partner and Zerodha the Program).
+The tree ABOVE the tenant was already locked by **ADR-036** as
+`Regulator → Partner Group → Partner → AP = tenant`, and doc 16 **extends downward** with
+tenant-configurable levels BELOW the AP (O-2) — e.g. `PIFS → sub-AP → introducer → referrer →
+customer`. The two trees join at the tenant node. So this was never an open design question in
+the shape I described it.
 
-**⚠ THE MODEL IS CURRENTLY INVERTED — this is the crux, and it must be resolved first.**
+**What doc 16 locks that bears directly on work already shipped:**
+- **One `ScopedConfig` + key registry** (Q-16-2 APPROVED) replaces the three config tables. Every
+  key declares a `cascade_policy`: `locked` (= ADR-037's lock), `default-with-override` (nearest
+  wins), or **bottom-up aggregation** (child facts roll up).
+- Therefore the `client_id_pattern__<PARTNER_CODE>` key shipped 2026-07-27 should be **re-keyed
+  onto the registry** when Phase 1 lands, and its `cascade_policy` declared. The known debt
+  recorded with it (keyed under PIFS though the rule is Zerodha's) is resolved by the registry,
+  not by a bespoke fix. **Do not invent a separate mechanism for it.**
 
-| Owner's hierarchy | What the code models today |
-|---|---|
-| SEBI/NSE (category) | `ReferralProgram.regulator = "sebi_nse"` ✓ |
-| Brokers (group) | *does not exist* |
-| **Zerodha** (partner) | `ReferralProgram.name = "Zerodha"` — modelled as the **program** |
-| **PIFS** (member) | `Partner.code = "ZMPHZC"` + `Tenant(pifs)` — modelled as the **partner** |
-
-So the code calls **PIFS** the Partner and **Zerodha** the Program — inverted from the owner's
-mental model, and from how the domain actually works (Zerodha issues the client ids; PIFS is one
-of possibly many APs beneath it).
-
-**Concrete debt this already created:** the strict client_id pattern shipped 2026-07-27 is keyed
-`client_id_pattern__ZMPHZC` — namespaced by **PIFS** — but the 6-character rule belongs to
-**ZERODHA**. A second AP onboarded under Zerodha would need a duplicate copy of the same rule,
-free to drift. Re-key onto `Partner=Zerodha` when the hierarchy lands.
-
-**Scope when built:** new `Category` / `PartnerGroup` / `Member` models + migrations, re-pointing
-`Partner` at Zerodha, and a rewrite of config resolution that composes with (does NOT replace) the
-existing ADR-022 user→tenant→central cascade — that one answers *which tier*, this answers *whose
-rule*. Touches ADR-022 and ADR-023, so it needs an ADR before code.
+**Independent corroboration of a Phase 12 finding.** Doc 16 §2.4 **D-4** records the same defect
+this queue found from the other direction: *"Docstring claims 'tenant-scoped managers' enforce
+isolation; none exist."* Two independent routes to one conclusion — isolation is upheld by
+convention, not by the ORM. The `tests/test_tenant_isolation.py` suite added 2026-07-27 is the
+early-warning system for it; **treat D-4 and that suite as one item, not two.**
 
 ## BLOCKED — still needs Abhay
 

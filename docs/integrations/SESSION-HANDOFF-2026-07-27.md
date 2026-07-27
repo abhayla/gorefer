@@ -8,8 +8,11 @@
 `main` is current and prod matches it. Suite **699 passed / 0 failed** (CI-parity env).
 Working branch for anything new: **`feature/gorefer-e2e-hardening`** (off `main`).
 
-**Do NOT work on `auto/work-*` branches.** They bit three times this session — see "Process
-hazards" below.
+**Do NOT work on `auto/work-*` branches, and do NOT share this checkout.** Two sessions in one
+checkout caused today's interleaving (and a merge-conflict marker committed into
+`COORDINATION.md`, since repaired by the architecture session). **Use your own worktree:**
+`git worktree add ../gorefer-<yourtask> <your-branch>`. The auto-checkpoint branches bit three
+times besides — see "Process hazards" below.
 
 ## The E2E programme is COMPLETE — 16 of 16 phases
 
@@ -34,6 +37,11 @@ blocked (the VPS has no Chrome; the OWNER'S LOCAL PC does).
 | 12 | 16 commits **deployed to prod but merged nowhere** | PR #56 |
 
 ## Two findings that matter more than the fixes
+
+**Doc 16 independently found one of this session's defects.** §2.4 **D-4** records
+*"Docstring claims 'tenant-scoped managers' enforce isolation; none exist"* — the same
+conclusion Phase 12 reached from the other direction. `tests/test_tenant_isolation.py` is the
+early-warning system for it. **Treat D-4 and that suite as one item, not two.**
 
 **A test that does the work it verifies is worse than no test.**
 `test_i3_visitor_pii_is_erasable` performed the erasure *itself* — set `raw_ip=None`, stamped
@@ -83,10 +91,17 @@ See `docs/integrations/Meta-Template-Categorization-Policy.md`.
   function is required either way.**
 - **D3** — webhook IP allowlist. Still premature; arming a second lock on a door that has never
   been used only adds a silent-failure mode.
-- **Partner hierarchy** (Category → Group → Partner → Member). Recorded in the queue with the
-  crux: **the model is inverted** — code calls PIFS the Partner and Zerodha the Program. That
-  already produced debt (the client-ID pattern is keyed under PIFS though the rule is Zerodha's).
-  Wants an ADR before code.
+- **Partner hierarchy — NOT open, and my earlier framing of it was wrong.**
+  `docs/architecture/16-Configurable-Platform-Architecture-Review.md` is **ratified** (2026-07-27,
+  Q-16-1…Q-16-5 all APPROVED) and is binding direction. Read §0, §3, §7 before touching it.
+  The tree ABOVE the tenant was already locked by **ADR-036**
+  (`Regulator → Partner Group → Partner → AP = tenant`); doc 16 **extends downward** with
+  tenant-configurable levels below the AP. My "the model is inverted" note described a question
+  that was never open in that shape.
+  **Consequence for shipped work:** the `client_id_pattern__<PARTNER_CODE>` key should be
+  re-keyed onto doc 16's single `ScopedConfig` + registry when Phase 1 lands, declaring its
+  `cascade_policy`. Do NOT build a bespoke fix for the "keyed under PIFS" debt — the registry
+  resolves it.
 
 **Outside this repo (1):**
 - **24 Zoho/Wati journey templates** — driven by Zoho Deluge functions and Wati flows. A
