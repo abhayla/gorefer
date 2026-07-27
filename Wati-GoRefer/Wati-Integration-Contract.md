@@ -30,11 +30,32 @@ self-deception — this is the discipline the whole adapter is built around (doc
 - **A real `User-Agent` is REQUIRED** — Wati sits behind Cloudflare, which 403s the default
   `Python-urllib/x.y` signature. This is why manual `curl` worked while the adapter got 403.
   We send `GoRefer/1.0 (+https://gorefer.in)`.
-- **Positional parameter remap.** Callers pass *semantic* names (`prospect_name`, `client_id`, …)
-  so the code stays order-independent, but Wati matches template variables **positionally** — its
-  `customParams` are named `"1"`, `"2"`, `"3"`. At the Wati boundary the adapter remaps by order:
-  `[{"name": str(i), "value": …} for i, p in enumerate(tvars, start=1)]`. Sending semantic names
-  makes Wati reject the send as "blank text" (HTTP 400).
+- **Parameter naming — TWO modes, because our templates use two conventions.**
+  - **Default (positional remap).** Most templates were created with **positional**
+    `customParams` (`"1"`, `"2"`, `"3"` — the `{{1}}`/`{{2}}` placeholders). Callers pass
+    *semantic* names so the code stays order-independent, and the adapter remaps by order at
+    the boundary: `[{"name": str(i), "value": …} for i, p in enumerate(tvars, start=1)]`.
+    Sending semantic names to such a template makes Wati reject the send as "blank text"
+    (HTTP 400).
+  - **Named (`params["template_params_named"] = True`).** Templates created with **named**
+    `customParams` (`{{name}}`, `{{client_id}}`, …) need the names to SURVIVE, because Wati
+    resolves them by name. **This is mandatory for a dynamic URL button:** the button's
+    `buttonParamMapping` points at a `paramName`, and a button variable has its **own index
+    space**, so positional remapping can never reach it — the button renders unfilled.
+  - **The caller chooses**, because only the caller knows which template it resolved. The
+    adapter does not guess.
+  - *Discovered 2026-07-27 (D9).* Submitting a button template with positional body params
+    made Wati silently rewrite the button's `{{client_id}}` to `{{1}}` and bind it to the
+    **referrer's name** — every send would have rendered
+    `gorefer.in/share/wa/Ramesh Kumar`. Caught only by reading the stored
+    `buttonParamMapping` back; `ok:true` on create proves nothing about it.
+
+- **Dynamic URL buttons (D9).** Create-time shape, verified against an approved template:
+  `buttonsType` is REQUIRED alongside `buttons` (`call_to_action` for URL buttons) or the
+  create call is rejected with *"Cannot contain any buttons in none buttonsType"* — nothing is
+  created, so it costs no submission. Only the **last** URL segment may be a variable
+  (`https://gorefer.in/share/wa/{{client_id}}`). **Wati allows only 10 template submissions per
+  hour.**
 - **The ack carries NO message id** (`{"result": true}` only), so `provider_message_id` is
   deliberately returned as `None` — never a fabricated id. That is *why* status reconciliation is
   keyed by mobile + template rather than by id.

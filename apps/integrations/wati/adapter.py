@@ -183,15 +183,33 @@ class LiveWatiAdapter:
         tvars = params.get("template_params") if isinstance(params, dict) else None
         if not isinstance(tvars, list):
             tvars = []
-        # Wati matches template variables POSITIONALLY: its customParams are named
-        # "1","2","3" (the {{1}}/{{2}} placeholders). Our callers pass SEMANTIC names
-        # (prospect_name, office_number, …) so the code stays order-independent — but at
-        # the Wati boundary they MUST be remapped to positional "1","2",… by their order,
-        # or Wati can't fill the template and rejects the send as "blank text" (HTTP 400).
-        wati_params = [
-            {"name": str(i), "value": (p.get("value") if isinstance(p, dict) else "")}
-            for i, p in enumerate(tvars, start=1)
-        ]
+        # Wati matches template variables against the template's OWN customParams names.
+        #
+        # Most of our templates were created with POSITIONAL customParams ("1","2","3" —
+        # the {{1}}/{{2}} placeholders), so semantic caller names must be remapped to
+        # positions by order or Wati can't fill the template and rejects the send as
+        # "blank text" (HTTP 400). That remains the DEFAULT.
+        #
+        # Templates created with NAMED customParams ({{name}}, {{client_id}}, …) need the
+        # opposite: the names must survive, because Wati resolves them by name — and a
+        # dynamic URL BUTTON can only be filled that way (`buttonParamMapping` points at a
+        # paramName, and a button variable has its own index space, so positional
+        # remapping can never reach it). Positional remapping against such a template
+        # leaves the button variable unfilled.
+        #
+        # Callers opt in with params["template_params_named"] = True rather than the
+        # adapter guessing, because only the caller knows which template it resolved.
+        named = bool(params.get("template_params_named")) if isinstance(params, dict) else False
+        if named:
+            wati_params = [
+                {"name": str(p.get("name") or ""), "value": (p.get("value") or "")}
+                for p in tvars if isinstance(p, dict)
+            ]
+        else:
+            wati_params = [
+                {"name": str(i), "value": (p.get("value") if isinstance(p, dict) else "")}
+                for i, p in enumerate(tvars, start=1)
+            ]
         url = (
             f"{self.base_url}/api/v1/sendTemplateMessage"
             f"?whatsappNumber={urllib.parse.quote(number)}"

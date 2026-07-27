@@ -61,6 +61,36 @@ def _tracked_link(channel: str, client_id: str) -> str:
     return f"{_public_host()}/r/{channel}/{client_id}"
 
 
+SHARE_KIT_MESSAGE_KEY = "share_kit_message_template"
+
+
+def _kit_message(channel: str, client_id: str, tenant_id: int | None) -> str:
+    """The share prefill, resolved through the config cascade (CLAUDE.md §6d).
+
+    Two defects fixed together here (found 2026-07-27):
+
+    1. COMPLIANCE. This prefill is a generated asset a referrer forwards to prospects,
+       so §4 requires the disclosure anchor on it — and the sibling builder in
+       `apps/accounts/selfview.py` already appends `· Disclosures: …`. This one did not,
+       so the same product shipped two share messages that disagreed on compliance.
+       The disclosure host is appended here rather than baked into the template string,
+       so an operator editing the copy cannot accidentally drop it.
+    2. §6d. The copy lived only in `flags.SHARE_KIT_MESSAGE_TEMPLATE`, an env-level flag —
+       "message settings are CONFIGURATION, not code". It is now a cascade key with the
+       flag as its default, so the owner can reword it without a deploy.
+    """
+    from apps.config.cascade import resolve
+
+    default = flags.SHARE_KIT_MESSAGE_TEMPLATE
+    try:
+        template = str(resolve(SHARE_KIT_MESSAGE_KEY, tenant_id=tenant_id, default=default) or default)
+    except Exception:
+        template = default
+    message = template.format(link=_tracked_link(channel, client_id))
+    anchor = f"Disclosures: https://{_public_host()}/d/pifs"
+    if anchor in message:
+        return message
+    return message + "\n\n" + anchor
 def handle_share_intent(*, tenant, channel: str, client_id: str, user_agent: str | None):
     """Resolve a /share/{channel}/{client_id} hit. Returns the destination URL.
 
@@ -74,7 +104,7 @@ def handle_share_intent(*, tenant, channel: str, client_id: str, user_agent: str
         raise Http404(f"unsupported share channel: {channel!r}")
 
     program = get_active_program(tenant)
-    message = flags.SHARE_KIT_MESSAGE_TEMPLATE.format(link=_tracked_link(channel, client_id))
+    message = _kit_message(channel, client_id, getattr(tenant, "id", None))
     destination = _CHANNEL_TARGET_BUILDERS[channel](message)
 
     if is_bot_user_agent(user_agent):
