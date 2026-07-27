@@ -47,11 +47,29 @@ The prod `.env` lines say `false` for the three integration flags — those are 
 defaults**; the truth is the ConfigGlobal override read through `resolve_flag()`. Never read
 `.env` alone for flag state.
 
-## Zoho ingest — LIVE
+## Zoho ingest — ENDPOINT LIVE, but NOTHING FEEDS IT (P0-D, corrected 2026-07-27)
 
-Conversion webhook (`POST /api/zoho/status-webhook`) sealed + ingesting. Conversions in DB:
-`GW5500` (opened 2026-05-02, historical import) · `RJ4521` (opened 18-Jul, webhook-ingested
-same evening). Zoho Variable `gorefer_webhook_secret` exists and matches prod.
+**The webhook works; no real conversion has ever arrived through it.** The previous wording
+here ("sealed + ingesting", `RJ4521` "webhook-ingested same evening") was **false** and is
+corrected: 14 days of continuous nginx logs (12–26 Jul) show **zero** POSTs from Zoho — every
+logged call was our own tooling. There was no POST at all on 18-Jul, so the `RJ4521` row was a
+manual curl, not an ingest. That row was also later reversed, which the old text omitted.
+
+**Root cause:** GoRefer's trigger watches Zoho **Leads**, but a lead that converts BECOMES A
+CONTACT — the account-opened event never fires in the module being watched (**P0-A**, still
+open; workflow rules are not in the CRM REST API, so it needs the Zoho UI).
+
+**What IS true:** the endpoint itself is correct and proven (Phase 5 — valid seal ingests,
+tampered/missing/replayed seals are refused, referrer credited by client id, ADR-017 true
+opening date honoured). July's six openings were **backfilled by hand** through that sealed
+endpoint on 2026-07-26 — so July analytics are right, but **the pipe is still disconnected and
+the next real opening will be missed exactly as those six were.**
+
+**Mitigation shipped:** `zoho_reconcile_conversions` (P0-B, `4919036`) — a scheduled reconciler
+that reads Contacts since a watermark and replays them through the same sealed endpoint, so a
+missed webhook self-heals within ~15 min. Registered and running.
+
+Zoho Variable `gorefer_webhook_secret` exists and matches prod.
 
 ## Daily report (O-6a / R-DRR)
 

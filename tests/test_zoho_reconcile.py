@@ -76,6 +76,43 @@ def test_is_idempotent_so_the_sweep_can_run_forever(seeded, fake_zoho):
     assert Conversion.objects.count() == before
 
 
+def test_a_replayed_row_is_already_ingested_NOT_a_failure(seeded, fake_zoho):
+    """A re-seen row is the NORMAL outcome of a reconciler, and must not read as failure.
+
+    Found live 2026-07-27: `DuplicateDelivery` was caught by the bare `except Exception`
+    and counted as `failed`, so prod logged `ingested: 0, failed: 6` on EVERY 15-minute
+    sweep — permanently. The damage is not the noise, it is the BLINDNESS: a genuinely
+    broken seventh opening would have been invisible among six permanent failures, which is
+    the exact condition this reconciler exists to end.
+
+    The pre-existing idempotency test above passed throughout, because it only asserted that
+    no duplicate rows appeared — it never looked at the counts. So this asserts the counts.
+    """
+    first = reconcile.reconcile_conversions(tenant=seeded)
+    assert first["ingested"] >= 1 and first["failed"] == 0
+
+    second = reconcile.reconcile_conversions(tenant=seeded)
+    assert second["failed"] == 0, f"a replay must never report failure: {second}"
+    assert second["ingested"] == 0, "nothing new to ingest on a replay"
+    assert second["already_ingested"] == first["ingested"], (
+        f"every previously-ingested row must be counted as already_ingested: {second}"
+    )
+
+
+def test_dry_run_reports_already_ingested_rather_than_pretending_work(seeded, fake_zoho):
+    """A dry-run must describe what WOULD happen, not what we hope would.
+
+    Counting every row as "would ingest" made a fully caught-up reconciler look like it had
+    real work pending — which is what masked the counting bug above: the dry-run reported
+    `ingested: 6, failed: 0` while every scheduled run reported `ingested: 0, failed: 6`.
+    """
+    reconcile.reconcile_conversions(tenant=seeded)
+    dry = reconcile.reconcile_conversions(tenant=seeded, dry_run=True)
+    assert dry["ingested"] == 0, f"nothing is left to ingest, so claim nothing: {dry}"
+    assert dry["already_ingested"] >= 1
+    assert dry["failed"] == 0
+
+
 def test_stores_the_true_opening_date_not_the_import_date(seeded, fake_zoho):
     """ADR-017 — a backfilled conversion must land in the month it actually opened."""
     reconcile.reconcile_conversions(tenant=seeded)

@@ -125,7 +125,7 @@ def reconcile_conversions(*, tenant=None, since: str | None = None, dry_run: boo
     since = since or str(_cfg(WATERMARK_KEY, DEFAULT_SINCE, tid))
     pattern = re.compile(str(_cfg(ACCOUNT_PATTERN_KEY, DEFAULT_ACCOUNT_PATTERN, tid)))
 
-    counts = {"seen": 0, "ingested": 0, "skipped_no_client_id": 0,
+    counts = {"seen": 0, "ingested": 0, "already_ingested": 0, "skipped_no_client_id": 0,
               "skipped_not_zerodha": 0, "failed": 0, "since": since}
     try:
         rows = fetch_opened_contacts(since)
@@ -157,12 +157,39 @@ def reconcile_conversions(*, tenant=None, since: str | None = None, dry_run: boo
             "account_opened_at": row.get("Account_Opened_On") or "",
         }
         if dry_run:
-            logger.info("zoho reconcile DRY-RUN would ingest %s", payload["opener_zerodha_account_id"])
-            counts["ingested"] += 1
+            # Report what would ACTUALLY happen, not what we hope would. Counting every row
+            # as "would ingest" made a fully-caught-up reconciler look like it had 6 rows of
+            # real work pending — which is exactly what masked the counting bug below on
+            # 2026-07-27: the dry-run said `ingested: 6, failed: 0` while every scheduled run
+            # was recording `ingested: 0, failed: 6`.
+            from apps.integrations.models import ZohoSyncIdempotency
+
+            key = ingest._dedupe_key(payload)
+            done = ZohoSyncIdempotency.objects.filter(
+                tenant=tenant, dedupe_key=key, processed_at__isnull=False
+            ).exists()
+            if done:
+                counts["already_ingested"] += 1
+            else:
+                logger.info(
+                    "zoho reconcile DRY-RUN would ingest %s",
+                    payload["opener_zerodha_account_id"],
+                )
+                counts["ingested"] += 1
             continue
         try:
             ingest.ingest_conversion(tenant=tenant, payload=payload)
             counts["ingested"] += 1
+        except ingest.DuplicateDelivery:
+            # THE NORMAL OUTCOME, not an error. A reconciler replays EVERY row since the
+            # watermark on every sweep, so almost all of them are already ingested — that is
+            # precisely the self-healing property this module exists to provide.
+            #
+            # Counting it as `failed` (the bug, found 2026-07-27) meant prod logged
+            # `failed: 6` every 15 minutes forever. Worse than the noise: it MASKED real
+            # failures — a genuinely broken 7th opening would have been invisible among six
+            # permanent ones, which is the exact blindness the reconciler was built to end.
+            counts["already_ingested"] += 1
         except Exception:
             logger.exception("zoho reconcile: ingest failed for %s", account)
             counts["failed"] += 1

@@ -570,3 +570,54 @@ def test_live_status_versioned_prefix_name_does_not_bleed(monkeypatch):
         provider_message_id="", recipient_mobile="917972672473", template=v1,
     )
     assert d.status == st.STATUS_DELIVERED  # v1 must match ITS row, not the v2 failure
+
+
+# --- D9: NAMED template params (needed for dynamic URL buttons) --------------
+
+def _capture_adapter(monkeypatch, calls):
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/999999")
+    monkeypatch.setenv("WATI_API_TOKEN", "abc.def.ghi")
+    monkeypatch.setenv("WATI_ALLOW_ALL_RECIPIENTS", "true")
+
+    def transport(method, url, headers, body):
+        calls.append(json.loads(body.decode()))
+        return 200, json.dumps({"result": True})
+
+    return LiveWatiAdapter(transport=transport)
+
+
+def test_template_params_remap_to_positional_by_default(monkeypatch):
+    """Default behaviour UNCHANGED: semantic names -> positional "1","2".
+
+    Most templates were created with positional customParams and Wati rejects a send it
+    cannot fill ("blank text", HTTP 400), so this remapping must keep working.
+    """
+    calls = []
+    a = _capture_adapter(monkeypatch, calls)
+    a.send_template(to="917767009136", template="tmpl", params={"template_params": [
+        {"name": "name", "value": "Ramesh"}, {"name": "prospect", "value": "Rahul"},
+    ]})
+    assert [p["name"] for p in calls[0]["parameters"]] == ["1", "2"]
+    assert [p["value"] for p in calls[0]["parameters"]] == ["Ramesh", "Rahul"]
+
+
+def test_template_params_named_preserves_names_for_button_templates(monkeypatch):
+    """D9: with template_params_named the names SURVIVE — required by a URL button.
+
+    The v9 referrer-nudge templates carry the referral link in a dynamic URL button whose
+    `buttonParamMapping` points at paramName `client_id`. A button variable has its OWN
+    index space, so positional remapping can never reach it and the button would render
+    unfilled. Verified against the live Wati contract 2026-07-27.
+    """
+    calls = []
+    a = _capture_adapter(monkeypatch, calls)
+    a.send_template(to="917767009136", template="tmpl", params={
+        "template_params_named": True,
+        "template_params": [
+            {"name": "name", "value": "Ramesh"},
+            {"name": "prospect", "value": "Rahul"},
+            {"name": "client_id", "value": "RJ4521"},
+        ],
+    })
+    sent = {p["name"]: p["value"] for p in calls[0]["parameters"]}
+    assert sent == {"name": "Ramesh", "prospect": "Rahul", "client_id": "RJ4521"}

@@ -61,8 +61,28 @@
 - [x] **Fix `CURRENT-STATE.md` staleness** — DONE 2026-07-26 (review session): funnel-report
       line corrected to APPROVED (verified vs live inventory); deployed-SHA row rewritten to
       `324a1b8` (PR #52); OTP P0 recorded on the `ENABLE_OTP_LOGIN` row.
-- [ ] **Landing page + capture form (Phase 11).** Needs a temporary `set_landing_mode page`
-      flip (revert after). Only way to exercise the JS beacon / confirmed-human click.
+- [x] **Phase 11 — landing page + capture form VERIFIED LIVE 2026-07-27. No defects.**
+      Flip done inside a `try/finally` so a crash could not leave prod in `page` mode;
+      restoration asserted, `direct` confirmed after.
+      **All present and correct:** PIFS-branded, does NOT resemble Zerodha · both buttons
+      ("Continue to Zerodha", "Share referral details on WhatsApp") · `Referral ID` echo ·
+      consent required + Privacy Policy link · `AP2516003693` + market-risk + the single
+      10% claim · guardrail 3 clean (no `ZMPHZC`, no `signup.zerodha.com`).
+      **Share target is the WATI BUSINESS number** (`watiNumber: "917080642020"`), per §4.
+      `7388882020` also appears but as a legitimate **helpline** `tel:` link, NOT the share
+      target — worth stating because a naive grep flags it as Ashok's personal number.
+      **Flow matches spec:** validate → `POST /api/leads/` (lead saved FIRST) → only then
+      navigate to the redirect route. Beacon is `fetch("/api/click/confirm")` with the nonce,
+      in `static/js/landing.js`.
+      **STILL UNPROVEN:** that the beacon actually FIRES and yields a genuine
+      `is_confirmed_human` click — that needs a real browser executing JS, which this
+      environment has no session for. Source-verified only; say so.
+      **METHOD NOTE worth keeping:** the first two passes produced FOUR false alarms from
+      crude regexes (button text longer than the pattern allowed; beacon in an external JS
+      file; form inputs keyed by `id` not `name`), and pass 2 followed the 302 out of
+      `/continue` and inspected **Zerodha's own signup page** while believing it was ours.
+      A redirect-following fetcher is the wrong instrument for testing a redirect service —
+      disable redirects, and read markup rather than boolean-grepping it.
 - [ ] **Hindi, DPDP, rollups, cross-tenant (Phase 12).** `pref_lang='hi'` end-to-end; PII out of
       the event log + erasable `VisitorPII`; manual erasure; rollup arithmetic vs raw events;
       conversions on the true opening date; tenant-scoped manager isolation.
@@ -152,12 +172,15 @@ decision needed: bring Zoho up to date as the real SSOT, or accept a second reco
       fire on lead→contact conversion (or Contact create where `Lead_Source="Referral"`) and POST the
       Contact's Zerodha client id + referrer client id to the existing sealed webhook. Needs the
       CUSTOM field API names on Contacts that hold those two ids — not in the standard field set.
-- [ ] **P0-B · Add a reconciler, do not rely on a single webhook delivery.** A scheduled job that
-      reads Contacts created since the last watermark and replays them through the same sealed
-      endpoint, so a missed or failed webhook self-heals. This is what would have caught it in July.
+- [x] **P0-B · DONE — reconciler SHIPPED and RUNNING** (`4919036`; `apps/integrations/zoho/reconcile.py`
+      + `manage.py reconcile_conversions`). Verified 2026-07-27: the `zoho_reconcile_conversions`
+      schedule is registered and the qcluster is actively processing it. This entry was stale.
 - [x] **P0-C · DONE 2026-07-26 — backfilled the 6 openings** once A/B land, so referrer credit and July analytics are correct.
-- [ ] **P0-D · Correct `CURRENT-STATE.md`** — "Zoho ingest LIVE / conversions ingesting" is false;
-      no real conversion has ever arrived.
+- [x] **P0-D · DONE 2026-07-27.** `CURRENT-STATE.md` §"Zoho ingest" rewritten: the endpoint is
+      live and proven, but **nothing feeds it** — 0 Zoho POSTs in 14 days of nginx logs, and the
+      `RJ4521` "webhook-ingested" row was a manual curl that was later reversed. Records that
+      July's six openings were BACKFILLED, that P0-A is still open, and that P0-B's reconciler
+      is the shipped mitigation.
 
 **D3 (webhook IP allowlist) is now clearly PREMATURE** — arming a second lock on a door that has
 never been used would only add another silent-failure mode. Do P0-A/B first, observe real Zoho
@@ -186,13 +209,21 @@ P0-A (point the trigger at Contacts) and P0-B (the reconciler) are **still open*
 account opening will be missed exactly as these six were. Do not read "July is correct" as "the
 integration works".
 
-- [ ] **P0-H · LATENT: month-boundary off-by-one in the rollup.** `account_opened_at` is stored as
-      IST-midnight-in-UTC (`18:30` the previous day), but `_accounts_opened_for_range` compares
-      against **naive** datetimes (Django logged `received a naive datetime … while time zone
-      support is active`). So an account opened on the **1st of a month IST** is stored at
-      `<last-day-of-previous-month>T18:30Z` and would be counted in the **previous month**. None of
-      the current 6 falls on a 1st, so no live error today — but it will silently misdate a month's
-      conversions the first time one does.
+- [x] **P0-H · DONE 2026-07-27 — the reported bug was a FALSE ALARM; a real latent trap was found
+      one layer up and fixed (`179eb27`).** The claim was that `_accounts_opened_for_range` compares
+      **naive** datetimes. It does not: `TIME_ZONE = "Asia/Kolkata"` and `_recompute_month` uses
+      `make_aware`, so month boundaries are IST-aligned and correct.
+      **The real hazard:** both `mark_dirty` call sites in `zoho/ingest.py` passed
+      `account_opened_at.date()`. That value is IST midnight stored as UTC (1 Aug IST =
+      `2026-07-31T18:30Z`), so `.date()` yields the **UTC** date and marks the **wrong month**
+      dirty — the right month then never gets recomputed and the conversion vanishes from it.
+      **Probed, not assumed:** in-memory `.date()` → `2026-08-01` (correct); after
+      `refresh_from_db()` → `2026-07-31` (wrong). So the live webhook path is correct only *by
+      accident* — the parsed value still carries its IST offset. Any path that RE-READS a
+      Conversion gets the UTC date, and the **reconciler and backfill jobs are exactly that shape**.
+      Both sites now use `timezone.localtime(...).date()`. The regression test calls
+      `refresh_from_db()` first so it exercises the re-read state, not the accidentally-correct one.
+      Suite 638/0, deployed.
 
 ## DECIDED by the owner 2026-07-26 — now actionable (was BLOCKED)
 
@@ -235,26 +266,35 @@ item below and to future work.
       ADR-035 re-asserted (user-supplied `mobile` → 400). Suite 634/0, deployed `1be4c34`.
       **Google OAuth — the PRIMARY referrer login — remains UNTESTED, as the owner chose. Keep
       saying so in every report.**
-- [~] **D9 · IN FLIGHT 2026-07-26 — v7 submitted and HOLDING UTILITY; awaiting Meta approval.**
-      **Scope correction, verified first:** all 7 follow-up cadence rules are `channel=session` —
-      free-form messages inside the 24h window, which carry **no Meta category and no cap at all**.
-      Resolving every configured template name against the live Meta inventory shows office alert,
-      both prospect-welcome, both referrer-update and the login OTP are **already
-      UTILITY/AUTHENTICATION**. So the ONLY marketing-capped template GoRefer sends is the §6.1
-      referrer-nudge pair. D9 is real but far narrower than stated.
-      **v6 FAILED (third flip after v4/v5).** Root cause found by reading Meta's actual policy, not
-      by inferring from failures: UTILITY requires **non-promotional AND specific to the RECIPIENT's
-      own** transaction, forbids "promote, recommend, upsell, or cross-sell", and classifies
-      **retargeting as MARKETING even when user-requested** ("You left items in your cart! Checkout
-      now"). v4/v5/v6 were all that shape with a referral link standing in for the cart — the
-      **link** was the disqualifier, so trimming adjectives could never work.
-      **v7 removes the link and every CTA → holding UTILITY in BOTH languages (PENDING).**
-      Full policy + authoring checklist: `docs/integrations/Meta-Template-Categorization-Policy.md`.
-      **NEXT (blocked on Meta, then on an owner call):** (a) re-poll v7 to APPROVED; (b) **owner
-      decides** — v7 delivers reliably but carries **no link** (2 vars, not 3), vs v5 which carries
-      the link and is capped; (c) if v7 is chosen, `_maybe_referrer_nudge()` must stop passing
-      `nudge_link_for()` and the config flips; (d) delete v6 EN (approved-but-unwired).
-      Leave `917972672473` to recover on its own.
+- [x] **D9 · DONE 2026-07-27 (one step outstanding: the live verified send).** Shipped
+      `12cabaf`; config wired; verified against the live Meta inventory.
+      **Scope correction first:** all 7 cadence rules are `channel=session` — free-form, **no Meta
+      category, no cap**. Every other configured template already resolved UTILITY/AUTHENTICATION.
+      So the only marketing-capped template GoRefer sends is the §6.1 referrer nudge.
+      **Root cause (from Meta's policy, not from guessing):** UTILITY needs non-promotional AND
+      specific to the RECIPIENT's own transaction; **retargeting is MARKETING even when
+      user-requested**. v4/v5/v6 were all the cart-abandonment shape with a referral link.
+      **Label matrix, body held byte-identical so the button is the only variable — all APPROVED:**
+      `Share Referral Link` EN **UTILITY** / HI MARKETING · `My Referral Link` same ·
+      `Share on WhatsApp` same · `Refer` same · `Refer & Earn` **MARKETING in BOTH**.
+      → (a) a referral SHARE button holds UTILITY in English; (b) **"Earn" is the one fatal word**;
+      (c) **Hindi rejects the BUTTON itself** — four labels flipped, incl. one with no referral or
+      reward wording, while HI with no button is UTILITY.
+      **SHIPPED:** EN `..._en_2026_07_27_v9a` (button) · HI `..._hi_2026_07_27_v10` (no button).
+      Both APPROVED UTILITY, both uncapped. Verified: button URL
+      `gorefer.in/share/wa/{{client_id}}`, `buttonParamMapping.paramName = client_id`.
+      **Owner-spotted functional fix:** `/r/wa/{id}` 302s the tapper to Zerodha SIGNUP — wrong for a
+      REFERRER who already has an account. `/share/wa/{id}` opens WhatsApp's picker. Owner phone-tested.
+      **Near-miss recorded:** positional params made Wati silently bind the button to the referrer's
+      NAME → would have rendered `gorefer.in/share/wa/Ramesh Kumar`. `ok:true` proves nothing about
+      the button mapping; read it back.
+      **ACCEPTED RISK:** the URL shape is back in the template (what the `?s=wa` fix removed). Code
+      guarantees only the button's INPUT — hence the live send below is required, not optional.
+      - [ ] **LIVE VERIFIED SEND still owed** — deferred deliberately: it was ~01:00 IST and the
+            engine's quiet hours (23:00–06:00) exist so we don't message people at night. Send to
+            `917767009136` in working hours and confirm the delivered button resolves to
+            `gorefer.in/share/wa/DA1707` (NOT a name), then that the link opens WhatsApp's picker.
+      - [ ] Delete the losing variants (v9b/v9c/v9d/v9e, v6) once the winner is proven live.
 
 ## 🔴 GUARDRAIL 3 VIOLATED IN PRODUCTION — partner code on the referrer self view (found + FIXED 2026-07-26)
 
