@@ -131,12 +131,12 @@ def test_first_click_at_is_stamped_on_first_click_only(seeded, client):
 
     It must be set by the first click and then stay put — a later click must not move it.
     """
-    client.get("/r/FIRSTCLK1", HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.7")
-    referral = Referral.objects.get(referral_identity__client_id="FIRSTCLK1")
+    client.get("/r/FSTCLK", HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.7")
+    referral = Referral.objects.get(referral_identity__client_id="FSTCLK")
     assert referral.first_click_at is not None, "first click did not stamp first_click_at"
     stamped = referral.first_click_at
 
-    client.get("/r/FIRSTCLK1", HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.7")
+    client.get("/r/FSTCLK", HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.7")
     referral.refresh_from_db()
     assert referral.first_click_at == stamped, "a later click moved first_click_at"
 
@@ -193,3 +193,41 @@ def test_referral_links_are_unaffected_by_the_partner_direct_change(seeded):
     program = ReferralProgram.objects.first()
     url = assemble_destination(program, client_id="RJ4521")
     assert "c=ZMPHZC" in url and "r=RJ4521" in url
+
+
+# --- strict per-partner client_id on the identity-CREATING paths (2026-07-27) ---
+
+def test_a_junk_client_id_creates_no_identity_on_the_redirect_path(client, seeded):
+    """THE point of the strict rule: junk must not become a referrer.
+
+    Live history: a Wati chatbot flow leaked the menu label "Talk to advisor" into the
+    client_id slot and GoRefer created a real ReferralIdentity called `TALK`; the partner
+    code `ZMPHZC` got in the same way. Both had to be soft-deleted by hand (D7).
+
+    Asserting the 400 alone would be weak — the defect was the ROW, not the status code.
+    """
+    from apps.referrals.models import ReferralIdentity
+
+    before = ReferralIdentity.objects.count()
+    resp = client.get("/r/ABHAY", HTTP_USER_AGENT="Mozilla/5.0 (Android)", REMOTE_ADDR="203.0.113.9")
+    assert resp.status_code == 400
+    assert ReferralIdentity.objects.count() == before, "a junk id must create NO identity"
+    assert not ReferralIdentity.objects.filter(client_id="ABHAY").exists()
+
+
+def test_a_real_client_id_still_works_end_to_end(client, seeded):
+    """The tightening must not break a legitimate referrer — the actual risk."""
+    from apps.referrals.models import ReferralIdentity
+
+    resp = client.get("/r/DA1707", HTTP_USER_AGENT="Mozilla/5.0 (Android)", REMOTE_ADDR="203.0.113.9")
+    assert resp.status_code in (200, 302)
+    assert ReferralIdentity.objects.filter(client_id="DA1707").exists()
+
+
+def test_share_path_also_refuses_junk(client, seeded):
+    """/share/ lazily creates an identity too, so it gets the same rule."""
+    from apps.referrals.models import ReferralIdentity
+
+    before = ReferralIdentity.objects.count()
+    client.get("/share/wa/ABHAY", HTTP_USER_AGENT="Mozilla/5.0 (Android)", REMOTE_ADDR="203.0.113.9")
+    assert ReferralIdentity.objects.count() == before
