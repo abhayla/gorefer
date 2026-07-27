@@ -51,10 +51,9 @@
       `'property="og:image"' in html` (presence, not usability) — replaced with absolute +
       resolves-under-STATIC_URL, parametrised over human and crawler UAs. Disproof: reverting fails
       only the crawler case. Verified live: image now fetches **200 image/png**. Suite 637/0.
-- [ ] **Withdraw the superseded PENDING v1 template**
-      `gorefer_referrer_prospect_pending_en_2026_07_25` (v2/v3/v4/v5 supersede it). NOTE: Wati
-      DELETE returns `ok:true` but Meta keeps the language content (`2388024`), so the name
-      cannot be reused afterwards.
+- [x] **Withdraw the superseded PENDING v1 template — DONE** (verified 2026-07-27:
+      `gorefer_referrer_prospect_pending_en_2026_07_25` is `DELETED`). The only PENDING template
+      remaining is `..._en_2026_07_26_v7`, the legitimate no-button UTILITY fallback — keep it.
 - [x] **Sync prod's `tests/` tree** — DONE 2026-07-26 (review session): 4 files copied
       (`test_followups.py`, `test_m_wati1_share_intent.py`, `test_recipient_identity.py`,
       `urls_share_intent.py` — the earlier "3 files" count was wrong), prod now 48/48 vs repo.
@@ -413,6 +412,26 @@ AND proves commit `606d710` is live in the real artifact.
       opt-out would persist with no automated way back, suppressing legitimate PIFS messages to
       the owner until someone flips it in the Wati dashboard. Testing a one-way door on the
       owner's own number is not a call to make unilaterally.
+
+## 🧹 PROD CLEANUP — DONE 2026-07-27 (owner-approved)
+
+**Soft-deleted** (reversible, rows retained — the D7 pattern): `E2E0726`, `FCLIVE01`,
+`REVW2607`, `PRODWA01`, plus `ABHAY` and `E2EBOTVERIFY` (junk created by my own probes).
+**Safety check run immediately after: all 14 REAL identities intact** — `AB1234 CQX688 DA1707
+EKU497 FWW808 GW5500 MK9033 RJ4521 SG2210 YT9788 YTW629 YW0175 ZD9598 ZZ8962`.
+
+**Conversions 4/5 needed nothing** — they were ALREADY `is_reversed=True`, so already excluded
+from analytics. An earlier note listing them as "cleanup owed" was wrong.
+
+**Deliberately NOT touched:** conversions 1/2 (`ZA9001`/`ZA9002`) are pre-existing `seed_demo`
+rows dated May/June. They inflate those months, but they predate this session and removing them
+is a data decision, not cleanup. Flagged, not acted on.
+
+- [ ] **4 Zoho test LEADS still need deleting — BLOCKED ON THE OWNER.** Record deletion is
+      refused by a safety classifier and I did not route around it. All four confirmed test
+      records first (`@example.invalid` emails, names like "E2e Test 26jul Delete", referrer
+      `E2E0726`): `475281000041836002` · `475281000041538002` · `475281000041592002` ·
+      `475281000030612001`. Recoverable from Zoho's Recycle Bin if removed in error.
 
 ## 🏗️ DESIGN ITEM (owner-requested 2026-07-27, build LATER) — hierarchical config
 
