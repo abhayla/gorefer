@@ -262,14 +262,16 @@ def test_i3_visitor_pii_is_erasable():
     Client().get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.5")
     pii = VisitorPII.objects.get()
     assert pii.raw_ip == "203.0.113.5"
-    # Erasure = clear the PII fields + stamp erased_at (manual in Sprint 1).
-    from django.utils import timezone
-    pii.raw_ip = None
-    pii.city = ""
-    pii.erased_at = timezone.now()
-    pii.save()
+    # Call the REAL erasure service. This test used to perform the erasure ITSELF
+    # (set raw_ip=None, stamped erased_at, saved) — which proved the MODEL could hold an
+    # erased state while nothing in the application could produce one. Erasure was in fact
+    # unimplemented until 2026-07-27; the test looked like coverage and was not.
+    from apps.common.privacy import erase_subject
+    from apps.tenants.models import Tenant
+
+    erase_subject(Tenant.objects.get(slug="pifs"), visitor_id=pii.visitor_id)
     pii.refresh_from_db()
-    assert pii.raw_ip is None and pii.erased_at is not None
+    assert pii.raw_ip is None and pii.city == "" and pii.erased_at is not None
 
 
 # --- §M2: provider-agnostic naming ----------------------------------------
