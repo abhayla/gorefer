@@ -266,28 +266,6 @@ item below and to future work.
       ADR-035 re-asserted (user-supplied `mobile` → 400). Suite 634/0, deployed `1be4c34`.
       **Google OAuth — the PRIMARY referrer login — remains UNTESTED, as the owner chose. Keep
       saying so in every report.**
-<<<<<<< HEAD
-- [~] **D9 · IN FLIGHT 2026-07-26 — v7 submitted and HOLDING UTILITY; awaiting Meta approval.**
-      **Scope correction, verified first:** all 7 follow-up cadence rules are `channel=session` —
-      free-form messages inside the 24h window, which carry **no Meta category and no cap at all**.
-      Resolving every configured template name against the live Meta inventory shows office alert,
-      both prospect-welcome, both referrer-update and the login OTP are **already
-      UTILITY/AUTHENTICATION**. So the ONLY marketing-capped template GoRefer sends is the §6.1
-      referrer-nudge pair. D9 is real but far narrower than stated.
-      **v6 FAILED (third flip after v4/v5).** Root cause found by reading Meta's actual policy, not
-      by inferring from failures: UTILITY requires **non-promotional AND specific to the RECIPIENT's
-      own** transaction, forbids "promote, recommend, upsell, or cross-sell", and classifies
-      **retargeting as MARKETING even when user-requested** ("You left items in your cart! Checkout
-      now"). v4/v5/v6 were all that shape with a referral link standing in for the cart — the
-      **link** was the disqualifier, so trimming adjectives could never work.
-      **v7 removes the link and every CTA → holding UTILITY in BOTH languages (PENDING).**
-      Full policy + authoring checklist: `docs/integrations/Meta-Template-Categorization-Policy.md`.
-      **NEXT (blocked on Meta, then on an owner call):** (a) re-poll v7 to APPROVED; (b) **owner
-      decides** — v7 delivers reliably but carries **no link** (2 vars, not 3), vs v5 which carries
-      the link and is capped; (c) if v7 is chosen, `_maybe_referrer_nudge()` must stop passing
-      `nudge_link_for()` and the config flips; (d) delete v6 EN (approved-but-unwired).
-      Leave `919999900000` to recover on its own.
-=======
 - [x] **D9 · DONE 2026-07-27 (one step outstanding: the live verified send).** Shipped
       `12cabaf`; config wired; verified against the live Meta inventory.
       **Scope correction first:** all 7 cadence rules are `channel=session` — free-form, **no Meta
@@ -317,7 +295,6 @@ item below and to future work.
             `919999900000` in working hours and confirm the delivered button resolves to
             `gorefer.in/share/wa/DA1707` (NOT a name), then that the link opens WhatsApp's picker.
       - [ ] Delete the losing variants (v9b/v9c/v9d/v9e, v6) once the winner is proven live.
->>>>>>> fix/d8-otp-delivery-race
 
 ## 🔴 GUARDRAIL 3 VIOLATED IN PRODUCTION — partner code on the referrer self view (found + FIXED 2026-07-26)
 
@@ -345,7 +322,6 @@ shows the code). Verified live after deploy: `ZMPHZC` count **0**, card still re
 **Worth a sweep, not yet done:** other surfaces sharing admin templates with a customer role should
 be checked for the same class of leak. Added below.
 
-<<<<<<< HEAD
 - [x] **Sweep every shared admin/customer template — DONE 2026-07-27, no further leaks.**
       `referred_people` projects only name/city/profession/partner/status/opened/reward (no mobile,
       email or IP — safe by construction); `clicks_rows.ip` is masked for the customer (verified
@@ -398,11 +374,6 @@ free to drift. Re-key onto `Partner=Zerodha` when the hierarchy lands.
 `Partner` at Zerodha, and a rewrite of config resolution that composes with (does NOT replace) the
 existing ADR-022 user→tenant→central cascade — that one answers *which tier*, this answers *whose
 rule*. Touches ADR-022 and ADR-023, so it needs an ADR before code.
-=======
-- [ ] **Sweep every shared admin/customer template for guardrail-3 and PII leakage.** ADR-026's
-      one-template-two-roles design means any admin-only field rendered unconditionally reaches the
-      customer. `partner_code` was one; enumerate the rest.
->>>>>>> fix/d8-otp-delivery-race
 
 ## BLOCKED — still needs Abhay
 
