@@ -363,6 +363,57 @@ be checked for the same class of leak. Added below.
       **Accepted:** a 6-letter string passes, so `ZMPHZC` would — a rule cannot both allow
       all-letter ids and reject one particular all-letter string.
 
+## ✅ PHASES 7 + 8 — DONE 2026-07-27 via the OWNER'S LOCAL PC (not the VPS)
+
+**I had wrongly reported these as blocked.** I checked the VPS for Chrome, found none, and
+concluded "not possible" — without considering the machine the session actually runs on. The
+owner corrected it. The local Chrome has a live WhatsApp Web session (logged in as
+`+91 77670 09136`, a sanctioned test number) and Google sessions.
+
+### Phase 8 — Google OAuth: COMPLETE, the PRIMARY referrer login is no longer untested
+Full flow driven in the browser: `/login/` → **Continue with Google** → account chooser →
+consent → `/login/google/callback` → `/login/bind` → **`/my/referrals`**.
+**Security properties verified from the authorize URL, not assumed:** PKCE
+(`code_challenge_method=S256`) · `state` present (CSRF) · scope is **`openid email profile`
+only** — no excess · redirect_uri is our own callback. Consent screen requests name, picture,
+email only.
+`/login/bind` states *"Used only to match against the record on file — we never send anything
+to it from here"* — ADR-035 upheld on the bind path too.
+**Self-view verified visually:** no `ZMPHZC` anywhere (the guardrail-3 fix holding LIVE in a
+real browser), IP column `—` on all 44 rows, visitors `31*` with the approximate footnote,
+compliance block present, no phone/email.
+
+### Phase 7 — `stop_on_reply` + converted-suppression: PROVEN BY REAL PRODUCTION DATA
+No simulation needed, and nothing had to be sent. The owner's genuine reply (the OTP they
+typed at 22:21) cancelled a REAL cadence:
+    nudge_12h/15h/18h/21h  cancelled  `engaged: replied`
+    nudge_9h               cancelled  `engaged: converted`
+The skill listed these as BLOCKED pending a WhatsApp session; they were in fact already
+demonstrated by live events. **A test that would have been faked was instead found already
+true.**
+
+### D9 button — FINALLY verified by DIRECT OBSERVATION
+Wati's API does not return a rendered button (`template` is null, no detail endpoint), so this
+had only ever been verified by inference. Opening the delivered message in WhatsApp Web shows
+the **"Share Referral Link"** button rendering as a real tappable button, and clicking it
+resolves to:
+    gorefer.in/r/wa/DA1707        <- the correct client_id, NOT a name
+    Disclosures: https://gorefer.in/d/pifs   <- the /share compliance fix, delivered
+That rules out the exact failure mode (`/share/wa/Abhay`) by observation rather than by chain,
+AND proves commit `606d710` is live in the real artifact.
+
+- [ ] **Phase 7 remainder — OPT-OUT (`STOP`) NOT TESTED, deliberately. Blocked on REQ-F02.**
+      Owner decision 2026-07-27: **do NOT build the re-subscribe path yet — recorded as a
+      requirement instead** (`REQ-F02` in `docs/foundation/01-GoRefer-Foundation-Specification.md`
+      §12.8). This gate stays unverified until REQ-F02 ships; testing it before then would
+      permanently suppress a live number with no supported way back.
+      Sending `STOP` sets `Allow Broadcast = false` on `917767009136` — the owner's own number —
+      and **there is no configured START/re-subscribe keyword** (the conversation map records
+      that it was deferred, because a bare "start" would false-match "how do I start"). So the
+      opt-out would persist with no automated way back, suppressing legitimate PIFS messages to
+      the owner until someone flips it in the Wati dashboard. Testing a one-way door on the
+      owner's own number is not a call to make unilaterally.
+
 ## 🏗️ DESIGN ITEM (owner-requested 2026-07-27, build LATER) — hierarchical config
 
 **Owner wants config settings to resolve down a four-level hierarchy**, with full control over

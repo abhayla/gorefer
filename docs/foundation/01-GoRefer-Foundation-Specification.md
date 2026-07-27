@@ -204,6 +204,27 @@ Every state change emits an immutable event (event-sourced; store events, not co
   - **Future behaviour (REQ-F01):** GoRefer moves from passive aging flag to an **active stale-lead WhatsApp nudge via Wati**.
   - **Dependencies / guardrails:** deferred until the **WATI opt-in / delivery-dedup fix** (the ~33% delivery-failure item) lands first. Any nudge **must respect Meta opt-in rules** — a warm, **utility-style** message, never a marketing blast (see BR-008). Zoho remains the source of truth; the nudge is additive and must never override or contradict Zoho lead status.
 
+- **REQ-F02 Re-subscribe / opt-in restoration (DEFERRED — owner-recorded 2026-07-27).** A contact
+  who has opted out via the `STOP` keyword must have a **supported route back in**. Today opt-out
+  is a **one-way door**: the live Wati rule "Unsubscribe / opt-out (EN + HI)" sets
+  `Allow Broadcast = false` on matching keywords (`stop`, `unsubscribe`, `remove me`, `band karo`,
+  `बंद करो`, `mat bhejo`, `hatao`, `message mat karo`), and **no START / re-subscribe path exists** —
+  the only way back is an operator editing the Wati dashboard by hand.
+  - **Why it was deferred originally:** a bare `start` keyword would false-match ordinary phrases
+    such as *"how do I start"*, silently re-subscribing someone who never asked to. Any
+    implementation must avoid reintroducing that — prefer an explicit, unambiguous phrase set
+    (e.g. `resume updates`, `start updates`, `फिर से शुरू करें`) over a single common word.
+  - **Consequences of leaving it absent:** (a) a contact who opts out cannot restore service
+    themselves, which is a poor experience and arguably at odds with the consent posture in
+    NFR-004; (b) the opt-out gate is **untestable without causing real harm** — verifying it on any
+    live number permanently suppresses that number's messages, which is precisely why the E2E
+    programme left this one gate unverified (see `docs/integrations/E2E-TEST-QUEUE.md`).
+  - **Acceptance when built:** `STOP` → suppressed; the chosen re-subscribe phrase → restored;
+    both transitions observable in the Wati contact record; the round trip exercised end to end on
+    a sanctioned test number; and the phrase set configurable (CLAUDE.md §6d) rather than hardcoded.
+  - **Dependency:** the keyword rule lives in the **Wati dashboard**, not this repo, so building it
+    spans GoRefer config + a Wati automation rule + a card on the conversation-map SSOT (§6c).
+
 ---
 
 ## 13. Non-Functional Requirements (NFR-xxx)
