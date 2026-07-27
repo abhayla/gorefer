@@ -402,7 +402,11 @@ resolves to:
 That rules out the exact failure mode (`/share/wa/Abhay`) by observation rather than by chain,
 AND proves commit `606d710` is live in the real artifact.
 
-- [ ] **Phase 7 remainder — OPT-OUT (`STOP`) NOT TESTED, deliberately. NEEDS AN OWNER CALL.**
+- [ ] **Phase 7 remainder — OPT-OUT (`STOP`) NOT TESTED, deliberately. Blocked on REQ-F02.**
+      Owner decision 2026-07-27: **do NOT build the re-subscribe path yet — recorded as a
+      requirement instead** (`REQ-F02` in `docs/foundation/01-GoRefer-Foundation-Specification.md`
+      §12.8). This gate stays unverified until REQ-F02 ships; testing it before then would
+      permanently suppress a live number with no supported way back.
       Sending `STOP` sets `Allow Broadcast = false` on `917767009136` — the owner's own number —
       and **there is no configured START/re-subscribe keyword** (the conversation map records
       that it was deferred, because a bare "start" would false-match "how do I start"). So the
