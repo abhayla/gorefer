@@ -1043,3 +1043,45 @@ def test_present_hindi_copy_is_used_and_logs_nothing(enabled, caplog):
     with caplog.at_level(logging.WARNING, logger="gorefer.followups.services"):
         assert services.body_for(rule, "hi") == "हिंदी कॉपी"
     assert not [r for r in caplog.records if "lang=hi" in r.getMessage()]
+
+
+def test_seeded_cadence_has_REAL_hindi_for_every_step(enabled):
+    """`body_hi` must never be blank, and must not be the English text.
+
+    Until 2026-07-27 the seeder wrote `body_hi=""` for every rule, so `body_for(rule,"hi")`
+    fell back to English and every Hindi-preferring prospect silently received the English
+    cadence while the surrounding templates were properly bilingual.
+
+    Asserting "not blank" alone would be too weak — copying the English into `body_hi`
+    would satisfy it. So this also asserts real Devanagari and that the two differ.
+    """
+    from django.core.management import call_command
+
+    call_command("seed_followup_cadence", "--tenant", enabled.slug)
+    rules = FollowupRule.objects.filter(tenant=enabled, enabled=True).order_by("order")
+    assert rules.count() == 7
+
+    seen_hi = set()
+    for rule in rules:
+        hi = rule.body_hi
+        assert hi.strip(), f"{rule.step_key}: body_hi is blank -> silently falls back to English"
+        assert hi != rule.body_en, f"{rule.step_key}: body_hi is just the English text"
+        assert any("\u0900" <= ch <= "\u097F" for ch in hi), (
+            f"{rule.step_key}: body_hi contains no Devanagari"
+        )
+        assert "{link}" in hi, f"{rule.step_key}: Hindi copy dropped the {{link}} placeholder"
+        seen_hi.add(hi)
+
+    # Distinct per step — a repeated message reads as spam, which is what the owner
+    # complained about for the English cadence.
+    assert len(seen_hi) == 7, "Hindi bodies must be distinct per step"
+
+
+def test_hindi_is_selected_when_pref_lang_is_hi(enabled):
+    """The whole point: with real Hindi seeded, a hi contact gets Hindi, not English."""
+    from django.core.management import call_command
+
+    call_command("seed_followup_cadence", "--tenant", enabled.slug)
+    rule = FollowupRule.objects.filter(tenant=enabled, step_key="nudge_3h").first()
+    assert services.body_for(rule, "hi") == rule.body_hi
+    assert services.body_for(rule, "en") == rule.body_en
