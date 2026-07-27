@@ -233,12 +233,18 @@ def test_crawler_card_carries_the_compliance_block(seeded, client):
 
 
 def test_crawler_creates_no_journey_and_no_cookie(seeded, client):
-    """The preview must stay as inert as the old 302 path was."""
+    """The preview must stay as inert as the old 302 path was.
+
+    Uses a client id that satisfies the partner's STRICT format (2026-07-27): format
+    validation now runs BEFORE the crawler branch, so an invalid id gets the branded 400
+    no matter who asks. That ordering is deliberate — a malformed id should not be able
+    to reach any downstream branch, preview included.
+    """
     from apps.referrals.models import ReferralIdentity
 
-    resp = client.get("/r/CRAWLBOT1", HTTP_USER_AGENT="facebookexternalhit/1.1")
+    resp = client.get("/r/CRWLBT", HTTP_USER_AGENT="facebookexternalhit/1.1")
     assert resp.status_code == 200
-    assert not ReferralIdentity.objects.filter(client_id="CRAWLBOT1").exists()
+    assert not ReferralIdentity.objects.filter(client_id="CRWLBT").exists()
     assert "gr_vid" not in resp.cookies
 
 

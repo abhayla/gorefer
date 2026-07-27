@@ -19,6 +19,12 @@ SCHEDULES = {
     # sparse enough that a long outage doesn't hammer it. Each sweep is bounded.
     "zoho_backfill_unsynced": ("apps.integrations.zoho.tasks.backfill_unsynced", 10),
     "zoho_reconcile_conversions": ("apps.integrations.zoho.reconcile.reconcile_conversions", 15),
+    # Daily (1440 min): the DPDP retention sweep — anonymise UNCONVERTED prospect PII past
+    # the configured window (CLAUDE.md §4). Daily is the right cadence for a 12-month
+    # obligation: hourly would be pointless churn, and anything rarer risks holding PII
+    # past the window between runs. A retention policy nobody runs is not a policy — this
+    # existed only as prose until 2026-07-27.
+    "pii_retention_purge": ("apps.common.privacy.purge_expired_pii", 1440),
     # Hourly: burnt wax-seal nonces past the freshness window are dead weight (a nonce
     # that old already fails the timestamp check), so purging them can't enable a
     # replay — it just stops the table growing forever.
