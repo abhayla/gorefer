@@ -2,8 +2,10 @@
 
 > **Status: RATIFIED BY OWNER (Abhay), 2026-07-27.** All five §7 decisions were approved
 > in-session the same day (Q-16-1…Q-16-5 = YES, one at a time, recommendation shown per item —
-> see COORDINATION 2026-07-27). Formal ADR codification (ADR-042…) is the first act of the
-> Phase-0 mission, mirroring the doc-13 → ADR-036…041 precedent. Engineer-authored 2026-07-27
+> see COORDINATION 2026-07-27). Formal ADR codification landed with Phase 0: **ADR-042**
+> (below-AP actor hierarchy), **ADR-043** (config totality / ScopedConfig + registry),
+> **ADR-044** (enforcement rails + not-building list), mirroring the doc-13 → ADR-036…041
+> precedent. Engineer-authored 2026-07-27
 > at the owner's direct instruction, from a code-grounded audit of the live repo (three
 > parallel deep-reads: actor model, config coverage, vendor coupling — findings cited as
 > `path:line` throughout).

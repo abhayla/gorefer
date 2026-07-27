@@ -56,10 +56,17 @@ class Command(BaseCommand):
         from apps.config.preferences import central_defaults
 
         baseline = {
+            # Compliance-locked keys (ADR-037): every member of COMPLIANCE_LOCKED_KEYS
+            # is seeded here and READ by the render paths (doc 16 D-1 / rail E-1) —
+            # seeded from the canonical settings/flags values so rendering stays
+            # byte-identical on a fresh database.
             "referral_incentive_claim": flags.REFERRAL_INCENTIVE_CLAIM,
             "nse_ap_no": getattr(settings, "NSE_AP_NO", ""),
             "sebi_reg_no": "INZ000031633",
-            "attribution_window_days": 60,
+            "ap_disclosure_block": getattr(settings, "AP_DISCLOSURE_BLOCK", ""),
+            "market_risk_warning": getattr(settings, "MARKET_RISK_WARNING", ""),
+            # attribution_window_days removed (doc 16 D-5): seeded since M1 but never
+            # read by any code path. Existing rows are harmless; no longer created.
             # WhatsApp share target = WATI BUSINESS number (NOT Ashok's personal),
             # config-driven via the cascade (ADR-022). Digits only for wa.me.
             "wati_business_number": settings.WATI_BUSINESS_NUMBER,

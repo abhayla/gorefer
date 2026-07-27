@@ -79,6 +79,9 @@ jobs:
       - name: Django system check
         run: python manage.py check
 
+      - name: Architecture boundary gate (rail E-3 — fails only on NEW vendor leaks)
+        run: python scripts/check_architecture.py
+
       - name: Migration drift check
         run: python manage.py makemigrations --check --dry-run
 
