@@ -7,6 +7,7 @@ DECISION; tasks.py applies it (sends + records). Mirrors how the codebase keeps
 """
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 from datetime import timezone as dt_timezone
 
@@ -17,6 +18,7 @@ from apps.config.cascade import resolve
 
 from .models import FollowupRule, FollowupWindow, ScheduledFollowup
 
+logger = logging.getLogger("gorefer.followups.services")
 # Cascade key (lowercase, matching the domain-config convention: landing_mode,
 # disclosure_page_enabled, …). Default OFF — nothing enqueues or fires until an admin
 # sets it True at the tenant tier (config.cascade.set_tenant).
@@ -170,9 +172,26 @@ def has_converted(tenant, mobile: str) -> bool:
 
 
 def body_for(rule: FollowupRule, pref_lang: str) -> str:
-    """Resolve the session-message copy for the contact's language, falling back to EN."""
-    if pref_lang == "hi" and rule.body_hi.strip():
-        return rule.body_hi
+    """Resolve the session-message copy for the contact's language, falling back to EN.
+
+    The fallback is correct behaviour — better an English nudge than a blank one. But it
+    was SILENT, and that hid a real gap: `seed_followup_cadence` seeds `body_hi=""` for
+    every rule, so as of 2026-07-27 EVERY Hindi-preferring prospect receives the English
+    cadence while the templates around it are properly bilingual. The system looks
+    bilingual and is only half so.
+
+    So the fallback now says so. Deliberately WARNING, not debug: missing copy for a
+    language we advertise support for is an operational gap someone should act on, and a
+    debug line nobody reads is how it stayed invisible in the first place.
+    """
+    if pref_lang == "hi":
+        if rule.body_hi.strip():
+            return rule.body_hi
+        logger.warning(
+            "followup copy missing for lang=hi on step=%s — falling back to English "
+            "(body_hi is empty; seed_followup_cadence writes it blank)",
+            rule.step_key,
+        )
     return rule.body_en
 
 
