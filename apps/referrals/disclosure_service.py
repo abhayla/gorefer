@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from django.conf import settings
 
+from apps.config.cascade import resolve
 from apps.tenants.models import Tenant
 
 from .models import ReferralProgram
@@ -40,13 +41,17 @@ def resolve_tenant_by_slug(slug: str) -> Tenant | None:
 def _placeholder_values() -> dict:
     """Values a disclosure_template may interpolate — config, never PII.
 
-    Sourced from the canonical compliance settings (single source, ADR-014). Extend
-    per-partner/per-tenant (ARN, DSA code…) as multi-partner composition lands.
+    Phase 0 (doc 16 D-1): resolved through the LOCKED cascade (central-only,
+    ADR-037), with the canonical settings values as byte-identical defaults.
+    Extend per-partner/per-tenant (ARN, DSA code…) as multi-partner composition
+    lands.
     """
     return {
-        "nse_ap_no": getattr(settings, "NSE_AP_NO", ""),
-        "sebi_reg_no": "INZ000031633",
-        "market_risk_warning": getattr(settings, "MARKET_RISK_WARNING", ""),
+        "nse_ap_no": resolve("nse_ap_no", default=getattr(settings, "NSE_AP_NO", "")),
+        "sebi_reg_no": resolve("sebi_reg_no", default="INZ000031633"),
+        "market_risk_warning": resolve(
+            "market_risk_warning", default=getattr(settings, "MARKET_RISK_WARNING", "")
+        ),
     }
 
 
@@ -57,16 +62,19 @@ def _block_for(program: ReferralProgram, values: dict) -> str:
     disclosure block (the exact text the landing page renders). Always append the
     verbatim market-risk warning so every regulator block carries §4.2.
     """
-    risk = getattr(settings, "MARKET_RISK_WARNING", "")
+    risk = values.get("market_risk_warning", "")
+    fallback_block = resolve(
+        "ap_disclosure_block", default=getattr(settings, "AP_DISCLOSURE_BLOCK", "")
+    )
     template = (program.disclosure_template or "").strip()
     if template:
         try:
             body = template.format(**values)
         except (KeyError, IndexError):
             # A malformed template must never 500 the compliance page — fall back.
-            body = getattr(settings, "AP_DISCLOSURE_BLOCK", "")
+            body = fallback_block
     else:
-        body = getattr(settings, "AP_DISCLOSURE_BLOCK", "")
+        body = fallback_block
     return body, risk
 
 

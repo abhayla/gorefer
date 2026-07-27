@@ -2,9 +2,12 @@
 
 Multi-tenancy is SINGLE-SCHEMA `tenant_id` discriminator (COORDINATION Q-M1-1):
 these are PLAIN models — a lightweight registry — with NO django-tenants schema
-routing. Isolation is enforced by tenant-scoped managers + TenantResolutionMiddleware
-+ composite unique constraints (05-Database-Design §2). Sprint 1 runs one tenant
-(PIFS). Schema-per-tenant physical isolation is deferred to backlog DF-7.
+routing. Isolation is enforced by TenantResolutionMiddleware + composite unique
+constraints + per-call-site `tenant=` filters (05-Database-Design §2);
+`TenantQuerySet.for_tenant()` (apps/common/models.py) is the scoped-query helper
+new code should use (doc 16 D-4 — this docstring previously claimed tenant-scoped
+managers that did not exist). Sprint 1 runs one tenant (PIFS). Schema-per-tenant
+physical isolation is deferred to backlog DF-7.
 """
 from __future__ import annotations
 

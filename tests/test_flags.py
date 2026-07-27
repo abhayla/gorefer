@@ -7,7 +7,6 @@ def test_default_flags_match_spec():
     assert f.ENABLE_CUSTOMER_LOGIN is False
     assert f.ENABLE_WATI_SEND is False
     assert f.ENABLE_ZOHO_WRITE is False
-    assert f.ENABLE_ASSET_GENERATOR is False
     assert f.ENABLE_ZOHO_READ is False   # M9: read enrichment off by default (fixtures)
     assert f.ENABLE_ADMIN_DASHBOARD is True
     assert f.ENABLE_DEMO_MODE is True

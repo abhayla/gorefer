@@ -549,3 +549,30 @@ COMPLIANCE LOCK: SEBI/NSE disclosure + market-risk warning are locked at CENTRAL
   - The "holding tenant" is a real seeded tenant with an admin assignment workflow and an audit trail — small, but not free, and in scope for the first migration.
   - The uniqueness rule (one `client_id` → one tenant per partner) becomes a DB constraint, not a convention.
   - Sprint 1 is unaffected: with PIFS as the sole AP today's behaviour is correct — it simply must not be *relied upon* as the model.
+
+---
+
+## ADR-042 — Tenant-configurable actor hierarchy BELOW the AP (ordered levels, one parent)
+
+- **Status:** Locked (2026-07-27, owner ratification of doc 16 Q-16-1). **Model-only — built in doc 16 Phase 4.** Basis: doc 16 §0 O-2 / §3.1; owner decisions 2026-07-27 (in-session, recorded in COORDINATION). Depends on ADR-016 (single-winner attribution, unchanged), ADR-023/036 (tenant boundary; the ADR-036 tree above the tenant is untouched — the two trees join at the tenant node).
+- **Context / Problem:** Sprint 1 has no relations between actors below the tenant — referrers are a flat set, "role" is five uncoordinated string vocabularies, and authorization is a binary `is_staff` (doc 16 §2.1). "Any type of customer with no code changes" (owner, 2026-07-27) requires structures like PIFS → sub-AP → introducer → referrer, or agency → manager → agent, whose depth cannot be predicted per tenant.
+- **Decision:** Each tenant defines an **ordered level schema as data** (`ActorLevelSchema`: tenant, rank, code, label). Actors form a **tree — exactly one parent, same tenant, rank-adjacent** (DB-enforced); prospects/customers are leaves outside the level schema. **Attribution is untouched:** an ancestor *sees* descendant journeys (visibility via the single subtree choke point, `TenantQuerySet`), it never *credits* from them. One canonical **ActorRole registry** (doc 16 Phase 3) replaces the five vocabularies; adding an actor type or level is a data operation. Free-form graphs and multi-parent relations are **rejected** — they make single-winner attribution ambiguous.
+- **Consequences:** Migration is a relabeling (existing referrers become depth-1 actors); no visible change until a tenant defines a second level. Cascade tiers `level`/`actor` (ADR-043) activate with it. Rail E-5 (ADR-044) guards the invariants.
+
+---
+
+## ADR-043 — Config totality: one ScopedConfig store + a declared key registry with per-key cascade policy
+
+- **Status:** Locked (2026-07-27, owner ratification of doc 16 Q-16-2, amended by O-3). **Built in doc 16 Phase 1** (Phase 0 lands only the D-1 compliance-reader fix). Basis: doc 16 §0 O-3 / §3.2. Generalizes ADR-022; implements ADR-037's semantics; ADR-034's Preferences screen becomes registry-generated.
+- **Context / Problem:** The three cascade tiers are three physical tables with a hand-written resolver branch each; 61 behavior-governing literals sit outside config entirely; and the compliance lock protected keys **nothing read** (doc 16 D-1 — fixed in Phase 0 by routing the render paths through `resolve()` and seeding every locked key).
+- **Decision:** **Every behavior is a config key.** One `ScopedConfig` table `(scope_type, scope_id, key, value)` replaces the three tables (resolver signature preserved); a **code-declared key registry** gives every key a default, type/validator, UI group (or `operator_only`), and **cascade policy**: `locked@tier` (ADR-037 hard stop), `override` (ADR-022 nearest-wins), or `aggregate` (read-model rollups climbing the actor tree — never through the resolver, so every resolved value still traces to exactly one tier). **An unregistered key does not resolve** (rail E-1). **Tenant admins self-serve their own tenant-tier defaults** through the registry-generated Preferences screen; locked keys render visible-but-locked. New behavior literals must register a key in the same PR (CLAUDE.md §6e).
+- **Consequences:** The 61-site hardcode inventory (doc 16 §2.2) becomes the Phase-1 backlog, migrated in churn order, each shipping with its old value as the default (zero behavior change day one). Adding a cascade tier becomes data. `attribution_window_days` and the dead `ENABLE_ASSET_GENERATOR` flag were removed (D-5) rather than carried into the registry.
+
+---
+
+## ADR-044 — The architecture is machine-enforced: rails E-1…E-6 with an observe→enforce ladder
+
+- **Status:** Locked (2026-07-27, owner ratification of doc 16 Q-16-4/Q-16-5). **Rails E-1(partial)/E-2/E-3/E-6 landed in Phase 0**; E-1(full) lands with Phase 1, E-4 with Phase 2, E-5 with Phase 4. Basis: doc 16 §0 O-4 / §5; precedent: the three guardrail tests + `scripts/check_contract_docs.py`.
+- **Context / Problem:** Every boundary in this codebase that was held only by prose drifted: the port Protocols nothing imported (D-3), the tenant-scoped managers that did not exist (D-4), the compliance lock guarding unread rows (D-1). Prose does not hold architecture; CI does.
+- **Decision:** Six rails, each with a CI call site: **E-1** key-registry gate (every compliance-locked key seeded + read; Phase 1 extends to all keys); **E-2** rendered compliance surfaces must track the locked resolver byte-for-byte (`tests/test_architecture_rails.py`); **E-3** vendor packages referenced only inside `apps/integrations/` — `scripts/check_architecture.py` fails on any NEW leak, the committed baseline (14 files) may only shrink; **E-4** shared port contract suite executing ADR-039's five invariants (Phase 2); **E-5** hierarchy invariants (Phase 4); **E-6** authoring rule CLAUDE.md §6e. **Observe→enforce ladder:** a rail ships observing with a baselined violation list; growth fails immediately; an emptied baseline makes the rail a hard boundary automatically. A rail with no CI call site is itself a defect (dead-gate rule).
+- **Consequences:** doc 16 §6's not-building list is ratified alongside (Q-16-5): no rules DSL, no actor graphs, no per-AP vendor choice, no SaaS surface, no speculative second adapters, no persisted vendor-column renames before a real second vendor.
