@@ -70,6 +70,7 @@ python -m pytest tests/test_redirect.py::test_name -q  # one test
 # Lint + static gates (same set CI runs)
 ruff check .
 python manage.py check
+python scripts/check_architecture.py                   # rail E-3: fails only on NEW vendor leaks (baseline: scripts/architecture_import_baseline.txt)
 python manage.py makemigrations --check --dry-run      # schema drift fails CI
 
 # Tailwind — compiled and COMMITTED (no CDN runtime). CI fails if app.css is stale.
