@@ -991,3 +991,38 @@ def test_converted_exit_can_be_switched_off_by_config(enabled, monkeypatch):
     assert counts["cancelled"] == 0, "config off ⇒ converted contact is NOT suppressed"
     assert counts["sent"] == 1
     assert len(rec.sent) == 1
+
+
+def test_missing_hindi_copy_falls_back_to_english_AND_says_so(enabled, caplog):
+    """The fallback is right; the SILENCE was the defect.
+
+    `seed_followup_cadence` writes `body_hi=""` for every rule, so every Hindi-preferring
+    prospect gets the English cadence while the surrounding templates are properly
+    bilingual. That went unnoticed because nothing reported it. Assert BOTH halves: the
+    English text is still returned (never a blank message), and the gap is logged.
+    """
+    import logging
+
+    rule = _rule(enabled, step_key="nudge_3h", channel=FollowupRule.CHANNEL_SESSION)
+    rule.body_en = "English copy"
+    rule.body_hi = ""
+    rule.save(update_fields=["body_en", "body_hi"])
+
+    with caplog.at_level(logging.WARNING, logger="gorefer.followups.services"):
+        assert services.body_for(rule, "hi") == "English copy"
+    assert any("lang=hi" in r.getMessage() for r in caplog.records), (
+        "a missing-translation fallback must be visible in the logs, not silent"
+    )
+
+
+def test_present_hindi_copy_is_used_and_logs_nothing(enabled, caplog):
+    import logging
+
+    rule = _rule(enabled, step_key="nudge_6h", channel=FollowupRule.CHANNEL_SESSION)
+    rule.body_en = "English copy"
+    rule.body_hi = "हिंदी कॉपी"
+    rule.save(update_fields=["body_en", "body_hi"])
+
+    with caplog.at_level(logging.WARNING, logger="gorefer.followups.services"):
+        assert services.body_for(rule, "hi") == "हिंदी कॉपी"
+    assert not [r for r in caplog.records if "lang=hi" in r.getMessage()]

@@ -282,9 +282,58 @@ shows the code). Verified live after deploy: `ZMPHZC` count **0**, card still re
 **Worth a sweep, not yet done:** other surfaces sharing admin templates with a customer role should
 be checked for the same class of leak. Added below.
 
-- [ ] **Sweep every shared admin/customer template for guardrail-3 and PII leakage.** ADR-026's
-      one-template-two-roles design means any admin-only field rendered unconditionally reaches the
-      customer. `partner_code` was one; enumerate the rest.
+- [x] **Sweep every shared admin/customer template — DONE 2026-07-27, no further leaks.**
+      `referred_people` projects only name/city/profession/partner/status/opened/reward (no mobile,
+      email or IP — safe by construction); `clicks_rows.ip` is masked for the customer (verified
+      live: admin `127.0.0.1` → customer `—`); `partner_code` now blank. Locked with a test that
+      asserts over the WHOLE serialized customer context, not a field list, because
+      one-template-two-roles makes this structural.
+- [x] **Strict per-partner `client_id` format — DONE 2026-07-27, deployed + verified live.**
+      Junk ids can no longer become referrers. Zerodha's rule (owner-specified): exactly 6 chars,
+      first a LETTER, rest letters or digits. Applied ONLY to identity-CREATING paths (`/r/`,
+      `/continue`, `/share/`, Wati assisted-capture); lookup paths keep the loose spec rule so
+      staff can still find existing junk. Pattern is cascade config keyed by the partner's own
+      code (§6d). **Live proof:** `DA1707`/`EKU497`/`RJ4521`/`FWW808` → 302; `ABHAY`/`TALK`/
+      `PRODWA01`/`E2E0726`/`Zerodha` → 400. Suite 667/0.
+      **Accepted:** a 6-letter string passes, so `ZMPHZC` would — a rule cannot both allow
+      all-letter ids and reject one particular all-letter string.
+
+## 🏗️ DESIGN ITEM (owner-requested 2026-07-27, build LATER) — hierarchical config
+
+**Owner wants config settings to resolve down a four-level hierarchy**, with full control over
+how a rule propagates:
+
+    Category  →  Partner Group  →  Partner  →  Member
+    SEBI/NSE  →  Brokers        →  Zerodha  →  PIFS
+
+**Propagation modes to offer per setting** (the "full freedom" the owner asked for):
+`inherit` (default — take the nearest ancestor's value) · `override` (this level sets its own) ·
+`locked` (an ancestor forbids descendants changing it — this is what `COMPLIANCE_LOCKED_KEYS`
+already does, generalised) · `required` (descendants must set it; no silent inherit) ·
+`merge` (for list/dict settings, combine with the ancestor instead of replacing).
+
+**⚠ THE MODEL IS CURRENTLY INVERTED — this is the crux, and it must be resolved first.**
+
+| Owner's hierarchy | What the code models today |
+|---|---|
+| SEBI/NSE (category) | `ReferralProgram.regulator = "sebi_nse"` ✓ |
+| Brokers (group) | *does not exist* |
+| **Zerodha** (partner) | `ReferralProgram.name = "Zerodha"` — modelled as the **program** |
+| **PIFS** (member) | `Partner.code = "ZMPHZC"` + `Tenant(pifs)` — modelled as the **partner** |
+
+So the code calls **PIFS** the Partner and **Zerodha** the Program — inverted from the owner's
+mental model, and from how the domain actually works (Zerodha issues the client ids; PIFS is one
+of possibly many APs beneath it).
+
+**Concrete debt this already created:** the strict client_id pattern shipped 2026-07-27 is keyed
+`client_id_pattern__ZMPHZC` — namespaced by **PIFS** — but the 6-character rule belongs to
+**ZERODHA**. A second AP onboarded under Zerodha would need a duplicate copy of the same rule,
+free to drift. Re-key onto `Partner=Zerodha` when the hierarchy lands.
+
+**Scope when built:** new `Category` / `PartnerGroup` / `Member` models + migrations, re-pointing
+`Partner` at Zerodha, and a rewrite of config resolution that composes with (does NOT replace) the
+existing ADR-022 user→tenant→central cascade — that one answers *which tier*, this answers *whose
+rule*. Touches ADR-022 and ADR-023, so it needs an ADR before code.
 
 ## BLOCKED — still needs Abhay
 
