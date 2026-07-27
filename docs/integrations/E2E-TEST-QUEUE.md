@@ -83,9 +83,26 @@
       `/continue` and inspected **Zerodha's own signup page** while believing it was ours.
       A redirect-following fetcher is the wrong instrument for testing a redirect service —
       disable redirects, and read markup rather than boolean-grepping it.
-- [ ] **Hindi, DPDP, rollups, cross-tenant (Phase 12).** `pref_lang='hi'` end-to-end; PII out of
-      the event log + erasable `VisitorPII`; manual erasure; rollup arithmetic vs raw events;
-      conversions on the true opening date; tenant-scoped manager isolation.
+- [x] **Phase 12 — DONE 2026-07-27, all four parts. Two real gaps found; one was a BUILD task.**
+      **DPDP (part 2) was NOT IMPLEMENTED, not merely untested.** `VisitorPII.erased_at` was READ
+      but nothing ever WROTE it — no service, command or admin action; a real erasure request meant
+      hand-editing the DB. The 12-month purge was absent entirely. Both now shipped
+      (`apps/common/privacy.py`, `erase_pii` / `purge_expired_pii` commands, daily
+      `pii_retention_purge` schedule). **Why it hid:** `test_i3_visitor_pii_is_erasable` performed
+      the erasure ITSELF inside the test — it proved the MODEL could hold an erased state, not that
+      any code could produce one. Rewritten to call the real service.
+      **Hindi (part 1): mechanism OK, COPY MISSING.** `seed_followup_cadence` writes `body_hi=""`
+      for every rule, so `body_for(rule,"hi")` returns English — every Hindi prospect gets the
+      English cadence while the templates around it are properly bilingual. The fallback is
+      correct; the SILENCE was the defect. Now logs a WARNING naming the step. **Copy itself is
+      owner-owned — 7 Hindi bodies still to write.**
+      **Rollups (part 3): clean.** Live prod July: clicks 140 / landing 47 / redirects 24 /
+      leads 10 / accounts 6 — all match raw events exactly. ADR-017 holds (8–68d drift between
+      opening and sync, so imports land in their real period).
+      **Isolation (part 4): holds, but by CONVENTION.** There are no tenant-scoped managers —
+      `TenantScopedModel` is a plain FK column, so every query must remember `tenant=`. A
+      two-tenant fixture sharing the same `client_id` AND mobile proves 7 read paths stay scoped,
+      including the new erasure/purge. Suite 697/0.
 - [ ] **24 Zoho/Wati journey templates.** Owned outside this repo — drive the Zoho Deluge
       functions (`ZOHO_FN_ZAPIKEY_WA_JOURNEY_*` in `GLOBAL.env`) and Wati flows directly.
       A GoRefer-only run cannot reach these; do not report them as covered until driven.
@@ -290,7 +307,15 @@ item below and to future work.
       the button mapping; read it back.
       **ACCEPTED RISK:** the URL shape is back in the template (what the `?s=wa` fix removed). Code
       guarantees only the button's INPUT — hence the live send below is required, not optional.
-      - [ ] **LIVE VERIFIED SEND still owed** — deferred deliberately: it was ~01:00 IST and the
+      - [x] **LIVE VERIFIED SEND DONE 2026-07-27 08:00 IST** — nudge sent to `917767009136` via
+            the real adapter with the real named params; terminal status **READ**; delivered
+            `finalText` confirms `name`/`prospect` substituted correctly. Wati's API does not
+            expose the rendered BUTTON, so the button was verified by chain instead: template at
+            Meta stores `gorefer.in/share/wa/{{client_id}}` bound to `paramName=client_id`, we
+            sent `client_id=DA1707`, and `/share/wa/DA1707` resolves live. **Testing the failure
+            mode found a separate defect:** `/share/wa/Abhay` returned 302 (not an error) and
+            minted a junk identity — fixed by the strict per-partner `client_id` rule.
+      - [ ] ~~LIVE VERIFIED SEND still owed~~ — deferred deliberately: it was ~01:00 IST and the
             engine's quiet hours (23:00–06:00) exist so we don't message people at night. Send to
             `917767009136` in working hours and confirm the delivered button resolves to
             `gorefer.in/share/wa/DA1707` (NOT a name), then that the link opens WhatsApp's picker.
