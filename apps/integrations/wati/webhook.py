@@ -26,7 +26,7 @@ from django.conf import settings
 
 from apps.referrals.lead_service import capture_lead
 from apps.referrals.redirect_service import _active_program, _lazy_get_or_create_referral
-from apps.referrals.validators import InvalidClientId, validate_client_id
+from apps.referrals.validators import InvalidClientId, validate_client_id_for
 from apps.tenants.resolve import get_current_tenant
 
 logger = logging.getLogger("gorefer.wati.webhook")
@@ -103,7 +103,10 @@ def process_assisted_capture(request, payload: dict) -> dict:
             raise AssistedCaptureError(f"forbidden field in assisted capture: {key}")
 
     try:
-        client_id = validate_client_id(payload.get("client_id"))
+        # STRICT, per-partner. THIS is the path that created the junk `TALK` identity:
+        # a Wati chatbot flow leaked a menu label into the client_id slot and GoRefer
+        # accepted it as a referrer. The partner's id pattern now refuses it.
+        client_id = validate_client_id_for(get_current_tenant(request), payload.get("client_id"))
     except InvalidClientId as exc:
         raise AssistedCaptureError(f"invalid referrer client_id: {exc}") from exc
 

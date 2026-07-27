@@ -17,6 +17,7 @@ from django.db import transaction
 
 from apps.config.models import ConfigCentral
 from apps.referrals.models import Partner, ProgramRedirectRule, ReferralProgram
+from apps.referrals.validators import PATTERN_KEY, ZERODHA_CLIENT_ID_PATTERN
 from gorefer.flags import flags
 
 BOOTSTRAP_TENANT_SLUG = "pifs"
@@ -63,6 +64,13 @@ class Command(BaseCommand):
             # config-driven via the cascade (ADR-022). Digits only for wa.me.
             "wati_business_number": settings.WATI_BUSINESS_NUMBER,
             "privacy_policy_url": "https://gorefer.in/privacy",
+            # Per-partner client-id format (owner decision 2026-07-27). The key is composed
+            # from the PARTNER'S OWN CODE, so onboarding a partner with different id rules
+            # is data, not code — nothing here is named after a partner.
+            # Zerodha ids are letters-then-digits (RJ4521, DA1707, EKU497). Without this the
+            # spec rule (4-16 alphanumerics) accepted a leaked chatbot label `TALK` and even
+            # the partner code `ZMPHZC` itself as referrers.
+            f"{PATTERN_KEY}__{settings.PARTNER_CODE}": ZERODHA_CLIENT_ID_PATTERN,
         }
         # Preference-screen keys (Q-M-PREF / ADR-034): central baselines so behaviour
         # is unchanged until a tenant overrides one through the Preferences screen.
