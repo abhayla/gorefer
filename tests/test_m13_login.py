@@ -438,3 +438,51 @@ def test_my_referrals_works_with_zero_activity(client, seeded, onfile_customer, 
     resp = client.get("/my/referrals")
     assert resp.status_code == 200
     assert f"gorefer.in/r/{CID}" in resp.content.decode()
+
+
+# --- ADR-026 shared-template sweep: nothing admin-only may reach the customer role ---
+
+@pytest.mark.urls("tests.urls_m13")
+def test_customer_view_context_carries_no_pii_and_no_partner_code(
+    client, seeded, onfile_customer, otp_on
+):
+    """Whole-context guard on the ONE template shared by admin and customer (ADR-026).
+
+    The `ZMPHZC` leak (fixed 2026-07-26) happened because a field the ADMIN screen wants
+    was rendered unconditionally, and the customer view inherited it. That is a structural
+    hazard of one-template-two-roles, not a one-off: ANY field added to the shared context
+    reaches the customer unless someone remembers to strip it.
+
+    So this asserts over the ENTIRE serialized customer context rather than a field list —
+    a new leaky field fails here without anyone having to think of it.
+
+    Audited 2026-07-27 and clean by construction: `referred_people` projects only
+    name/city/profession/partner/status/opened/reward (no mobile, email or IP), and
+    `_mask_clicks` blanks the IP the admin view keeps.
+    """
+    import json
+    import re
+
+    from apps.accounts.selfview import my_referrals_ctx
+    from apps.dashboard import profile
+
+    client.get(f"/r/{CID}", **HUMAN)
+    ctx = my_referrals_ctx(seeded, CID)
+    blob = json.dumps(ctx, default=str)
+
+    assert "ZMPHZC" not in blob, "partner code reached the customer context"
+    assert "signup.zerodha.com" not in blob, "raw partner URL reached the customer context"
+    assert not re.findall(r"(?<!\d)[6-9]\d{9}(?!\d)", blob), "a mobile number reached the customer"
+    assert not re.findall(r"[\w.+-]+@[\w-]+\.[\w.]+", blob), "an email reached the customer"
+    assert HUMAN["REMOTE_ADDR"] not in blob, "raw IP reached the customer"
+
+    # Every people row must carry ONLY the non-contact projection.
+    allowed = {"name", "name_known", "city", "profession", "partner", "status", "opened", "reward"}
+    for row in profile.referred_people(seeded, CID):
+        assert set(row) <= allowed, f"referred_people grew a field: {set(row) - allowed}"
+
+    # And the admin view must still keep what it needs — this is a scoping guard, not a
+    # blanket redaction that would quietly degrade the staff screen.
+    admin_clicks = profile.clicks_rows(seeded, CID)
+    if admin_clicks:
+        assert "ip" in admin_clicks[0], "admin click rows must retain the IP"

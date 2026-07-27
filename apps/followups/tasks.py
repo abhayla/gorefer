@@ -322,8 +322,10 @@ def _maybe_referrer_nudge(sf: ScheduledFollowup, identity, counts: dict) -> None
         link = nudge_link_for(identity, tenant_id=tid)
         if not link:
             # link_mode="none" — the operator has switched embedded links off. A nudge whose
-            # entire point is "share your link again" is meaningless without one, and a blank
-            # template variable is rejected by Meta, so skip rather than send something broken.
+            # entire point is "share your link again" is meaningless without one, so skip.
+            # NB since D9 the link rides in a URL BUTTON built from `client_id`, not in the
+            # body — so this early return is now the ONLY thing that honours link_mode="none".
+            # Removing it would let the button re-introduce a link the operator switched off.
             logger.info(
                 "referrer-nudge skipped for sf=%s: link_mode=none (no link to embed)", sf.pk
             )
@@ -336,21 +338,34 @@ def _maybe_referrer_nudge(sf: ScheduledFollowup, identity, counts: dict) -> None
             resolve(
                 f"followup_referrer_nudge_template_{lang}",
                 tenant_id=tid,
-                default=f"gorefer_referrer_prospect_pending_{lang}_2026_07_26_v5",
+                default=(
+                    "gorefer_referrer_prospect_pending_en_2026_07_27_v9a" if lang == "en"
+                    else "gorefer_referrer_prospect_pending_hi_2026_07_27_v10"
+                ),
             )
         ).strip()
 
         adapter = get_wati_adapter()
+        # v9/v10 templates (D9, 2026-07-27) use NAMED params, and the referral link now
+        # lives in a dynamic URL BUTTON rather than in the body:
+        #     EN  gorefer_referrer_prospect_pending_en_2026_07_27_v9a — button
+        #         "Share Referral Link" -> gorefer.in/share/wa/{{client_id}}
+        #     HI  ..._hi_2026_07_27_v10 — NO button (Meta re-categorises any Hindi button
+        #         template to MARKETING; four distinct labels were tested, all flipped)
+        # so `client_id` is sent for the button and `link` is no longer a body param.
+        # `template_params_named` keeps the names intact through the adapter — positional
+        # remapping cannot fill a button variable (it has its own index space).
+        # A template with no button simply ignores the extra `client_id` param.
         result = adapter.send_template(
             to=identity.referrer_mobile,
             template=tmpl,
             params={
+                "template_params_named": True,
                 "template_params": [
                     {"name": "name", "value": ref_name},
                     {"name": "prospect", "value": descr},
-                    # position 3 is the FULL link (v5+), not a bare client_id (v3/v4)
-                    {"name": "link", "value": link},
-                ]
+                    {"name": "client_id", "value": identity.referrer_client_id},
+                ],
             },
         )
         if result.accepted:

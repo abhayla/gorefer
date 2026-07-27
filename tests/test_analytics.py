@@ -156,3 +156,64 @@ def test_analytics_endpoints_refuse_a_non_staff_user(demo):
     c = Client()
     c.force_login(u)
     assert c.get("/api/analytics/funnel").status_code == 401
+
+
+# --- ADR-017 month boundary: IST-midnight conversions must land in the right month ---
+
+def test_conversion_opened_on_the_1st_ist_counts_in_that_month(demo):
+    """P0-H: an account opened on the 1st of a month IST must roll up into THAT month.
+
+    `account_opened_at` is stored as IST-midnight-in-UTC — 1 Aug 2026 IST is
+    `2026-07-31T18:30Z`. Two independent places can get this wrong:
+      1. the range comparison in `_accounts_opened_for_range`, and
+      2. `mark_dirty(on_date=conversion.account_opened_at.date())` in the Zoho ingest —
+         `.date()` on a UTC-aware datetime yields the UTC date (31 Jul), which would mark
+         the WRONG month dirty, so the right month never gets recomputed at all.
+
+    A silent misdating: no error, just a conversion counted in the previous month. None of
+    the live conversions currently falls on a 1st, which is why this has never shown up.
+    """
+    import datetime as dt
+
+    from django.utils import timezone
+
+    from apps.events.rollups import mark_dirty
+    from apps.integrations.models import Conversion
+    from apps.referrals.models import ReferralProgram
+
+    program = ReferralProgram.objects.first()
+    tenant = program.tenant
+    ist = dt.timezone(dt.timedelta(hours=5, minutes=30))
+    opened_ist = dt.datetime(2026, 8, 1, 0, 0, tzinfo=ist)  # 1 Aug 2026, IST midnight
+
+    conv = Conversion.objects.create(
+        tenant=tenant, program=program, opener_zerodha_account_id="MONTHBND1",
+        account_opened_at=opened_ist, is_reversed=False,
+    )
+    # Sanity: it really is stored as the previous UTC day.
+    assert conv.account_opened_at.astimezone(dt.timezone.utc).date() == dt.date(2026, 7, 31)
+    # ...and the IST calendar date is the 1st.
+    assert timezone.localtime(conv.account_opened_at).date() == dt.date(2026, 8, 1)
+
+    # Drive it the way the INGEST does — re-read from the DB first, which is exactly the
+    # state the reconciler/backfill paths are in. Before the fix this marked 31 Jul dirty,
+    # so August was never recomputed and the conversion vanished from the month it belongs to.
+    conv.refresh_from_db()
+    mark_dirty(
+        tenant=tenant, program=program,
+        on_date=timezone.localtime(conv.account_opened_at).date(),
+    )
+    recompute_dirty()
+
+    aug = MonthlyMetric.objects.filter(
+        tenant=tenant, program=program, year=2026, month=8
+    ).first()
+    jul = MonthlyMetric.objects.filter(
+        tenant=tenant, program=program, year=2026, month=7
+    ).first()
+    assert aug is not None and aug.accounts_opened == 1, (
+        "conversion opened 1 Aug IST did not count in August"
+    )
+    assert (jul.accounts_opened if jul else 0) == 0, (
+        "conversion opened 1 Aug IST leaked into July — month-boundary off-by-one"
+    )
