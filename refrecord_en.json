@@ -1,0 +1,16 @@
+{
+  "elementName": "gr_brokers_zerodha_refrecord_en_2026_07_27",
+  "category": "UTILITY",
+  "language": "en",
+  "type": "template",
+  "body": "Hi {{name}},\n\nYour personal referral link for Zerodha account openings is active. Our team assists everyone who applies through it, and we will notify you when a referral's status changes.\n\nInvestments in the securities market are subject to market risks.\n*Disclosures*: https://gorefer.in/d/pifs",
+  "buttonsType": "call_to_action",
+  "buttons": [
+    {"type": "url", "parameter": {"text": "Share on WhatsApp", "url": "https://gorefer.in/share/wa/{{client_id}}", "urlType": "dynamic"}},
+    {"type": "quick_reply", "parameter": {"text": "Know More"}}
+  ],
+  "customParams": [
+    {"paramName": "name", "paramValue": "Ramesh Kumar"},
+    {"paramName": "client_id", "paramValue": "RJ4521"}
+  ]
+}
