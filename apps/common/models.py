@@ -43,6 +43,21 @@ class SoftDeleteModel(models.Model):
         return self.deleted_at is None
 
 
+class TenantQuerySet(models.QuerySet):
+    """QuerySet for tenant-scoped tables — the single choke point for tenant filters.
+
+    Phase 0 (doc 16 D-4): call sites today filter `tenant=` by hand; this method is
+    the one place hierarchy-aware visibility (doc 16 §3.1 "parent sees its subtree")
+    will be implemented when Phase 4 lands. No call sites are migrated yet — the
+    manager exists so the documented scoping mechanism is real, and new code can
+    adopt it incrementally.
+    """
+
+    def for_tenant(self, tenant_or_id):
+        tenant_id = getattr(tenant_or_id, "id", tenant_or_id)
+        return self.filter(tenant_id=tenant_id)
+
+
 class TenantScopedModel(models.Model):
     """Carries the ADR-023 `tenant_id` discriminator.
 
@@ -50,6 +65,8 @@ class TenantScopedModel(models.Model):
     can be backfilled cleanly; every tenant-scoped uniqueness constraint includes
     this column (per 05 §2). Physical isolation (schema-per-tenant vs discriminator)
     is decided at multi-tenant-enable time — see COORDINATION Q-M1-1.
+
+    `objects.for_tenant(...)` is the scoped-query helper (see TenantQuerySet).
     """
 
     tenant = models.ForeignKey(
@@ -59,6 +76,8 @@ class TenantScopedModel(models.Model):
         blank=True,
         related_name="+",
     )
+
+    objects = TenantQuerySet.as_manager()
 
     class Meta:
         abstract = True

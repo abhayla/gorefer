@@ -16,8 +16,20 @@ from django.db import models
 
 from apps.common.models import AuditedModel
 
-# Keys that lower config tiers may never override (compliance lock, ADR-022).
-COMPLIANCE_LOCKED_KEYS = frozenset({"referral_incentive_claim", "ap_disclosure_block", "nse_ap_no"})
+# Keys that lower config tiers may never override (compliance lock, ADR-022/ADR-037).
+# Phase 0 (doc 16 D-1): the render paths now READ these through resolve(), so the set
+# is live, not decorative. market_risk_warning + sebi_reg_no joined the set when they
+# gained resolver readers — every member must have a seeded central row and at least
+# one production reader (rail E-1).
+COMPLIANCE_LOCKED_KEYS = frozenset(
+    {
+        "referral_incentive_claim",
+        "ap_disclosure_block",
+        "market_risk_warning",
+        "nse_ap_no",
+        "sebi_reg_no",
+    }
+)
 
 
 class ConfigCentral(AuditedModel):

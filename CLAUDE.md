@@ -185,7 +185,7 @@ The architecture supports these, but **do not implement** them — they stay off
 - ~~**WATI stale-lead auto-nudge (REQ-F01)**~~ — **UN-FROZEN and LIVE** (M-FUP-1, 2026-07-24, owner-authorized Sprint-2 mission + prod deploy). Code in `apps/followups/`; `followups_enabled=True` for PIFS. Still scoped to the **24h WhatsApp session window** (session messages, not marketing templates) with quiet hours + anti-burst min-gap; **Zoho remains the owner of lead status** — the nudge engine never writes or infers it.
 - **Reward computation / calculations / payment integrations** (rewards live only in Zerodha Console).
 - **Multi-partner UI** (architecture is provider-agnostic; UI exposes only Zerodha).
-- **Public self-service registration**, **mobile app**, **poster/PDF asset generator** (`ENABLE_ASSET_GENERATOR=false`), **multi-language**.
+- **Public self-service registration**, **mobile app**, **poster/PDF asset generator** (the dead `ENABLE_ASSET_GENERATOR` flag was removed in Phase 0 — doc 16 D-5; add a flag back when the feature is actually built), **multi-language**.
 
 ---
 
@@ -266,6 +266,16 @@ This is the same reasoning as `REFERRAL_INCENTIVE_CLAIM` living in one editable 
 must be able to change customer-facing behaviour without an engineer. When adding a new message
 surface, add its knob at the same time — a literal that "will probably never change" is exactly the
 one that changes on a Saturday.
+
+## 6e. Behavior literals must register a config key (rail E-6 — doc 16, ADR-044)
+
+Any NEW literal that governs **what a message says, where a link points, when something is
+suppressed, how long/often something runs, or what a page shows** must, in the SAME PR, either
+become a cascade-resolved config key (with its old value as the default — zero behavior change)
+or be explicitly justified as structural. This generalizes §6d from messages to every behavior
+(doc 16 §3.2, owner-ratified 2026-07-27). The hard stops are the CI rails (`tests/
+test_architecture_rails.py`, `scripts/check_architecture.py`); this section is the
+authoring-time rule that keeps the rails from firing.
 
 ## 7. Definition of Done + expectations
 
