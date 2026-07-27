@@ -56,6 +56,13 @@ self-deception — this is the discipline the whole adapter is built around (doc
   created, so it costs no submission. Only the **last** URL segment may be a variable
   (`https://gorefer.in/share/wa/{{client_id}}`). **Wati allows only 10 template submissions per
   hour.**
+- **Mixed button sets (refrecord family, 2026-07-27).** A dynamic URL button + a quick-reply
+  button in ONE template is accepted under `buttonsType: "call_to_action"`, with each button as
+  `{"type": "url"|"quick_reply", "parameter": {"text": …, "url": …, "urlType": "dynamic"}}`.
+  With NAMED placeholders (`{{name}}` body, `{{client_id}}` button) the stored
+  `buttonParamMapping` survived correctly (`paramName: "client_id"`) — the positional
+  param-rewrite trap fires only on positional-body submissions. Still MANDATORY: read the stored
+  template back after `ok:true` and verify both buttons + the mapping before trusting it.
 - **The ack carries NO message id** (`{"result": true}` only), so `provider_message_id` is
   deliberately returned as `None` — never a fabricated id. That is *why* status reconciliation is
   keyed by mobile + template rather than by id.
