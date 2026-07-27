@@ -61,8 +61,28 @@
 - [x] **Fix `CURRENT-STATE.md` staleness** — DONE 2026-07-26 (review session): funnel-report
       line corrected to APPROVED (verified vs live inventory); deployed-SHA row rewritten to
       `324a1b8` (PR #52); OTP P0 recorded on the `ENABLE_OTP_LOGIN` row.
-- [ ] **Landing page + capture form (Phase 11).** Needs a temporary `set_landing_mode page`
-      flip (revert after). Only way to exercise the JS beacon / confirmed-human click.
+- [x] **Phase 11 — landing page + capture form VERIFIED LIVE 2026-07-27. No defects.**
+      Flip done inside a `try/finally` so a crash could not leave prod in `page` mode;
+      restoration asserted, `direct` confirmed after.
+      **All present and correct:** PIFS-branded, does NOT resemble Zerodha · both buttons
+      ("Continue to Zerodha", "Share referral details on WhatsApp") · `Referral ID` echo ·
+      consent required + Privacy Policy link · `AP2516003693` + market-risk + the single
+      10% claim · guardrail 3 clean (no `ZMPHZC`, no `signup.zerodha.com`).
+      **Share target is the WATI BUSINESS number** (`watiNumber: "917080642020"`), per §4.
+      `7388882020` also appears but as a legitimate **helpline** `tel:` link, NOT the share
+      target — worth stating because a naive grep flags it as Ashok's personal number.
+      **Flow matches spec:** validate → `POST /api/leads/` (lead saved FIRST) → only then
+      navigate to the redirect route. Beacon is `fetch("/api/click/confirm")` with the nonce,
+      in `static/js/landing.js`.
+      **STILL UNPROVEN:** that the beacon actually FIRES and yields a genuine
+      `is_confirmed_human` click — that needs a real browser executing JS, which this
+      environment has no session for. Source-verified only; say so.
+      **METHOD NOTE worth keeping:** the first two passes produced FOUR false alarms from
+      crude regexes (button text longer than the pattern allowed; beacon in an external JS
+      file; form inputs keyed by `id` not `name`), and pass 2 followed the 302 out of
+      `/continue` and inspected **Zerodha's own signup page** while believing it was ours.
+      A redirect-following fetcher is the wrong instrument for testing a redirect service —
+      disable redirects, and read markup rather than boolean-grepping it.
 - [ ] **Hindi, DPDP, rollups, cross-tenant (Phase 12).** `pref_lang='hi'` end-to-end; PII out of
       the event log + erasable `VisitorPII`; manual erasure; rollup arithmetic vs raw events;
       conversions on the true opening date; tenant-scoped manager isolation.
