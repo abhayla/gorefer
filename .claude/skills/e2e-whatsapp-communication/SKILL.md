@@ -1,6 +1,6 @@
 ---
 name: e2e-whatsapp-communication
-description: Test the live GoRefer site end to end against real production — click a referral link and check the record was created, send a WhatsApp message and check it actually went out, run the follow-up nudge cadence, ingest a Zoho conversion, log into the admin dashboard, test referrer login, and check the safety guardrails hold. Use when asked to "test end to end", "run the E2E", "test everything", "verify prod", "full round of testing", or after any deploy touching redirect / Wati / Zoho / followups / login.
+description: Test the live GoRefer site end to end against real production — click a referral link and check the record was created, send a WhatsApp message and check it actually went out, drive the Wati chatbot/keyword estate as a real contact (buttons, question-node validators, flow kits), run the follow-up nudge cadence, ingest a Zoho conversion, log into the admin dashboard, test referrer login, and check the safety guardrails hold. Use when asked to "test end to end", "run the E2E", "test everything", "verify prod", "full round of testing", or after any deploy touching redirect / Wati / Zoho / followups / login / chatbot flows.
 ---
 
 # GoRefer — full live end-to-end test
@@ -298,9 +298,18 @@ that the comparison works, not that a real reply cancels a cadence.
 known `Customer` (never guessed); capped one per step; unknown prospect name → generic descriptor;
 `{{3}}` is the full link from `nudge_link_for()` (see the v5 contract).
 
-## Phase 7 — WhatsApp Web on the VPS (removes the last human step)
+## Phase 7 — WhatsApp Web (removes the last human step)
 
-With an authenticated `web.whatsapp.com` session in the VPS Chrome, drive it via browser automation:
+**Check the LOCAL Chrome first (found 2026-07-28).** The owner's WhatsApp Web session lives on the
+local PC's Chrome, reachable via claude-in-chrome (`list_connected_browsers` → `switch_browser` →
+navigate `web.whatsapp.com`). That session lets the engineer act as a **real contact** — trigger
+keywords, tap real buttons, answer question nodes, read rendered link previews — with no VPS marker
+file and no owner hands. **Never claim an inbound test "needs the owner's phone" before checking
+this** (owner correction 2026-07-28; memory `verify-own-access-before-depending-on-owner`).
+Limitation: browser typing DROPS leading Devanagari (typed "सीधे Refer करें", arrived "Refer करें") —
+Hindi keyword tests need clipboard-paste or a real phone.
+
+With an authenticated `web.whatsapp.com` session (local or VPS Chrome), drive it via browser automation:
 - Send the inbound "Hi" → `followup_inbound_poll` (every 5 min) opens the window **fully autonomously**.
   (The Wati inbound webhook is chatbot-suppressed — polling is the designed path, not a workaround.)
 - **Read the login OTP** → unlocks Phase 8 OTP login.
@@ -312,6 +321,39 @@ Never drive a conversation with any number outside the sanctioned test list.
 Do NOT fake a window by setting `last_inbound_at` in the DB — Meta still rejects the session send,
 so you would be testing the failure path and calling it green. To skip the 3h wait legitimately,
 advance ONE step's `fire_at` while the window is genuinely open.
+
+## Phase 7b — Chatbot & keyword estate (the Wati side of E2E; added 2026-07-28 after a live incident)
+
+"End-to-end WhatsApp communication" includes the **Wati chatbot flows and keyword routing** — every
+defect of the 2026-07-28 incident lived here, invisible to all GoRefer-side phases. Drive it as a
+real contact over WhatsApp Web (Phase 7 session):
+
+1. **Pre-check the contact's session state.** An OPEN Question node consumes EVERY inbound message
+   BEFORE keyword routing — a contact stuck mid-flow makes the whole bot look dead (all buttons →
+   the stock retry line). Diagnosis recipe: `getMessages` → if taps draw *"I'm afraid I didn't
+   understand"* with **no Started/Ended-chatbot events**, it's an open question session, NOT broken
+   keyword wiring. Clear it (complete or junk×failsCount) before judging anything else.
+2. **Every quick-reply button literal, typed/tapped** → assert the mapped flow starts ONCE (a
+   double-fire = two handlers on one literal — rule + legacy keyword action).
+3. **Every Question node: one junk answer + one valid answer.** Assert the junk draws the node's
+   configured, language-matched, example-bearing fallback (never the bare stock line) and the valid
+   answer advances. **Audit `answerValidation` in the flow JSON first**: stored type Regex with an
+   EMPTY `regex` rejects EVERYTHING — the trap that broke the Direct-Referral collector for every
+   user who ever reached "Name?".
+4. **Exhaustion behavior (proven live):** after `failsCount` (3) consecutive failures the flow
+   **exits silently** — user freed, keywords route again, but zero feedback. Expected, not a bug.
+5. **Interactive-buttons/list cards:** typed non-matching text is **swallowed silently**; if the
+   node's `interactiveButtonsDefaultNodeResultId` is unset the session dies and the card's buttons
+   become DEAD UI. Assert every button/list node has a default branch.
+6. **Flow message bodies are deliverables** — apply the full Phase 0c bar to them: every link
+   `https://`-schemed and resolving; the **first full URL in the body decides WhatsApp's preview
+   card**, so the referral link must PRECEDE the disclosures link; the compliance footer
+   (market-risk + `Disclosures: https://gorefer.in/d/pifs`) present on any benefit-claiming card
+   (the live kit was missing it entirely until 2026-07-28); no partner code, no raw Zerodha URL.
+7. **Both language lanes.** The EN/HI condition split means the HI lane is a separate node set with
+   its own copy, validators and fallbacks — EN passing proves nothing about HI.
+8. Flow edits/backups/GET-verification: use the `wati-dashboard-automation` skill (74-key
+   updateFlow write format; back up via `getFlow` FIRST; check `ok:true` + GET-after, never HTTP 200).
 
 ## Phase 8 — M13 referrer login (LIVE, both flags ON)
 
@@ -424,6 +466,13 @@ env and diff the failure *sets*, not just the counts.
 - Wati's `sendTemplateMessage` ack carries **no message id** → `provider_message_id` stays empty;
   terminal status is matched by recipient+template+time by the reconciler.
 - A returning prospect **does** get a fresh cadence (the window timestamp is in the dedupe key).
+- A contact who "gets no reply to anything" is almost always **stuck in an open Question node**
+  (see Phase 7b #1), not a broken keyword estate — check chatbot events before touching wiring.
+- The `getMessages` **eventType `ticket` entries are the flow audit trail** (Started/Ended chatbot,
+  trigger source KeywordAction vs Rule) — they prove which handler fired and whether a session is
+  still open; read them before any "keyword X is not wired" conclusion.
+- WhatsApp Web **cannot type leading Devanagari reliably** via browser automation — HI lanes need a
+  real phone or clipboard paste (2026-07-28).
 
 ## Open questions — resolve, don't paper over
 
