@@ -4582,3 +4582,16 @@ default — third occurrence of this failure class. Also: the gorefer dev-DB rol
 Windows-VPS Postgres was lost; reset by owner approval 2026-07-28 and recorded as
 `GOREFER_DEV_DB_PASSWORD` in `D:\Abhay\GLOBAL.env` (main PC) + `C:\Abhay\GLOBAL.env` (Windows
 VPS); both local `.env` `DB_PASSWORD` values now set.
+
+### 2026-07-28 — STATUS: prod DEPLOYED `31fc244` (share-kit fix LIVE + Phase-0 rails) — Engineer
+
+Owner-approved deploy (19:09 IST). Method per convention: /tmp clone at the SHA → rsync over
+`/var/www/gorefer` (excluding .env*, .venv, staticfiles, DEPLOYED_SHA, backups) → pip install →
+`migrate` (no-op) → `seed_program` (Phase-0 locked rows) → `collectstatic` (8 new) → restart
+`gorefer.service` + `gorefer-qcluster.service` (both active). DEPLOYED_SHA updated 2accaa1 →
+31fc244. **Effect verified at the destination:** `GET /share/wa/EKU497` 302s to wa.me with kit
+text `https://gorefer.in/r/wa/EKU497` (full scheme) BEFORE the disclosures URL — WhatsApp will
+preview the referral landing, closing screenshot issues 1+2 end-to-end. Note: this deploy also
+carried Phase-0 (a23a58e, zero-behavior-change rails) and docs #63/#64/#66 — main-tip deploy per
+trunk discipline. CURRENT-STATE's Deployed-SHA row was stale (said 1be4c34 while the box ran
+2accaa1 since Jul-27) — corrected in the same turn.
