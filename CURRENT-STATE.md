@@ -11,7 +11,7 @@
 > wins; if either disagrees with the live system, **the live system wins** — verify, don't
 > trust (commands at the bottom).
 >
-> **Last updated:** 2026-07-25 (recipient-identity resolver LIVE, `c050d19` — PR #42; prospect
+> **Last updated:** 2026-07-28 (share-kit preview fix PR #67 squash-merged to main `118ddfd` — https:// scheme on the kit referral link + preview-order test, so WhatsApp previews the referral landing not the Disclosures page; **NOT deployed — prod stays `1be4c34`**, main is ahead of prod) — prior 2026-07-25 (recipient-identity resolver LIVE, `c050d19` — PR #42; prospect
 > nudges now carry the credit-preserving referral link `gorefer.in/r/wa/{referrer_client_id}` (or
 > `/open` fallback), referrer recipients suppressed from the prospect copy, language from the
 > existing `referrer_language` rule; re-seeded 7 rules with the `{link}` CTA; resolve-on-send, no
