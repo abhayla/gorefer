@@ -45,9 +45,8 @@ _CHANNEL_TARGET_BUILDERS = {
 
 
 def _public_host() -> str:
-    """The configured public host, scheme stripped (matches the bare-host form
-    already used in kit messages elsewhere — the tracked link is shown as plain
-    text, not a clickable URL with a scheme prefix)."""
+    """The configured public host, scheme stripped (used to compose full https URLs
+    and the disclosure anchor from one canonical host value)."""
     from django.conf import settings
 
     base = (settings.PUBLIC_BASE_URL or "").rstrip("/")
@@ -58,7 +57,13 @@ def _public_host() -> str:
 
 
 def _tracked_link(channel: str, client_id: str) -> str:
-    return f"{_public_host()}/r/{channel}/{client_id}"
+    # Full https URL, matching the selfview share builder. A scheme-less link is
+    # not linkified by every client, and — observed live 2026-07-28 — it loses the
+    # WhatsApp preview card to the disclosure URL (the message's only full URL),
+    # so recipients saw a "Disclosures" headline instead of the referral landing.
+    # The tracked link must be the FIRST full URL in the kit so the preview is the
+    # PIFS-branded landing page.
+    return f"https://{_public_host()}/r/{channel}/{client_id}"
 
 
 SHARE_KIT_MESSAGE_KEY = "share_kit_message_template"
