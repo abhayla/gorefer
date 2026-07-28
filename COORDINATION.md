@@ -4553,3 +4553,32 @@ worktree rule. Contents:
 **No schema migrations** (manager + frozenset changes only). Deploy note: run
 `python manage.py seed_program` after deploy so the two new locked rows exist in prod
 (rendering is byte-identical either way — defaults equal settings).
+
+### 2026-07-28 — STATUS: share-kit preview fix MERGED to main (PR #67) — NOT deployed — Engineer
+
+**What:** The share-kit's tracked referral link was scheme-less (`gorefer.in/r/wa/ID`), so
+WhatsApp's link preview used the first full URL in the kit — the https disclosures link — and
+rendered the "Disclosures" card instead of the branded referral landing (owner screenshot
+issues 1+2, 2026-07-28). `_tracked_link()` now returns `https://{host}/r/{channel}/{id}`; new
+test asserts the referral link is full-https AND precedes the disclosure URL (preview-order
+guarantee). Client-id case normalization was audited and is already correct (validators
+uppercase at all 3 entry points) — no change.
+
+**Verification:** full suite in an isolated worktree DB (`gorefer_test_kitfix`, over SSH tunnel
+to the Windows-VPS Postgres): 701 passed + 2 `test_zoho_client` failures that were a LOCAL-env
+artifact (empty `ZOHO_API_BASE=`/`ZOHO_ACCOUNTS_BASE=` lines in local `.env` clobbering the
+client's `.in` defaults — same set-but-empty clobber family as the WATI-token and OTP-template
+precedents). Fixed locally by commenting the empty lines; all 9 zoho-client tests pass. CI
+unaffected (never sets those vars). ruff clean.
+
+**Landing:** owner pre-approved "fix, LAND on main, DON'T deploy". PR #67 squash-merged as
+`118ddfd`. NOTE: `gh pr merge --auto` merged IMMEDIATELY — main has no required status checks,
+so there was nothing to arm against; post-merge CI on `118ddfd` was watched to completion
+instead. **Prod stays `1be4c34` — no deploy without fresh owner approval.**
+
+**Flag for DA (not built):** consider empty-string-tolerant env reads (`or default`) in
+`zoho/client.py` (+ a repo-wide sweep) so a set-but-empty var can never clobber a correct
+default — third occurrence of this failure class. Also: the gorefer dev-DB role password on the
+Windows-VPS Postgres was lost; reset by owner approval 2026-07-28 and recorded as
+`GOREFER_DEV_DB_PASSWORD` in `D:\Abhay\GLOBAL.env` (main PC) + `C:\Abhay\GLOBAL.env` (Windows
+VPS); both local `.env` `DB_PASSWORD` values now set.
