@@ -8,6 +8,8 @@ this tenant, not a structured object).
 """
 from __future__ import annotations
 
+import io
+import json
 from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 
@@ -293,6 +295,97 @@ def test_get_engagement_reader_is_live_with_creds(monkeypatch):
     monkeypatch.setenv("WATI_API_TOKEN", "test-token")
     reader = engagement.get_engagement_reader()
     assert reader.kind == "live"
+
+
+# --- FIX 1: v3 host has NO tenant path, v1 keeps it (T-033) -----------------------
+
+def test_live_reader_derives_v3_base_without_tenant_path(monkeypatch):
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/105355")
+    monkeypatch.setenv("WATI_API_TOKEN", "test-token")
+    reader = engagement.LiveEngagementReader()
+    assert reader.base_url == "https://live-mt-server.wati.io/105355"
+    assert reader.v3_base_url == "https://live-mt-server.wati.io"
+
+
+def test_live_reader_pull_calls_v3_broadcasts_on_bare_host(monkeypatch):
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/105355")
+    monkeypatch.setenv("WATI_API_TOKEN", "test-token")
+    urls_called = []
+
+    def fake_transport(method, url, headers, body):
+        urls_called.append(url)
+        if "/getMessageTemplates" in url:
+            return 200, json.dumps({"messages": []})
+        if "/api/ext/v3/broadcasts" in url:
+            return 200, json.dumps({"items": []})
+        return 200, json.dumps({})
+
+    reader = engagement.LiveEngagementReader(transport=fake_transport)
+    now = timezone.now()
+    reader.pull(window_start=now - timedelta(days=1), window_end=now)
+
+    v3_calls = [u for u in urls_called if "/api/ext/v3/broadcasts" in u]
+    assert v3_calls, "expected a v3 broadcasts call"
+    assert all(u.startswith("https://live-mt-server.wati.io/api/ext/v3/broadcasts") for u in v3_calls)
+    v1_calls = [u for u in urls_called if "/getMessageTemplates" in u]
+    assert all(u.startswith("https://live-mt-server.wati.io/105355/api/v1/") for u in v1_calls)
+
+
+# --- FIX 2: a non-200 pull marks degraded=True, never a silent zero (T-033) -------
+
+def test_live_reader_404_on_broadcasts_marks_degraded(monkeypatch):
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/105355")
+    monkeypatch.setenv("WATI_API_TOKEN", "test-token")
+
+    def fake_transport(method, url, headers, body):
+        if "/getMessageTemplates" in url:
+            return 200, json.dumps({"messages": []})
+        if "/api/ext/v3/broadcasts" in url:
+            return 404, ""
+        return 200, json.dumps({})
+
+    reader = engagement.LiveEngagementReader(transport=fake_transport)
+    now = timezone.now()
+    pull = reader.pull(window_start=now - timedelta(days=1), window_end=now)
+
+    assert pull.degraded is True
+    assert pull.broadcasts == []
+
+
+@pytest.mark.django_db
+def test_degraded_pull_yields_no_live_data_digest_title(tenant, monkeypatch, tmp_path):
+    class _Degraded404Reader:
+        kind = "live"
+
+        def pull(self, *, window_start, window_end):
+            return engagement.EngagementPull(degraded=True)
+
+    monkeypatch.setattr(engagement, "get_engagement_reader", lambda: _Degraded404Reader())
+    monkeypatch.delenv("NOTIFIER_URL", raising=False)
+    set_tenant(engagement.REPORT_ENABLED_KEY, True, tenant_id=tenant.id)
+    set_tenant(engagement.REPORT_DIR_KEY, str(tmp_path), tenant_id=tenant.id)
+
+    result = engagement.run_report_for_tenant(tenant)
+    assert result["report"]["degraded"] is True
+    digest = engagement.build_digest(result["report"], lookback=7, report_path=result["report_path"])
+    assert "NO LIVE DATA" in digest["title"]
+
+
+# --- FIX 3: the management command lives under the installed app (T-033) ---------
+
+@pytest.mark.django_db
+def test_wa_engagement_report_command_is_discoverable(monkeypatch, tenant, tmp_path):
+    monkeypatch.delenv("WATI_API_ENDPOINT", raising=False)
+    monkeypatch.delenv("WATI_BASE_URL", raising=False)
+    monkeypatch.delenv("WATI_API_TOKEN", raising=False)
+    monkeypatch.delenv("NOTIFIER_URL", raising=False)
+    set_tenant(engagement.REPORT_ENABLED_KEY, True, tenant_id=tenant.id)
+    set_tenant(engagement.REPORT_DIR_KEY, str(tmp_path), tenant_id=tenant.id)
+
+    out = io.StringIO()
+    call_command("wa_engagement_report", "--json", stdout=out)
+    payload = json.loads(out.getvalue())
+    assert payload[tenant.slug]["skipped"] is False
 
 
 # --- notify_owner ------------------------------------------------------------------
