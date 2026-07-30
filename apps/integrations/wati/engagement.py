@@ -123,11 +123,17 @@ class LiveEngagementReader:
     def __init__(self, *, transport=None):
         base = os.environ.get("WATI_API_ENDPOINT") or os.environ.get("WATI_BASE_URL") or ""
         self.base_url = base.rstrip("/")
+        # /api/v1/* stays tenant-suffixed (self.base_url); /api/ext/v3/* is served off the
+        # bare host with NO tenant path — proven by T-031 evidence (pull_broadcasts.py).
+        # Derived from the configured v1 endpoint so there is no new env var (rail E-6).
+        parsed = urllib.parse.urlsplit(self.base_url)
+        self.v3_base_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
         raw_token = os.environ.get("WATI_API_TOKEN", "")
         self.token = raw_token[len("Bearer "):] if raw_token.startswith("Bearer ") else raw_token
         if not (self.base_url and self.token):
             raise RuntimeError("WATI_API_ENDPOINT / WATI_API_TOKEN not configured — cannot read live.")
         self._transport = transport or self._http
+        self._degraded = False
 
     def _http(self, method: str, url: str, headers: dict, body: bytes | None):
         headers = {**headers, "User-Agent": "GoRefer/1.0 (+https://gorefer.in)"}
@@ -144,26 +150,38 @@ class LiveEngagementReader:
     def _auth(self) -> dict:
         return {"Authorization": f"Bearer {self.token}"}
 
-    def _get_json(self, path: str) -> dict:
-        code, text = self._transport("GET", f"{self.base_url}{path}", self._auth(), None)
+    def _get_json(self, path: str, *, base: str | None = None) -> dict:
+        base_url = base if base is not None else self.base_url
+        code, text = self._transport("GET", f"{base_url}{path}", self._auth(), None)
         if not (200 <= code < 300):
             logger.warning("WATI engagement GET %s -> http %s", path, code)
+            self._degraded = True
             return {}
         try:
             return json.loads(text or "{}")
         except ValueError:
+            self._degraded = True
             return {}
 
     def pull(self, *, window_start, window_end) -> EngagementPull:
         """Pull broadcasts (paged, created-desc, until older than window_start),
         the template list, and — for numbers with a replied row — their inbound history.
-        Mirrors T-031's Appendix method exactly (#1-#6)."""
+        Mirrors T-031's Appendix method exactly (#1-#6).
+
+        `/api/v1/*` calls stay on the tenant-suffixed `self.base_url`; `/api/ext/v3/*`
+        calls use `self.v3_base_url` (bare host, no tenant path) — see __init__. Any
+        non-200 response along the way marks the pull degraded=True rather than
+        silently reporting zero counts as real.
+        """
+        self._degraded = False
         templates = (self._get_json("/api/v1/getMessageTemplates?pageSize=300").get("messages") or [])
 
         broadcasts: list = []
         page = 1
         while True:
-            payload = self._get_json(f"/api/ext/v3/broadcasts?page_size=100&page_number={page}")
+            payload = self._get_json(
+                f"/api/ext/v3/broadcasts?page_size=100&page_number={page}", base=self.v3_base_url,
+            )
             items = payload.get("items") or payload.get("data") or []
             if not items:
                 break
@@ -178,7 +196,7 @@ class LiveEngagementReader:
                 bid = b.get("id")
                 if bid is None:
                     continue
-                detail = self._get_json(f"/api/ext/v3/broadcasts/{bid}")
+                detail = self._get_json(f"/api/ext/v3/broadcasts/{bid}", base=self.v3_base_url)
                 broadcasts.append(detail or b)
             if stop or len(items) < 100:
                 break
@@ -199,7 +217,7 @@ class LiveEngagementReader:
             items = ((payload.get("messages") or {}).get("items")) or []
             responder_messages[number] = items
 
-        return EngagementPull(degraded=False, broadcasts=broadcasts, templates=templates,
+        return EngagementPull(degraded=self._degraded, broadcasts=broadcasts, templates=templates,
                                responder_messages=responder_messages)
 
 
