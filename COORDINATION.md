@@ -4622,3 +4622,37 @@ baseline (14/14), no migration drift. `npm run build:css` left `static/css/app.c
 
 **Landing:** PR against main, merge on green. **No deploy** — `deploy_tier: none`; prod stays
 where it is until the owner approves separately.
+
+## 2026-07-30 — STATUS: T-031 WhatsApp marketing engagement study (7-day, read-only) — Engineer
+
+**Mission:** T-031 — measure real WhatsApp delivery/response outcomes for the study window
+2026-07-23 00:00 IST → 2026-07-30 09:00 IST across all outbound Wati template sends (tenant
+105355), cross-checked against GoRefer's own event stream and follow-up window data. Read-only
+data study: zero WhatsApp sends, zero prod DB writes. Baseline for the daily recurring digest
+(T-032).
+
+**Headline findings:** 2,047 template sends in-window (1,991 MARKETING / 50 UTILITY / 6
+AUTHENTICATION). Only 51.3% reached the device or better (delivered+read+replied). The single
+largest failure cause is Meta's per-user marketing cap, error 131049 — 407 failures (59.7% of
+all 682 failures, 19.9% of all sends). Only 22 of 1,970 distinct recipients (1.1%) responded at
+all; of 45 in-window inbound messages from those responders, 18 were quick-reply button taps,
+1 a client-id keyword, 26 free text. URL-button clicks (the referral-link share button) are not
+tracked by Wati at all for any template (`isUrlBtnClickTrackingEnabled=false` tenant-wide) —
+GoRefer's own `share_intent` event (19 in-window) is the only signal for that interaction.
+`FollowupWindow`-based window-open count (2) and `ScheduledFollowup`-based count (4) disagree by
+design (current-state table vs append-only history) — both reported, not reconciled.
+
+**Finding for the backlog:** `apps/integrations/wati/status.py`'s `META_ERROR_MEANINGS` does not
+classify Meta error code `130472` (31 real occurrences in this pull), only `131047`. Not fixed
+here (read-only study, out of scope).
+
+**Deviations from contract-pinned sources (both from Stage A, unchanged in this retry):**
+gorefer's local `.env` has `WATI_*` empty on this box — used the shared `D:\Abhay\GLOBAL.env`
+cross-project credential for the same tenant (105355, confirmed via template-list smoke). SSH
+used the working `~/.ssh/config` alias `rfp-vps`, not the bare `root@72.61.240.224` the contract
+named (denied on this box).
+
+**Report:** `reports/wa-engagement/2026-07-30.md` (PII-masked aggregates only; raw pulls kept
+local to the run worktree, not committed).
+
+**PR:** #74 — merge on green, no deploy (docs-only, `deploy_tier: none`).
