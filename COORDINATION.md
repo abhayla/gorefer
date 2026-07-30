@@ -4656,3 +4656,19 @@ named (denied on this box).
 local to the run worktree, not committed).
 
 **PR:** #74 — merge on green, no deploy (docs-only, `deploy_tier: none`).
+
+
+---
+
+## 2026-07-30 STATUS — T-032 daily WA engagement report job + owner digest
+
+Productizes T-031's one-off engagement study into a scheduled daily job: trailing-24h/7d
+send/delivery/responder metrics, dated markdown report on disk, owner digest via the shared
+Notifier gateway (GLOBAL.md §2). Flag-gated OFF by default (4 new cascade config keys, CLAUDE.md
+§6e); schedule polls hourly, gates real work on a tenant's configured IST hour. Read path
+independent of ENABLE_WATI_SEND; degrades to a log-only report when WATI creds absent.
+
+gorefer onboarded to the shared Notifier gateway (apps/common/notify_owner.py, zero-dep stdlib
+client). Wati-GoRefer/Wati-Integration-Contract.md updated in the same commit (§10) per §6b.
+
+**PR:** #75 — merge on green CI.
