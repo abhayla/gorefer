@@ -285,6 +285,22 @@ Appendix):**
 - `GET /api/v1/getMessages/{number}` — inbound history for numbers with a
   `total_replied > 0` broadcast, to classify their response mode.
 
+**Two-base rule (T-033 fix — root cause of a live 404-on-every-page defect):** `/api/v1/*`
+calls stay on the tenant-suffixed base configured in `WATI_API_ENDPOINT`
+(e.g. `https://live-mt-server.wati.io/105355`), but `/api/ext/v3/*` calls go to the
+**same host with the tenant path stripped** (e.g. `https://live-mt-server.wati.io`) —
+proven by T-031's evidence scripts. `LiveEngagementReader` derives `v3_base_url` from
+the configured v1 endpoint at construction time (no new env var). Before this fix, v3
+calls kept the tenant suffix and got HTTP 404 on every broadcasts page.
+
+**Any non-200 on a pull marks that window `degraded=True`** — templates, broadcasts
+pages, broadcast detail, or `getMessages` — never a silently-fabricated zero. A
+degraded pull renders the same "NO LIVE DATA" marker as the creds-absent path, in
+both the report file (a banner above the counts) and the owner digest title; the
+counts underneath a degraded window are zero **by construction of the empty pull**,
+same as the pre-existing creds-absent path — the banner is what tells a reader they
+are not real counts.
+
 **Response classification reuses T-031's confirmed parser reality:** a tapped
 quick-reply button arrives in `getMessages` as a **plain-text row** matching the
 button's label — `buttonReply` and `interactive` are both `null` — not a structured
