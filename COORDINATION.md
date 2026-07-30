@@ -4672,3 +4672,39 @@ gorefer onboarded to the shared Notifier gateway (apps/common/notify_owner.py, z
 client). Wati-GoRefer/Wati-Integration-Contract.md updated in the same commit (§10) per §6b.
 
 **PR:** #75 — merge on green CI.
+
+---
+
+## 2026-07-30 STATUS — T-033 + T-034: WA engagement job made real (v3 host, degraded semantics, command, parser-vs-reality)
+
+Closes out the WA engagement chain (T-032 productized the job; these two fixed it against
+reality). Both PRs: merge on green CI.
+
+**T-033 (PR #76, merged 3e19038) — three defects, all live-verified fixed:**
+1. **v3 host.** `/api/ext/v3/*` calls were sent to the tenant-suffixed base
+   (`.../105355/api/ext/v3/...`) and 404'd on every page; the real v3 host has no tenant path.
+   `LiveEngagementReader` now derives a separate `v3_base_url` (bare host) from the configured
+   v1 endpoint at construction — no new env var.
+2. **Silent zero.** A non-200 anywhere in the pull previously fell through to an empty-but-not-
+   degraded result, so a broken pull rendered as "0 sends, all healthy" instead of "no live
+   data." Any non-200 now marks that window `degraded=True`.
+3. **Command location.** `wa_engagement_report` management command lived outside the installed
+   app path and was undiscoverable by `manage.py`; moved under `apps/integrations/wati/`.
+
+**T-034 (this entry's PR) — parser read imagined keys, not the real ones (root cause of prod
+still reporting `total_sends=0` / `degraded=false` after T-033's host fix landed):**
+
+| Endpoint | Was reading | Real key |
+|---|---|---|
+| `getMessageTemplates` | `messages` | `messageTemplates` |
+| `broadcasts` list | `items`/`data` | `broadcasts` |
+| `broadcasts/{id}` detail | top-level `total_sent` etc. | nested under `statistics` |
+| per-recipient outcome | invented `failed_meta_codes` field + `whatsapp_number` on the broadcast | `broadcasts/{id}/recipients` → `recipients` list, `contact_phone` + `status` + `failed_code` (not previously called at all) |
+
+Ground truth for every key: the T-031 real captured payloads
+(`GetWorkDone/evidence/2026-07-30-T-031/*.json`). Fixed all four, added fixture tests built from
+the real captures (masked numbers) that fail against the pre-fix parser, and distinguished a
+200-but-missing-key response (degraded, unknown shape) from a 200-with-empty-list response
+(legitimate zero) per endpoint. `Wati-GoRefer/Wati-Integration-Contract.md` §10 carries the full
+verified key map. Deployed + a supervised prod run verified real trailing-7d counts (see
+CURRENT-STATE.md for the run output).
