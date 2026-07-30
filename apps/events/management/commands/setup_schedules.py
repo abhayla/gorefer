@@ -50,6 +50,13 @@ SCHEDULES = {
     # 24h windows / start cadences — the reliable window-feed (Wati's inbound webhook is
     # chatbot-suppressed). Bounded to known/watch-listed mobiles; inert until followups_enabled.
     "followup_inbound_poll": ("apps.followups.tasks.poll_inbound_windows", 5),
+    # Hourly (60 min, T-032): the WA engagement report task fires every hour but only
+    # does real work during a tenant's configured `wa_engagement_report_hour_ist` —
+    # the minute-interval scheduler can't express "once daily at hour H" directly, so
+    # the hour gate lives inside run_scheduled_report (same "poll often, gate on
+    # config" idiom as followup_sweep gating on quiet hours). Inert per-tenant until
+    # `wa_engagement_report_enabled` is on (re-checked at fire time).
+    "wa_engagement_report_daily": ("apps.integrations.wati.engagement.run_scheduled_report", 60),
 }
 
 
