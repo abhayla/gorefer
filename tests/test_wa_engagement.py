@@ -47,13 +47,13 @@ TEMPLATES_FIXTURE = [
 BROADCASTS_FIXTURE = [
     {"id": "b1", "template_name": "gorefer_zerodha_hin_2026_07_10_v2", "category": "MARKETING",
      "total_sent": 1, "total_delivered": 1, "total_read": 1, "total_replied": 1, "total_failed": 0,
-     "whatsapp_number": "919876500001", "failed_meta_codes": []},
+     "whatsapp_number": "919876500001"},
     {"id": "b2", "template_name": "gorefer_zerodha_reopen_en", "category": "UTILITY",
      "total_sent": 0, "total_delivered": 1, "total_read": 1, "total_replied": 1, "total_failed": 0,
-     "whatsapp_number": "919876500002", "failed_meta_codes": []},
+     "whatsapp_number": "919876500002"},
     {"id": "b3", "template_name": "gorefer_zerodha_eng_leads_2026_07_10", "category": "MARKETING",
      "total_sent": 0, "total_delivered": 0, "total_read": 0, "total_replied": 0, "total_failed": 1,
-     "whatsapp_number": "919876500003", "failed_meta_codes": [131049]},
+     "whatsapp_number": "919876500003"},
 ]
 
 
@@ -66,6 +66,7 @@ def _pull():
             "919876500001": REPLIED_MESSAGES_1,
             "919876500002": REPLIED_MESSAGES_2,
         },
+        failure_codes={"131049": 1},
     )
 
 
@@ -148,9 +149,12 @@ def test_sends_by_category():
     assert by_cat["UTILITY"]["delivered"] == 1
 
 
-def test_failure_codes():
-    codes = engagement._failure_codes(BROADCASTS_FIXTURE)
-    assert codes == {131049: 1}
+def test_failure_codes_come_from_the_pull_not_a_broadcast_field():
+    # Real broadcasts carry no "failed_meta_codes" field (T-034) — failure codes are
+    # recipient-level (`failed_code` on /broadcasts/{id}/recipients rows) and are
+    # aggregated during pull(), not derived from the broadcast list.
+    pull = _pull()
+    assert dict(pull.failure_codes) == {"131049": 1}
 
 
 def test_responder_breakdown_classifies_real_samples():
@@ -315,9 +319,9 @@ def test_live_reader_pull_calls_v3_broadcasts_on_bare_host(monkeypatch):
     def fake_transport(method, url, headers, body):
         urls_called.append(url)
         if "/getMessageTemplates" in url:
-            return 200, json.dumps({"messages": []})
+            return 200, json.dumps({"messageTemplates": []})
         if "/api/ext/v3/broadcasts" in url:
-            return 200, json.dumps({"items": []})
+            return 200, json.dumps({"broadcasts": []})
         return 200, json.dumps({})
 
     reader = engagement.LiveEngagementReader(transport=fake_transport)
@@ -369,6 +373,205 @@ def test_degraded_pull_yields_no_live_data_digest_title(tenant, monkeypatch, tmp
     assert result["report"]["degraded"] is True
     digest = engagement.build_digest(result["report"], lookback=7, report_path=result["report_path"])
     assert "NO LIVE DATA" in digest["title"]
+
+
+# --- PARSER-VS-REALITY (T-034) ----------------------------------------------------
+# Fixtures below are REAL captured Wati payload shapes from the T-031 evidence pull
+# (GetWorkDone/evidence/2026-07-30-T-031/*.json), trimmed to the fields the parser
+# reads, with every phone number masked to 91XXXXXX-last4 and names truncated to a
+# first name. Field NAMES and NESTING are verbatim from the captures — that is the
+# thing under test.
+
+REAL_BROADCAST_SUMMARY = {
+    "id": "6a6ada71ab6c299dd3e9e76a",
+    "name": "wa_queue_30-Jul-2026",
+    "status": "completed",
+    "template_id": "6a68813ee1675239608a2990",
+    "created": "2026-07-29T12:00:33.975Z",
+    "last_updated": "2026-07-29T12:00:34.639Z",
+    "scheduled_at": "2026-07-29T12:00:33.975Z",
+}
+REAL_BROADCAST_DETAIL = {
+    "template_id": "6a68813ee1675239608a2990",
+    "statistics": {
+        "total_recipients": 1, "total_pending": 0, "total_queued": 0, "total_sending": 0,
+        "total_sent": 1, "total_delivered": 1, "total_read": 0, "total_replied": 1,
+        "total_failed": 0, "total_stopped": 0,
+    },
+}
+REAL_TEMPLATE = {
+    "id": "6a68813ee1675239608a2990",
+    "elementName": "gr_brokers_zerodha_refrecord_en_2026_07_28",
+    "category": "MARKETING",
+    "buttons": [{"type": "quick_reply", "parameter": {"text": "Know More"}}],
+}
+REAL_FAILED_RECIPIENT = {
+    "id": "6a6a00b1554b8364fe1b8af1", "contact_id": "6671239ac43f1ec885377c18",
+    "contact_name": "91XXXXXX1731", "contact_phone": "91XXXXXX1731", "status": "failed",
+    "failed_code": "131049", "created": "2026-07-29T13:31:29.014Z",
+}
+REAL_REPLIED_RECIPIENT = {
+    "id": "6a68b8af5e4345acd4cc00f7", "contact_id": "646d01d946569a95b35b4df2",
+    "contact_name": "Abhay", "contact_phone": "91XXXXXX9136", "status": "replied",
+    "failed_code": "", "created": "2026-07-28T14:11:59.187Z",
+}
+
+
+def _fixed_window():
+    end = datetime(2026, 7, 30, 3, 30, tzinfo=dt_timezone.utc)
+    start = end - timedelta(days=7)
+    return start, end
+
+
+def test_broadcasts_list_reads_the_real_top_level_key(monkeypatch):
+    """The v3 broadcasts LIST response nests rows under "broadcasts" — never
+    "items"/"data" (evidence: pull_broadcasts.py `d.get("broadcasts", [])`). This is
+    the regression the T-034 contract named: RED against any parser reading
+    items/data, because a real 200 body with only "broadcasts" would yield zero rows.
+    """
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/105355")
+    monkeypatch.setenv("WATI_API_TOKEN", "test-token")
+
+    def fake_transport(method, url, headers, body):
+        if "/getMessageTemplates" in url:
+            return 200, json.dumps({"messageTemplates": [REAL_TEMPLATE]})
+        if "/api/ext/v3/broadcasts/" in url and "/recipients" in url:
+            return 200, json.dumps({"recipients": [REAL_REPLIED_RECIPIENT]})
+        if url.endswith(f"/api/ext/v3/broadcasts/{REAL_BROADCAST_SUMMARY['id']}"):
+            return 200, json.dumps(REAL_BROADCAST_DETAIL)
+        if "/api/ext/v3/broadcasts?" in url:
+            return 200, json.dumps({"broadcasts": [REAL_BROADCAST_SUMMARY]})
+        return 200, json.dumps({})
+
+    reader = engagement.LiveEngagementReader(transport=fake_transport)
+    start, end = _fixed_window()
+    pull = reader.pull(window_start=start, window_end=end)
+
+    assert pull.degraded is False
+    assert len(pull.broadcasts) == 1
+    assert pull.broadcasts[0]["id"] == REAL_BROADCAST_SUMMARY["id"]
+
+
+def test_broadcasts_empty_list_is_a_real_zero_not_degraded(monkeypatch):
+    """A 200 body with `"broadcasts": []` is a legitimate zero — must NOT set degraded."""
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/105355")
+    monkeypatch.setenv("WATI_API_TOKEN", "test-token")
+
+    def fake_transport(method, url, headers, body):
+        if "/getMessageTemplates" in url:
+            return 200, json.dumps({"messageTemplates": []})
+        if "/api/ext/v3/broadcasts?" in url:
+            return 200, json.dumps({"broadcasts": []})
+        return 200, json.dumps({})
+
+    reader = engagement.LiveEngagementReader(transport=fake_transport)
+    start, end = _fixed_window()
+    pull = reader.pull(window_start=start, window_end=end)
+
+    assert pull.degraded is False
+    assert pull.broadcasts == []
+
+
+def test_broadcasts_key_absent_on_200_is_degraded_unknown_shape(monkeypatch):
+    """A 200 body missing the "broadcasts" key entirely is an unknown shape — must
+    be marked degraded, distinct from a present-but-empty list (T-034 DoD)."""
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/105355")
+    monkeypatch.setenv("WATI_API_TOKEN", "test-token")
+
+    def fake_transport(method, url, headers, body):
+        if "/getMessageTemplates" in url:
+            return 200, json.dumps({"messageTemplates": []})
+        if "/api/ext/v3/broadcasts?" in url:
+            return 200, json.dumps({"unexpected_shape": True})
+        return 200, json.dumps({})
+
+    reader = engagement.LiveEngagementReader(transport=fake_transport)
+    start, end = _fixed_window()
+    pull = reader.pull(window_start=start, window_end=end)
+
+    assert pull.degraded is True
+    assert pull.broadcasts == []
+
+
+def test_templates_list_reads_messageTemplates_key_not_messages(monkeypatch):
+    """`getMessageTemplates` nests rows under "messageTemplates" (evidence:
+    templates.json top-level keys are result/messageTemplates/link) — never "messages"."""
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/105355")
+    monkeypatch.setenv("WATI_API_TOKEN", "test-token")
+
+    def fake_transport(method, url, headers, body):
+        if "/getMessageTemplates" in url:
+            return 200, json.dumps({"messageTemplates": [REAL_TEMPLATE]})
+        if "/api/ext/v3/broadcasts?" in url:
+            return 200, json.dumps({"broadcasts": []})
+        return 200, json.dumps({})
+
+    reader = engagement.LiveEngagementReader(transport=fake_transport)
+    start, end = _fixed_window()
+    pull = reader.pull(window_start=start, window_end=end)
+
+    assert pull.degraded is False
+    assert pull.templates == [REAL_TEMPLATE]
+
+
+def test_broadcast_detail_stats_come_from_nested_statistics_key(monkeypatch):
+    """The per-broadcast detail response nests counts under "statistics" (evidence:
+    pull_stats.py `d.get("statistics")`) — a parser reading total_sent etc. at the
+    detail response's top level gets nothing, not zero-but-real."""
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/105355")
+    monkeypatch.setenv("WATI_API_TOKEN", "test-token")
+
+    def fake_transport(method, url, headers, body):
+        if "/getMessageTemplates" in url:
+            return 200, json.dumps({"messageTemplates": [REAL_TEMPLATE]})
+        if "/api/ext/v3/broadcasts/" in url and "/recipients" in url:
+            return 200, json.dumps({"recipients": [REAL_REPLIED_RECIPIENT]})
+        if url.endswith(f"/api/ext/v3/broadcasts/{REAL_BROADCAST_SUMMARY['id']}"):
+            return 200, json.dumps(REAL_BROADCAST_DETAIL)
+        if "/api/ext/v3/broadcasts?" in url:
+            return 200, json.dumps({"broadcasts": [REAL_BROADCAST_SUMMARY]})
+        return 200, json.dumps({})
+
+    reader = engagement.LiveEngagementReader(transport=fake_transport)
+    start, end = _fixed_window()
+    pull = reader.pull(window_start=start, window_end=end)
+
+    b = pull.broadcasts[0]
+    assert b["total_sent"] == 1
+    assert b["total_replied"] == 1
+    assert b["category"] == "MARKETING"
+    assert b["template_name"] == "gr_brokers_zerodha_refrecord_en_2026_07_28"
+
+
+def test_failure_codes_and_responders_come_from_recipients_endpoint(monkeypatch):
+    """Per-recipient outcome (replied/failed + failed_code) is on
+    `/broadcasts/{id}/recipients` (`{"recipients": [...]}`), keyed by `contact_phone`
+    and `failed_code` — broadcasts carry no "failed_meta_codes"/"whatsapp_number" field."""
+    monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/105355")
+    monkeypatch.setenv("WATI_API_TOKEN", "test-token")
+
+    failed_detail = {
+        "template_id": REAL_BROADCAST_SUMMARY["template_id"],
+        "statistics": {**REAL_BROADCAST_DETAIL["statistics"], "total_replied": 0, "total_failed": 1},
+    }
+
+    def fake_transport(method, url, headers, body):
+        if "/getMessageTemplates" in url:
+            return 200, json.dumps({"messageTemplates": [REAL_TEMPLATE]})
+        if "/recipients" in url:
+            return 200, json.dumps({"recipients": [REAL_FAILED_RECIPIENT]})
+        if url.endswith(f"/api/ext/v3/broadcasts/{REAL_BROADCAST_SUMMARY['id']}"):
+            return 200, json.dumps(failed_detail)
+        if "/api/ext/v3/broadcasts?" in url:
+            return 200, json.dumps({"broadcasts": [REAL_BROADCAST_SUMMARY]})
+        return 200, json.dumps({})
+
+    reader = engagement.LiveEngagementReader(transport=fake_transport)
+    start, end = _fixed_window()
+    pull = reader.pull(window_start=start, window_end=end)
+
+    assert pull.failure_codes == {"131049": 1}
+    assert pull.responder_messages == {}  # no replied recipients in this fixture
 
 
 # --- FIX 3: the management command lives under the installed app (T-033) ---------

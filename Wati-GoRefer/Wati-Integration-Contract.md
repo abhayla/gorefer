@@ -312,6 +312,27 @@ against the live template's quick-reply labels first, then a `client_id` shape r
 masking discipline as every other customer-facing/PII-adjacent Wati artifact in this
 repo.
 
+**Verified payload key map (T-034 fix — the parser previously read imagined keys the
+live API never returns; every mismatch below was checked against T-031's real capture
+files, not guessed):**
+
+| Endpoint | Real top-level key | Notes |
+|---|---|---|
+| `GET /api/v1/getMessageTemplates` | `messageTemplates` (list) | Was read as `messages` — always empty, so quick-reply labels never matched and every reply fell through to `keyword_trigger`/`free_text`. |
+| `GET /api/ext/v3/broadcasts` (list) | `broadcasts` (list) | Was read as `items`/`data` — the T-033-era defect this contract names outright: `total_sends=0` with `degraded=false` even after the v3-host fix. |
+| `GET /api/ext/v3/broadcasts/{id}` (detail) | `statistics` (object: `total_sent`/`total_delivered`/`total_read`/`total_replied`/`total_failed`/…) | Was read at the response's top level — the detail call returns the counts nested one level down; a naive top-level read gets nothing. |
+| `GET /api/ext/v3/broadcasts/{id}/recipients` | `recipients` (list; `contact_phone`, `status` = `replied`/`failed`/…, `failed_code`) | **Not previously called at all.** The old code invented a `failed_meta_codes` field on the broadcast object and a `whatsapp_number`/`waId`/`recipient` field to identify a single "the" responder per broadcast — neither exists; a broadcast fans out to many recipients, and per-recipient outcome (who replied, who failed with what code) only exists on this endpoint. |
+| `GET /api/v1/getMessages/{number}` | `messages.items` (list) | Already correct — verified unchanged against `getmessages_raw.json`. |
+
+Category and template name are **not** on the broadcast object at all (list or
+detail) — they are resolved by joining the broadcast's `template_id` against the
+`messageTemplates` list (`elementName`, `category`).
+
+**Zero vs unknown, applied per-endpoint:** a 200 response whose body is missing the
+expected top-level key (`broadcasts`, `messageTemplates`) is an unknown shape and
+marks the pull `degraded=True`; a 200 response with the key present but an empty list
+is a legitimate zero and does not.
+
 ## 11. Related
 
 - Channel health, template approvals, nightly report: `C:\Abhay\5Wealths\Wati-Project\`

@@ -93,9 +93,10 @@ class EngagementPull:
     """Raw data pulled from Wati for one window, or a degraded/empty marker."""
 
     degraded: bool
-    broadcasts: list = field(default_factory=list)          # per-broadcast stat dicts
+    broadcasts: list = field(default_factory=list)          # merged: summary + statistics + template
     templates: list = field(default_factory=list)           # template list (name/category/buttons)
-    responder_messages: dict = field(default_factory=dict)   # number -> list of getMessages items
+    responder_messages: dict = field(default_factory=dict)  # number -> list of getMessages items
+    failure_codes: dict = field(default_factory=dict)       # failed_code -> count (recipient-level)
 
 
 class LogOnlyEngagementReader:
@@ -165,24 +166,42 @@ class LiveEngagementReader:
 
     def pull(self, *, window_start, window_end) -> EngagementPull:
         """Pull broadcasts (paged, created-desc, until older than window_start),
-        the template list, and — for numbers with a replied row — their inbound history.
-        Mirrors T-031's Appendix method exactly (#1-#6).
+        the template list, and — for numbers with a replied/failed row — their
+        recipient-level detail. Mirrors T-031's Appendix method exactly (#1-#6).
 
         `/api/v1/*` calls stay on the tenant-suffixed `self.base_url`; `/api/ext/v3/*`
         calls use `self.v3_base_url` (bare host, no tenant path) — see __init__. Any
-        non-200 response along the way marks the pull degraded=True rather than
-        silently reporting zero counts as real.
+        non-200 response, or a 200 whose body is missing the expected top-level key
+        (unknown shape), marks the pull degraded=True rather than silently reporting
+        zero counts as real. A present-but-empty list is a legitimate zero.
+
+        Real payload shapes (verified against T-031 evidence, not guessed):
+        - `GET /api/v1/getMessageTemplates` → `{"messageTemplates": [...]}` (NOT "messages").
+        - `GET /api/ext/v3/broadcasts` → `{"broadcasts": [...]}` (NOT "items"/"data"); each
+          summary row carries `id`, `name`, `status`, `template_id`, `created` — no stats,
+          no category.
+        - `GET /api/ext/v3/broadcasts/{id}` → `{"statistics": {"total_sent": ..., ...}}` —
+          the counts are nested under "statistics", not top-level on the detail response.
+        - `GET /api/ext/v3/broadcasts/{id}/recipients` → `{"recipients": [...]}`, each with
+          `contact_phone`, `status` ("replied"/"failed"/...), `failed_code`.
         """
         self._degraded = False
-        templates = (self._get_json("/api/v1/getMessageTemplates?pageSize=300").get("messages") or [])
+        tpl_payload = self._get_json("/api/v1/getMessageTemplates?pageSize=300")
+        if "messageTemplates" not in tpl_payload:
+            self._degraded = True
+        templates = tpl_payload.get("messageTemplates") or []
+        template_map = {t.get("id"): t for t in templates if t.get("id")}
 
-        broadcasts: list = []
+        summaries: list = []
         page = 1
         while True:
             payload = self._get_json(
                 f"/api/ext/v3/broadcasts?page_size=100&page_number={page}", base=self.v3_base_url,
             )
-            items = payload.get("items") or payload.get("data") or []
+            if "broadcasts" not in payload:
+                self._degraded = True
+                break
+            items = payload.get("broadcasts") or []
             if not items:
                 break
             stop = False
@@ -193,23 +212,48 @@ class LiveEngagementReader:
                     continue
                 if created is not None and created > window_end:
                     continue
-                bid = b.get("id")
-                if bid is None:
+                if b.get("id") is None:
                     continue
-                detail = self._get_json(f"/api/ext/v3/broadcasts/{bid}", base=self.v3_base_url)
-                broadcasts.append(detail or b)
+                summaries.append(b)
             if stop or len(items) < 100:
                 break
             page += 1
             if page > 50:  # hard safety cap — never loop unbounded on a live API
                 break
 
+        broadcasts: list = []
+        for b in summaries:
+            bid = b["id"]
+            detail = self._get_json(f"/api/ext/v3/broadcasts/{bid}", base=self.v3_base_url)
+            stats = detail.get("statistics") or {}
+            tpl = template_map.get(b.get("template_id")) or {}
+            merged = {
+                **b,
+                **stats,
+                "category": (tpl.get("category") or "UNKNOWN").upper(),
+                "template_name": tpl.get("elementName") or b.get("name") or "unknown",
+            }
+            broadcasts.append(merged)
+
         responder_numbers = set()
+        failure_codes: dict = {}
         for b in broadcasts:
-            if int(b.get("total_replied") or 0) > 0:
-                num = b.get("whatsapp_number") or b.get("waId") or b.get("recipient")
-                if num:
-                    responder_numbers.add(str(num))
+            if int(b.get("total_replied") or 0) <= 0 and int(b.get("total_failed") or 0) <= 0:
+                continue
+            rpayload = self._get_json(
+                f"/api/ext/v3/broadcasts/{b['id']}/recipients?page_size=100&page_number=1",
+                base=self.v3_base_url,
+            )
+            recipients = rpayload.get("recipients") or []
+            for r in recipients:
+                status = str(r.get("status") or "").lower()
+                if status == "replied":
+                    num = r.get("contact_phone")
+                    if num:
+                        responder_numbers.add(str(num))
+                elif status == "failed":
+                    code = r.get("failed_code") or "UNKNOWN"
+                    failure_codes[code] = failure_codes.get(code, 0) + 1
 
         responder_messages: dict = {}
         for number in responder_numbers:
@@ -218,7 +262,7 @@ class LiveEngagementReader:
             responder_messages[number] = items
 
         return EngagementPull(degraded=self._degraded, broadcasts=broadcasts, templates=templates,
-                               responder_messages=responder_messages)
+                               responder_messages=responder_messages, failure_codes=failure_codes)
 
 
 def get_engagement_reader():
@@ -317,14 +361,6 @@ def _sends_by_template(broadcasts: list) -> dict:
     return out
 
 
-def _failure_codes(broadcasts: list) -> dict:
-    counts: dict = {}
-    for b in broadcasts:
-        for code in (b.get("failed_meta_codes") or []):
-            counts[code] = counts.get(code, 0) + 1
-    return counts
-
-
 def _responder_breakdown(pull: EngagementPull) -> dict:
     labels = _quick_reply_labels(pull.templates)
     breakdown = {"quick_reply_button": 0, "keyword_trigger": 0, "free_text": 0}
@@ -376,7 +412,7 @@ def compute_window_metrics(tenant, pull: EngagementPull, window_start, window_en
         "degraded": pull.degraded,
         "by_category": _sends_by_category(pull.broadcasts),
         "by_template": _sends_by_template(pull.broadcasts),
-        "failure_codes": _failure_codes(pull.broadcasts),
+        "failure_codes": dict(pull.failure_codes),
         "total_sends": len(pull.broadcasts),
     }
     metrics["responders"] = _responder_breakdown(pull)
