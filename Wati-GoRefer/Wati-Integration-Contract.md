@@ -253,7 +253,50 @@ fallback, the spec rule) raises `AssistedCaptureError` and the capture is reject
 same external behavior as before, just a narrower set of accepted ids on the happy
 path.
 
-## 10. Related
+## 10. Read-only engagement reporting — `apps/integrations/wati/engagement.py` (T-032)
+
+A daily scheduled job (`wa_engagement_report_daily`, django-q, fires at
+`wa_engagement_report_hour_ist` — default 21:00 IST) computes trailing-24h and
+trailing-`wa_engagement_lookback_days` (default 7) WhatsApp engagement metrics and
+writes a dated markdown report to `wa_engagement_report_dir` (default
+`var/reports/wa-engagement/YYYY-MM-DD.md`), then posts an owner digest via the shared
+Notifier gateway (`apps.common.notify_owner`). **This is a READ path — it sends
+nothing to any customer and never writes to Wati.** The only outbound message it
+produces is the owner digest.
+
+**Gating differs from the send adapters.** `get_engagement_reader()` swaps
+`LiveEngagementReader` / `LogOnlyEngagementReader` on whether `WATI_API_ENDPOINT` /
+`WATI_API_TOKEN` are present in env — **not** on `ENABLE_WATI_SEND`, since reading
+requires no send flag. The job itself is gated per-tenant by the cascade key
+`wa_engagement_report_enabled` (default `False`); with it off the job is a no-op for
+that tenant. With creds absent it still writes a report, explicitly marked "NO LIVE
+DATA — WATI credentials absent" rather than crashing (mirrors the
+LiveWatiAdapter/LogOnlyWatiAdapter degraded-mode philosophy already used for sends).
+
+**Endpoints read (mirrors T-031's manual pull, `reports/wa-engagement/2026-07-30.md`
+Appendix):**
+
+- `GET /api/v1/getMessageTemplates` — template list (name, category, quick-reply
+  button labels), used to classify a responder's reply as `quick_reply_button` vs
+  `keyword_trigger` (a bare `client_id`-shaped token) vs `free_text`.
+- `GET /api/ext/v3/broadcasts` (paged, newest-first, stopped once older than the
+  window start) + `GET /api/ext/v3/broadcasts/{id}` — per-broadcast send/delivery/
+  read/reply/failure counts and Meta failure codes, bucketed by template + category.
+- `GET /api/v1/getMessages/{number}` — inbound history for numbers with a
+  `total_replied > 0` broadcast, to classify their response mode.
+
+**Response classification reuses T-031's confirmed parser reality:** a tapped
+quick-reply button arrives in `getMessages` as a **plain-text row** matching the
+button's label — `buttonReply` and `interactive` are both `null` — not a structured
+button-reply payload. `classify_response_mode()` matches the (case-folded) text
+against the live template's quick-reply labels first, then a `client_id` shape regex
+(keyword trigger), falling back to free text.
+
+**Numbers are masked in the rendered report** (last-4 only, e.g. `…5000`) — same
+masking discipline as every other customer-facing/PII-adjacent Wati artifact in this
+repo.
+
+## 11. Related
 
 - Channel health, template approvals, nightly report: `C:\Abhay\5Wealths\Wati-Project\`
 - Templates GoRefer uses: [`Wati-GoRefer-Templates.md`](./Wati-GoRefer-Templates.md)
