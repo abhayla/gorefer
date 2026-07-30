@@ -11,7 +11,28 @@
 > wins; if either disagrees with the live system, **the live system wins** — verify, don't
 > trust (commands at the bottom).
 >
-> **Last updated:** 2026-07-28 19:15 IST (**DEPLOYED to prod: `31fc244` = main tip** — share-kit preview fix LIVE (verified: /share/wa/ redirect now emits https://gorefer.in/r/wa/{id} BEFORE the disclosures link) + Phase-0 rails (a23a58e, zero-behavior-change; seed_program run — locked rows exist) + docs. Services restarted, both active. NOTE: pre-deploy DEPLOYED_SHA read `2accaa1` (Jul-27 deploy), NOT this table's stale `1be4c34` — table now corrected) — earlier same day (share-kit preview fix PR #67 squash-merged to main `118ddfd` — https:// scheme on the kit referral link + preview-order test, so WhatsApp previews the referral landing not the Disclosures page; **NOT deployed — prod stays `1be4c34`**, main is ahead of prod) — prior 2026-07-25 (recipient-identity resolver LIVE, `c050d19` — PR #42; prospect
+> **Last updated:** 2026-07-30 14:00 IST (**DEPLOYED to prod: `d342831` = main tip** — the
+> T-032/T-033/T-034 daily WA-engagement-report chain LIVE and verified with REAL numbers:
+> PR #75 (feature: `wa_engagement_report` command + `apps/integrations/wati/engagement.py` +
+> `wa_engagement_report_daily` schedule, hourly poll gated on `wa_engagement_report_hour_ist`,
+> default 21 IST) + PR #76 (fix: v3 bare-host base, degraded-on-non-200, command moved to the
+> installed-app location `apps/integrations/management/commands/`) + PR #77 (fix: parser reads
+> the REAL Wati payload keys — `messageTemplates`, `broadcasts`, nested `statistics`,
+> `recipients`; ground truth = T-031 captured payloads). Config cascade for PIFS:
+> `wa_engagement_report_enabled=True`, hour 21 IST, lookback 7d, reports at
+> `/var/www/gorefer/var/reports/wa-engagement/` (www-data-owned). Owner digest goes via the
+> shared **Notifier gateway** (localhost:3300, `projects.gorefer` → Telegram ops chat;
+> NOTIFIER_URL/KEY in prod .env). Supervised prod run 2026-07-30 13:57 IST: degraded=false,
+> trailing-7d sends **1,930** (MARKETING 1,873 / UTILITY 51 / AUTH 6), failure codes
+> 131049=382 · 131026=234 · 130472=27, responders 20 (17 quick-reply taps), windows 4,
+> share_intent 19 / clicks 34 — consistent with the T-031 verified baseline (2,047 sends on
+> the ~1-day-earlier window; report `reports/wa-engagement/2026-07-30.md`, PR #74). Digest
+> POST 202 accepted, dedupeKey `wa-engagement-2026-07-30`. **CORRECTION:** the T-034
+> COORDINATION entry's closing claim ("Deployed + a supervised prod run verified…") was
+> written by the worker BEFORE the deploy happened (it ran out of budget); the deploy + run
+> above were executed and verified by the dispatcher at 13:54–13:57 IST — the claim is true
+> only as of then. Fleet records: GetWorkDone T-031…T-034, evidence
+> `GetWorkDone/evidence/2026-07-30-T-031/` + `…-T-032-034/`.) — prior 2026-07-28 19:15 IST (**DEPLOYED to prod: `31fc244` = main tip** — share-kit preview fix LIVE (verified: /share/wa/ redirect now emits https://gorefer.in/r/wa/{id} BEFORE the disclosures link) + Phase-0 rails (a23a58e, zero-behavior-change; seed_program run — locked rows exist) + docs. Services restarted, both active. NOTE: pre-deploy DEPLOYED_SHA read `2accaa1` (Jul-27 deploy), NOT this table's stale `1be4c34` — table now corrected) — earlier same day (share-kit preview fix PR #67 squash-merged to main `118ddfd` — https:// scheme on the kit referral link + preview-order test, so WhatsApp previews the referral landing not the Disclosures page; **NOT deployed — prod stays `1be4c34`**, main is ahead of prod) — prior 2026-07-25 (recipient-identity resolver LIVE, `c050d19` — PR #42; prospect
 > nudges now carry the credit-preserving referral link `gorefer.in/r/wa/{referrer_client_id}` (or
 > `/open` fallback), referrer recipients suppressed from the prospect copy, language from the
 > existing `referrer_language` rule; re-seeded 7 rules with the `{link}` CTA; resolve-on-send, no
