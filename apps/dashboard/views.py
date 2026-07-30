@@ -35,10 +35,35 @@ class DashboardLoginView(LoginView):
     failures per client IP in the DB cache; past RATELIMIT_LOGIN_MAX within the window
     the form is refused (locked) until the window elapses. A successful login clears
     the counter. Disabled under DEBUG (RATELIMIT_ENABLED off) so dev/CI isn't locked.
+
+    `redirect_authenticated_user` is deliberately NOT set: stock LoginView bounces
+    EVERY authenticated user to the success URL, and an M13 referrer session
+    (is_staff=False, apps/accounts) bounced straight back off `_staff_required` —
+    an infinite redirect loop (ERR_TOO_MANY_REDIRECTS). `dispatch()` below keeps the
+    convenience redirect for staff only; a non-staff visitor gets the login page with
+    a sign-out notice instead.
     """
 
     template_name = "dashboard/login.html"
-    redirect_authenticated_user = True
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated and request.user.is_staff:
+            redirect_to = self.get_success_url()
+            if redirect_to == request.path:
+                # Same guard stock LoginView.dispatch uses — an infinite loop here
+                # is a misconfiguration, not something to paper over.
+                raise ValueError(
+                    "Redirection loop for authenticated user detected. Check that "
+                    "your LOGIN_REDIRECT_URL doesn't point to a login page."
+                )
+            return redirect(redirect_to)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        user = self.request.user
+        ctx["signed_in_non_staff"] = user.is_authenticated and not user.is_staff
+        return ctx
 
     def _lock_key(self):
         from apps.common.ratelimit import client_ip

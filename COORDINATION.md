@@ -4595,3 +4595,30 @@ preview the referral landing, closing screenshot issues 1+2 end-to-end. Note: th
 carried Phase-0 (a23a58e, zero-behavior-change rails) and docs #63/#64/#66 — main-tip deploy per
 trunk discipline. CURRENT-STATE's Deployed-SHA row was stale (said 1be4c34 while the box ran
 2accaa1 since Jul-27) — corrected in the same turn.
+
+### 2026-07-30 — STATUS: T-030 admin-login redirect loop fixed (PR #PENDING) — Engineer
+
+**What:** `/admin-panel/login/` returned ERR_TOO_MANY_REDIRECTS in the browser for anyone
+holding an M13 referrer session. **Root cause:** `DashboardLoginView.redirect_authenticated_user
+= True` (apps/dashboard/views.py) bounced EVERY authenticated user to `/admin-panel/`, and
+`_staff_required` bounced that non-staff user (`is_staff=False`, the session class
+`apps/accounts/service.py` mints) straight back to the login page — an infinite loop. A
+cookie-less request was unaffected, which is why the page looked fine to curl.
+
+**Fix:** dropped `redirect_authenticated_user`; `dispatch()` now performs the convenience
+redirect **only when `request.user.is_staff`** (keeping stock LoginView's same-URL loop guard).
+A non-staff visitor gets HTTP 200 with the login form plus a notice — "You're signed in as a
+referrer. Sign out to access the admin panel." — and a POST sign-out control targeting
+`dashboard_logout` (unconditional route; `referrer_logout` is flag-gated). `_staff_required` is
+untouched.
+
+**Verification:** three new regression tests in `tests/test_dashboard.py` —
+`test_login_page_does_not_loop_for_authenticated_non_staff` (200 + notice + logout URL; fails
+`assert 302 == 200` on pre-fix code), `test_login_page_still_redirects_authenticated_staff`
+(302 → `/admin-panel/`), `test_login_page_renders_form_for_anonymous` (200 + form). Full local
+gate green: 706 passed (`-n 4`), ruff clean, `manage.py check` clean, architecture gate at
+baseline (14/14), no migration drift. `npm run build:css` left `static/css/app.css` byte-identical
+(the notice reuses existing utility classes), so no CSS is committed.
+
+**Landing:** PR against main, merge on green. **No deploy** — `deploy_tier: none`; prod stays
+where it is until the owner approves separately.
