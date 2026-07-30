@@ -373,3 +373,52 @@ def test_dashboard_routes_absent_when_flag_off(db, settings):
         settings.FEATURE_FLAGS = {**settings.FEATURE_FLAGS, "ENABLE_ADMIN_DASHBOARD": True}
         importlib.reload(gorefer.urls)
         clear_url_caches()
+
+
+# --- admin login: no redirect loop for authenticated non-staff sessions ----
+# An M13 referrer session is a normal Django session with is_staff=False. When
+# DashboardLoginView redirected EVERY authenticated user to /admin-panel/, that
+# user bounced straight back off _staff_required to the login page and looped
+# (ERR_TOO_MANY_REDIRECTS in the browser). Only staff may be redirected away.
+
+@pytest.fixture
+def program(db):
+    call_command("seed_program")
+
+
+def test_login_page_does_not_loop_for_authenticated_non_staff(program):
+    User = get_user_model()
+    User.objects.create_user(username="referrer@pifs.in", password="pw12345!", is_staff=False)
+    c = Client()
+    c.login(username="referrer@pifs.in", password="pw12345!")
+
+    resp = c.get("/admin-panel/login/?next=/admin-panel/")
+
+    assert resp.status_code == 200
+    assert "dashboard/login.html" in [t.name for t in resp.templates]
+    html = resp.content.decode()
+    assert "signed in as a referrer. Sign out to access the admin panel." in html
+    assert "/admin-panel/logout/" in html
+
+
+def test_login_page_still_redirects_authenticated_staff(program):
+    User = get_user_model()
+    User.objects.create_user(
+        username="admin@pifs.in", email="admin@pifs.in", password="pw12345!", is_staff=True
+    )
+    c = Client()
+    c.login(username="admin@pifs.in", password="pw12345!")
+
+    resp = c.get("/admin-panel/login/")
+
+    assert resp.status_code == 302
+    assert resp.headers["Location"] == "/admin-panel/"
+
+
+def test_login_page_renders_form_for_anonymous(program):
+    resp = Client().get("/admin-panel/login/")
+
+    assert resp.status_code == 200
+    html = resp.content.decode()
+    assert 'name="username"' in html
+    assert 'name="password"' in html
