@@ -4596,7 +4596,7 @@ carried Phase-0 (a23a58e, zero-behavior-change rails) and docs #63/#64/#66 — m
 trunk discipline. CURRENT-STATE's Deployed-SHA row was stale (said 1be4c34 while the box ran
 2accaa1 since Jul-27) — corrected in the same turn.
 
-### 2026-07-30 — STATUS: T-030 admin-login redirect loop fixed (PR #PENDING) — Engineer
+### 2026-07-30 — STATUS: T-030 admin-login redirect loop fixed (PR #72) — Engineer
 
 **What:** `/admin-panel/login/` returned ERR_TOO_MANY_REDIRECTS in the browser for anyone
 holding an M13 referrer session. **Root cause:** `DashboardLoginView.redirect_authenticated_user
