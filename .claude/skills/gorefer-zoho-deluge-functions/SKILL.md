@@ -51,7 +51,7 @@ sweeps (wa_utility_fallback_sweep, wa_callcheck_sweep, wa_visitcheck_sweep)
 
 | Function (automation.*) | Purpose | Schedule | State 2026-07-31 |
 |---|---|---|---|
-| wa_utility_fallback_sweep | §6f UTILITY fallback for cap-blocked MARKETING failures | "WA Utility Fallback Sweep" every 2h + REST zapikey | **LIVE — real sends, EN lane** (enabled=true, dry_run=false since 2026-07-31 17:18 IST); HI lane empty by owner ruling (ROUND 7 deferred) |
+| wa_utility_fallback_sweep | §6f UTILITY fallback for cap-blocked MARKETING failures | "WA Utility Fallback Sweep" every 2h + REST zapikey | **LIVE + E2E-PROVEN** (first real send DELIVERED 2026-07-31 18:44 IST to the allowlisted test number, terminal-status verified); EN lane only, HI deferred |
 | wa_callcheck_sweep | Post-callback feedback check | "WA Callcheck Sweep" every 2h | Pasted; callcheck_enabled unset → no-op |
 | wa_visitcheck_sweep | Post-office-visit feedback | "WA Visitcheck Sweep" every 2h | Pasted; visitcheck_enabled unset → no-op |
 | schedule_wa_*_sweep ×3 | Schedule-category wrappers for the above | (they ARE the schedule targets) | Pasted + scheduled |
@@ -80,6 +80,19 @@ sweeps (wa_utility_fallback_sweep, wa_callcheck_sweep, wa_visitcheck_sweep)
 6. searchRecords has no `:in:` operator (INVALID_DATA/[BIGINT]) — loop equals-queries instead.
 7. Every zoho.crm.* call that can return null goes through `ifnull()`; `.size()` on a failed
    search result throws.
+
+18. **Datetime FIELD writes need the ISO string form** — `put("Eligible_After", nowT)` with a
+   raw Deluge time object fails createRecord with INVALID_DATA; use
+   `nowT.toString("yyyy-MM-dd'T'HH:mm:ss")` (2026-07-31, first live EN E2E test; precedent
+   was already documented in wa_reconcile_status_v2.dg:343 — READ the existing functions'
+   inline comments before writing new ones, they are case law).
+
+19. **Params_JSON is an ARRAY of {name,value} pairs** — `[{"name":"name","value":"Abhay"}]`;
+   a bare map is silently rejected by Wati's sendTemplateMessage (2026-07-31 E2E; the
+   journey-nudge functions were the precedent).
+20. **Guard every subString** — `resp.toString().subString(0,200)` on a short error response
+   crashed the ENTIRE gatekeeper run, blocking all queue rows behind it (2026-07-31 E2E).
+   Length-check before slicing; a truncation helper failing is worse than no truncation.
 
 **Data reality (this org — verified via getFields/REST, do not trust memory)**
 8. `Referrers.Client_Id` (underscore) vs `Contacts.ClientId` (no underscore) — not a typo.
