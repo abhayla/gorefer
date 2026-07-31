@@ -81,6 +81,12 @@ sweeps (wa_utility_fallback_sweep, wa_callcheck_sweep, wa_visitcheck_sweep)
 7. Every zoho.crm.* call that can return null goes through `ifnull()`; `.size()` on a failed
    search result throws.
 
+18. **Datetime FIELD writes need the ISO string form** — `put("Eligible_After", nowT)` with a
+   raw Deluge time object fails createRecord with INVALID_DATA; use
+   `nowT.toString("yyyy-MM-dd'T'HH:mm:ss")` (2026-07-31, first live EN E2E test; precedent
+   was already documented in wa_reconcile_status_v2.dg:343 — READ the existing functions'
+   inline comments before writing new ones, they are case law).
+
 **Data reality (this org — verified via getFields/REST, do not trust memory)**
 8. `Referrers.Client_Id` (underscore) vs `Contacts.ClientId` (no underscore) — not a typo.
 9. `Contacts.Mobile` stores the **10-digit national** number; `WA_Send_Queue.Mobile` is
