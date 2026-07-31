@@ -51,7 +51,7 @@ sweeps (wa_utility_fallback_sweep, wa_callcheck_sweep, wa_visitcheck_sweep)
 
 | Function (automation.*) | Purpose | Schedule | State 2026-07-31 |
 |---|---|---|---|
-| wa_utility_fallback_sweep | §6f UTILITY fallback for cap-blocked MARKETING failures | "WA Utility Fallback Sweep" every 2h + REST zapikey | **LIVE, dry-run** (fallback_enabled=true, fallback_dry_run=true); EN lane wired, HI empty |
+| wa_utility_fallback_sweep | §6f UTILITY fallback for cap-blocked MARKETING failures | "WA Utility Fallback Sweep" every 2h + REST zapikey | **LIVE — real sends, EN lane** (enabled=true, dry_run=false since 2026-07-31 17:18 IST); HI lane empty by owner ruling (ROUND 7 deferred) |
 | wa_callcheck_sweep | Post-callback feedback check | "WA Callcheck Sweep" every 2h | Pasted; callcheck_enabled unset → no-op |
 | wa_visitcheck_sweep | Post-office-visit feedback | "WA Visitcheck Sweep" every 2h | Pasted; visitcheck_enabled unset → no-op |
 | schedule_wa_*_sweep ×3 | Schedule-category wrappers for the above | (they ARE the schedule targets) | Pasted + scheduled |
