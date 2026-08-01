@@ -4759,3 +4759,41 @@ resolved in prod's favor. (4) Crawlers get 200 + PIFS OG card on `/r/` (open que
 (5) Landing page carries the inline compliance block (reg no + risk warning) but no /d/pifs link —
 nit, DA call. Test artifacts for owner deletion: identities E2E999/ZZ9999/AB1234, conversions 14+15
 (E2EACC01/02), events for QQ700x (no identities). No Zoho lead written (deduped to 26-Jul lead 9).
+
+---
+
+**STATUS — 2026-08-01 (Worker, T-039: rollup counting + first_click_at backfill)**
+
+Closes OQ2b (owner ruling 2026-08-01 ~13:40 IST, option A) and OQ2 from the E2E run above.
+
+**OQ2b ruling recorded:** unattributed conversions (`referral=None`, off-platform ingest) count
+under the tenant's program row in `DailyMetric`/`MonthlyMetric.accounts_opened`, on the
+conversion's TRUE IST account-opening date (ADR-017) — never invented attribution, counting only.
+Root cause: `_apply_upsert` (`apps/integrations/zoho/ingest.py`) only called `mark_dirty` inside
+the `referral is not None` branch (via `_emit_conversion_events`); `_accounts_opened_for_range`
+itself never filtered by referral, so the count was always correct once a recompute ran — but an
+unattributed conversion's day was never marked dirty, so it silently never rolled up. Fix: a new
+`elif stage == TERMINAL_ACCOUNT_STAGE and open_dt` branch mark_dirty's the conversion's true IST
+date when `referral is None`, mirroring `_emit_conversion_events`'s existing dirty-marking exactly.
+Regression tests reproduce the exact live shape (conversion with `referral=None`,
+`account_opened_at` at 00:00:00 IST) and assert a credited conversion isn't double-counted.
+
+**OQ2 root cause:** `Referral.first_click_at` stamping itself was already fixed and deployed
+2026-07-26 (`4ab05b8`, live on prod since `324a1b8`) — every click path funnels through
+`redirect_service._record_event` → `_stamp_first_click`, verified still correct in this review.
+The gap: the one-time recovery of rows that predated that fix was an ad-hoc, uncommitted,
+un-repeatable SQL statement run once by hand on 2026-07-26 — so any row that statement missed, or
+any row created in a fresh/restored environment before the fix line existed, stays permanently
+NULL with no repeatable recovery path. Added `apps/referrals/backfill.py` (idempotent, set-once,
+bot-click-excluded — same conditional-update contract as the live stamp) +
+`manage.py backfill_first_click_at [--tenant] [--dry-run]`. Tests cover: stamps from earliest
+non-bot click, idempotent re-run never moves an existing stamp, a bot-only click never poisons the
+value, `--dry-run` reports without writing.
+
+Local gates (Postgres unavailable in this worker's sandbox — CI is the authoritative gate):
+ruff clean, `manage.py check` clean, architecture gate 14/14 (baseline, no new vendor leaks),
+`makemigrations --check --dry-run` → no changes detected.
+
+`.claude/skills/e2e-whatsapp-communication/SKILL.md` open questions 2 and 2b marked RESOLVED with
+one-line fix references. No deploy performed — this worker stops at merged PR; prod deploy +
+live re-verification is the dispatcher's last-mile per T-039's contract.

@@ -173,6 +173,17 @@ def _apply_upsert(tenant, program, conversion, payload, account_id, zoho_lead_id
             "account_opened_at", "conversion_synced_at", "status", "updated_at",
         ])
         _emit_conversion_events(tenant, referral, stage, conversion, open_dt)
+    elif stage == statusmap.TERMINAL_ACCOUNT_STAGE and open_dt:
+        # Unattributed (off-platform, no credited referrer) conversion still counts
+        # under the program's rollup on its TRUE IST open date (OQ2b, owner ruling
+        # 2026-08-01: option A). The forward path above only dirties the day when a
+        # referral was resolved, via `_emit_conversion_events` — so a conversion Zoho
+        # names no referrer for never got its day marked dirty and silently never
+        # appeared in DailyMetric/MonthlyMetric.accounts_opened, even though
+        # `_accounts_opened_for_range` itself never filtered by referral. No
+        # attribution is invented here — the conversion stays referrer-less; only its
+        # period gets recomputed so the count is not permanently missing.
+        mark_dirty(tenant=tenant, program=program, on_date=timezone.localtime(open_dt).date())
     return conversion
 
 

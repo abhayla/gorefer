@@ -219,6 +219,92 @@ def test_conversion_opened_on_the_1st_ist_counts_in_that_month(demo):
     )
 
 
+# --- OQ2b (owner ruling 2026-08-01, option A): unattributed conversions still roll up ---
+
+def test_unattributed_conversion_counts_under_the_program_on_its_true_date(demo):
+    """A Zoho conversion that names no referrer (off-platform, referral=None) must
+    still count in DailyMetric.accounts_opened for the tenant's program, on its TRUE
+    IST account-opening date — never invented attribution, just counted.
+
+    Reproduces the exact shape found live 2026-08-01 (conversion id 15): referral=None,
+    account_opened_at at exactly 00:00:00 IST (18:30:00Z the previous day). Before the
+    fix, `_apply_upsert` only called `mark_dirty` inside the `if referral is not None`
+    branch (via `_emit_conversion_events`), so an unattributed conversion's day was
+    NEVER marked dirty and `recompute_dirty()` never touched it — even though
+    `_accounts_opened_for_range` itself never filtered by referral. The row was
+    silently absent from every DailyMetric/MonthlyMetric row forever.
+    """
+    import datetime as dt
+
+    from apps.integrations.zoho.ingest import ingest_conversion
+    from apps.referrals.models import ReferralProgram
+
+    program = ReferralProgram.objects.first()
+    tenant = program.tenant
+    ist = dt.timezone(dt.timedelta(hours=5, minutes=30))
+    opened_ist = dt.datetime(2026, 7, 29, 0, 0, tzinfo=ist)  # exactly IST midnight
+
+    conv = ingest_conversion(
+        tenant=tenant,
+        payload={
+            "event_id": "oq2b-unattributed-1",
+            "opener_zerodha_account_id": "OQ2BNOREF1",
+            "referrer_client_id": "",  # Zoho names no referrer — never guess (ADR-013/016)
+            "status": "Account Opened",
+            "account_opened_at": opened_ist.isoformat(),
+        },
+    )
+    assert conv is not None and conv.referral is None, "conversion must stay referrer-less"
+    assert conv.account_opened_at.astimezone(dt.timezone.utc) == dt.datetime(
+        2026, 7, 28, 18, 30, tzinfo=dt.timezone.utc
+    )
+
+    recompute_dirty()
+
+    day = DailyMetric.objects.filter(
+        tenant=tenant, program=program, metric_date=dt.date(2026, 7, 29)
+    ).first()
+    assert day is not None and day.accounts_opened == 1, (
+        "unattributed conversion (referral=None) did not count in its true-date DailyMetric row"
+    )
+
+
+def test_credited_conversion_is_not_double_counted(demo):
+    """A normally-credited conversion (referral resolved) must still count exactly
+    once — the new referral-less branch in `_apply_upsert` must never also fire for a
+    conversion that DID resolve a referral."""
+    import datetime as dt
+
+    from apps.integrations.zoho.ingest import ingest_conversion
+    from apps.referrals.models import ReferralProgram
+
+    program = ReferralProgram.objects.first()
+    tenant = program.tenant
+    ist = dt.timezone(dt.timedelta(hours=5, minutes=30))
+    opened_ist = dt.datetime(2026, 7, 29, 10, 0, tzinfo=ist)
+
+    conv = ingest_conversion(
+        tenant=tenant,
+        payload={
+            "event_id": "oq2b-credited-1",
+            "opener_zerodha_account_id": "OQ2BCREDIT1",
+            "referrer_client_id": "RJ4521",
+            "status": "Account Opened",
+            "account_opened_at": opened_ist.isoformat(),
+        },
+    )
+    assert conv is not None and conv.referral is not None
+
+    recompute_dirty()
+
+    day = DailyMetric.objects.filter(
+        tenant=tenant, program=program, metric_date=dt.date(2026, 7, 29)
+    ).first()
+    assert day is not None and day.accounts_opened == 1, (
+        "credited conversion was counted more than once"
+    )
+
+
 def test_click_in_the_early_ist_hours_is_rolled_up_on_its_own_day(demo):
     """The SAME P0-H trap on the EVENT path (the Zoho ingest above was fixed; this
     one was missed) — `apps/events/signals.py` marked the day dirty from the raw
