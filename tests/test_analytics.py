@@ -217,3 +217,65 @@ def test_conversion_opened_on_the_1st_ist_counts_in_that_month(demo):
     assert (jul.accounts_opened if jul else 0) == 0, (
         "conversion opened 1 Aug IST leaked into July — month-boundary off-by-one"
     )
+
+
+def test_click_in_the_early_ist_hours_is_rolled_up_on_its_own_day(demo):
+    """The SAME P0-H trap on the EVENT path (the Zoho ingest above was fixed; this
+    one was missed) — `apps/events/signals.py` marked the day dirty from the raw
+    `.date()` of an aware-UTC `timestamp` instead of its IST calendar date.
+
+    Between 00:00 and 05:30 IST the UTC date is still the PREVIOUS day, so the click
+    was filed under day D-1 while `rollups._recompute_day` builds its window in the
+    current timezone: the IST window for D-1 ends at 00:00 IST, strictly BEFORE the
+    click. The marked day therefore recomputed to 0, and day D — where the click
+    actually lives — was never marked dirty at all, so no row was ever written for
+    it. The click simply disappeared from the rollups the dashboard reads.
+
+    This is why CI failed only on runs between 18:30 and 00:00 UTC and passed for
+    everyone running the suite during the Indian working day. Pinning the timestamp
+    into that window makes it deterministic at any wall-clock hour.
+    """
+    import datetime as dt
+
+    from django.utils import timezone
+
+    from apps.events.models import DirtyPeriod
+    from apps.referrals.models import Referral
+
+    referral = Referral.objects.filter(program__isnull=False).first()
+    tenant, program = referral.tenant, referral.program
+
+    # 02:00 IST on 2 Aug 2026 == 20:30 UTC on 1 Aug 2026 — inside the failure window.
+    ist = dt.timezone(dt.timedelta(hours=5, minutes=30))
+    clicked_ist = dt.datetime(2026, 8, 2, 2, 0, tzinfo=ist)
+
+    DirtyPeriod.objects.all().update(processed_at=timezone.now())  # isolate this click
+    event = Event.objects.create(
+        tenant=tenant, event_type=vocab.CLICK, source=vocab.SRC_CLICK,
+        referral=referral, is_bot=False, metadata={},
+    )
+    # `timestamp` is auto_now_add, so backdate it and re-fire the producer path the
+    # way a real early-hours click would have arrived.
+    Event.objects.filter(pk=event.pk).update(timestamp=clicked_ist)
+    event.refresh_from_db()
+
+    # Sanity: the UTC date and the IST calendar date genuinely disagree here.
+    assert event.timestamp.astimezone(dt.timezone.utc).date() == dt.date(2026, 8, 1)
+    assert timezone.localtime(event.timestamp).date() == dt.date(2026, 8, 2)
+
+    # Drive the REAL producer — `apps.events.signals._mark_period_dirty` — rather than
+    # calling `mark_dirty` ourselves with an already-correct date, which would bypass
+    # the very line under test and pass either way.
+    from apps.events.signals import _mark_period_dirty
+
+    DirtyPeriod.objects.all().update(processed_at=timezone.now())
+    _mark_period_dirty(sender=Event, instance=event, created=True)
+    recompute_dirty()
+
+    day = DailyMetric.objects.filter(
+        tenant=tenant, program=program, metric_date=dt.date(2026, 8, 2)
+    ).first()
+    assert day is not None and day.clicks == 1, (
+        "a click at 02:00 IST was not rolled up on its own IST day — the dirty day was "
+        "filed from the UTC date while the recompute window is built in IST"
+    )
