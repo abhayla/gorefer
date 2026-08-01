@@ -306,8 +306,9 @@ navigate `web.whatsapp.com`). That session lets the engineer act as a **real con
 keywords, tap real buttons, answer question nodes, read rendered link previews — with no VPS marker
 file and no owner hands. **Never claim an inbound test "needs the owner's phone" before checking
 this** (owner correction 2026-07-28; memory `verify-own-access-before-depending-on-owner`).
-Limitation: browser typing DROPS leading Devanagari (typed "सीधे Refer करें", arrived "Refer करें") —
-Hindi keyword tests need clipboard-paste or a real phone.
+Former limitation, now SOLVED (2026-08-01): browser typing drops leading Devanagari, but
+`document.execCommand('insertText', ...)` into the focused composer (via `javascript_tool`)
+delivers intact Hindi — see Phase 7b #7. No phone needed for HI lanes.
 
 With an authenticated `web.whatsapp.com` session (local or VPS Chrome), drive it via browser automation:
 - Send the inbound "Hi" → `followup_inbound_poll` (every 5 min) opens the window **fully autonomously**.
@@ -340,18 +341,58 @@ real contact over WhatsApp Web (Phase 7 session):
    answer advances. **Audit `answerValidation` in the flow JSON first**: stored type Regex with an
    EMPTY `regex` rejects EVERYTHING — the trap that broke the Direct-Referral collector for every
    user who ever reached "Name?".
-4. **Exhaustion behavior (proven live):** after `failsCount` (3) consecutive failures the flow
-   **exits silently** — user freed, keywords route again, but zero feedback. Expected, not a bug.
+4. **Exhaustion behavior (precision proven live 2026-08-01):** `failsCount: "3"` means **three
+   retry replies** — junk #1/#2/#3 each draw the fallback, and the **4th** bad input exits the flow
+   **silently** (user freed, keywords route again, zero feedback). Test the full ladder: three junks
+   → three retries → one more junk → silence → the entry keyword recovers. Expected, not a bug.
 5. **Interactive-buttons/list cards:** typed non-matching text is **swallowed silently**; if the
    node's `interactiveButtonsDefaultNodeResultId` is unset the session dies and the card's buttons
    become DEAD UI. Assert every button/list node has a default branch.
+5b. **POST-FLOW button taps — every card, every button (defect class found by owner screenshots
+   2026-08-01).** A flow session ENDS at any terminal Message node (e.g. the advisor handoff);
+   every button on cards already sitting in the chat then arrives as **plain text** on tap, and
+   dies silently unless (a) the label is in the chatbot's keyword rule AND (b) the flow's START
+   condition chain routes that label to its correct node. Only labels with dedicated rules (the
+   advisor handoffs) survived; मेरा रेफरल लिंक / मेनू पर वापस / Get my referral link / Back to
+   menu / bare "menu" were all dead until KM v7. **Test procedure:** end the flow at a terminal,
+   then tap (or send the exact label text of) at least one button from EACH earlier card and
+   assert the correct node answers. The ratified bar: *a tapped button is always obeyed —
+   whenever it is tapped.*
+5c. **Question-node junk mid-question (defect class found by owner probe 2026-08-01).** Send
+   space-containing junk to every Question node and assert it draws the polite retry — never a
+   confidently-wrong artifact (the v5 KM flow minted `gorefer.in/r/wa/hello there friend` as a
+   "personal link"). Audit `answerValidation` in the flow JSON: the correct pattern is a **regex
+   ALTERNATION** of the valid answer + every sibling button label + `[Mm]enu` (labels in the
+   alternation is what keeps taps from being swallowed — labels-not-in-regex is the 07-31 trap;
+   `Contains` conditions cannot express this because updateFlow silently drops them). Stored
+   type "None"-as-written (numeric 3) accepts EVERYTHING including junk; stored Regex (numeric 2)
+   with an EMPTY pattern rejects everything. Both are defects.
+5d. **Stale sessions pin the OLD flow version.** After any flow edit, a contact mid-session (open
+   question OR open buttons card) keeps running the pre-edit nodes, and typed entry keywords go to
+   the open node (catch card / validation), never to keyword routing. Before judging a new
+   version: END the session at a terminal node (tap the advisor button), then re-trigger fresh.
 6. **Flow message bodies are deliverables** — apply the full Phase 0c bar to them: every link
    `https://`-schemed and resolving; the **first full URL in the body decides WhatsApp's preview
    card**, so the referral link must PRECEDE the disclosures link; the compliance footer
    (market-risk + `Disclosures: https://gorefer.in/d/pifs`) present on any benefit-claiming card
    (the live kit was missing it entirely until 2026-07-28); no partner code, no raw Zerodha URL.
-7. **Both language lanes.** The EN/HI condition split means the HI lane is a separate node set with
-   its own copy, validators and fallbacks — EN passing proves nothing about HI.
+7. **Both language lanes — and HI is now fully automatable.** The EN/HI condition split means the
+   HI lane is a separate node set with its own copy, validators and fallbacks — EN passing proves
+   nothing about HI. Devanagari input is SOLVED (2026-08-01): via `javascript_tool` on the WhatsApp
+   Web tab, focus `footer [contenteditable="true"]` and run
+   `document.execCommand('insertText', false, 'और जानें')`, then Enter via the computer tool —
+   intact Hindi, no phone needed. "HI lane config-verified only" is no longer an acceptable
+   end-state for a run.
+7b. **Test matrix comes from the FIX SPEC / flow design, not the demo script.** Enumerate every
+   scenario cell from the approved design (every button × in-flow AND post-flow, every question ×
+   junk/valid/escape/exhaustion, both lanes) and classify each cell **tested / inferred / untested**
+   in the report — never let a scripted happy-path sequence stand in for the matrix. Both
+   2026-08-01 defects survived an "all pass" report built from the demo script alone; the owner's
+   two probes ("all three buttons?", the phone screenshots) found them in minutes.
+7c. **Verify the chat header before every composer send.** WhatsApp Web focus is fragile — a
+   search-click can land on the wrong chat and the composer belongs to whatever chat is open
+   (2026-08-01: a "Know More" landed in an unrelated human's chat). Screenshot → confirm the top
+   bar shows the intended recipient → type → screenshot the sent tick in THAT chat.
 8. Flow edits/backups/GET-verification: use the `wati-dashboard-automation` skill (74-key
    updateFlow write format; back up via `getFlow` FIRST; check `ok:true` + GET-after, never HTTP 200).
 
@@ -471,8 +512,10 @@ env and diff the failure *sets*, not just the counts.
 - The `getMessages` **eventType `ticket` entries are the flow audit trail** (Started/Ended chatbot,
   trigger source KeywordAction vs Rule) — they prove which handler fired and whether a session is
   still open; read them before any "keyword X is not wired" conclusion.
-- WhatsApp Web **cannot type leading Devanagari reliably** via browser automation — HI lanes need a
-  real phone or clipboard paste (2026-07-28).
+- WhatsApp Web keyboard-typing drops leading Devanagari — use the `execCommand('insertText')`
+  method (Phase 7b #7) for Hindi; solved 2026-08-01, no phone needed.
+- A flow edit does NOT reach contacts mid-session — they stay pinned to the old version until their
+  session ends (Phase 7b #5d). "The fix doesn't work" is often just a stale session.
 
 ## Open questions — resolve, don't paper over
 
@@ -483,7 +526,10 @@ env and diff the failure *sets*, not just the counts.
 3. **`/open` destination** is `signup.zerodha.com/api/lead/?c=ZMPHZC`, but CLAUDE.md specifies
    `signup.zerodha.com/?c=ZMPHZC`. No `r=` either way; confirm which is intended.
 4. **Junk identities** `TALK` and `ZMPHZC` exist in prod from a malformed Wati chatbot link
-   (`/r/wa/Talk to advisor`) — a flow variable leaks a menu label into the `client_id` slot.
+   (`/r/wa/Talk to advisor`) — a flow variable leaked a menu label into the `client_id` slot.
+   *Partially closed 2026-08-01:* KM v6/v7's escape chain + regex-alternation validation now route
+   label text away from the id slot, so this leak path is shut; the existing junk rows still need
+   the owner's delete decision.
 
 ## Cleanup checklist
 
