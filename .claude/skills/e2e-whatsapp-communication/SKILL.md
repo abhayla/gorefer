@@ -13,7 +13,9 @@ Tests the real production system at `gorefer.in`. Every leg is verified **at the
 (per-user cap `131049` is common; delivery has run ~43%) — that is not a GoRefer defect.
 `delivered` / `read` are bonus.
 
-Use a fresh throwaway client id per run (`E2E<DDMM>`) so real referrer stats stay clean.
+Use a fresh throwaway client id per run that FITS the partner id shape — the validator enforces the
+per-partner pattern (`client_id_pattern__ZMPHZC`, 6 chars, e.g. `E2E999`/`E2E998`); the old
+`E2E<DDMM>` 7-char convention is REJECTED with a branded 400 since 2026-07-27.
 Sanctioned test recipients ONLY (`GLOBAL.env:WATI_TEST_RECIPIENTS`): `917972672473`, `917767009136`.
 
 ## STEP 0 — PREREQUISITE GATE (run FIRST, every time, before anything else)
@@ -167,8 +169,10 @@ for UA in "facebookexternalhit/1.1" "WhatsApp/2.23.20.0" "Telegrambot (like Twit
   curl -s -o /dev/null -A "$UA" "https://gorefer.in/r/wa/E2EBOT$RANDOM"
 done
 ```
-Assert **no** `ReferralIdentity` created for any `E2EBOT*` id. A 302 is still returned — only the
-*record* is suppressed. See open question 1 about M11 OG cards.
+Use VALID-shaped ids (e.g. `QQ7001`…`QQ7008`, one per UA) — invalid-shaped ids 400 on the validator
+and mask the bot filter. Crawlers receive **200 + the PIFS OG preview card** (M11, config-driven
+copy) — not a 302 — and **no** `ReferralIdentity` may be created. (Resolved 2026-08-01: open
+question 1 — bots get the card, humans get the redirect.)
 
 ## Phase 3 — Lead capture over HTTP (not the service layer)
 
@@ -179,7 +183,11 @@ consent enforcement, and rate limiting**. Test the real endpoint separately:
 - Missing/false consent → rejected (DPDP: consent required on the form).
 - Malformed / oversized / illegal-char `client_id` → rejected by `validators.py`.
 - Hammer past the limit → rate limiter trips (`apps/common/ratelimit.py`, DB-cache-backed so
-  counters are shared across gunicorn workers).
+  counters are shared across gunicorn workers). Verified 2026-08-01: 429 from request #11.
+- Same-mobile re-submissions DEDUPE: 201 returns the EXISTING lead (id echoed in the response),
+  touching nothing — repeat runs on the sanctioned numbers exercise the dedup path, not create.
+- PROD RUNS `WATI_ALLOW_ALL_RECIPIENTS=true` by necessity — the fail-closed allowlist rail is NOT
+  testable on prod (suite covers it); never fire negative-send probes at non-sanctioned numbers.
 - Assert **no PII** (name/mobile/email) reached the `Event` table (Round-2 amendment #16).
 - Phone normalized one canonical way (strip spaces/`+`/`()`/`-`, prefix `91`).
 
@@ -501,6 +509,8 @@ env and diff the failure *sets*, not just the counts.
 | `ScheduledFollowup.step_key` / `.scheduled_for` | `.rule__step_key` / `.fire_at` |
 | filtering `status="pending"` | initial status is **`scheduled`** — "pending: 0" is NOT a missing cadence |
 | `Schedule.last_run` | doesn't exist; use `next_run` |
+| `DailyRollup` / `.date` / `.conversions` | `DailyMetric` / `.metric_date` / `.accounts_opened` (in `apps.events`) |
+| `Notification` in `apps.integrations.wati` | `apps.integrations.models` |
 | reading `.env` for flags | `resolve_flag()` — DB override beats env |
 | bare `ssh root@…` | `ssh -i ~/.ssh/firekaro_v6_vps` |
 
@@ -519,12 +529,15 @@ env and diff the failure *sets*, not just the counts.
 
 ## Open questions — resolve, don't paper over
 
-1. **M11 OG preview vs bot 302.** Crawlers get a 302 to Zerodha, so WhatsApp would render
-   *Zerodha's* card, not PIFS's — yet M11 claims forwarded links render a PIFS preview card.
-   Reconcile; log a COORDINATION QUESTION if genuinely contradictory.
+1. ~~M11 OG preview vs bot 302~~ RESOLVED 2026-08-01: crawlers get 200 + the PIFS OG card;
+   humans get the 302. No contradiction.
 2. **`Referral.first_click_at` stays `None`** despite recorded click events (observed 2026-07-26).
-3. **`/open` destination** is `signup.zerodha.com/api/lead/?c=ZMPHZC`, but CLAUDE.md specifies
-   `signup.zerodha.com/?c=ZMPHZC`. No `r=` either way; confirm which is intended.
+2b. **Credit-nobody conversions vanish from DailyMetric** (found 2026-08-01): an off-platform
+   conversion with `referral=None` lands in NO daily rollup, while a credited one lands on its
+   true date — "off-platform conversions are still shown" is violated at the rollup layer.
+   COORDINATION QUESTION logged; DA to decide where unattributed conversions count.
+3. ~~`/open` destination~~ RESOLVED 2026-08-01: prod redirects to `signup.zerodha.com/?c=ZMPHZC`,
+   matching CLAUDE.md (config-driven per §6d).
 4. **Junk identities** `TALK` and `ZMPHZC` exist in prod from a malformed Wati chatbot link
    (`/r/wa/Talk to advisor`) — a flow variable leaked a menu label into the `client_id` slot.
    *Partially closed 2026-08-01:* KM v6/v7's escape chain + regex-alternation validation now route
