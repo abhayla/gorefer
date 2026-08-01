@@ -531,11 +531,14 @@ env and diff the failure *sets*, not just the counts.
 
 1. ~~M11 OG preview vs bot 302~~ RESOLVED 2026-08-01: crawlers get 200 + the PIFS OG card;
    humans get the 302. No contradiction.
-2. **`Referral.first_click_at` stays `None`** despite recorded click events (observed 2026-07-26).
-2b. **Credit-nobody conversions vanish from DailyMetric** (found 2026-08-01): an off-platform
-   conversion with `referral=None` lands in NO daily rollup, while a credited one lands on its
-   true date — "off-platform conversions are still shown" is violated at the rollup layer.
-   COORDINATION QUESTION logged; DA to decide where unattributed conversions count.
+2. ~~`Referral.first_click_at` stays `None`~~ RESOLVED 2026-08-01 (T-039): live stamping was
+   already correct (`4ab05b8`); the gap was legacy rows whose one-time recovery was an ad-hoc,
+   un-repeatable SQL statement — fixed with an idempotent `backfill_first_click_at` command
+   (`apps/referrals/backfill.py`).
+2b. ~~Credit-nobody conversions vanish from DailyMetric~~ RESOLVED 2026-08-01 (T-039, owner ruling
+   option A): unattributed conversions now count under the program's rollup on their true IST date
+   — `_apply_upsert` (`apps/integrations/zoho/ingest.py`) now marks the day dirty even when
+   `referral is None`.
 3. ~~`/open` destination~~ RESOLVED 2026-08-01: prod redirects to `signup.zerodha.com/?c=ZMPHZC`,
    matching CLAUDE.md (config-driven per §6d).
 4. **Junk identities** `TALK` and `ZMPHZC` exist in prod from a malformed Wati chatbot link
