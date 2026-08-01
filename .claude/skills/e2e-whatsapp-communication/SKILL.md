@@ -85,8 +85,23 @@ standing prod password exists anywhere (`CLAUDE.md` §4: never a seeded plaintex
    ```
    get_wati_adapter().send_template(to=<test#>, template=<name>, params={...})  # accepted False + http=400 ⇒ name is bogus
    ```
-5. Any disagreement (map card vs Meta status vs prod config) is a **defect** — fix it in the same
-   turn, then update the HTML map.
+5. **MANDATORY — the manifest diff (added 2026-08-01 after a live miss).** The map artifact embeds
+   `<script type="application/json" id="wfmanifest">` (per card: id, name, state, category,
+   buttons with labels). Fetch the LIVE artifact (WebFetch), parse the manifest, and assert
+   mechanically — name/category checks alone DO NOT satisfy Phase 0:
+   - every template a wired config key resolves to has a card in state `live`, and every
+     `live`-state template card's name matches what config actually sends;
+   - the card's BUTTON LIST equals the live template's buttons at Meta (labels + type) — a
+     LIVE card showing [Refer more] while the wired template has `buttonsType=none` is a
+     defect (this exact miss shipped button-less referrer updates, owner-caught 2026-08-01);
+   - every send later in the run is compared against its card: delivered body AND buttons must
+     match the card (Phase 0c extends to buttons, not just links/variables).
+6. Any disagreement (map card vs Meta shape vs prod config vs delivered message) is a **defect**.
+   Fix order is LAW (§6c + owner 2026-08-01): update the conversation-map HTML FIRST, get the
+   owner's copy approval, THEN touch Wati/Meta/config — never reconcile by editing reality to
+   match a silent code change. Reality-RECORDING map fixes (a live template missing its card, a
+   stale state tag) are same-turn reconciliation; intent CHANGES (new copy, new buttons) always
+   wait for the owner.
 
 ## Phase 0b — Template sweep: every template, every scenario
 
