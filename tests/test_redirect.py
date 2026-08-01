@@ -161,6 +161,95 @@ def test_bot_click_does_not_stamp_first_click_at(seeded, client):
     assert not ReferralIdentity.objects.filter(client_id="BOTCLK1").exists()
 
 
+# --- OQ2: backfill_first_click_at (rows created before the request-time stamp fix) --
+
+def _legacy_referral_with_click(client_id: str, *, is_bot: bool = False):
+    """Simulate a pre-fix row: a Referral + a real click Event, but first_click_at
+    forced back to NULL — exactly the shape a row created before PR #52 would carry."""
+    from django.utils import timezone as djtz
+
+    from apps.events import vocab
+    from apps.referrals.models import Partner, Referral, ReferralIdentity, ReferralProgram
+
+    program = ReferralProgram.objects.get()
+    identity = ReferralIdentity.objects.create(
+        tenant=program.tenant, partner=Partner.objects.get(), program=program,
+        client_id=client_id, id_source="native", status="active",
+    )
+    referral = Referral.objects.create(
+        tenant=program.tenant, referral_identity=identity, program=program,
+        source="referral_link", status="opened",
+    )
+    event = Event.objects.create(
+        tenant=program.tenant, event_type=vocab.CLICK, source=vocab.SRC_CLICK,
+        referral=referral, is_bot=is_bot, metadata={},
+    )
+    Event.objects.filter(pk=event.pk).update(
+        timestamp=djtz.now() - djtz.timedelta(days=3)
+    )
+    assert referral.first_click_at is None
+    return referral
+
+
+def test_backfill_stamps_a_legacy_referral_from_its_earliest_click(seeded):
+    from apps.referrals.backfill import backfill_first_click_at
+
+    referral = _legacy_referral_with_click("BACKFL01")
+    earliest_click = Event.objects.get(referral=referral).timestamp
+
+    result = backfill_first_click_at()
+    referral.refresh_from_db()
+
+    assert result["candidates"] >= 1 and result["stamped"] >= 1
+    assert referral.first_click_at == earliest_click
+
+
+def test_backfill_is_idempotent_and_never_moves_an_existing_stamp(seeded):
+    from apps.referrals.backfill import backfill_first_click_at
+
+    referral = _legacy_referral_with_click("BACKFL02")
+    backfill_first_click_at()
+    referral.refresh_from_db()
+    first_stamp = referral.first_click_at
+    assert first_stamp is not None
+
+    # A second later click must never move an already-stamped value, and re-running
+    # the backfill on an already-stamped row must be a no-op.
+    Event.objects.create(
+        tenant=referral.tenant, event_type="click", source="click",
+        referral=referral, is_bot=False, metadata={},
+    )
+    result = backfill_first_click_at()
+    referral.refresh_from_db()
+
+    assert referral.first_click_at == first_stamp
+    assert result["stamped"] == 0  # already-stamped rows are not re-touched
+
+
+def test_backfill_does_not_stamp_from_a_bot_only_click(seeded):
+    """A referral whose only click Event is bot-attributed has no real click to
+    backfill from — must stay NULL, never poisoned by a crawler timestamp."""
+    from apps.referrals.backfill import backfill_first_click_at
+
+    referral = _legacy_referral_with_click("BACKFL03", is_bot=True)
+    result = backfill_first_click_at()
+    referral.refresh_from_db()
+
+    assert referral.first_click_at is None
+    assert result["stamped"] == 0
+
+
+def test_backfill_dry_run_reports_without_writing(seeded):
+    from apps.referrals.backfill import backfill_first_click_at
+
+    referral = _legacy_referral_with_click("BACKFL04")
+    result = backfill_first_click_at(dry_run=True)
+    referral.refresh_from_db()
+
+    assert result["candidates"] == 1
+    assert referral.first_click_at is None
+
+
 # --- D1: /open destination is configurable (owner decision 2026-07-26) -------
 
 def test_open_defaults_to_the_plain_signup_page_not_the_lead_form(seeded):
