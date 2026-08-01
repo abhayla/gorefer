@@ -4733,3 +4733,29 @@ deployed byte-exact with apps/events/signals.py (PR #85 rider) after a git-archi
 live-verified timeout=600, both services active, DEPLOYED_SHA 431931f. CURRENT-STATE updated
 (PR #87). Checker verdict PASS (evidence GetWorkDone/evidence/2026-08-01-T-037); this entry
 closes the checker's one DoD-gap finding (COORDINATION record was missing).
+
+---
+
+**STATUS — 2026-08-01 14:0x IST (Engineer, first skill-driven E2E run post-#90)**
+
+Ran `/e2e-whatsapp-communication` end-to-end against prod (SHA 431931f). Gate: partial autonomy
+(local-Chrome WhatsApp session substituted for the VPS markers). Verdicts: Phases 0, 0b/0c, 1, 2,
+3, 4, 5, 9, 10, 11, 13 PASS; Phase 6 gate-order + stop_on_reply PROVEN LIVE on real rows (quiet-hold
+structurally unobservable on a replying contact — gate #4 outranks #7 by design; predicate covered by
+the suite); Phase 7 inbound-poll autonomy PROVEN (real inbound auto-opened window 2 + scheduled the
+7-step cadence); Phase 7b covered by today's KM v6/v7 full-matrix live test; Phase 8 surfaces PASS
+(OTP loop + Google OAuth BLOCKED: owner phone / session markers). Suite: 727/727 after refreshing a
+STALE `tests/test_wa_engagement.py` on prod (byte-exact from main; runtime unaffected).
+
+FINDINGS for DA: (1) **credit-nobody conversions vanish from DailyMetric** — conversion 15
+(off-platform, referral=None, true date 29-Jul) appears in NO daily rollup while credited
+conversion 14 lands correctly on 30-Jul; "off-platform conversions are still shown" is violated at
+the rollup layer. QUESTION: should program-scoped metrics count unattributed conversions (e.g.
+under the program row with credited_referrer NULL)? (2) client_id validator now enforces the
+per-partner 6-char shape (config `client_id_pattern__ZMPHZC`, seeded 07-27) — intended, but it
+broke the E2E `E2E<DDMM>` id convention (skill fixed) and Phase-2's E2EBOT ids. (3) `/open`
+destination observed as bare `signup.zerodha.com/?c=ZMPHZC` — matches CLAUDE.md; open question 3
+resolved in prod's favor. (4) Crawlers get 200 + PIFS OG card on `/r/` (open question 1 resolved).
+(5) Landing page carries the inline compliance block (reg no + risk warning) but no /d/pifs link —
+nit, DA call. Test artifacts for owner deletion: identities E2E999/ZZ9999/AB1234, conversions 14+15
+(E2EACC01/02), events for QQ700x (no identities). No Zoho lead written (deduped to 26-Jul lead 9).
