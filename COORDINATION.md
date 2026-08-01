@@ -4722,3 +4722,14 @@ taps), windows 4, share_intent 19 / clicks 34 — within tolerance of the T-031 
 digest 202 accepted (dedupeKey wa-engagement-2026-07-30). CURRENT-STATE.md updated in this same
 turn. Independent checker verdict + evidence to follow in the fleet ledger
 (GetWorkDone/evidence/, T-032…T-034).
+
+---
+
+**STATUS — 2026-08-01 07:10 IST (Dispatcher, T-037: nightly digest unbroken)**
+Root cause: django-q global 60s timeout killed the 21:xx IST wa_engagement_report runs on BOTH
+2026-07-30 and 2026-07-31 (~16:17 UTC Failure rows) — zero scheduled digests ever completed.
+Fix: Q_CLUSTER timeout 600 / retry 720 + guard test (PR #86, worker-built, merged on green);
+deployed byte-exact with apps/events/signals.py (PR #85 rider) after a git-archive CRLF redo;
+live-verified timeout=600, both services active, DEPLOYED_SHA 431931f. CURRENT-STATE updated
+(PR #87). Checker verdict PASS (evidence GetWorkDone/evidence/2026-08-01-T-037); this entry
+closes the checker's one DoD-gap finding (COORDINATION record was missing).
