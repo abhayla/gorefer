@@ -11,7 +11,16 @@
 > wins; if either disagrees with the live system, **the live system wins** — verify, don't
 > trust (commands at the bottom).
 >
-> **Last updated:** 2026-07-30 14:00 IST (**DEPLOYED to prod: `d342831` = main tip** — the
+> **Last updated:** 2026-08-01 07:00 IST (**DEPLOYED to prod: `431931f` = main tip** — T-037
+> Q_CLUSTER timeout 60→600 (retry 720): the nightly 21:00 IST engagement digest had NEVER
+> survived its schedule — django-q killed the multi-minute Wati pull at 60s on BOTH 07-30 and
+> 07-31 (Failure rows are the evidence; only manual runs ever completed). Also carries PR #85
+> (rollups IST-date dirty-marking, apps/events/signals.py). Both files deployed byte-exact via
+> git-show pipe (the Windows git-archive CRLF trap fired again — hash-verified after redo),
+> services restarted+active, live-verified timeout=600. First scheduled digest expected tonight
+> 21:xx IST. Fallback engine (T-032..036 chain): LIVE EN lane, E2E-proven 07-31 (test template
+> DELIVERED to the allowlisted number); Zoho console still runs the map-params sweep version —
+> owner paste batch pending (sweep params-array + gatekeeper/sender subString guards).) — prior 2026-07-30 14:00 IST (**DEPLOYED to prod: `d342831` = main tip** — the
 > T-032/T-033/T-034 daily WA-engagement-report chain LIVE and verified with REAL numbers:
 > PR #75 (feature: `wa_engagement_report` command + `apps/integrations/wati/engagement.py` +
 > `wa_engagement_report_daily` schedule, hourly poll gated on `wa_engagement_report_hour_ist`,
