@@ -80,3 +80,13 @@ def test_never_raises(settings, monkeypatch):
 
     monkeypatch.setattr(qm, "Success", _S)
     assert worker_health()["state"] == "unknown"
+
+
+def test_qcluster_timeout_survives_a_multi_minute_task():
+    """The 60s default silently killed the nightly engagement digest's multi-minute
+    Wati pull (prod Failure rows 2026-07-30/31 16:26 UTC). Guard both the floor and
+    that retry always exceeds timeout, so a future edit can't reintroduce the kill."""
+    from django.conf import settings as real_settings
+
+    assert real_settings.Q_CLUSTER["timeout"] >= 600
+    assert real_settings.Q_CLUSTER["retry"] > real_settings.Q_CLUSTER["timeout"]
