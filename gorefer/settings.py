@@ -120,8 +120,10 @@ Q_CLUSTER = {
     "name": "gorefer",
     "orm": "default",  # use the default DB as the broker (no Redis)
     "sync": os.environ.get("Q_ASYNC", "false").strip().lower() not in {"1", "true", "yes", "on"},
-    "timeout": 60,
-    "retry": 120,
+    # 600/720 (retry > timeout): the 60s default silently killed the multi-minute Wati
+    # pull in the nightly engagement digest (prod Failure rows 2026-07-30/31 16:26 UTC).
+    "timeout": 600,
+    "retry": 720,
     "max_attempts": 5,
     "catch_up": False,
 }
