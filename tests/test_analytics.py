@@ -320,6 +320,12 @@ def test_click_in_the_early_ist_hours_is_rolled_up_on_its_own_day(demo):
     This is why CI failed only on runs between 18:30 and 00:00 UTC and passed for
     everyone running the suite during the Indian working day. Pinning the timestamp
     into that window makes it deterministic at any wall-clock hour.
+
+    The pinned day must ALSO be a day no fixture writes to. `seed_demo` stamps its
+    events with `auto_now_add`, so they all land on whatever "today" is, and it
+    additionally seeds conversions on two fixed dates (2026-06-15, 2026-05-02). An
+    isolated PAST day avoids every one of those: it can never become "today", so the
+    expected count stays exactly 1 on any run date.
     """
     import datetime as dt
 
@@ -331,9 +337,18 @@ def test_click_in_the_early_ist_hours_is_rolled_up_on_its_own_day(demo):
     referral = Referral.objects.filter(program__isnull=False).first()
     tenant, program = referral.tenant, referral.program
 
-    # 02:00 IST on 2 Aug 2026 == 20:30 UTC on 1 Aug 2026 — inside the failure window.
+    # 02:00 IST on 10 Mar 2026 == 20:30 UTC on 9 Mar 2026 — inside the failure window,
+    # and a day no fixture touches (see the docstring).
+    click_day = dt.date(2026, 3, 10)
     ist = dt.timezone(dt.timedelta(hours=5, minutes=30))
-    clicked_ist = dt.datetime(2026, 8, 2, 2, 0, tzinfo=ist)
+    clicked_ist = dt.datetime(click_day.year, click_day.month, click_day.day, 2, 0, tzinfo=ist)
+
+    # Guard the isolation itself: if a fixture ever starts seeding this day, fail here
+    # with a clear cause rather than silently inflating the expected click count.
+    assert timezone.localtime(timezone.now()).date() != click_day
+    assert not DailyMetric.objects.filter(
+        tenant=tenant, program=program, metric_date=click_day
+    ).exists(), "fixture data collides with the pinned day — pick another isolated day"
 
     DirtyPeriod.objects.all().update(processed_at=timezone.now())  # isolate this click
     event = Event.objects.create(
@@ -346,8 +361,8 @@ def test_click_in_the_early_ist_hours_is_rolled_up_on_its_own_day(demo):
     event.refresh_from_db()
 
     # Sanity: the UTC date and the IST calendar date genuinely disagree here.
-    assert event.timestamp.astimezone(dt.timezone.utc).date() == dt.date(2026, 8, 1)
-    assert timezone.localtime(event.timestamp).date() == dt.date(2026, 8, 2)
+    assert event.timestamp.astimezone(dt.timezone.utc).date() == click_day - dt.timedelta(days=1)
+    assert timezone.localtime(event.timestamp).date() == click_day
 
     # Drive the REAL producer — `apps.events.signals._mark_period_dirty` — rather than
     # calling `mark_dirty` ourselves with an already-correct date, which would bypass
@@ -359,7 +374,7 @@ def test_click_in_the_early_ist_hours_is_rolled_up_on_its_own_day(demo):
     recompute_dirty()
 
     day = DailyMetric.objects.filter(
-        tenant=tenant, program=program, metric_date=dt.date(2026, 8, 2)
+        tenant=tenant, program=program, metric_date=click_day
     ).first()
     assert day is not None and day.clicks == 1, (
         "a click at 02:00 IST was not rolled up on its own IST day — the dirty day was "
