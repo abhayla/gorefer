@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-# Terminal OTP delivery outcomes (aligned with apps.integrations.wati.status).
+# Terminal OTP delivery outcomes (aligned with apps.integrations.delivery_status).
 STATUS_DELIVERED = "delivered"   # proven delivery (delivered/read) — the only success
 STATUS_FAILED = "failed"         # terminal failure — cascade to fallback
 STATUS_QUEUED = "queued"         # accepted/enqueued but delivery NOT yet proven — not success

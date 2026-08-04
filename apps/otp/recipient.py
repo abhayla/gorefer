@@ -67,10 +67,10 @@ def _from_zoho(tenant, client_id: str) -> str:
 
     if not resolve_flag(ENABLE_ZOHO_READ, tenant_id=getattr(tenant, "id", None)):
         return ""
-    from apps.integrations.zoho.read import get_zoho_read_adapter
+    from apps.integrations.ports import get_crm_read_port
 
     try:
-        contact = get_zoho_read_adapter().fetch_contact_by_client_id(client_id=client_id)
+        contact = get_crm_read_port().fetch_contact_by_client_id(client_id=client_id)
     except Exception:  # noqa: BLE001 — a Zoho outage must degrade to Path B, never 500 a login
         logger.warning(
             "Zoho on-file OTP lookup failed for client_id=%s — degrading", client_id, exc_info=True
