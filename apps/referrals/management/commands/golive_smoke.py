@@ -22,7 +22,6 @@ What it does and does NOT do:
 """
 from __future__ import annotations
 
-import contextlib
 import json
 
 from django.core.management.base import BaseCommand, CommandError
@@ -30,6 +29,7 @@ from django.db import transaction
 
 from apps.common.phone import normalize_phone
 from apps.config.integration_flags import flag_source, resolve_flag
+from apps.integrations import services
 from apps.referrals import redirect_service
 from apps.referrals.lead_service import capture_lead
 from apps.referrals.models import Lead
@@ -37,40 +37,6 @@ from apps.referrals.validators import InvalidClientId, validate_client_id
 from apps.tenants.resolve import get_current_tenant
 
 SYNTH_UA = "GoReferGoLiveSmoke/1.0 (management-command; human-equivalent)"
-
-
-@contextlib.contextmanager
-def _observe_zoho_action(sink: dict):
-    """Record the adapter's insert-vs-update verdict without changing what it does.
-
-    `LeadWriteResult.action` is Zoho's own server-side dedup verdict but is only
-    logged, never persisted on the Lead. Rather than add a column + migration for a
-    diagnostic, wrap the selected adapter's `upsert_lead` for the duration of this
-    run: it forwards the call untouched and copies `action` out. Production paths
-    are unaffected — the wrap is installed and removed inside this command.
-    """
-    from apps.integrations.zoho import tasks as zoho_tasks
-
-    original = zoho_tasks.get_zoho_adapter
-
-    def _wrapped_get_adapter(*a, **kw):
-        adapter = original(*a, **kw)
-        inner = adapter.upsert_lead
-
-        def _upsert(*args, **kwargs):
-            result = inner(*args, **kwargs)
-            sink["action"] = getattr(result, "action", None)
-            sink["zoho_lead_id"] = getattr(result, "zoho_lead_id", None)
-            return result
-
-        adapter.upsert_lead = _upsert
-        return adapter
-
-    zoho_tasks.get_zoho_adapter = _wrapped_get_adapter
-    try:
-        yield sink
-    finally:
-        zoho_tasks.get_zoho_adapter = original
 
 
 class Command(BaseCommand):
@@ -159,7 +125,7 @@ def run_smoke(*, referrer: str, mobile: str, name: str = "GoLive Smoke", email: 
     # WATI notifications and the Zoho upsert per the live flags.
     observed: dict = {}
     try:
-        with _observe_zoho_action(observed), transaction.atomic():
+        with services.observe_zoho_upsert_action(observed), transaction.atomic():
             lead = capture_lead(
                 tenant=tenant,
                 referral=referral,

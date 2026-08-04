@@ -88,7 +88,7 @@ class _RecoveredAdapter:
 def test_capture_enqueues_the_upsert_and_does_not_write_inline():
     """The submit must not wait on Zoho — the write is enqueued on_commit."""
     call_command("seed_program")
-    with mock.patch("apps.referrals.lead_service.enqueue_upsert") as enq:
+    with mock.patch("apps.integrations.services.enqueue_lead_upsert") as enq:
         resp = _capture(Client())
 
     assert resp.status_code in (200, 201)

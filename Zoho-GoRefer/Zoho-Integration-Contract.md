@@ -224,6 +224,15 @@ The inbound webhook router also moved **inside** the boundary: `api/zoho.py` is 
 `apps/integrations/router.py` (`zoho_router`). URL path (`/api/zoho/...`), the HMAC
 waxseal auth, and response shapes are unchanged — this was a move, not a rewrite.
 
+T-041 W2a (2026-08-04) rewired the four `apps/referrals/**` consumers (`lead_service.py`,
+`admin.py`, the `golive_smoke` / `seed_demo` management commands) to call
+`apps.integrations.services` instead of importing `apps.integrations.zoho.tasks` /
+`.ingest` directly — pure delegation, no behaviour change. The facade also gained
+`observe_zoho_upsert_action(sink)`, a diagnostic-only context manager (moved verbatim
+from `golive_smoke.py`) that wraps the selected Zoho adapter's `upsert_lead` for the
+duration of a smoke run to report insert-vs-update; it changes nothing about what the
+adapter does and is not used on any production write path.
+
 ## 7. Related
 
 - Zoho-side execution (Deluge, rules, Send Queue): `C:\Abhay\5Wealths\Zoho-Project\`
