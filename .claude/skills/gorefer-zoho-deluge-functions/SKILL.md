@@ -59,6 +59,7 @@ sweeps (wa_utility_fallback_sweep, wa_callcheck_sweep, wa_visitcheck_sweep)
 | wa_reconcile_status (v2) | Stamps terminal statuses + Fail_Code from Wati | scheduled | LIVE |
 | wa_journey_referrer_activation / _prospect_nudges | Daily journey nudges | daily 09:30 / 11:30 | LIVE |
 | send_office_visitor_* + schedule_office_visitor_* | Office-visitor flow + wrappers | every 2h | LIVE |
+| gorefer_webhook_signer_contacts | P0-A fix: signs+POSTs the account-opened webhook from the CONTACTS module (the Leads rule watches a door conversions never exit) | Contacts workflow rule "GoRefer — account opened (Contacts)", instant action | Authored 2026-08-04; AWAITING owner paste (runbook: gorefer `Zoho-GoRefer/P0A-Contacts-Trigger-Steps.md`) |
 | others (webhook handler, note-writers, wa_set_pref_lang, seed config, day summary, callback task v3, gorefer_webhook_signer) | see source headers | various | see Zoho-Project/deluge |
 
 ## Standards — every one bought with a live failure (violate = repeat it)
