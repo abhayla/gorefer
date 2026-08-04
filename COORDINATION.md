@@ -4823,7 +4823,7 @@ shrink; E-3 hardens automatically when it empties.
 
 ---
 
-**STATUS — 2026-08-04 (Worker, T-040 W1: vendor ports + boundary routers, ADR-045/046) — PR #PENDING**
+**STATUS — 2026-08-04 (Worker, T-040 W1: vendor ports + boundary routers, ADR-045/046) — PR #96**
 
 Implements Wave 1 of `docs/architecture/17-Vendor-Port-Boundary-Hardening.md`: a
 vendor-neutral port layer at the top of `apps/integrations/` and the two webhook
