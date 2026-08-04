@@ -64,10 +64,10 @@ def _from_zoho(tenant, client_id: str) -> OnFileRecord:
 
     if not resolve_flag(ENABLE_ZOHO_READ, tenant_id=getattr(tenant, "id", None)):
         return OnFileRecord(client_id=client_id)
-    from apps.integrations.zoho.read import get_zoho_read_adapter
+    from apps.integrations.ports import get_crm_read_port
 
     try:
-        contact = get_zoho_read_adapter().fetch_contact_by_client_id(client_id=client_id)
+        contact = get_crm_read_port().fetch_contact_by_client_id(client_id=client_id)
     except Exception:  # noqa: BLE001 — a Zoho outage degrades to "unknown", never a 500
         logger.warning("Zoho on-file lookup failed for %s — degrading", client_id, exc_info=True)
         return OnFileRecord(client_id=client_id)
