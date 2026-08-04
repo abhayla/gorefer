@@ -207,6 +207,23 @@ logged in rendered nameless even when Zoho knew them (live finding 2026-07-22).
 
 ---
 
+## 6c. GoRefer-side port layer (ADR-045/046)
+
+T-040 Wave 1 (2026-08-04) introduced a vendor-neutral boundary at the top of
+`apps/integrations/`: domain code now consumes Zoho via `apps/integrations/ports.py`
+(`CrmPort`/`CrmReadPort`, `get_crm_port()`/`get_crm_read_port()`) and
+`apps/integrations/services.py` (`enqueue_lead_upsert`, `ingest_conversion`,
+`MAX_SYNC_ATTEMPTS`). These are pure delegation — no logic moved, no behaviour
+change; `LiveZohoAdapter` / `LogOnlyZohoAdapter` (and the read-side equivalents)
+still swap by the same `ENABLE_ZOHO_WRITE` / `ENABLE_ZOHO_READ` flags exactly as
+before, and `zoho.ingest.ingest_conversion` remains the sole sanctioned writer of
+conversion/account status (guardrail #2 unaffected).
+
+The inbound webhook router also moved **inside** the boundary: `api/zoho.py` is now
+`apps/integrations/zoho/api.py`, re-exported for mounting via
+`apps/integrations/router.py` (`zoho_router`). URL path (`/api/zoho/...`), the HMAC
+waxseal auth, and response shapes are unchanged — this was a move, not a rewrite.
+
 ## 7. Related
 
 - Zoho-side execution (Deluge, rules, Send Queue): `C:\Abhay\5Wealths\Zoho-Project\`

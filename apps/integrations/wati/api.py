@@ -22,14 +22,15 @@ from ninja import Router, Schema
 from ninja.errors import HttpError
 from pydantic import ValidationError
 
-from apps.integrations.wati.webhook import (
+from apps.tenants.resolve import get_current_tenant
+
+from .webhook import (
     FORBIDDEN_KEYS,
     AssistedCaptureError,
     authenticate,
     process_assisted_capture,
     record_inbound,
 )
-from apps.tenants.resolve import get_current_tenant
 
 router = Router()
 

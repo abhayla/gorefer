@@ -333,7 +333,25 @@ expected top-level key (`broadcasts`, `messageTemplates`) is an unknown shape an
 marks the pull `degraded=True`; a 200 response with the key present but an empty list
 is a legitimate zero and does not.
 
-## 11. Related
+## 11. GoRefer-side port layer (ADR-045/046)
+
+T-040 Wave 1 (2026-08-04) introduced a vendor-neutral boundary at the top of
+`apps/integrations/`: domain code now consumes Wati via
+`apps/integrations/ports.py` (`MessagingPort`, `get_messaging_port()`),
+`apps/integrations/delivery_status.py` (re-exports `is_terminal` / `is_delivered` /
+`classify_failure` from `wati.status`), and `apps/integrations/services.py`
+(`queue_lead_notifications`, `record_inbound`). These are pure delegation — no
+logic moved, no behaviour change; `LiveWatiAdapter` / `LogOnlyWatiAdapter` still
+swap by the same `ENABLE_WATI_SEND` flag exactly as before.
+
+The inbound webhook router also moved **inside** the boundary: `api/wati.py` is now
+`apps/integrations/wati/api.py`, re-exported for mounting via
+`apps/integrations/router.py` (`wati_router`). URL path (`/api/wati/...`), the
+fail-closed 401-before-schema auth ordering, and response shapes are unchanged —
+this was a move, not a rewrite. Everything else in this contract (send shape,
+terminal-status rule, allowlist gate, reconcile matching) is untouched.
+
+## 12. Related
 
 - Channel health, template approvals, nightly report: `C:\Abhay\5Wealths\Wati-Project\`
 - Templates GoRefer uses: [`Wati-GoRefer-Templates.md`](./Wati-GoRefer-Templates.md)
