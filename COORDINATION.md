@@ -4797,3 +4797,26 @@ ruff clean, `manage.py check` clean, architecture gate 14/14 (baseline, no new v
 `.claude/skills/e2e-whatsapp-communication/SKILL.md` open questions 2 and 2b marked RESOLVED with
 one-line fix references. No deploy performed — this worker stops at merged PR; prod deploy +
 live re-verification is the dispatcher's last-mile per T-039's contract.
+
+---
+
+## 2026-08-04 STATUS — Doc 17: Vendor Port & Boundary Hardening (Phase-2 burn-down authorized)
+
+Owner (2026-08-04, session GoRefer-Fable-031) directed an architect review of the Wati/Zoho
+boundary and authorized autonomous implementation of its recommendations. Review verdict:
+the E-3 gate + baseline ratchet are healthy, but 14 production files still import vendor
+packages directly, so Wati/Zoho are not yet swappable-by-one-folder; nothing is
+cross-project reusable.
+
+**Decisions (ADR-045…048, recorded in `docs/architecture/17-Vendor-Port-Boundary-Hardening.md`):**
+role-shaped ports + facade at `apps/integrations/` top level (045); webhook HTTP routers
+belong INSIDE the boundary (046); dotted schedule/async task paths are a public contract —
+move-freeze + `setup_schedules` update mode (047); `engagement.py`/`notify.py` interiors
+stay boundary-internal, DF-PORTS-1 records the deferred eviction (048).
+
+**Execution:** Waves W1 (ports+routers) → W2a/b/c (parallel mechanical burn-down) → W3
+(hardening+docs) via /get-work-done (cheapest-correct models, independent checkers, PR+CI
+merge-on-green); deploys + final acceptance by the architect session against live prod.
+W4 (shared cross-project gateway, Notifier model) is PARKED pending owner decision.
+Behavior-frozen throughout: no template/copy/timing/flag/URL change; baseline may only
+shrink; E-3 hardens automatically when it empties.
