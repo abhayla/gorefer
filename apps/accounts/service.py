@@ -246,10 +246,10 @@ def _put_on_file(tenant, request_obj: VerificationRequest, mobile: str) -> None:
         if changed:
             customer.save(update_fields=[*changed, "updated_at"])
 
-    from apps.integrations.zoho.adapter import get_zoho_adapter
+    from apps.integrations.ports import get_crm_port
 
     try:
-        get_zoho_adapter().upsert_referrer_contact(
+        get_crm_port().upsert_referrer_contact(
             client_id=request_obj.client_id,
             name=name,
             mobile=mobile,

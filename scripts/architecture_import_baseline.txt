@@ -1,4 +1,0 @@
-apps/accounts/onfile.py
-apps/accounts/service.py
-apps/dashboard/profile.py
-apps/events/management/commands/setup_schedules.py

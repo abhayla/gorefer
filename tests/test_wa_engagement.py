@@ -95,9 +95,9 @@ def test_config_overridable_via_cascade(tenant):
 # --- Schedule registration --------------------------------------------------------
 
 def test_wa_engagement_schedule_registered():
-    from apps.events.management.commands.setup_schedules import SCHEDULES
+    from apps.integrations.schedules import INTEGRATION_SCHEDULES
 
-    assert SCHEDULES["wa_engagement_report_daily"] == (
+    assert INTEGRATION_SCHEDULES["wa_engagement_report_daily"] == (
         "apps.integrations.wati.engagement.run_scheduled_report", 60,
     )
 
