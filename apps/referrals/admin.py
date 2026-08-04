@@ -80,18 +80,18 @@ class UnsyncedZohoFilter(admin.SimpleListFilter):
         ]
 
     def queryset(self, request, queryset):
-        from apps.integrations.zoho.tasks import MAX_SYNC_ATTEMPTS
+        from apps.integrations import services
 
         unsynced = [Lead.SYNC_PENDING, Lead.SYNC_FAILED]
         if self.value() == "unsynced":
             return queryset.filter(zoho_sync_status__in=unsynced)
         if self.value() == "needs_attention":
             return queryset.filter(
-                zoho_sync_status__in=unsynced, zoho_sync_attempts__gte=MAX_SYNC_ATTEMPTS
+                zoho_sync_status__in=unsynced, zoho_sync_attempts__gte=services.MAX_SYNC_ATTEMPTS
             )
         if self.value() == "awaiting_retry":
             return queryset.filter(
-                zoho_sync_status__in=unsynced, zoho_sync_attempts__lt=MAX_SYNC_ATTEMPTS
+                zoho_sync_status__in=unsynced, zoho_sync_attempts__lt=services.MAX_SYNC_ATTEMPTS
             )
         return queryset
 
@@ -113,7 +113,7 @@ class LeadAdmin(admin.ModelAdmin):
         Resets attempts so a lead the sweep gave up on can be retried after the
         underlying cause is fixed. Safe: the upsert dedups on mobile, never twins.
         """
-        from apps.integrations.zoho.tasks import enqueue_upsert
+        from apps.integrations import services
 
         eligible = queryset.exclude(zoho_sync_status=Lead.SYNC_SYNCED)
         count = 0
@@ -121,6 +121,6 @@ class LeadAdmin(admin.ModelAdmin):
             lead.zoho_sync_attempts = 0
             lead.zoho_sync_status = Lead.SYNC_PENDING
             lead.save(update_fields=["zoho_sync_attempts", "zoho_sync_status", "updated_at"])
-            enqueue_upsert(lead.pk)
+            services.enqueue_lead_upsert(lead.pk)
             count += 1
         self.message_user(request, f"Re-enqueued {count} lead(s) for Zoho sync.")

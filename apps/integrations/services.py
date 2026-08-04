@@ -7,6 +7,8 @@ app-loading cycles.
 """
 from __future__ import annotations
 
+import contextlib
+
 from apps.integrations.zoho.tasks import MAX_SYNC_ATTEMPTS
 
 __all__ = [
@@ -14,6 +16,7 @@ __all__ = [
     "enqueue_lead_upsert",
     "record_inbound",
     "ingest_conversion",
+    "observe_zoho_upsert_action",
     "MAX_SYNC_ATTEMPTS",
 ]
 
@@ -51,5 +54,40 @@ def ingest_conversion(*, tenant, payload: dict):
     from apps.integrations.zoho.ingest import ingest_conversion as _impl
 
     return _impl(tenant=tenant, payload=payload)
+
+
+@contextlib.contextmanager
+def observe_zoho_upsert_action(sink: dict):
+    """Diagnostic-only: capture the Zoho adapter's insert/update verdict for any
+    `upsert_lead` call made within the block, without changing what it does.
+
+    `LeadWriteResult.action` is Zoho's own server-side dedup verdict but is only
+    logged, never persisted on the Lead. Wraps the selected adapter's `upsert_lead`
+    for the duration of the block: it forwards the call untouched and copies
+    `action`/`zoho_lead_id` into `sink`. Used by `golive_smoke`; production paths
+    are unaffected — the wrap is installed and removed inside this context.
+    """
+    from apps.integrations.zoho import tasks as zoho_tasks
+
+    original = zoho_tasks.get_zoho_adapter
+
+    def _wrapped_get_adapter(*a, **kw):
+        adapter = original(*a, **kw)
+        inner = adapter.upsert_lead
+
+        def _upsert(*args, **kwargs):
+            result = inner(*args, **kwargs)
+            sink["action"] = getattr(result, "action", None)
+            sink["zoho_lead_id"] = getattr(result, "zoho_lead_id", None)
+            return result
+
+        adapter.upsert_lead = _upsert
+        return adapter
+
+    zoho_tasks.get_zoho_adapter = _wrapped_get_adapter
+    try:
+        yield sink
+    finally:
+        zoho_tasks.get_zoho_adapter = original
 
 
