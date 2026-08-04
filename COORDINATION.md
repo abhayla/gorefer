@@ -4865,3 +4865,33 @@ gate for the pytest suite): ruff clean, `manage.py check` clean, architecture ga
 
 No deploy performed (W1 is not deployed per the contract's `deploy_tier: none`) — this
 worker stops at merged PR.
+
+---
+
+## 2026-08-04 STATUS — Wave 2 COMPLETE: E-3 baseline EMPTY, boundary gate now HARD (T-041/T-042/T-043)
+
+The doc-17 Phase-2 burn-down is done. Three serialized fleet contracts rewired every
+remaining vendor leak to the Wave-1 ports/facade (all sonnet workers, PR + CI-gated
+squash merges, independent checkers with evidence under GetWorkDone/evidence/):
+
+- **T-041 (PR #97, `19f0ef6`)** — referrals group: lead_service, admin, golive_smoke,
+  seed_demo → `apps.integrations.services`. Baseline 12→8. Checker: all code predicates
+  PASS; ONE predicate failed (behavior-freeze golive_smoke pre/post artifact absent — no
+  local Postgres on the worker box). REMEDIATION recorded: the pre/post pair is captured
+  on PROD at deploy time (pre-deploy prod predates all waves); final acceptance checker
+  validates it. T-041 stays open until then.
+- **T-042 (PR #98, `f8b2248`)** — followups + OTP → `get_messaging_port` /
+  `delivery_status` / `services.record_inbound`. Baseline 8→4. OTP QUEUED-on-non-terminal
+  semantics byte-identical (checker-diffed). Deviations verified sound: a test-compat
+  `get_wati_adapter` alias in followups/tasks.py (monkeypatches stay live) and a local
+  `_STATUS_BLOCKED` constant. Checker PASS.
+- **T-043 (PR #99, `d096e90`)** — accounts + dashboard → CRM ports; ADR-047 schedule
+  registry (`apps/integrations/schedules.py`, six entries byte-identical) + setup_schedules
+  UPDATE MODE (differing func/minutes now updates the row — the silent-ImportError trap is
+  closed), 5 new tests. **Baseline 4→0: `architecture_import_baseline.txt` is EMPTY and
+  the E-3 gate is a permanent hard boundary.** Checker verdict pending (running).
+
+NOT YET DEPLOYED — prod still runs `d342831`-era code. Deploy of the whole wave train
+(full-tree, per doc 17 deploy procedure: setup_schedules update-mode run, qcluster
+ImportError check, golive_smoke pre/post, live probes) is the architect session's next
+step, followed by final acceptance and CURRENT-STATE.md update in the same turn.
