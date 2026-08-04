@@ -9,14 +9,13 @@ from __future__ import annotations
 from ninja import NinjaAPI
 
 from apps.followups.api import router as followups_router
+from apps.integrations.router import wati_router, zoho_router
 from gorefer.flags import flags
 
 from .analytics import router as analytics_router
 from .click import router as click_router
 from .leads import router as leads_router
 from .share import router as share_router
-from .wati import router as wati_router
-from .zoho import router as zoho_router
 
 api = NinjaAPI(title="GoRefer API", version="0.1.0", description="GoRefer referral intelligence API")
 api.add_router("/click", click_router)

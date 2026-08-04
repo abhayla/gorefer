@@ -1,5 +1,3 @@
-api/wati.py
-api/zoho.py
 apps/accounts/onfile.py
 apps/accounts/service.py
 apps/dashboard/profile.py

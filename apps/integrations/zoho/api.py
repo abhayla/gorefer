@@ -25,7 +25,7 @@ import json
 from ninja import Router, Schema
 from ninja.errors import HttpError
 
-from apps.integrations.zoho.webhook import authenticate, process_webhook
+from .webhook import authenticate, process_webhook
 
 router = Router()
 
