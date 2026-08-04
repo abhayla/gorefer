@@ -4820,3 +4820,48 @@ merge-on-green); deploys + final acceptance by the architect session against liv
 W4 (shared cross-project gateway, Notifier model) is PARKED pending owner decision.
 Behavior-frozen throughout: no template/copy/timing/flag/URL change; baseline may only
 shrink; E-3 hardens automatically when it empties.
+
+---
+
+**STATUS — 2026-08-04 (Worker, T-040 W1: vendor ports + boundary routers, ADR-045/046) — PR #PENDING**
+
+Implements Wave 1 of `docs/architecture/17-Vendor-Port-Boundary-Hardening.md`: a
+vendor-neutral port layer at the top of `apps/integrations/` and the two webhook
+routers moved inside the boundary.
+
+New: `apps/integrations/ports.py` (`MessagingPort`/`CrmPort`/`CrmReadPort` Protocols +
+lazy-delegating factories `get_messaging_port()`/`get_crm_port()`/`get_crm_read_port()`,
+re-exporting the existing result dataclasses), `apps/integrations/delivery_status.py`
+(re-exports `is_terminal`/`is_delivered`/`classify_failure` from `wati.status`),
+`apps/integrations/services.py` (thin facade: `queue_lead_notifications`,
+`enqueue_lead_upsert`, `record_inbound`, `ingest_conversion`, `MAX_SYNC_ATTEMPTS`).
+
+Moved (git mv, import-path fix only, byte-identical behavior): `api/wati.py` →
+`apps/integrations/wati/api.py`, `api/zoho.py` → `apps/integrations/zoho/api.py`, now
+aggregated by the new `apps/integrations/router.py` and mounted by `api/router.py` at
+the same `/wati` / `/zoho` paths — auth ordering (401-before-schema fail-closed),
+status codes, and response shapes unchanged. `scripts/architecture_import_baseline.txt`
+shrunk by exactly those two lines (14 → 12); `check_architecture.py` prints
+`12 vendor references outside the boundary (baseline 12)`, exit 0.
+
+No adapter internals touched (wati/zoho `adapter.py`, `notify.py`, `tasks.py`,
+`ingest.py`, `webhook.py`, `engagement.py`, `status.py`, `read.py` untouched beyond the
+two moved `api.py` modules). No new app, no `INSTALLED_APPS` change, no migration.
+
+Added `tests/test_ports.py`: each factory satisfies its Protocol; with flags off (repo
+`.env` default) each factory resolves to the log-only adapter and a send through the
+port logs rather than sends; `delivery_status` re-exports behave identically to
+`wati.status`; each `services` facade function delegates to its existing target
+(mocked, call-through asserted).
+
+Updated both integration contract docs (`Wati-GoRefer/Wati-Integration-Contract.md` §11,
+`Zoho-GoRefer/Zoho-Integration-Contract.md` §6c) with a "GoRefer-side port layer
+(ADR-045/046)" section.
+
+Local gates (Postgres unavailable in this worker's sandbox — CI is the authoritative
+gate for the pytest suite): ruff clean, `manage.py check` clean, architecture gate
+12/12 (baseline shrunk by exactly the two moved files), `makemigrations --check
+--dry-run` → no changes detected.
+
+No deploy performed (W1 is not deployed per the contract's `deploy_tier: none`) — this
+worker stops at merged PR.
