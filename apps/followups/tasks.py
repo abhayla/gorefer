@@ -3,9 +3,9 @@
   - enqueue_followups(): on chat-open, insert one ScheduledFollowup per enabled rule step.
   - fire_due_followups(): the recurring sweep (registered in setup_schedules as
     `followup_sweep`, every 5 min). Selects due SCHEDULED rows, LOCKS each, runs the gate
-    (services.evaluate_gate), and sends via the Wati adapter. Mirrors
-    `apps.integrations.wati.tasks.reconcile_pending_deliveries` exactly — a recurring sweep
-    over a due-table, the idiom the whole engine is built on.
+    (services.evaluate_gate), and sends via the messaging port. Mirrors the boundary's own
+    pending-delivery reconcile sweep exactly — a recurring sweep over a due-table, the idiom
+    the whole engine is built on.
 
 In sync/demo mode (Q_CLUSTER sync=True, ENABLE_WATI_SEND=false) this runs inline against
 the log-only adapter, so the whole flow is testable offline. Nothing sends until
@@ -22,13 +22,16 @@ from django.utils import timezone
 
 from apps.events import vocab
 from apps.events.models import Event
-from apps.integrations.wati import status as st
-from apps.integrations.wati.adapter import get_wati_adapter
+from apps.integrations.ports import get_messaging_port as get_wati_adapter
 
 from . import services
 from .models import FollowupRule, ScheduledFollowup
 
 logger = logging.getLogger("gorefer.followups.tasks")
+
+# Mirrors the fail-closed-allowlist status value; not yet part of the neutral
+# delivery_status vocabulary (doc 17 tracks the remaining vendor-status surface).
+_STATUS_BLOCKED = "blocked"
 
 
 def enqueue_followups(
@@ -182,7 +185,7 @@ def _apply(sf: ScheduledFollowup, decision: str, reason: str, now, counts: dict)
         # doc 15 §6.1 — at the configured step, ALSO nudge this idle prospect's referrer
         # (if we know their phone) so they can push their friend personally. Flag-gated.
         _maybe_referrer_nudge(sf, identity, counts)
-    elif result.raw_status == st.STATUS_BLOCKED:
+    elif result.raw_status == _STATUS_BLOCKED:
         # Fail-closed allowlist blocked it — a suppression, not a delivery failure.
         sf.status = ScheduledFollowup.STATUS_SKIPPED
         sf.reason = "recipient not in Wati allowlist (fail-closed)"
@@ -212,7 +215,7 @@ def poll_inbound_windows(limit: int = 50) -> dict:
 
     from apps.common.phone import normalize_phone
     from apps.config.cascade import resolve
-    from apps.integrations.wati.webhook import record_inbound
+    from apps.integrations.services import record_inbound
     from apps.referrals.models import Prospect
     from apps.tenants.models import Tenant
 
