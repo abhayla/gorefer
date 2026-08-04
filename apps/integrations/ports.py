@@ -5,7 +5,9 @@ Domain code should import ONLY from here (or `.services` / `.delivery_status` /
 These Protocols formalize the shapes the existing adapters already have; this is
 extraction, not redesign. Factories resolve to today's adapters unchanged (live vs
 log-only still swaps by the same config flags) via LAZY imports inside the function
-body, so importing this module never triggers app-loading of the vendor packages.
+body — but the dataclass re-exports above (`SendResult`, `LeadWriteResult`, etc.) are
+imported eagerly at module load, so importing this module DOES load the vendor adapter
+modules; only the factory calls (which pick live vs log-only) are deferred.
 """
 from __future__ import annotations
 
