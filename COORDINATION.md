@@ -4895,3 +4895,21 @@ NOT YET DEPLOYED — prod still runs `d342831`-era code. Deploy of the whole wav
 (full-tree, per doc 17 deploy procedure: setup_schedules update-mode run, qcluster
 ImportError check, golive_smoke pre/post, live probes) is the architect session's next
 step, followed by final acceptance and CURRENT-STATE.md update in the same turn.
+
+---
+
+## 2026-08-04 STATUS — DEPLOYED: doc-17 boundary train LIVE on prod (`f4f079f`), W3 merged, T-041 remediation complete
+
+Full-tree deploy 2026-08-04 ~14:40 IST by the architect session (owner-authorized autonomous
+run). Prod `f9f0144` → **`f4f079f`** (= main tip; W1 #96, W2 #97/#98/#99, records #100, W3
+#101). Method: `git -c core.autocrlf=false archive` (LF-clean — the T-034 CRLF trap tested
+for and avoided) → rsync --delete with .env/.venv/var/staticfiles/DEPLOYED_SHA exclusions;
+backup `predeploy-w1w3-20260804-143744.tgz`; 10 critical files sha256-verified vs git blobs;
+migrate --check clean (zero new migrations across all waves); setup_schedules (ADR-047
+update mode) — all 11 rows match, no drift; both services restarted + active; qcluster log
+ImportError-free. Live probes: home/health/`/d/pifs` 200; `/api/wati/webhook` and
+`/api/zoho/status-webhook` both 401 fail-closed at their UNCHANGED paths (ADR-046 router
+move verified at destination); bot-UA `/r/EKU497` preview 200. **T-041 remediation
+delivered:** golive_smoke pre (`f9f0144`) vs post (`f4f079f`) on PROD — structurally
+IDENTICAL, errors=[] both runs (evidence/2026-08-04-T-041/). Final acceptance checker
+dispatched to validate the whole train end-to-end. CURRENT-STATE.md updated in this turn.
