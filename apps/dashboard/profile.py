@@ -18,10 +18,10 @@ import logging
 
 from apps.events.models import Event, VisitorPII
 from apps.integrations.models import Conversion
-from apps.integrations.zoho.read import (
+from apps.integrations.ports import (
     ReferredPeople,
     ZohoContact,
-    get_zoho_read_adapter,
+    get_crm_read_port,
 )
 from apps.referrals.models import Lead, Referral, ReferralIdentity
 
@@ -225,7 +225,7 @@ def _safe_zoho_contact(client_id: str) -> ZohoContact:
     arrives only via the webhook), so a missed read loses nothing but chips.
     """
     try:
-        return get_zoho_read_adapter().fetch_contact_by_client_id(client_id=client_id)
+        return get_crm_read_port().fetch_contact_by_client_id(client_id=client_id)
     except Exception:
         logger.warning(
             "Zoho enrichment unavailable for ClientId=%s — degrading",
@@ -418,7 +418,7 @@ def clicks_rows(tenant, client_id: str) -> list[dict]:
 def referred_people(tenant, client_id: str) -> list[dict]:
     """Referred-People tab — one row per identified person, from Zoho READ."""
     try:
-        data = get_zoho_read_adapter().fetch_referred_people(referrer_client_id=client_id)
+        data = get_crm_read_port().fetch_referred_people(referrer_client_id=client_id)
     except Exception:
         # Same rationale as _safe_zoho_contact: an unreachable Zoho must not 500 the
         # profile. An empty tab renders the honest "no people" empty state.

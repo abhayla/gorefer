@@ -193,7 +193,7 @@ def test_profile_survives_a_zoho_read_outage():
     boom.fetch_contact_by_client_id.side_effect = RuntimeError("Zoho HTTP 502: down")
     boom.fetch_referred_people.side_effect = RuntimeError("Zoho HTTP 502: down")
 
-    with mock.patch.object(profile, "get_zoho_read_adapter", return_value=boom):
+    with mock.patch.object(profile, "get_crm_read_port", return_value=boom):
         band = profile.top_band(None, "RJ4521")
         people = profile.referred_people(None, "RJ4521")
 
