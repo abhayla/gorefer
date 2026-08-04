@@ -86,7 +86,7 @@ class Command(BaseCommand):
         """Seed demo conversions THROUGH the Zoho ingest path (never an internal
         fabrication) — proving account_opened only ever comes from the Zoho path.
         One on-platform (RJ4521 converts) + one off-platform zero-click (new id)."""
-        from apps.integrations.zoho.ingest import ingest_conversion
+        from apps.integrations import services
 
         fixtures = [
             {"event_id": "demo-conv-1", "opener_zerodha_account_id": "ZA9001",
@@ -98,7 +98,7 @@ class Command(BaseCommand):
         ]
         n = 0
         for fx in fixtures:
-            if ingest_conversion(tenant=tenant, payload=fx) is not None:
+            if services.ingest_conversion(tenant=tenant, payload=fx) is not None:
                 n += 1
         return n
 

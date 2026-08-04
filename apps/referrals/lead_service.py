@@ -23,8 +23,7 @@ from django.utils import timezone
 from apps.common.phone import normalize_phone
 from apps.events import vocab
 from apps.events.models import Event
-from apps.integrations.wati.notify import queue_lead_notifications
-from apps.integrations.zoho.tasks import enqueue_upsert
+from apps.integrations import services
 from apps.referrals.models import Lead, Prospect, Referral
 
 logger = logging.getLogger("gorefer.leads")
@@ -112,7 +111,7 @@ def capture_lead(*, tenant, referral: Referral, name: str, mobile: str, email: s
     # only after the lead is durably saved (capture-first).
     referrer_client_id = _referrer_client_id(referral)
     transaction.on_commit(
-        lambda: queue_lead_notifications(
+        lambda: services.queue_lead_notifications(
             tenant=tenant, referral=referral, prospect=prospect, client_id=referrer_client_id
         )
     )
@@ -121,7 +120,7 @@ def capture_lead(*, tenant, referral: Referral, name: str, mobile: str, email: s
     # Zoho, and so the task can only ever see a durably-saved lead. A Zoho outage now
     # leaves the lead `pending` for the retry/backfill sweep instead of stranding it
     # local-only. Behind ENABLE_ZOHO_WRITE → log-only adapter in demo (no network).
-    transaction.on_commit(lambda: enqueue_upsert(lead.pk))
+    transaction.on_commit(lambda: services.enqueue_lead_upsert(lead.pk))
     return lead
 
 
