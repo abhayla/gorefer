@@ -2,7 +2,3 @@ apps/accounts/onfile.py
 apps/accounts/service.py
 apps/dashboard/profile.py
 apps/events/management/commands/setup_schedules.py
-apps/followups/tasks.py
-apps/otp/adapters.py
-apps/otp/ports.py
-apps/otp/recipient.py

@@ -46,11 +46,11 @@ class WatiWhatsAppOtpAdapter:
     code = "whatsapp_wati"
 
     def send(self, *, recipient: str, code: str, ttl_seconds: int, context: dict) -> DeliveryResult:
-        from apps.integrations.wati import status as st
-        from apps.integrations.wati.adapter import get_wati_adapter
+        from apps.integrations import delivery_status as st
+        from apps.integrations.ports import get_messaging_port
 
         template = context.get("template") or "gr_platform_gorefer_login_otp_en_2026_07_21"
-        adapter = get_wati_adapter()
+        adapter = get_messaging_port()
         logger.info(
             "OTP whatsapp_wati send: to=%s template=%s code_len=%d ttl=%ds",
             recipient, template, len(code), ttl_seconds,
