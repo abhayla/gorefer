@@ -5061,3 +5061,53 @@ Deployed by dispatcher: api/analytics.py, apps/common/api_auth.py, apps/followup
 piped blob-hash-verified; DEPLOYED_SHA=7eb1c82; live probes: followups anon POST **403**
 (new auth layer), zoho webhook bad-key **401** (key layer — CSRF did NOT touch webhooks),
 health/home 200. The 2026-08-06 review's last live security gap is closed in prod.
+
+## 2026-08-06 STATUS — T-048 PR: Wati webhook replay/stale-status guard + 3 hardenings
+
+**Branch** `fix/t048-wati-replay` (worktree `../gorefer-wt-t048`, from `origin/main` d7727f2).
+
+**SURFACED FINDING — the contract's premise did not hold, and the work was re-aimed
+accordingly (reported, not silently resolved).** T-048 was written against "the Wati
+delivery-status webhook". **There is no such webhook.** Three independent sources agree:
+`Wati-Integration-Contract.md` §5 ("there is no Wati delivery webhook"), the same sentence in
+`apps/integrations/wati/tasks.py:reconcile_pending_deliveries`, and the router itself — Wati has
+exactly two inbound endpoints, `/api/wati/webhook` (assisted capture) and `/api/wati/inbound`
+(24h-window feed). Delivery status is applied ONLY by the send + the polling reconcile sweep.
+
+I did **not** invent a delivery-status webhook to make the wording true (CLAUDE.md §3: never
+invent features, never add an external contract surface the vendor is not configured to call).
+Instead both DoD predicates were mapped onto the replayable surfaces that actually exist:
+
+1. **Replay** — proven end-to-end through `/api/wati/inbound`, which is the endpoint with real
+   harm: it opens the 24h session window and, on a fresh open, enqueues the whole nudge cadence.
+   One captured request URL could be re-POSTed a day later to re-fire that cadence at a person.
+2. **Stale status** — proven on the single apply-status function both real paths now share
+   (`wati.tasks._finalize`), plus the equivalent ordering bug found in the window feed (below).
+
+**A live defect was found while doing this, not just a theoretical one.**
+`followups.services.stamp_inbound` set `last_inbound_at = at` unconditionally, so an inbound with
+an OLDER timestamp rewound the window. `window_is_open` is computed from that field, so a rewind
+marks a genuinely open 24h window CLOSED and silently downgrades every in-window session send to
+the closed-window path. Now monotonic.
+
+**What shipped:** `wati/replay.py` (dedupe keyed on Wati's own `id`/`whatsappMessageId`, SHA-256
+of exact bytes as fallback; UNIQUE-constrained claim in new `wati_webhook_receipt`, not
+tenant-scoped for the same reason as `zoho_webhook_nonce`; hourly purge on the ADR-047 registry);
+`supersedes`/`status_rank` in `wati/status.py`, re-exported vendor-neutrally from
+`delivery_status.py`; `_finalize` returns applied/refused and the sweep stops counting refused
+rows as finalized; monotonic `stamp_inbound`; `MinimumLengthValidator` min_length 12; static
+ReDoS screen on the admin-editable `client_id_pattern` reusing the existing safe-degrade path;
+report-only `pytest-cov` in CI (no `--cov-fail-under` anywhere).
+
+**Evidence.** `tests/test_wati_replay.py` (23) + `tests/test_client_id_pattern_redos.py` (12) +
+1 appended guardrail test. Full suite **822 passed** (`-n 4`, `TEST_DB_NAME=gorefer_test_t048`);
+ruff, `manage.py check`, `check_architecture.py` (0 outside boundary), `makemigrations --check`
+all clean. Every pre-existing Wati/followups/reconcile test passes UNMODIFIED. Contract doc
+`Wati-GoRefer/Wati-Integration-Contract.md` §8 updated with the dedupe identity, response codes,
+retention and the stale-status rank rule exactly as implemented — no `[skip-contract-doc]`.
+
+**QUESTION for the DA (not blocking this PR):** with no Wati delivery-status webhook available,
+delivery truth depends entirely on the 15-min reconcile poll. Is a delivery-status webhook worth
+requesting from Wati, or is the poll the accepted permanent design? Recorded, not assumed.
+
+**Deploy:** none in this task — code + tests only (adds one migration, `0006_watiwebhookreceipt`).

@@ -189,3 +189,36 @@ class ZohoDeadLetter(TimestampedModel, TenantScopedModel):
 
     class Meta:
         db_table = "zoho_dead_letter"
+
+
+class WatiWebhookReceipt(TimestampedModel):
+    """T-048 replay guard: one row per Wati webhook event we have already accepted.
+
+    Wati's webhook sender is FIXED — it cannot attach a custom header, a signature, or
+    a nonce; the only credential it carries is the `?token=` query param (see
+    `wati/webhook.py:authenticate`). So replay protection cannot be a wax-seal like the
+    Zoho path (`ZohoWebhookNonce`): it has to be idempotency keyed on the identity Wati
+    ITSELF puts in the body (`id` / `whatsappMessageId` / …), falling back to a digest
+    of the exact bytes for a payload that carries no id.
+
+    Deliberately NOT tenant-scoped, for the same reason as `ZohoWebhookNonce`: the
+    replay check runs before the request is trusted, so scoping uniqueness per tenant
+    would let a replay succeed by claiming a different tenant.
+
+    Rows are purged past the retention window (`purge_expired_receipts`). Retention is
+    intentionally longer than the 24h WhatsApp session window, because the harm a replay
+    causes (re-opening a window, re-enqueuing a whole nudge cadence) is bounded by that
+    window.
+    """
+
+    endpoint = models.CharField(max_length=40)     # "inbound" | "assisted"
+    event_key = models.CharField(max_length=200)   # derived identity (see wati/replay.py)
+
+    class Meta:
+        db_table = "wati_webhook_receipt"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["endpoint", "event_key"], name="uniq_wati_receipt_endpoint_event"
+            )
+        ]
+        indexes = [models.Index(fields=["created_at"])]  # the purge sweep's scan

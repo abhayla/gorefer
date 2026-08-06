@@ -88,5 +88,16 @@ jobs:
       - name: Migrate (Postgres)
         run: python manage.py migrate --noinput
 
-      - name: Tests (pytest)
-        run: python -m pytest -q
+      - name: Tests (pytest + coverage report)
+        # Coverage is REPORT-ONLY: no --cov-fail-under, no threshold, so this can never
+        # fail the build on its own. It exists to make the number visible in the log.
+        # `python -m pytest -q` locally still runs exactly as before (no cov flags).
+        run: |
+          python -m pytest -q \
+            --cov=apps --cov=api --cov=gorefer \
+            --cov-report=term --cov-report=term-missing:skip-covered
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          echo "Coverage is report-only — no threshold gates this build."

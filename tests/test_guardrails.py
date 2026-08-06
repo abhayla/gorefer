@@ -191,3 +191,24 @@ def test_lead_capture_never_sets_account_opened():
     assert referral.conversion_status == ""      # never set outside Zoho
     assert referral.credited_referrer == ""
     assert referral.account_opened_at is None
+
+
+# --- T-048: staff/admin password minimum length ------------------------------
+
+def test_admin_password_minimum_length_is_12():
+    """Staff accounts reach an internet-facing dashboard holding every referrer's PII,
+    so Django's default 8-character floor is not enough. 12 is the structural posture
+    (deliberately not a tenant config knob — a tenant must not weaken its own auth)."""
+    from django.conf import settings
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+
+    entry = next(
+        v for v in settings.AUTH_PASSWORD_VALIDATORS
+        if v["NAME"].endswith("MinimumLengthValidator")
+    )
+    assert entry.get("OPTIONS", {}).get("min_length") == 12
+
+    with pytest.raises(ValidationError):
+        validate_password("Xk7#pQ2z9L")      # 10 chars, otherwise strong
+    validate_password("Xk7#pQ2z9Lmn")        # 12 chars — accepted
