@@ -8,7 +8,7 @@ python-dotenv>=1.0
 
 # Dev / CI
 pytest>=8.0
-pytest-django>=4.9
+pytest-django>=4.9,<4.13   # 4.13.0 (released ~2026-08-05) breaks django_db fixture setup (_pre_setup_ran_eagerly AttributeError); re-test before lifting
 # DF-TESTDB-ISOLATION: gives each worker its OWN test DB (gorefer_test_gw0, _gw1, …),
 # which is what makes concurrent runs safe — not merely faster.
 pytest-xdist>=3.5

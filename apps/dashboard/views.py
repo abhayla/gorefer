@@ -164,16 +164,29 @@ def explorer(request):
     direction = request.GET.get("dir", "desc")
     if direction not in ("asc", "desc"):
         direction = "desc"
+    try:
+        page = max(1, int(request.GET.get("page", 1)))
+    except ValueError:
+        page = 1
+    total = queries.explorer_row_count(tenant, source=source, stage=stage, search=search)
+    page_size = queries.explorer_page_size(tenant)
+    total_pages = max(1, -(-total // page_size)) if page_size else 1
+    page = min(page, total_pages)
     ctx = {
         "rows": queries.explorer_rows(
             tenant, source=source, stage=stage, search=search,
-            sort=sort, direction=direction,
+            sort=sort, direction=direction, page=page,
         ),
         "filter_source": source,
         "filter_stage": stage,
         "search": search,
         "sort": sort,
         "dir": direction,
+        "page": page,
+        "total_pages": total_pages,
+        "total_rows": total,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
         "sync_health": _sync_health(tenant),
         "sources": ["referral_link", "partner_direct", "zoho_import"],
         "stages": [

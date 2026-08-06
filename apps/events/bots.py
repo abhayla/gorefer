@@ -58,11 +58,22 @@ def is_synthetic_user_agent(user_agent: str | None) -> bool:
     return any(marker in ua for marker in SYNTHETIC_UA_MARKERS)
 
 
-def exclude_synthetic(qs):
-    """Filter an Event queryset down to non-synthetic rows (count-time exclusion)."""
+def synthetic_ua_q(prefix: str = ""):
+    """A Q matching synthetic-UA rows — the annotation-safe twin of `exclude_synthetic`.
+
+    `prefix` lets callers build the condition across a reverse relation (e.g.
+    `synthetic_ua_q(prefix="events__")` for a Count/Max filter on a related Event).
+    Single source of the SYNTHETIC_UA_MARKERS list so the two never drift.
+    """
     from django.db.models import Q
 
+    field = f"{prefix}user_agent"
     cond = Q()
     for marker in SYNTHETIC_UA_MARKERS:
-        cond |= Q(user_agent__icontains=marker)
-    return qs.exclude(cond)
+        cond |= Q(**{f"{field}__icontains": marker})
+    return cond
+
+
+def exclude_synthetic(qs):
+    """Filter an Event queryset down to non-synthetic rows (count-time exclusion)."""
+    return qs.exclude(synthetic_ua_q())
