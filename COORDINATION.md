@@ -1,5 +1,7 @@
 # GoRefer — Coordination Log (Design Authority ⇆ Engineer)
 
+> **Archive.** Entries dated before 2026-07-01 live in `COORDINATION-archive-2026H1.md` (none currently — earliest live entry is 2026-07-06). **Rotation policy:** rotate to a new quarterly archive file when this file exceeds ~2500 lines; append-only within a live file, cut-paste (never edited) across a rotation.
+
 > **Purpose.** The async communication channel between the **Design Authority (DA)** — Claude in the Cowork planning/advisory session that authored the specs — and the **Engineer** — Claude Code, implementing in the dev environment. The two never talk directly. **Abhay relays entries between the sessions and commits this file**, so both sides always read the latest state here.
 
 ## Protocol (read before acting)
