@@ -91,7 +91,7 @@ def erase_subject(tenant, *, mobile: str | None = None, visitor_id: str | None =
         from apps.common.phone import normalize_phone
 
         canonical = normalize_phone(mobile)
-        qs = Prospect.objects.filter(tenant=tenant, mobile=canonical)
+        qs = Prospect.objects.for_tenant(tenant).filter(mobile=canonical)
         for prospect in qs:
             prospect.name = ERASED_NAME
             prospect.email = ""
@@ -102,8 +102,8 @@ def erase_subject(tenant, *, mobile: str | None = None, visitor_id: str | None =
             counts["leads"] += prospect.leads.count()
 
     if visitor_id:
-        pii_qs = VisitorPII.objects.filter(
-            tenant=tenant, visitor_id=visitor_id, erased_at__isnull=True
+        pii_qs = VisitorPII.objects.for_tenant(tenant).filter(
+            visitor_id=visitor_id, erased_at__isnull=True
         )
         counts["visitor_pii"] += pii_qs.update(raw_ip=None, city="", erased_at=now)
 
@@ -137,7 +137,7 @@ def purge_expired_pii(tenant=None, *, days: int | None = None, dry_run: bool = F
         totals["cutoff"] = cutoff.date().isoformat()
         totals["days"] = window
 
-        stale = Prospect.objects.filter(tenant=tnt, created_at__lt=cutoff).exclude(
+        stale = Prospect.objects.for_tenant(tnt).filter(created_at__lt=cutoff).exclude(
             name=ERASED_NAME
         )
         for prospect in stale:
@@ -156,8 +156,8 @@ def purge_expired_pii(tenant=None, *, days: int | None = None, dry_run: bool = F
             erase_subject(tnt, mobile=prospect.mobile)
             totals["prospects"] += 1
 
-        old_pii = VisitorPII.objects.filter(
-            tenant=tnt, created_at__lt=cutoff, erased_at__isnull=True
+        old_pii = VisitorPII.objects.for_tenant(tnt).filter(
+            created_at__lt=cutoff, erased_at__isnull=True
         )
         if dry_run:
             totals["visitor_pii"] += old_pii.count()
