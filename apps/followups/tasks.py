@@ -60,7 +60,7 @@ def enqueue_followups(
         return {"created": 0, "reason": "opted_out"}
 
     opened_at = opened_at or timezone.now()
-    rules = FollowupRule.objects.filter(tenant=tenant, enabled=True).order_by("order", "id")
+    rules = FollowupRule.objects.for_tenant(tenant).filter(enabled=True).order_by("order", "id")
     created = 0
     for rule in rules:
         fire_at = opened_at + timedelta(minutes=rule.offset_minutes)
@@ -237,7 +237,7 @@ def poll_inbound_windows(limit: int = 50) -> dict:
                 mobiles.add(n)
         cutoff = timezone.now() - timedelta(days=3)
         for m in (
-            Prospect.objects.filter(tenant=tenant, created_at__gte=cutoff, deleted_at__isnull=True)
+            Prospect.objects.for_tenant(tenant).filter(created_at__gte=cutoff, deleted_at__isnull=True)
             .values_list("mobile", flat=True)[:limit]
         ):
             n = normalize_phone(m)
@@ -253,7 +253,7 @@ def poll_inbound_windows(limit: int = 50) -> dict:
                 continue
             if latest is None:
                 continue
-            win = FollowupWindow.objects.filter(tenant=tenant, mobile=mobile).first()
+            win = FollowupWindow.objects.for_tenant(tenant).filter(mobile=mobile).first()
             if win is not None and win.last_inbound_at is not None and latest <= win.last_inbound_at:
                 continue  # already recorded this inbound — nothing new
             res = record_inbound(tenant, mobile, latest)
@@ -305,8 +305,8 @@ def _maybe_referrer_nudge(sf: ScheduledFollowup, identity, counts: dict) -> None
             return  # never guess a referrer's phone
 
         cust = (
-            Customer.objects.filter(
-                tenant=sf.tenant, client_id=identity.referrer_client_id, deleted_at__isnull=True
+            Customer.objects.for_tenant(sf.tenant).filter(
+                client_id=identity.referrer_client_id, deleted_at__isnull=True
             )
             .exclude(mobile="")
             .first()

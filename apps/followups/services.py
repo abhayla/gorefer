@@ -73,7 +73,7 @@ def followups_enabled(tenant_id: int | None) -> bool:
 
 
 def get_window(tenant, mobile: str) -> FollowupWindow | None:
-    return FollowupWindow.objects.filter(tenant=tenant, mobile=mobile).first()
+    return FollowupWindow.objects.for_tenant(tenant).filter(mobile=mobile).first()
 
 
 def is_opted_out(tenant, mobile: str) -> bool:
@@ -88,8 +88,8 @@ def is_opted_out(tenant, mobile: str) -> bool:
         return True
     from apps.referrals.models import Prospect
 
-    return Prospect.objects.filter(
-        tenant=tenant, mobile=mobile, deleted_at__isnull=True, whatsapp_opt_out=True
+    return Prospect.objects.for_tenant(tenant).filter(
+        mobile=mobile, deleted_at__isnull=True, whatsapp_opt_out=True
     ).exists() if _prospect_has_optout_field() else False
 
 
@@ -108,7 +108,7 @@ def stamp_inbound(tenant, mobile: str, at=None) -> tuple[FollowupWindow, bool]:
     counts as a reply for engaged-exit) but does NOT re-enqueue.
     """
     at = at or timezone.now()
-    win = FollowupWindow.objects.filter(tenant=tenant, mobile=mobile).first()
+    win = FollowupWindow.objects.for_tenant(tenant).filter(mobile=mobile).first()
     if win is None:
         win = FollowupWindow.objects.create(tenant=tenant, mobile=mobile, last_inbound_at=at)
         return win, True
@@ -168,8 +168,8 @@ def has_converted(tenant, mobile: str) -> bool:
     try:
         from apps.referrals.models import Lead
 
-        return Lead.objects.filter(
-            tenant=tenant, prospect__mobile=mobile, deleted_at__isnull=True
+        return Lead.objects.for_tenant(tenant).filter(
+            prospect__mobile=mobile, deleted_at__isnull=True
         ).filter(
             Q(referral__conversion_status="account_opened")
             | Q(status="account_opened")
@@ -250,8 +250,8 @@ def _min_gap(tenant_id: int | None) -> timedelta:
 def last_sent_at(tenant, mobile: str):
     """The most recent SENT nudge time for this contact (aware UTC), or None."""
     row = (
-        ScheduledFollowup.objects.filter(
-            tenant=tenant, mobile=mobile, status=ScheduledFollowup.STATUS_SENT, sent_at__isnull=False
+        ScheduledFollowup.objects.for_tenant(tenant).filter(
+            mobile=mobile, status=ScheduledFollowup.STATUS_SENT, sent_at__isnull=False
         )
         .order_by("-sent_at")
         .values_list("sent_at", flat=True)
