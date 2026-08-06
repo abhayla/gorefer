@@ -80,5 +80,24 @@
       </tbody>
     </table>
   </div>
+  {% if total_pages > 1 %}
+  <div class="flex items-center justify-between gap-3 mt-4 text-[12px] text-ink-500">
+    <span>Page {{ page }} of {{ total_pages }} &middot; {{ total_rows }} referral{{ total_rows|pluralize }}</span>
+    <div class="flex items-center gap-2">
+      {% if has_prev %}
+        <a href="?q={{ search|urlencode }}&amp;source={{ filter_source|urlencode }}&amp;stage={{ filter_stage|urlencode }}&amp;sort={{ sort }}&amp;dir={{ dir }}&amp;page={{ page|add:"-1" }}"
+           class="rounded-full border border-line px-3 py-1.5 hover:bg-cobalt-50/40">Previous</a>
+      {% else %}
+        <span class="rounded-full border border-line px-3 py-1.5 text-ink-200">Previous</span>
+      {% endif %}
+      {% if has_next %}
+        <a href="?q={{ search|urlencode }}&amp;source={{ filter_source|urlencode }}&amp;stage={{ filter_stage|urlencode }}&amp;sort={{ sort }}&amp;dir={{ dir }}&amp;page={{ page|add:"1" }}"
+           class="rounded-full border border-line px-3 py-1.5 hover:bg-cobalt-50/40">Next</a>
+      {% else %}
+        <span class="rounded-full border border-line px-3 py-1.5 text-ink-200">Next</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
 </section>
 {% endblock %}
