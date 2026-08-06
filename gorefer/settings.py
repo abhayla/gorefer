@@ -228,7 +228,15 @@ LOGOUT_REDIRECT_URL = "dashboard_login"
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    # 12, not Django's default 8 (T-048). These are STAFF/admin accounts on an
+    # internet-facing dashboard that can read every referrer's PII; an 8-character
+    # password is inside brute-force range for a leaked hash. Structural security
+    # posture — deliberately NOT a tenant config knob (CLAUDE.md §6e is about
+    # behaviour literals, not about letting a tenant weaken its own auth).
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 12},
+    },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]

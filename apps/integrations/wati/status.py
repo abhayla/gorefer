@@ -38,6 +38,49 @@ META_ERROR_MEANINGS = {
 }
 
 
+# --- status ordering / stale-status guard (T-048) ---------------------------
+#
+# Delivery status only ever moves FORWARD. Nothing that arrives later — a replayed
+# webhook, a reconcile sweep re-reading an old getMessages page, a duplicate task —
+# may walk a message BACKWARDS from a status it has already reached.
+#
+# Ranks encode "how far along" a message is, not how good the news is:
+#   accepted(1) < sent(2) < {delivered, failed, blocked, simulated_delivered}(3) < read(4)
+# `failed` shares rank 3 with `delivered` deliberately: they are mutually exclusive
+# OUTCOMES of the same step, so neither may overwrite the other. Whichever terminal
+# outcome we observed first is the one we keep — we never flip a recorded delivery into
+# a failure (or the reverse) on a late re-read.
+_STATUS_RANK = {
+    STATUS_ACCEPTED: 1,
+    STATUS_SENT: 2,
+    STATUS_DELIVERED: 3,
+    STATUS_FAILED: 3,
+    STATUS_BLOCKED: 3,
+    STATUS_SIMULATED_DELIVERED: 3,
+    STATUS_READ: 4,
+}
+# An unknown/queued status ranks below everything known, so it can never displace a
+# recorded outcome — and a known status always beats it.
+_UNKNOWN_RANK = 0
+
+
+def status_rank(status: str) -> int:
+    return _STATUS_RANK.get(status, _UNKNOWN_RANK)
+
+
+def supersedes(current: str, incoming: str) -> bool:
+    """May `incoming` replace `current`? Only if it is strictly further along.
+
+    This is THE guard against a stale status overwriting a newer one. Examples:
+      supersedes("accepted", "delivered") -> True   (normal progression)
+      supersedes("delivered", "read")     -> True   (read implies delivered)
+      supersedes("delivered", "sent")     -> False  (a replayed older status)
+      supersedes("delivered", "failed")   -> False  (never flip a recorded outcome)
+      supersedes("read", "read")          -> False  (a duplicate is a no-op)
+    """
+    return status_rank(incoming) > status_rank(current)
+
+
 def is_terminal(status: str) -> bool:
     return status in TERMINAL_STATUSES
 
