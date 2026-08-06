@@ -4962,3 +4962,43 @@ of the dashboard fix, not scope creep.
 Local gates green: ruff, `manage.py check`, architecture gate (E-3: 0/0), migrations
 `--check --dry-run` (no changes), full `pytest -n 4` (768 passed, includes all 29
 pre-existing dashboard tests unmodified + 3 new bounded-query tests).
+
+## 2026-08-06 STATUS — T-046 MERGED+DEPLOYED (`8f71be6`); P0-A CLOSED (Contacts rule live, TZ bug found+fixed); Wati token rotated
+
+**Engineer (Fable session, owner-dispatched "three review fixes").**
+
+1. **T-046 dashboard N+1 (PR #104) — merged and DEPLOYED.** CI initially failed on
+   pytest-django 4.13.0 (released ~08-05; broke `django_db` fixture setup with
+   `_pre_setup_ran_eagerly` AttributeError on EVERY PR — green main on 08-04 ran 4.12.0).
+   Pinned `pytest-django>=4.9,<4.13` on the PR branch; CI green; squash-merged `8f71be6`
+   (human-verified MERGED, CI-before-merge). Independent checker: PASS 8/8 dod predicates,
+   768 tests re-run in a detached worktree, evidence `GetWorkDone/evidence/2026-08-06-T-046/`
+   + LEDGER line. Deployed via git-show pipe (5 files, blob-hash-verified byte-exact),
+   `DEPLOYED_SHA=8f71be6`, services active, health/home 200, admin-panel 302-to-login.
+
+2. **P0-A CLOSED — the real Zoho→GoRefer push pipe is live and end-to-end verified.**
+   Created `gorefer_webhook_signer_contacts` (Automation, arg `contactId`←Contact Id) and
+   workflow rule "GoRefer account opened Contacts" (id `475281000042172012`, Contacts
+   Create-or-Edit + repeat-on-edit, `Account_Opened_On is not empty`), ACTIVE. Live fire
+   (edit of contact KTP804) EXPOSED a latent Deluge TZ bug: signer formatted IST wall-clock,
+   parsed as GMT → timestamp +19800s → seal rejected. The 18-Jul "seal proven" was curl-only;
+   no Deluge sender had ever fired (that's WHY P0-A existed), so the bug was invisible in both
+   signers. Fixed in-console (`toString(...,"GMT")`), synced to both canonical `.dg` files in
+   `5Wealths\Zoho-Project\deluge\`. Re-fire: HTTP 200, conversion APPLIED (KTP804, true
+   opening date 2022-10-02 per ADR-017, referrer VPP326 as Zoho holds), duplicate firing
+   refused as nonce replay, exactly 1 row in `conversions`. Bonus: a 2022 opening the
+   reconciler's watermark could never reach — the push pipe already recovers what the sweep
+   cannot. Reconciler stays as safety net. NOTE for future automation: Zoho CRM v8 has a
+   workflow-rules API now; our token lacks `settings.workflow_rules` scope (self-client
+   re-mint needs owner MFA once) — the UI path is fragile (CRM-Plus shell recycles tabs).
+
+3. **Wati webhook token rotated** (review finding: query-param token in access logs).
+   VPS `.env` updated + services restarted (old key in `.env.bak-tokenrotate-20260806`);
+   Wati-dashboard URL paste staged as owner TODO-Manual card (dashboard needs owner login).
+   Until pasted: Wati webhook POSTs 401, self-healing via pending-delivery reconcile —
+   inbound is poll-based (chatbot-suppressed webhook), so no message loss.
+
+QUESTION (non-blocking, for DA): the workflow rule double-fires per record edit (two POSTs
+per save — second correctly refused as replay). Suspect the Create-or-Edit + repeat-on-edit
+combination; harmless under idempotency+nonce, but worth deciding whether to switch the
+rule to Edit-only-with-repeat if Zoho-side double-execution is confirmed as the cause.
