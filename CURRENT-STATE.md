@@ -11,7 +11,18 @@
 > wins; if either disagrees with the live system, **the live system wins** — verify, don't
 > trust (commands at the bottom).
 >
-> **Last updated:** 2026-08-01 07:00 IST (**DEPLOYED to prod: `431931f` = main tip** — T-037
+> **Last updated:** 2026-08-06 16:30 IST (**DEPLOYED to prod: `8f71be6` = main tip** — T-046
+> dashboard N+1 fix (PR #104): explorer/leaderboard rewritten to queryset annotations +
+> pagination (new cascade key `dashboard_explorer_page_size`, default 100), `_referrer_name`
+> consolidated to one shared helper; deployed via git-show pipe (5 files, blob-hash-verified),
+> services active, health/home probes green, admin-panel 302-to-login as expected. Also
+> carries the `pytest-django<4.13` pin (4.13.0 broke django_db fixture setup on every PR).
+> **P0-A CLOSED the same afternoon** — Contacts workflow rule + signer live and verified
+> end-to-end incl. a latent Deluge TZ bug found by the live fire and fixed in-console (full
+> story in the Zoho-ingest section below). **Wati webhook token ROTATED** on the VPS (old key
+> in `.env.bak-tokenrotate-20260806`); the Wati-dashboard URL paste is an owner TODO-Manual
+> card — until pasted, Wati webhook POSTs 401 and self-heal via the pending-delivery
+> reconcile, no data loss.) — prior 2026-08-01 07:00 IST (**DEPLOYED: `431931f`** — T-037
 > Q_CLUSTER timeout 60→600 (retry 720): the nightly 21:00 IST engagement digest had NEVER
 > survived its schedule — django-q killed the multi-minute Wati pull at 60s on BOTH 07-30 and
 > 07-31 (Failure rows are the evidence; only manual runs ever completed). Also carries PR #85
@@ -77,29 +88,36 @@ The prod `.env` lines say `false` for the three integration flags — those are 
 defaults**; the truth is the ConfigGlobal override read through `resolve_flag()`. Never read
 `.env` alone for flag state.
 
-## Zoho ingest — ENDPOINT LIVE, but NOTHING FEEDS IT (P0-D, corrected 2026-07-27)
+## Zoho ingest — P0-A CLOSED 2026-08-06: the real push pipe is LIVE and verified
 
-**The webhook works; no real conversion has ever arrived through it.** The previous wording
-here ("sealed + ingesting", `RJ4521` "webhook-ingested same evening") was **false** and is
-corrected: 14 days of continuous nginx logs (12–26 Jul) show **zero** POSTs from Zoho — every
-logged call was our own tooling. There was no POST at all on 18-Jul, so the `RJ4521` row was a
-manual curl, not an ingest. That row was also later reversed, which the old text omitted.
+**A Contacts-module workflow rule now pushes conversions to GoRefer within seconds.** Rule
+**"GoRefer account opened Contacts"** (id `475281000042172012`, ACTIVE, execute on Contacts
+Create-or-Edit with repeat-on-edit, condition `Account_Opened_On is not empty`) fires the
+Deluge function **`gorefer_webhook_signer_contacts`** (argument `contactId` ←
+`Contacts.Contact Id`), which HMAC-seals and POSTs to `/api/zoho/status-webhook`. Installed
+via browser session 2026-08-06 (the runbook `Zoho-GoRefer/P0A-Contacts-Trigger-Steps.md`,
+executed by the Engineer, not owner-manual; note Zoho CRM **v8 now has a workflow-rules API**
+— our OAuth token lacks the `settings.workflow_rules` scope, minting a broader self-client
+token is the durable automation fix and needs owner MFA once).
 
-**Root cause:** GoRefer's trigger watches Zoho **Leads**, but a lead that converts BECOMES A
-CONTACT — the account-opened event never fires in the module being watched (**P0-A**, still
-open; workflow rules are not in the CRM REST API, so it needs the Zoho UI).
+**Live-fire test found and fixed a latent TZ bug:** the first real firing (16:04 IST edit of
+contact KTP804) was **rejected — "stale or future timestamp (skew 19800s)"**. The Deluge
+signer formatted IST wall-clock and parsed it as GMT (+5h30m). The 18-Jul "seal proven
+end-to-end" was **curl-only** — no Deluge sender had ever actually fired (the Leads rule
+never triggers), so the bug sat invisible in BOTH signer functions. Fixed in-console
+(`toString("dd-MMM-yyyy HH:mm:ss","GMT")`) and synced to the canonical `.dg` files in
+`5Wealths\Zoho-Project\deluge\` (both signers).
 
-**What IS true:** the endpoint itself is correct and proven (Phase 5 — valid seal ingests,
-tampered/missing/replayed seals are refused, referrer credited by client id, ADR-017 true
-opening date honoured). July's six openings were **backfilled by hand** through that sealed
-endpoint on 2026-07-26 — so July analytics are right, but **the pipe is still disconnected and
-the next real opening will be missed exactly as those six were.**
+**Post-fix verification (2026-08-06 16:04 IST):** rule fired → **HTTP 200**, conversion
+**applied** — `KTP804`, true opening date **2022-10-02** honoured (ADR-017), referrer
+`VPP326` credited exactly as Zoho holds it; the duplicate rule-firing was refused as a
+**nonce replay (401)**; DB shows **exactly 1** conversion row. Notably this 2022 opening is
+one the reconciler could never have recovered (watermark never reaches it) — the push pipe
+is already ingesting data the patch couldn't.
 
-**Mitigation shipped:** `zoho_reconcile_conversions` (P0-B, `4919036`) — a scheduled reconciler
-that reads Contacts since a watermark and replays them through the same sealed endpoint, so a
-missed webhook self-heals within ~15 min. Registered and running.
-
-Zoho Variable `gorefer_webhook_secret` exists and matches prod.
+**Reconciler stays on as the safety net:** `zoho_reconcile_conversions` (P0-B, `4919036`),
+~15-min sweep. Old Leads rule/function remain inactive-harmless. Zoho Variable
+`gorefer_webhook_secret` exists and matches prod.
 
 ## Daily report (O-6a / R-DRR)
 
