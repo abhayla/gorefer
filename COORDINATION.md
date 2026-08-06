@@ -5002,3 +5002,51 @@ QUESTION (non-blocking, for DA): the workflow rule double-fires per record edit 
 per save — second correctly refused as replay). Suspect the Create-or-Edit + repeat-on-edit
 combination; harmless under idempotency+nonce, but worth deciding whether to switch the
 rule to Edit-only-with-repeat if Zoho-side double-execution is confirmed as the cause.
+
+---
+
+## 2026-08-06 STATUS — T-047: CSRF + real session auth on the staff-scoped Ninja routers (PR pending)
+
+**Branch:** `fix/t047-csrf-staff-api` (worktree `../gorefer-wt-t047`). Owner-approved
+security fix, last live gap from the 2026-08-06 review.
+
+**The hole.** `/api/followups/*` (staff CRUD for the follow-up cadence) authenticated the
+Django session cookie with a plain callable (`require_staff`), and EVERY django-ninja view
+is `csrf_exempt` at the Django middleware level. So there was no CSRF check anywhere on the
+path: a logged-in staff member visiting a malicious page could have their browser silently
+POST/PATCH/DELETE follow-up rules, cookie riding along. The in-code comment admitted the
+deferral; it is now removed and resolved.
+
+**Routes whose auth/CSRF posture changed (exactly two, both cookie-authed):**
+
+| route | before | after |
+|---|---|---|
+| `/api/followups/*` (POST/PATCH/DELETE + GET) | `Router(auth=require_staff)` — session, no CSRF | `Router(auth=staff_session_auth)` — `SessionAuth` subclass, CSRF-checked on unsafe methods |
+| `/api/analytics/*` (GET only) | same plain callable | same new class (no behaviour delta — CSRF does not gate safe methods; shared so a future write is protected by construction) |
+
+**Unchanged by design** (no cookie auth → correctly still CSRF-exempt, verified by new
+tests, not by reasoning): `/api/leads/`, `/api/share/`, `/api/click/*` (public capture),
+`/api/wati/webhook` + `/api/wati/inbound` (static key + IP allowlist), `/api/zoho/status-webhook`
+(HMAC seal / key), `/api/health`. A blanket `csrf=True` on the `NinjaAPI` would have 403'd
+the webhooks and killed the conversion pipe that went live the same day — deliberately not done.
+
+**Why this shape:** django-ninja 1.6.2 enforces CSRF in the AUTH OBJECT (`APIKeyCookie._get_key`
+calls `check_csrf` before authenticating), not at the API level. Switching only the cookie-authed
+routers is therefore the narrow, correct lever. Verified against the installed package source,
+then proven by test — not from docs memory. Ninja's own `SessionAuthIsStaff` also admits
+non-staff superusers, a widening, so `apps/common/api_auth.py:StaffSessionAuth` keeps the
+exact `require_staff` predicate (authenticated AND `is_staff`).
+
+**Evidence.** New `tests/test_api_csrf.py` (13 tests). Reverted the source fix and re-ran:
+5 tests FAIL on pre-fix code (the CSRF-rejection ones) and pass after — the tests actually
+catch the bug rather than describing it. Full suite `781 passed` (`-n 4`, `TEST_DB_NAME=
+gorefer_test_t047`); ruff, `manage.py check`, `check_architecture.py` (0 outside boundary),
+`makemigrations --check` all clean. No `apps/integrations/**` file touched → no contract-doc
+change owed; gate confirms.
+
+**Admin-panel HTMX:** grep of `templates/` + `static/js/` shows NO caller of `/api/followups/*`
+or `/api/analytics/*` — the dashboard screens use Django views (already `login_required` +
+`{% csrf_token %}`), and `static/js/landing.js` only calls the public endpoints. So no template
+needed an `hx-headers` token; nothing to change there.
+
+**Deploy:** none in this task — code + tests only.

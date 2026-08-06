@@ -11,14 +11,18 @@ accounts opened, approximate unique visitors), an enumerable per-journey event t
 screens showing the same figures were behind `login_required` + `is_staff`, so the UI was
 gated while the API feeding it was not. No PII leaked — the event log excludes PII by
 design (Round-2 amendment #16) and that held — but the business metrics are confidential.
-Reuses `apps.followups.api.require_staff`, the same plain-callable auth the follow-up CRUD
-router already uses, so there is one staff-auth mechanism rather than two.
+Reuses `apps.common.api_auth.staff_session_auth`, the same session-auth class the follow-up
+CRUD router uses, so there is one staff-auth mechanism rather than two. That class is a
+Ninja `SessionAuth` subclass, so cookie-authed unsafe methods are CSRF-checked (T-047);
+these three routes are read-only GETs, where CSRF does not apply, but sharing the
+mechanism means a future write here is protected by construction.
 """
 from __future__ import annotations
 
 from ninja import Router, Schema
 from ninja.errors import HttpError
 
+from apps.common.api_auth import staff_session_auth
 from apps.events.analytics import (
     approximate_unique_visitors,
     build_journey_timeline,
@@ -26,11 +30,10 @@ from apps.events.analytics import (
     funnel_counts,
 )
 from apps.events.models import SyncHealth
-from apps.followups.api import require_staff
 from apps.referrals.models import Referral
 from apps.tenants.resolve import get_current_tenant
 
-router = Router(auth=require_staff)
+router = Router(auth=staff_session_auth)
 
 
 class FunnelStage(Schema):

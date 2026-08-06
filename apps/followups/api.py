@@ -9,9 +9,11 @@ and DRF is not installed. Building on Ninja to match every other `api/*` router 
 the locked ADR over a loose word in a DESIGN-status doc — surfaced in COORDINATION for DA
 confirmation, not a silent pick.
 
-Auth: staff session user only (`require_staff`). A plain-callable auth (not Ninja's
-SessionAuth) so it composes with the main csrf=False NinjaAPI; CSRF hardening + a proper
-SessionAuth land with the in-product page (tracked). Every query is tenant-scoped, so one
+Auth: staff session user only, via `apps.common.api_auth.staff_session_auth` — a
+`SessionAuth` subclass, so every unsafe method (POST/PATCH/DELETE) is CSRF-checked as
+well as session-authed. It replaced a plain-callable auth that authenticated the cookie
+but checked no CSRF token, which left this CRUD surface forgeable from any page a
+logged-in staff member visited (T-047, 2026-08-06). Every query is tenant-scoped, so one
 AP can never see or edit another's rules/rows (ADR-023 isolation).
 """
 from __future__ import annotations
@@ -21,20 +23,12 @@ from datetime import datetime
 from ninja import Router, Schema
 from ninja.errors import HttpError
 
+from apps.common.api_auth import staff_session_auth
 from apps.tenants.resolve import get_current_tenant
 
 from .models import FollowupRule, ScheduledFollowup
 
-
-def require_staff(request):
-    """Ninja auth: allow only an authenticated staff user (admin surface)."""
-    user = getattr(request, "user", None)
-    if user is not None and user.is_authenticated and user.is_staff:
-        return user
-    return None
-
-
-router = Router(auth=require_staff)
+router = Router(auth=staff_session_auth)
 
 
 # --- Schemas ------------------------------------------------------------------
