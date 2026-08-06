@@ -25,6 +25,10 @@ from apps.integrations.ports import (
 )
 from apps.referrals.models import Lead, Referral, ReferralIdentity
 
+# Referrer-name lookup: the ONE shared helper (also used by apps/dashboard/queries),
+# so the two can never diverge again (was a documented-only invariant before T-046).
+from .queries import _referrer_name
+
 logger = logging.getLogger("gorefer.dashboard.profile")
 
 # ── Config-over-code: labels/columns/strings (a config constant, not inline literals).
@@ -189,16 +193,6 @@ def search_referrers(tenant, query: str, limit: int = 25) -> list[dict]:
         if len(rows) >= limit:
             break
     return rows
-
-
-def _referrer_name(tenant, client_id: str) -> str:
-    from apps.referrals.models import Customer
-
-    cust = Customer.objects.filter(client_id=client_id).exclude(first_name="")
-    if tenant is not None:
-        cust = cust.filter(tenant=tenant)
-    cust = cust.first()
-    return f"{cust.first_name} {cust.last_name}".strip() if cust else ""
 
 
 def profile_exists(tenant, client_id: str) -> bool:

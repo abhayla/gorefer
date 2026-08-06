@@ -4913,3 +4913,52 @@ move verified at destination); bot-UA `/r/EKU497` preview 200. **T-041 remediati
 delivered:** golive_smoke pre (`f9f0144`) vs post (`f4f079f`) on PROD — structurally
 IDENTICAL, errors=[] both runs (evidence/2026-08-04-T-041/). Final acceptance checker
 dispatched to validate the whole train end-to-end. CURRENT-STATE.md updated in this turn.
+
+---
+
+## 2026-08-06 STATUS — T-046: dashboard N+1 + unbounded-scan fix (PR pending)
+
+`apps/dashboard/queries.py` `explorer_rows`/`top_referrers` rewired from per-row
+`.count()`/`.filter()` loops (each Referral iterated in Python, ~4-6 queries per row)
+to Django queryset annotations (`Count(..., distinct=True)`, correlated `Subquery`
+for client-id-keyed accounts/name lookups, `Max` for last_activity) + DB-side
+ordering. Both functions now issue a constant number of queries regardless of
+referral count — proven by `tests/test_dashboard_queries_bounded.py` (new): asserts
+query count with 5 vs 50 seeded referrals is identical and `<=15` (explorer) /
+`<=10` (top_referrers), using `CaptureQueriesContext`.
+
+**Pagination added** (owner-authorized behavior change from "unlimited rows"):
+`explorer_rows` takes a `page` param, capped at a new cascade-resolved config key
+`dashboard_explorer_page_size` (default 100, rail E-6) — `apps/dashboard/queries.py`
+`explorer_page_size()`. `explorer_row_count()` (new) drives the pager. Template
+`templates/dashboard/explorer.html` gained Prev/Next controls preserving all filter/
+sort querystring params (only reused existing Tailwind utility classes, so
+`app.css` needed no rebuild — confirmed by rerunning `npm run build:css`, no diff).
+
+**`_referrer_name` consolidated**: `apps/dashboard/profile.py` had a byte-identical
+duplicate of `queries._referrer_name`, guarded only by a "must not diverge" comment.
+Now `profile.py` imports the one implementation from `queries.py`.
+
+**`apps/dashboard/profile.py` audited for the same shape** (contract DoD item) —
+none of its per-client-id loops are proportional to total dataset size, so none
+were rewritten:
+- `search_referrers` (L161-195): loops over search candidates, bounded by `limit`
+  (default 25, a fixed cap) — not by total referral count.
+- `top_band` (L231-272), `_accounts_for`, `_unique_visitors_for`: operate on ONE
+  client_id's own referral set (typically 1-2 rows — one partner, Zerodha, today).
+- `per_link_cards` (L292-321): loops over one referrer's OWN referral-program links
+  (bounded by partner count, currently 1), not the tenant's total referrals.
+- `clicks_rows` (L324-409): one referrer's own click history, already batch-queried
+  (dict-keyed lookups, no query inside the per-event loop).
+
+**Out-of-scope note**: `apps/events/bots.py` gained `synthetic_ua_q()` — a Q-object
+twin of the existing `exclude_synthetic()` filter, needed so the new annotations can
+exclude synthetic-UA rows via `Count(..., filter=...)` across the `events` reverse
+relation (annotations can't call `.exclude()` mid-query the way a queryset can).
+`exclude_synthetic()` itself is unchanged (still delegates to the same marker list),
+so this is additive, not a behavior change — kept in scope as a direct dependency
+of the dashboard fix, not scope creep.
+
+Local gates green: ruff, `manage.py check`, architecture gate (E-3: 0/0), migrations
+`--check --dry-run` (no changes), full `pytest -n 4` (768 passed, includes all 29
+pre-existing dashboard tests unmodified + 3 new bounded-query tests).
