@@ -23,7 +23,6 @@ invented header:
 
     id                  the Wati message id (the primary identity)
     whatsappMessageId   Meta's message id, when present
-    conversationId      only as part of a composite, never alone
 
 A payload carrying none of these falls back to a SHA-256 of the exact request bytes, so a
 byte-identical replay is still caught. That fallback is deliberately conservative: it
