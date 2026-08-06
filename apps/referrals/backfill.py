@@ -24,7 +24,7 @@ def backfill_first_click_at(tenant=None, *, dry_run: bool = False) -> dict:
     """
     referrals = Referral.objects.filter(first_click_at__isnull=True)
     if tenant is not None:
-        referrals = referrals.filter(tenant=tenant)
+        referrals = referrals.for_tenant(tenant)
 
     candidates = 0
     stamped = 0

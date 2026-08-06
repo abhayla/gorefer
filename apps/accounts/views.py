@@ -241,8 +241,8 @@ def oauth_callback(request):
     tenant = get_current_tenant(request)
     from .models import ReferrerAccount
 
-    account = ReferrerAccount.objects.filter(
-        tenant=tenant, google_email=claims["email"], status=ReferrerAccount.STATUS_ACTIVE
+    account = ReferrerAccount.objects.for_tenant(tenant).filter(
+        google_email=claims["email"], status=ReferrerAccount.STATUS_ACTIVE
     ).first()
     if account is not None:
         service.login_account(request, account)

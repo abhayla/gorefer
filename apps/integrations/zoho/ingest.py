@@ -57,7 +57,7 @@ def _dedupe_key(payload: dict) -> str:
 def _active_program(tenant) -> ReferralProgram:
     qs = ReferralProgram.objects.filter(status="active", deleted_at__isnull=True)
     if tenant is not None:
-        qs = qs.filter(tenant=tenant)
+        qs = qs.for_tenant(tenant)
     return qs.order_by("id").first()
 
 

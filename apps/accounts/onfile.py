@@ -42,7 +42,7 @@ def resolve_onfile(tenant, client_id: str) -> OnFileRecord:
     from apps.referrals.models import Customer
 
     customer = (
-        Customer.objects.filter(tenant=tenant, client_id=client_id, deleted_at__isnull=True)
+        Customer.objects.for_tenant(tenant).filter(client_id=client_id, deleted_at__isnull=True)
         .exclude(mobile="", email="")
         .first()
     )

@@ -173,7 +173,7 @@ def _save_integration_flags(data, *, tenant_id: int, user=None) -> list[str]:
 def list_partnerships(tenant) -> list[dict]:
     """The tenant's programs (the rows that drive /d/{slug}), ordered as the page composes them."""
     programs = (
-        ReferralProgram.objects.filter(tenant=tenant, deleted_at__isnull=True)
+        ReferralProgram.objects.for_tenant(tenant).filter(deleted_at__isnull=True)
         .select_related("partner")
         .order_by("disclosure_sequence", "id")
     )
@@ -419,7 +419,7 @@ def add_partnership(tenant, *, name: str, regulator: str, user=None) -> Referral
     )
     # Sequence after existing programs so regulator order stays deterministic.
     next_seq = 10 * (
-        ReferralProgram.objects.filter(tenant=tenant, deleted_at__isnull=True).count() + 2
+        ReferralProgram.objects.for_tenant(tenant).filter(deleted_at__isnull=True).count() + 2
     )
     program = ReferralProgram.objects.create(
         tenant=tenant,
@@ -441,15 +441,15 @@ def set_partnership_active(tenant, *, program_id: int, active: bool, user=None) 
     Refuses to deactivate the LAST active partnership while LANDING_MODE=direct — that
     would strand a `direct` bypass with no disclosure host (ADR-032 coupling).
     """
-    program = ReferralProgram.objects.filter(
-        tenant=tenant, id=program_id, deleted_at__isnull=True
+    program = ReferralProgram.objects.for_tenant(tenant).filter(
+        id=program_id, deleted_at__isnull=True
     ).first()
     if program is None:
         raise PreferencesError("Partnership not found.")
 
     if not active:
         remaining = (
-            ReferralProgram.objects.filter(tenant=tenant, status="active", deleted_at__isnull=True)
+            ReferralProgram.objects.for_tenant(tenant).filter(status="active", deleted_at__isnull=True)
             .exclude(id=program_id)
             .exists()
         )

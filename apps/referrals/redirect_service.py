@@ -34,7 +34,7 @@ def _active_program(tenant) -> ReferralProgram:
     """The single active program for the tenant (Sprint 1: Zerodha)."""
     qs = ReferralProgram.objects.filter(status="active", deleted_at__isnull=True)
     if tenant is not None:
-        qs = qs.filter(tenant=tenant)
+        qs = qs.for_tenant(tenant)
     program = qs.order_by("id").first()
     if program is None:
         raise ReferralProgram.DoesNotExist("no active ReferralProgram seeded for tenant")
