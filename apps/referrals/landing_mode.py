@@ -69,8 +69,8 @@ def has_live_disclosure_page(tenant) -> bool:
     # Local import avoids a cycle (models import is cheap at call time).
     from .models import ReferralProgram
 
-    return ReferralProgram.objects.filter(
-        tenant=tenant, status="active", deleted_at__isnull=True
+    return ReferralProgram.objects.for_tenant(tenant).filter(
+        status="active", deleted_at__isnull=True
     ).exists()
 
 

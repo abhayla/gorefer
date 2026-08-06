@@ -47,7 +47,7 @@ def get_or_create_account(
     google_email to an OTP-bound account (both proofs passed), but bound_via keeps
     recording the FIRST successful proof.
     """
-    account = ReferrerAccount.objects.filter(tenant=tenant, client_id=client_id).first()
+    account = ReferrerAccount.objects.for_tenant(tenant).filter(client_id=client_id).first()
     if account is not None:
         changed = []
         if google_email and not account.google_email:
@@ -110,8 +110,8 @@ def submit_evidence_request(
         raise VerificationError("Screenshot must be a JPEG, PNG, or WebP image.")
     # One open request per (tenant, client_id, kind): a re-submit replaces the
     # pending evidence rather than queueing duplicates for Ashok to reconcile.
-    existing = VerificationRequest.objects.filter(
-        tenant=tenant, client_id=client_id,
+    existing = VerificationRequest.objects.for_tenant(tenant).filter(
+        client_id=client_id,
         kind=VerificationRequest.KIND_EVIDENCE, status=VerificationRequest.STATUS_PENDING,
     ).first()
     if existing is not None:
@@ -139,8 +139,8 @@ def submit_oauth_mismatch_request(
     tenant, *, client_id: str, google_email: str, mobile_entered: str,
 ) -> VerificationRequest:
     """ADR-027: neither email nor mobile matched — queue for admin review."""
-    existing = VerificationRequest.objects.filter(
-        tenant=tenant, client_id=client_id,
+    existing = VerificationRequest.objects.for_tenant(tenant).filter(
+        client_id=client_id,
         kind=VerificationRequest.KIND_OAUTH_MISMATCH, status=VerificationRequest.STATUS_PENDING,
     ).first()
     if existing is not None:
@@ -214,7 +214,7 @@ def _put_on_file(tenant, request_obj: VerificationRequest, mobile: str) -> None:
     from apps.referrals.models import Customer, ReferralProgram
 
     program = (
-        ReferralProgram.objects.filter(tenant=tenant, status="active", deleted_at__isnull=True)
+        ReferralProgram.objects.for_tenant(tenant).filter(status="active", deleted_at__isnull=True)
         .select_related("partner")
         .first()
     )

@@ -154,7 +154,7 @@ def _referrer_referrals(tenant, client_id: str):
     """All referral rows whose identity is this client id (referral_link source)."""
     qs = Referral.objects.filter(referral_identity__client_id=client_id)
     if tenant is not None:
-        qs = qs.filter(tenant=tenant)
+        qs = qs.for_tenant(tenant)
     return qs.select_related("referral_identity", "program", "program__partner")
 
 
@@ -172,13 +172,13 @@ def search_referrers(tenant, query: str, limit: int = 25) -> list[dict]:
     # Client ids with a GoRefer footprint (a referral identity).
     ids = ReferralIdentity.objects.all()
     if tenant is not None:
-        ids = ids.filter(tenant=tenant)
+        ids = ids.for_tenant(tenant)
     ids = ids.filter(client_id__istartswith=q).values_list("client_id", flat=True).distinct()
 
     # Names → their client ids (Customer is the name source).
     cust = Customer.objects.filter(first_name__icontains=q)
     if tenant is not None:
-        cust = cust.filter(tenant=tenant)
+        cust = cust.for_tenant(tenant)
     name_ids = set(cust.values_list("client_id", flat=True))
 
     seen, rows = set(), []
@@ -202,7 +202,7 @@ def profile_exists(tenant, client_id: str) -> bool:
         return True
     conv = Conversion.objects.filter(referrer_client_id=client_id)
     if tenant is not None:
-        conv = conv.filter(tenant=tenant)
+        conv = conv.for_tenant(tenant)
     return conv.exists()
 
 
@@ -241,7 +241,7 @@ def top_band(tenant, client_id: str) -> dict:
     ).count()
     leads = Lead.objects.filter(referral_id__in=referral_ids)
     if tenant is not None:
-        leads = leads.filter(tenant=tenant)
+        leads = leads.for_tenant(tenant)
     leads_count = leads.count()
     accounts = _accounts_for(tenant, client_id)
     uniques = _unique_visitors_for(tenant, referral_ids)
@@ -275,7 +275,7 @@ def top_band(tenant, client_id: str) -> dict:
 def _accounts_for(tenant, client_id: str) -> int:
     qs = Conversion.objects.filter(referrer_client_id=client_id, is_reversed=False)
     if tenant is not None:
-        qs = qs.filter(tenant=tenant)
+        qs = qs.for_tenant(tenant)
     return qs.count()
 
 
@@ -285,7 +285,7 @@ def _unique_visitors_for(tenant, referral_ids) -> int:
         .exclude(visitor_id__isnull=True).exclude(visitor_id="")
     )
     if tenant is not None:
-        qs = qs.filter(tenant=tenant)
+        qs = qs.for_tenant(tenant)
     return qs.values("visitor_id").distinct().count()
 
 
@@ -367,7 +367,7 @@ def clicks_rows(tenant, client_id: str) -> list[dict]:
     if vids:
         pq = VisitorPII.objects.filter(visitor_id__in=vids, erased_at__isnull=True)
         if tenant is not None:
-            pq = pq.filter(tenant=tenant)
+            pq = pq.for_tenant(tenant)
         for row in pq:
             pii.setdefault(row.visitor_id, row)
 

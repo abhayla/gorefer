@@ -87,8 +87,8 @@ def compose_disclosures(tenant: Tenant) -> list[dict]:
     precede loans, deterministically.
     """
     programs = (
-        ReferralProgram.objects.filter(status="active", deleted_at__isnull=True)
-        .filter(tenant=tenant)
+        ReferralProgram.objects.for_tenant(tenant)
+        .filter(status="active", deleted_at__isnull=True)
         .select_related("partner")
     )
     values = _placeholder_values()

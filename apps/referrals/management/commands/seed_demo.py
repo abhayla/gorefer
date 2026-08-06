@@ -65,7 +65,7 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args, **options):
         tenant = get_bootstrap_tenant()
-        program = ReferralProgram.objects.filter(tenant=tenant, status="active").first()
+        program = ReferralProgram.objects.for_tenant(tenant).filter(status="active").first()
         if program is None:
             self.stderr.write("Run seed_program first.")
             return

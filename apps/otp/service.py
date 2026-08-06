@@ -93,8 +93,8 @@ class OtpService:
 
         with transaction.atomic():
             # Single active code per identity: retire any prior active challenges.
-            OtpChallenge.objects.filter(
-                tenant=self.tenant, identity=identity, status=OtpChallenge.STATUS_ACTIVE
+            OtpChallenge.objects.for_tenant(self.tenant).filter(
+                identity=identity, status=OtpChallenge.STATUS_ACTIVE
             ).update(status=OtpChallenge.STATUS_SUPERSEDED)
 
             challenge = OtpChallenge.objects.create(
@@ -164,7 +164,8 @@ class OtpService:
         with transaction.atomic():
             challenge = (
                 OtpChallenge.objects.select_for_update()
-                .filter(tenant=self.tenant, identity=identity, status=OtpChallenge.STATUS_ACTIVE)
+                .for_tenant(self.tenant)
+                .filter(identity=identity, status=OtpChallenge.STATUS_ACTIVE)
                 .order_by("-created_at")
                 .first()
             )
@@ -203,8 +204,8 @@ class OtpService:
     def _enforce_rate_limit(self, identity: str) -> None:
         limit = self._cfg[prefkeys.OTP_RATE_LIMIT_PER_IDENTITY_PER_HOUR]
         since = timezone.now() - timedelta(hours=1)
-        issued = OtpChallenge.objects.filter(
-            tenant=self.tenant, identity=identity, created_at__gte=since
+        issued = OtpChallenge.objects.for_tenant(self.tenant).filter(
+            identity=identity, created_at__gte=since
         ).count()
         if issued >= limit:
             raise OtpRateLimited(
@@ -217,7 +218,7 @@ class OtpService:
             return
         window = timezone.now() - timedelta(seconds=cooldown)
         recent = (
-            OtpChallenge.objects.filter(tenant=self.tenant, identity=identity, created_at__gte=window)
+            OtpChallenge.objects.for_tenant(self.tenant).filter(identity=identity, created_at__gte=window)
             .order_by("-created_at")
             .first()
         )

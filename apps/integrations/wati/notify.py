@@ -48,7 +48,7 @@ def _referrer_if_known(tenant, client_id: str):
     the referrer fields as "not on file" (never guessed).
     """
     return (
-        Customer.objects.filter(tenant=tenant, client_id=client_id, deleted_at__isnull=True)
+        Customer.objects.for_tenant(tenant).filter(client_id=client_id, deleted_at__isnull=True)
         .exclude(mobile="")
         .first()
     )

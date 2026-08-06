@@ -53,8 +53,8 @@ def record_share(request, payload: ShareIn):
         raise HttpError(422, "invalid channel")
 
     tenant = get_current_tenant(request)
-    identity = ReferralIdentity.objects.filter(
-        tenant=tenant, client_id=client_id, id_source="native"
+    identity = ReferralIdentity.objects.for_tenant(tenant).filter(
+        client_id=client_id, id_source="native"
     ).first()
     referral = identity.referrals.filter(source="referral_link").first() if identity else None
 

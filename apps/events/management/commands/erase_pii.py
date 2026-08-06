@@ -38,12 +38,12 @@ class Command(BaseCommand):
             from apps.referrals.models import Prospect
 
             n_p = (
-                Prospect.objects.filter(tenant=tenant, mobile=normalize_phone(opts["mobile"])).count()
+                Prospect.objects.for_tenant(tenant).filter(mobile=normalize_phone(opts["mobile"])).count()
                 if opts["mobile"] else 0
             )
             n_v = (
-                VisitorPII.objects.filter(
-                    tenant=tenant, visitor_id=opts["visitor_id"], erased_at__isnull=True
+                VisitorPII.objects.for_tenant(tenant).filter(
+                    visitor_id=opts["visitor_id"], erased_at__isnull=True
                 ).count()
                 if opts["visitor_id"] else 0
             )

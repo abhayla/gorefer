@@ -91,7 +91,7 @@ def _source(tenant_id: int) -> str:
     """Which tier answered: a tenant override row, or the central default."""
     from apps.config.models import ConfigGlobal
 
-    if ConfigGlobal.objects.filter(key=LANDING_MODE, tenant_id=tenant_id).exists():
+    if ConfigGlobal.objects.for_tenant(tenant_id).filter(key=LANDING_MODE).exists():
         return "tenant override (GLOBAL tier)"
     if resolve(LANDING_MODE, tenant_id=tenant_id, default=None) is not None:
         return "central default"

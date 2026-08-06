@@ -57,8 +57,8 @@ def capture_lead(*, tenant, referral: Referral, name: str, mobile: str, email: s
     # number created a SECOND lead for the same human: prod carried two leads for
     # 919876543210. It also diverged from Zoho, which already upserts by mobile, so the two
     # systems disagreed about how many leads existed.
-    existing = Lead.objects.filter(
-        tenant=tenant, prospect=prospect, deleted_at__isnull=True
+    existing = Lead.objects.for_tenant(tenant).filter(
+        prospect=prospect, deleted_at__isnull=True
     ).order_by("id").first()
     if existing is not None:
         # A re-submission under a DIFFERENT referral is not an error and must not vanish

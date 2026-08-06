@@ -93,7 +93,7 @@ class RescheduleIn(Schema):
 @router.get("/rules", response=list[RuleOut])
 def list_rules(request):
     tenant = get_current_tenant(request)
-    return list(FollowupRule.objects.filter(tenant=tenant).order_by("order", "id"))
+    return list(FollowupRule.objects.for_tenant(tenant).order_by("order", "id"))
 
 
 @router.post("/rules", response={201: RuleOut})
@@ -101,7 +101,7 @@ def create_rule(request, payload: RuleIn):
     tenant = get_current_tenant(request)
     if payload.channel not in {FollowupRule.CHANNEL_SESSION, FollowupRule.CHANNEL_TEMPLATE}:
         raise HttpError(422, "channel must be 'session' or 'template'")
-    if FollowupRule.objects.filter(tenant=tenant, step_key=payload.step_key).exists():
+    if FollowupRule.objects.for_tenant(tenant).filter(step_key=payload.step_key).exists():
         raise HttpError(409, f"a rule with step_key '{payload.step_key}' already exists")
     rule = FollowupRule.objects.create(tenant=tenant, **payload.dict())
     return 201, rule
@@ -150,7 +150,7 @@ def delete_rule(request, rule_id: int):
 @router.get("/scheduled", response=list[ScheduledOut])
 def list_scheduled(request, status: str | None = None, mobile: str | None = None):
     tenant = get_current_tenant(request)
-    qs = ScheduledFollowup.objects.filter(tenant=tenant)
+    qs = ScheduledFollowup.objects.for_tenant(tenant)
     if status:
         qs = qs.filter(status=status)
     if mobile:
@@ -188,7 +188,7 @@ def reschedule_scheduled(request, sf_id: int, payload: RescheduleIn):
 
 def _get_rule_or_404(request, rule_id: int) -> FollowupRule:
     tenant = get_current_tenant(request)
-    rule = FollowupRule.objects.filter(tenant=tenant, id=rule_id).first()
+    rule = FollowupRule.objects.for_tenant(tenant).filter(id=rule_id).first()
     if rule is None:
         raise HttpError(404, "rule not found")
     return rule
@@ -196,7 +196,7 @@ def _get_rule_or_404(request, rule_id: int) -> FollowupRule:
 
 def _get_scheduled_or_404(request, sf_id: int) -> ScheduledFollowup:
     tenant = get_current_tenant(request)
-    sf = ScheduledFollowup.objects.filter(tenant=tenant, id=sf_id).first()
+    sf = ScheduledFollowup.objects.for_tenant(tenant).filter(id=sf_id).first()
     if sf is None:
         raise HttpError(404, "scheduled follow-up not found")
     return sf

@@ -165,8 +165,8 @@ def reconcile_conversions(*, tenant=None, since: str | None = None, dry_run: boo
             from apps.integrations.models import ZohoSyncIdempotency
 
             key = ingest._dedupe_key(payload)
-            done = ZohoSyncIdempotency.objects.filter(
-                tenant=tenant, dedupe_key=key, processed_at__isnull=False
+            done = ZohoSyncIdempotency.objects.for_tenant(tenant).filter(
+                dedupe_key=key, processed_at__isnull=False
             ).exists()
             if done:
                 counts["already_ingested"] += 1
