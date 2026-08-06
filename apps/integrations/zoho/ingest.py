@@ -70,8 +70,8 @@ def _find_or_autocreate_referral(tenant, program, referrer_client_id: str) -> Re
     """
     if not referrer_client_id:
         return None
-    identity = ReferralIdentity.objects.filter(
-        tenant=tenant, client_id=referrer_client_id, id_source="native"
+    identity = ReferralIdentity.objects.for_tenant(tenant).filter(
+        client_id=referrer_client_id, id_source="native"
     ).first()
     referral = None
     if identity is not None:
@@ -126,7 +126,7 @@ def ingest_conversion(*, tenant, payload: dict) -> Conversion | None:
 
 
 def _get_conversion(tenant, account_id, zoho_lead_id) -> Conversion | None:
-    qs = Conversion.objects.filter(tenant=tenant)
+    qs = Conversion.objects.for_tenant(tenant)
     if account_id:
         row = qs.filter(opener_zerodha_account_id=account_id).first()
         if row:

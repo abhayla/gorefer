@@ -71,7 +71,7 @@ class TimelineNode(Schema):
 @router.get("/journey/{referral_id}", response=list[TimelineNode])
 def journey(request, referral_id: int):
     tenant = get_current_tenant(request)
-    referral = Referral.objects.filter(id=referral_id, tenant=tenant).first()
+    referral = Referral.objects.for_tenant(tenant).filter(id=referral_id).first()
     if referral is None:
         raise HttpError(404, "referral not found")
     nodes = build_journey_timeline(referral)
@@ -88,7 +88,7 @@ class SyncHealthOut(Schema):
 @router.get("/sync-health", response=SyncHealthOut)
 def sync_health(request):
     tenant = get_current_tenant(request)
-    row = SyncHealth.objects.filter(tenant=tenant).order_by("-updated_at").first()
+    row = SyncHealth.objects.for_tenant(tenant).order_by("-updated_at").first()
     if row is None:
         return {"zoho_state": "no_sync", "zoho_last_sync": None, "wati_state": "no_sync",
                 "note": "No sync yet — Zoho/WATI integrate in M5/M6."}

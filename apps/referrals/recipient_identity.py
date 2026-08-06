@@ -69,7 +69,7 @@ def _referrer_mobile_for(tenant, client_id: str) -> str:
         from apps.referrals.models import Customer
 
         cust = (
-            Customer.objects.filter(tenant=tenant, client_id=client_id, deleted_at__isnull=True)
+            Customer.objects.for_tenant(tenant).filter(client_id=client_id, deleted_at__isnull=True)
             .exclude(mobile="")
             .first()
         )
@@ -89,7 +89,7 @@ def resolve_recipient(tenant, mobile: str) -> RecipientIdentity:
         from apps.referrals.models import Customer, Lead, Prospect
 
         prospect = (
-            Prospect.objects.filter(tenant=tenant, mobile=canonical, deleted_at__isnull=True)
+            Prospect.objects.for_tenant(tenant).filter(mobile=canonical, deleted_at__isnull=True)
             .order_by("-created_at")
             .first()
         )
@@ -100,7 +100,7 @@ def resolve_recipient(tenant, mobile: str) -> RecipientIdentity:
         in_progress = False
         if prospect is not None:
             lead = (
-                Lead.objects.filter(tenant=tenant, prospect=prospect, deleted_at__isnull=True)
+                Lead.objects.for_tenant(tenant).filter(prospect=prospect, deleted_at__isnull=True)
                 .select_related("referral", "referral__referral_identity")
                 .order_by("-created_at")
                 .first()
@@ -121,8 +121,8 @@ def resolve_recipient(tenant, mobile: str) -> RecipientIdentity:
         if canonical.startswith("91") and len(canonical) > 10:
             candidates.add(canonical[2:])
         customer = (
-            Customer.objects.filter(
-                tenant=tenant, mobile__in=list(candidates), deleted_at__isnull=True
+            Customer.objects.for_tenant(tenant).filter(
+                mobile__in=list(candidates), deleted_at__isnull=True
             ).first()
         )
         self_client_id = customer.client_id if customer else ""
@@ -167,7 +167,7 @@ def prospect_descriptor(tenant, mobile: str) -> str:
 
         canonical = normalize_phone(mobile)
         p = (
-            Prospect.objects.filter(tenant=tenant, mobile=canonical, deleted_at__isnull=True)
+            Prospect.objects.for_tenant(tenant).filter(mobile=canonical, deleted_at__isnull=True)
             .order_by("-created_at")
             .first()
         )

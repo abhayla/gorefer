@@ -223,8 +223,8 @@ def referral_continue(request, client_id: str, channel: str | None = None):
         normalized = validate_client_id_for(tenant, client_id)
     except InvalidClientId:
         return render(request, "landing_invalid.html", status=400)
-    identity = ReferralIdentity.objects.filter(
-        tenant=tenant, client_id=normalized, id_source="native"
+    identity = ReferralIdentity.objects.for_tenant(tenant).filter(
+        client_id=normalized, id_source="native"
     ).first()
     referral = identity.referrals.filter(source="referral_link").order_by("id").first() if identity else None
     try:
