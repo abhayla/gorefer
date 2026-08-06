@@ -11,7 +11,13 @@
 > wins; if either disagrees with the live system, **the live system wins** — verify, don't
 > trust (commands at the bottom).
 >
-> **Last updated:** 2026-08-06 16:30 IST (**DEPLOYED to prod: `8f71be6` = main tip** — T-046
+> **Last updated:** 2026-08-06 18:10 IST (**DEPLOYED to prod: `7eb1c82` = main tip** — T-047
+> CSRF + real session auth on staff Ninja routers (PR #107, opus worker + adversarial opus
+> checker PASS incl. mutation test): `StaffSessionAuth(SessionAuth)` on followups/analytics
+> routers — forged staff POSTs now 403; webhooks/public routes untouched (live probe:
+> followups anon POST 403, zoho webhook bad-key 401 = key layer, not CSRF). 3 files piped
+> blob-hash-verified, services active. Closes the last live security gap from the 2026-08-06
+> review.) — prior 2026-08-06 16:30 IST (**DEPLOYED: `8f71be6`** — T-046
 > dashboard N+1 fix (PR #104): explorer/leaderboard rewritten to queryset annotations +
 > pagination (new cascade key `dashboard_explorer_page_size`, default 100), `_referrer_name`
 > consolidated to one shared helper; deployed via git-show pipe (5 files, blob-hash-verified),

@@ -5050,3 +5050,14 @@ or `/api/analytics/*` — the dashboard screens use Django views (already `login
 needed an `hx-headers` token; nothing to change there.
 
 **Deploy:** none in this task — code + tests only.
+
+## 2026-08-06 STATUS — T-047 DEPLOYED (`7eb1c82`): staff-API CSRF live on prod
+
+Checker (independent opus, adversarial): PASS all 8 predicates — including a mutation run
+(source reverted → exactly the 5 CSRF tests fail) and a form-encoded cross-site probe beyond
+the maker's suite; 781 tests green locally on real Postgres; CI-before-merge confirmed.
+Evidence `GetWorkDone/evidence/2026-08-06-T-047/` + LEDGER line ($5.5177 maker).
+Deployed by dispatcher: api/analytics.py, apps/common/api_auth.py, apps/followups/api.py
+piped blob-hash-verified; DEPLOYED_SHA=7eb1c82; live probes: followups anon POST **403**
+(new auth layer), zoho webhook bad-key **401** (key layer — CSRF did NOT touch webhooks),
+health/home 200. The 2026-08-06 review's last live security gap is closed in prod.
