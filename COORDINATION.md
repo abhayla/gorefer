@@ -5161,3 +5161,40 @@ contract is byte-identical.
 a keeper job today (one tenant), a leak the day tenant #2 lands. Should Phase 4 add a
 "tenant-scoped model queried without a scope" rail, or an explicit `.across_tenants()` marker that
 keeper jobs must type? Recorded, not assumed.
+
+---
+
+## 2026-08-06 STATUS (Engineer) — T-050: doc-estate hygiene (rotation, scratch archive, review/ index, ADR-023)
+
+**PR:** `docs/t050-doc-hygiene` -> main. Docs-only; no code, no migration, no deploy.
+
+**Rotated `COORDINATION.md`:** added a 2-line archive/rotation-policy pointer at the top and
+created `COORDINATION-archive-2026H1.md`. **No entries actually predate 2026-07-01** — the earliest
+live entry is 2026-07-06 — so the archive file is created empty of log entries, documented as such,
+and stands ready for the next rotation. Line math: 5161 (original) + 2 (COORDINATION.md pointer) +
+8 (new archive file, entirely pointer/explanation) = 5171 combined.
+
+**Archived `docs/integrations/` scratch (4 files -> `_source-archive/integrations-scratch/`, with a
+new `00-INDEX.md`):** `E2E-TEST-QUEUE.md`, `REVIEW-BRIEF-E2E-Testing-2026-07-26.md`,
+`SESSION-HANDOFF-2026-07-26.md`, `SESSION-HANDOFF-2026-07-27.md`. Content unchanged — moves only.
+The authoritative files (`08-Zoho-WATI-Integration.md`, `Meta-Template-Categorization-Policy.md`,
+`WhatsApp-Template-Coverage-Matrix.md`, `MOVED-TO-WATI-PROJECT.md`) stay in place.
+
+**QUESTION for the DA (not blocking) — one ambiguous file left in place.**
+`docs/integrations/WATI-lead-capture-templates-PROPOSAL.md` self-describes as a DRAFT superseded by
+`Wati-GoRefer/Wati-GoRefer-Templates.md` (its own 2026-07-19 historical note says so), but it is not
+named like the one-day working notes above (no date in the filename, not a queue/handoff/brief) and
+nothing else in the repo treats it as archived. Left in place rather than guessed into
+`_source-archive/`; flagging for a DA call on whether it should move too.
+
+**`review/README.md`** created — 21 files split into LIVE-tracked vs historical design-phase
+captures, each file appearing in exactly one list.
+
+**ADR-023 added** to `docs/architecture/02-Architecture-Decisions-ADR.md` at its numeric position
+(between ADR-022 and ADR-024): single-schema `tenant_id` discriminator isolation, restating the
+decision already recorded in `CLAUDE.md` (ADR-024 basis note, Q-M1-1) and doc 16 — no new decision
+invented. Footer flags the ADR-028 duplicate-number numbering debt (not renumbered).
+
+**No content changes** beyond the moves, the two new pointer/header additions, the new
+`review/README.md`, and the new ADR-023 entry — verified via `git diff --stat` showing renames/pure
+adds only.
