@@ -5111,3 +5111,51 @@ delivery truth depends entirely on the 15-min reconcile poll. Is a delivery-stat
 requesting from Wati, or is the poll the accepted permanent design? Recorded, not assumed.
 
 **Deploy:** none in this task — code + tests only (adds one migration, `0006_watiwebhookreceipt`).
+
+---
+
+## 2026-08-06 — STATUS (Engineer): T-049 tenant scoping — 89 call sites -> `for_tenant()` + rail E-7
+
+**PR:** `fix/t049-tenant-rail` -> main. Behavior-neutral refactor; no migration, no deploy needed.
+
+**Why.** ADR-023 single-schema multi-tenancy was enforced only by every author remembering to
+type `filter(tenant=...)`. `TenantQuerySet.for_tenant()` existed in `apps/common/models.py` with
+**zero call sites** — its own docstring said so. One forgotten filter after tenant #2 onboards is
+a cross-tenant data leak, and nothing caught a new unscoped query. This converts the convention
+into a machine-checked rail, the same move that made the E-3 vendor boundary real.
+
+**Migrated (89 raw tenant filters, per app):** dashboard 26 · followups 14 · referrals 13 ·
+events 7 · integrations 7 (wati 3, zoho 4) · accounts 6 · otp 5 · api 4 · common 4 · config 3.
+Every rewrite is `X.objects.filter(tenant=T, ...)` -> `X.objects.for_tenant(T).filter(...)`, read
+site-by-site (no blind regex on the multi-arg cases). `for_tenant()` accepts a Tenant, a raw id,
+or None with identical semantics to the filter it replaced.
+
+**Two models needed a manager, not a rewrite.** `ConfigGlobal` / `ConfigUser` are tenant-scoped
+data but not `TenantScopedModel` (own FK, CASCADE, named related_name). They got
+`objects = TenantQuerySet.as_manager()` — additive, **no migration** (`makemigrations --check`
+clean), so they share the same choke point.
+
+**The rail:** `tests/test_tenant_scoping_rail.py` (E-7). AST-based, not regex, so a call split
+across lines cannot hide. Scans `apps/`, `api/`, `gorefer/`; skips `migrations/` (historical
+models carry a plain Manager, `for_tenant` does not exist there). **ALLOWLIST has exactly ONE
+entry** — `apps/common/models.py`, the helper's own implementation. A second test fails if an
+allowlist entry goes stale, so the list cannot silently un-guard a live file.
+
+**Evidence.** Full suite **825 passed** (`-n 4`, `TEST_DB_NAME=gorefer_test_t049`); **zero
+pre-existing tests modified** (`git diff origin/main -- tests/` = 1 file, 101 insertions, the new
+rail). Rail proven to FIRE: re-introducing the raw filter in `apps/referrals/landing_mode.py:72`
+failed with `raw tenant filter(s) outside the for_tenant() choke point: apps/referrals/
+landing_mode.py:72`; reverted, 3 passed. ruff, `manage.py check`, `check_architecture.py`
+(0 outside boundary), `makemigrations --check` all clean.
+
+**Contract docs:** `apps/integrations/wati/{engagement,notify}.py` and `zoho/{ingest,reconcile}.py`
+changed, so the commits carry `[skip-contract-doc]`. Justification: a query-scoping rewrite touches
+no send shape, webhook payload, HMAC seal, status map or allowlist — the external Wati/Zoho
+contract is byte-identical.
+
+**QUESTION for the DA (not blocking).** This rail catches a raw tenant filter; it CANNOT catch a
+*missing* one. One deliberately cross-tenant query exists and was left alone:
+`integrations/zoho/tasks.backfill_pending_leads` sweeps `Lead` with no tenant filter — correct for
+a keeper job today (one tenant), a leak the day tenant #2 lands. Should Phase 4 add a
+"tenant-scoped model queried without a scope" rail, or an explicit `.across_tenants()` marker that
+keeper jobs must type? Recorded, not assumed.

@@ -30,12 +30,12 @@ def resolve(
     locked = key in COMPLIANCE_LOCKED_KEYS
 
     if not locked and user_id is not None and flags.ENABLE_CUSTOMER_LOGIN and tenant_id is not None:
-        row = ConfigUser.objects.filter(tenant_id=tenant_id, user_id=user_id, key=key).first()
+        row = ConfigUser.objects.for_tenant(tenant_id).filter(user_id=user_id, key=key).first()
         if row is not None:
             return row.value
 
     if not locked and tenant_id is not None:
-        row = ConfigGlobal.objects.filter(tenant_id=tenant_id, key=key).first()
+        row = ConfigGlobal.objects.for_tenant(tenant_id).filter(key=key).first()
         if row is not None:
             return row.value
 

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from django.db import models
 
-from apps.common.models import AuditedModel
+from apps.common.models import AuditedModel, TenantQuerySet
 
 # Keys that lower config tiers may never override (compliance lock, ADR-022/ADR-037).
 # Phase 0 (doc 16 D-1): the render paths now READ these through resolve(), so the set
@@ -53,6 +53,10 @@ class ConfigGlobal(AuditedModel):
     key = models.CharField(max_length=100)
     value = models.JSONField()
 
+    # Not a TenantScopedModel (own FK, CASCADE + named related_name), but it IS
+    # tenant-scoped data — so it gets the same for_tenant() choke point (rail E-7).
+    objects = TenantQuerySet.as_manager()
+
     class Meta:
         db_table = "config_global"
         constraints = [
@@ -70,6 +74,9 @@ class ConfigUser(AuditedModel):
     user_id = models.BigIntegerField()
     key = models.CharField(max_length=100)
     value = models.JSONField()
+
+    # See ConfigGlobal.objects — same reasoning (rail E-7).
+    objects = TenantQuerySet.as_manager()
 
     class Meta:
         db_table = "config_user"

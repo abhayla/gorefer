@@ -386,8 +386,8 @@ def _goref_side_events(tenant, window_start, window_end) -> dict:
         ("click", vocab.CLICK),
         ("share_clicked", vocab.SHARE_CLICKED),
     ):
-        counts[label] = Event.objects.filter(
-            tenant=tenant, event_type=event_type,
+        counts[label] = Event.objects.for_tenant(tenant).filter(
+            event_type=event_type,
             timestamp__gte=window_start, timestamp__lt=window_end,
         ).count()
     return counts
@@ -397,8 +397,8 @@ def _session_windows_opened(tenant, window_start, window_end) -> dict:
     from apps.followups.models import ScheduledFollowup
 
     opens = (
-        ScheduledFollowup.objects.filter(
-            tenant=tenant, window_opened_at__gte=window_start, window_opened_at__lt=window_end,
+        ScheduledFollowup.objects.for_tenant(tenant).filter(
+            window_opened_at__gte=window_start, window_opened_at__lt=window_end,
         ).values_list("mobile", "window_opened_at").distinct()
     )
     return {"distinct_windows_opened": len(set(opens))}

@@ -63,7 +63,7 @@ def funnel_counts(*, tenant=None, program=None) -> list[dict]:
 
     qs = exclude_synthetic(Event.objects.filter(is_bot=False))
     if tenant is not None:
-        qs = qs.filter(tenant=tenant)
+        qs = qs.for_tenant(tenant)
     if program is not None:
         qs = qs.filter(referral__program=program)
 
@@ -89,7 +89,7 @@ def confirmed_human_clicks(*, tenant=None) -> int:
         Event.objects.filter(event_type=vocab.CLICK, is_bot=False, is_confirmed_human=True)
     )
     if tenant is not None:
-        qs = qs.filter(tenant=tenant)
+        qs = qs.for_tenant(tenant)
     return qs.count()
 
 
@@ -105,5 +105,5 @@ def approximate_unique_visitors(*, tenant=None) -> int:
         Event.objects.filter(is_bot=False).exclude(visitor_id__isnull=True).exclude(visitor_id="")
     )
     if tenant is not None:
-        qs = qs.filter(tenant=tenant)
+        qs = qs.for_tenant(tenant)
     return qs.values("visitor_id").distinct().count()

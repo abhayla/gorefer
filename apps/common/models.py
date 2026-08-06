@@ -46,11 +46,15 @@ class SoftDeleteModel(models.Model):
 class TenantQuerySet(models.QuerySet):
     """QuerySet for tenant-scoped tables — the single choke point for tenant filters.
 
-    Phase 0 (doc 16 D-4): call sites today filter `tenant=` by hand; this method is
-    the one place hierarchy-aware visibility (doc 16 §3.1 "parent sees its subtree")
-    will be implemented when Phase 4 lands. No call sites are migrated yet — the
-    manager exists so the documented scoping mechanism is real, and new code can
-    adopt it incrementally.
+    Every tenant-scoped read in production source goes through `for_tenant()`
+    (T-049) — it is the one place hierarchy-aware visibility (doc 16 §3.1 "parent
+    sees its subtree") will be implemented when Phase 4 lands. A raw
+    `filter(tenant=...)` outside this method fails the E-7 rail
+    (`tests/test_tenant_scoping_rail.py`), so the scope has exactly one
+    implementation instead of ~90 remembered ones.
+
+    Accepts a Tenant instance, a raw id, or None — identical semantics to the
+    `filter(tenant=...)` it replaces (None means "rows with no tenant").
     """
 
     def for_tenant(self, tenant_or_id):

@@ -204,7 +204,7 @@ def explorer(request):
 @require_GET
 def journey(request, referral_id: int):
     tenant = get_current_tenant(request)
-    referral = Referral.objects.filter(id=referral_id, tenant=tenant).select_related(
+    referral = Referral.objects.for_tenant(tenant).filter(id=referral_id).select_related(
         "referral_identity"
     ).first()
     if referral is None:
@@ -298,10 +298,10 @@ def verifications(request):
     from apps.accounts.models import VerificationRequest
 
     tenant = get_current_tenant(request)
-    pending = VerificationRequest.objects.filter(
-        tenant=tenant, status=VerificationRequest.STATUS_PENDING
+    pending = VerificationRequest.objects.for_tenant(tenant).filter(
+        status=VerificationRequest.STATUS_PENDING
     ).order_by("created_at")
-    decided = VerificationRequest.objects.filter(tenant=tenant).exclude(
+    decided = VerificationRequest.objects.for_tenant(tenant).exclude(
         status=VerificationRequest.STATUS_PENDING
     ).order_by("-decided_at")[:25]
     ctx = {
@@ -326,7 +326,7 @@ def verification_evidence(request, request_id: int):
     from apps.accounts.models import VerificationRequest
 
     tenant = get_current_tenant(request)
-    req = VerificationRequest.objects.filter(id=request_id, tenant=tenant).first()
+    req = VerificationRequest.objects.for_tenant(tenant).filter(id=request_id).first()
     if req is None or req.evidence is None:
         raise Http404("no evidence")
     return HttpResponse(bytes(req.evidence), content_type=req.evidence_content_type or "image/png")
@@ -340,7 +340,7 @@ def verification_decide(request, request_id: int):
     from apps.accounts.models import VerificationRequest
 
     tenant = get_current_tenant(request)
-    req = VerificationRequest.objects.filter(id=request_id, tenant=tenant).first()
+    req = VerificationRequest.objects.for_tenant(tenant).filter(id=request_id).first()
     if req is None:
         raise Http404("verification request not found")
     action = request.POST.get("action", "")

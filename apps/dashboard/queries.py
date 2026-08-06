@@ -35,7 +35,7 @@ def _rollup_totals(tenant):
     """Sum the daily rollups (dashboards read rollups, never the raw firehose)."""
     qs = DailyMetric.objects.all()
     if tenant is not None:
-        qs = qs.filter(tenant=tenant)
+        qs = qs.for_tenant(tenant)
     agg = qs.aggregate(
         clicks=Sum("clicks"), landing_views=Sum("landing_views"),
         redirects=Sum("redirects"), leads=Sum("leads"), accounts=Sum("accounts_opened"),
@@ -54,7 +54,7 @@ def refresh_and_freshness(tenant=None):
     recompute_dirty()
     qs = DailyMetric.objects.all()
     if tenant is not None:
-        qs = qs.filter(tenant=tenant)
+        qs = qs.for_tenant(tenant)
     last = qs.order_by("-recomputed_at").values_list("recomputed_at", flat=True).first()
     return last or timezone.now()
 
@@ -119,7 +119,7 @@ def funnel(tenant=None) -> list[dict]:
 def _rollup_column_sum(tenant, column: str) -> int:
     qs = DailyMetric.objects.all()
     if tenant is not None:
-        qs = qs.filter(tenant=tenant)
+        qs = qs.for_tenant(tenant)
     return qs.aggregate(n=Sum(column))["n"] or 0
 
 
@@ -139,7 +139,7 @@ def _accounts_by_client_id_subquery(tenant):
         referrer_client_id=OuterRef("referral_identity__client_id"), is_reversed=False
     )
     if tenant is not None:
-        sub = sub.filter(tenant=tenant)
+        sub = sub.for_tenant(tenant)
     sub = sub.order_by().values("referrer_client_id").annotate(cnt=Count("id")).values("cnt")
     return Coalesce(Subquery(sub, output_field=IntegerField()), Value(0))
 
@@ -152,7 +152,7 @@ def _referrer_name_subquery(tenant):
         .exclude(first_name="")
     )
     if tenant is not None:
-        sub = sub.filter(tenant=tenant)
+        sub = sub.for_tenant(tenant)
     sub = (
         sub.order_by("id")
         .annotate(full=Trim(Concat("first_name", Value(" "), "last_name", output_field=CharField())))
@@ -170,7 +170,7 @@ def top_referrers(tenant=None, limit: int = 10) -> list[dict]:
         source__in=["referral_link", "zoho_import"], referral_identity__isnull=False
     )
     if tenant is not None:
-        qs = qs.filter(tenant=tenant)
+        qs = qs.for_tenant(tenant)
     qs = qs.select_related("referral_identity").annotate(
         clicks=Count(
             "events",
@@ -200,7 +200,7 @@ def _referrer_name(tenant, client_id: str) -> str:
     # (imported by apps/dashboard/profile.py so the two paths cannot diverge).
     cust = Customer.objects.filter(client_id=client_id).exclude(first_name="")
     if tenant is not None:
-        cust = cust.filter(tenant=tenant)
+        cust = cust.for_tenant(tenant)
     cust = cust.first()
     return f"{cust.first_name} {cust.last_name}".strip() if cust else ""
 
@@ -209,7 +209,7 @@ def recent_leads(tenant=None, limit: int = 10) -> list[dict]:
     """Recent leads with the referrer name-if-known and MASKED mobile (admin PII)."""
     qs = Lead.objects.select_related("prospect", "referral", "referral__referral_identity")
     if tenant is not None:
-        qs = qs.filter(tenant=tenant)
+        qs = qs.for_tenant(tenant)
     rows = []
     for lead in qs.order_by("-created_at")[:limit]:
         identity = lead.referral.referral_identity if lead.referral else None
@@ -300,7 +300,7 @@ def _annotated_explorer_qs(tenant, *, source: str = "", search: str = ""):
     not_synth_events = ~synthetic_ua_q(prefix="events__")
     qs = Referral.objects.select_related("referral_identity")
     if tenant is not None:
-        qs = qs.filter(tenant=tenant)
+        qs = qs.for_tenant(tenant)
     if source:
         qs = qs.filter(source=source)
     if search:

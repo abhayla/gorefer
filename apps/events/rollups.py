@@ -34,8 +34,8 @@ def _accounts_opened_for_range(*, tenant, program, start, end):
     import/event date — so a backdated conversion lands in its real period."""
     from apps.integrations.models import Conversion
 
-    return Conversion.objects.filter(
-        tenant=tenant, program=program, is_reversed=False,
+    return Conversion.objects.for_tenant(tenant).filter(
+        program=program, is_reversed=False,
         account_opened_at__gte=start, account_opened_at__lt=end,
     ).count()
 
@@ -52,8 +52,8 @@ def _counts_for_range(*, tenant, program, start, end):
     """event_type -> count over [start, end) from raw events (bots + synthetic excluded)."""
     from apps.events.bots import exclude_synthetic
 
-    qs = Event.objects.filter(
-        tenant=tenant, referral__program=program, is_bot=False,
+    qs = Event.objects.for_tenant(tenant).filter(
+        referral__program=program, is_bot=False,
         timestamp__gte=start, timestamp__lt=end,
     )
     qs = exclude_synthetic(qs)

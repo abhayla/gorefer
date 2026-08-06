@@ -100,7 +100,7 @@ def _override_row(key: str, tenant_id: int | None):
 
     if tenant_id is None:
         return None
-    return ConfigGlobal.objects.filter(tenant_id=tenant_id, key=key).first()
+    return ConfigGlobal.objects.for_tenant(tenant_id).filter(key=key).first()
 
 
 def _current_tenant_id(tenant_id: int | None):
