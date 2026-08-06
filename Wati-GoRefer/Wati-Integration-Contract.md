@@ -211,6 +211,64 @@ recorded, opening the window + starting the cadence on a fresh 24h open. Inert u
 `followups_enabled`. The `/api/wati/inbound` webhook endpoint stays in place (harmless; it would fire
 as a bonus for any event Wati does deliver).
 
+**Replay protection — idempotency on Wati's OWN event id, because a nonce is impossible
+(T-048, 2026-08-06).** Wati's webhook sender is fixed: it carries exactly one credential, the static
+`?token=` query param, and cannot attach a signature, a timestamp header, or a nonce. So the Zoho
+wax-seal design (HMAC + freshness + one-time nonce) is not available here, and a captured request
+stays valid indefinitely. Replay protection therefore lives entirely on GoRefer's side:
+
+- **Dedupe identity** (`apps.integrations.wati.replay.event_key`) — the first of Wati's own body keys
+  that is present, in order: **`id`**, then **`whatsappMessageId`**. Both are keys this integration
+  has actually observed on Wati message payloads (§10's verified key map / `getMessages` items); no
+  invented header or field is read. A payload carrying **neither** falls back to
+  `sha256=<digest of the exact request bytes>`, so a byte-identical replay is still refused while two
+  genuinely distinct events are never merged.
+- **Claim** (`claim_event`) — a UNIQUE-constrained INSERT into `wati_webhook_receipt`
+  (`endpoint`, `event_key`). The database decides, so two concurrent replays cannot both win. The
+  table is deliberately NOT tenant-scoped, for the same reason as `zoho_webhook_nonce`: the check
+  runs before the request is trusted, so per-tenant uniqueness would let a replay succeed by
+  claiming a different tenant. The same message id arriving at two different endpoints is two
+  distinct events (`endpoint` is a separate column, not part of the key).
+- **Ordering of the checks** — auth first, then payload validation, then the ignore-cases
+  (`owner`/`fromMe` outbound, missing mobile), and only then the claim. An unauthenticated flood
+  cannot fill the table, and a state-changing-nothing event never burns a key that a real message
+  would need.
+- **Responses.** `POST /api/wati/inbound` answers a duplicate with **HTTP 200**
+  `{"status":"ignored","reason":"duplicate","stamped":false,"enqueued":0}` — Wati's native sender
+  RETRIES on a non-2xx, and a retry of a message we already recorded must be a benign no-op, not an
+  error loop. `POST /api/wati/webhook` (assisted capture, driven by a chatbot HTTP node that does not
+  retry-loop) answers a duplicate with **HTTP 409** `duplicate webhook delivery (replay refused)`.
+- **Retention.** Receipts are purged after **7 days** by `replay.purge_expired_receipts`, wired as
+  the hourly `wati_purge_webhook_receipts` schedule (ADR-047 registry). A receipt older than that
+  cannot prevent meaningful harm, because the 24h session window a replay would target has closed.
+  Retention is structural security posture — deliberately NOT a tenant config key.
+
+*Why this matters concretely:* `/api/wati/inbound` opens the 24h session window and, on a fresh open,
+enqueues the referrer's entire nudge cadence. Before this guard, one captured request URL could be
+re-POSTed a day later to re-open the window and re-fire the whole cadence at that person, on demand.
+
+**Stale-status guard — status only ever moves forward (T-048).** There is still **no Wati
+delivery-status webhook** (see §5); the only status-applying paths are the send and the reconcile
+sweep, and both now funnel through the single `wati.tasks._finalize`, which refuses any status that
+does not supersede what is already recorded. The precedence rule lives in the vendor-neutral
+`apps/integrations/delivery_status.py` (`supersedes` / `status_rank`):
+
+    accepted(1) < sent(2) < {delivered, failed, blocked, simulated_delivered}(3) < read(4)
+
+`failed` shares rank 3 with `delivered` on purpose — they are mutually exclusive OUTCOMES of the same
+step, so a late re-read can never flip a recorded delivery into a failure or the reverse; whichever
+terminal outcome was observed first is kept. A refused status is logged and is **not** counted as a
+`finalized` row by the reconcile sweep, so the sweep never reports work it did not do. This closes a
+real corruption path: `getMessages` is an eventually-consistent list, and a sweep landing on an older
+page would otherwise walk a message back from `delivered` to `sent` — a field both the daily WA
+engagement report and the follow-up engine read.
+
+**Window timestamps are monotonic (T-048).** `apps.followups.services.stamp_inbound` now refuses an
+inbound whose timestamp is **older than or equal to** the one already recorded. Rewinding
+`last_inbound_at` is not cosmetic: `window_is_open` is computed from it, so a replayed webhook
+carrying its original timestamp (or an out-of-order poll page) would mark a genuinely OPEN 24h window
+CLOSED and silently downgrade every in-window session send to the closed-window path.
+
 ## 9. Assisted-capture `client_id` validation — strict, per-partner (B4)
 
 `apps/integrations/wati/webhook.py:process_assisted_capture()` — the Wati "Refer

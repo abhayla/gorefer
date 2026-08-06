@@ -24,6 +24,7 @@ from pydantic import ValidationError
 
 from apps.tenants.resolve import get_current_tenant
 
+from .replay import claim_event, event_key
 from .webhook import (
     FORBIDDEN_KEYS,
     AssistedCaptureError,
@@ -79,6 +80,12 @@ def assisted_webhook(request):
     except (ValidationError, TypeError) as exc:
         raise HttpError(422, "invalid assisted-capture payload") from exc
 
+    # 4) REPLAY GUARD (T-048). The `?token=` credential is static and replayable, so a
+    #    captured request stays valid forever; the claim below makes each Wati event
+    #    single-use. Runs AFTER validation so a malformed body cannot burn a real key.
+    if not claim_event("assisted", event_key("assisted", request.body or b"", raw)):
+        raise HttpError(409, "duplicate webhook delivery (replay refused)")
+
     try:
         result = process_assisted_capture(request, payload.dict())
     except AssistedCaptureError as exc:
@@ -114,6 +121,17 @@ def inbound_message(request):
     mobile = raw.get("waId") or raw.get("phone") or raw.get("mobile") or raw.get("senderId") or ""
     if not str(mobile).strip():
         return {"status": "ignored", "reason": "no mobile"}
+
+    # REPLAY GUARD (T-048). This endpoint opens the 24h session window and, on a fresh
+    # open, enqueues the whole nudge cadence — so a replayed capture is a message-spam
+    # primitive. Claimed AFTER the outbound/no-mobile early returns (those change no
+    # state, so they must not burn a key) and BEFORE any write.
+    #
+    # A duplicate answers 200 with a no-op rather than an error: Wati's native sender
+    # RETRIES on a non-2xx, and a retry of a message we already recorded is benign — the
+    # requirement is that it changes nothing, not that it fails loudly.
+    if not claim_event("inbound", event_key("inbound", request.body or b"", raw)):
+        return {"status": "ignored", "reason": "duplicate", "stamped": False, "enqueued": 0}
 
     tenant = get_current_tenant(request)
     result = record_inbound(tenant, str(mobile), _parse_ts(raw.get("timestamp")))

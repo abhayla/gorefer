@@ -113,6 +113,13 @@ def stamp_inbound(tenant, mobile: str, at=None) -> tuple[FollowupWindow, bool]:
         win = FollowupWindow.objects.create(tenant=tenant, mobile=mobile, last_inbound_at=at)
         return win, True
     prev = win.last_inbound_at
+    # MONOTONIC (T-048): `last_inbound_at` only moves forward. An inbound older than the
+    # one already recorded — a replayed webhook carrying its original timestamp, or a
+    # poll returning an out-of-order page — must never rewind the window, because
+    # rewinding CLOSES a window that is genuinely still open and silently downgrades
+    # every in-window session send to the closed-window path.
+    if prev is not None and at <= prev:
+        return win, False
     opened_fresh = prev is None or (at - prev) >= WINDOW
     win.last_inbound_at = at
     win.save(update_fields=["last_inbound_at", "updated_at"])

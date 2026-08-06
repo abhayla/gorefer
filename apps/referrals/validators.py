@@ -60,6 +60,70 @@ class InvalidClientId(ValueError):
     """Raised when a client_id fails format validation."""
 
 
+# --- ReDoS guard on the admin-editable pattern (T-048) ------------------------
+#
+# `client_id_pattern` is CONFIGURATION an operator edits, and it is then run against
+# attacker-supplied input on the public `/r/{client_id}` path. Python's `re` has no
+# timeout, so a pattern with a nested quantifier — `(a+)+$`, `(a|a)*$`, `((ab)*)+$` —
+# backtracks exponentially and hangs the worker thread for that request. Nobody has to
+# be malicious for this to bite: a well-meant "make the pattern stricter" edit is enough.
+#
+# We screen STATICALLY and refuse to use an unsafe pattern, rather than trying to bound
+# it at match time (there is no portable way to interrupt `re`). The refusal reuses the
+# EXISTING safe-degrade path — fall back to the loose spec rule and log loudly — so a bad
+# config never 400s real referral links.
+MAX_PATTERN_LENGTH = 200
+
+
+def is_safe_pattern(pattern: str) -> bool:
+    """False when `pattern` contains a quantified group that itself is quantified.
+
+    Two shapes make backtracking exponential, and both are a quantifier applied to a
+    group whose body is itself ambiguous:
+      - a nested quantifier — `(a+)+`, `((ab)*)+`
+      - a quantified alternation — `(a|a)*`, `(a|ab)+`
+    A plain `[A-Z][A-Z0-9]{5}` or `[a-z]+` has neither and matches in linear time. An
+    UNQUANTIFIED alternation like `^(RJ|DA)[0-9]{4}$` is fine and stays allowed — it is
+    the outer repetition that multiplies the alternatives.
+
+    The scan is a single left-to-right pass tracking each open group's body, honouring
+    escapes and character classes so `\\(` and `[+*|]` are not mistaken for structure.
+    """
+    if len(pattern or "") > MAX_PATTERN_LENGTH:
+        return False
+    if not pattern:
+        return True
+    stack: list[bool] = []          # per open group: is its body ambiguous?
+    in_class = False
+    escaped = False
+    for i, ch in enumerate(pattern):
+        if escaped:
+            escaped = False
+        elif ch == "\\":
+            escaped = True
+        elif in_class:
+            if ch == "]":
+                in_class = False
+        elif ch == "[":
+            in_class = True
+        elif ch == "(":
+            stack.append(False)
+        elif ch == ")":
+            body_ambiguous = stack.pop() if stack else False
+            # Is THIS group quantified? Look at what immediately follows the ')'.
+            nxt = pattern[i + 1] if i + 1 < len(pattern) else ""
+            group_quantified = nxt in "*+{"
+            if group_quantified and body_ambiguous:
+                return False
+            # A quantified group is itself ambiguous inside its parent.
+            if stack and (group_quantified or body_ambiguous):
+                stack[-1] = True
+        elif ch in "*+{|":
+            if stack:
+                stack[-1] = True
+    return True
+
+
 def validate_client_id(raw: str | None, *, pattern: str | None = None) -> str:
     """Return the normalized client_id (uppercased) or raise InvalidClientId.
 
@@ -80,6 +144,15 @@ def validate_client_id(raw: str | None, *, pattern: str | None = None) -> str:
         raise InvalidClientId("client_id contains illegal characters")
     normalized = candidate.upper()
     if pattern:
+        # ReDoS screen BEFORE compiling/matching: an unsafe pattern is never run against
+        # the (attacker-supplied) candidate. Same safe-degrade as a syntactically broken
+        # pattern — fall back to the spec rule and shout, never hang or 400 the link.
+        if not is_safe_pattern(pattern):
+            logger.error(
+                "unsafe client_id_pattern %r (catastrophic-backtracking risk) — "
+                "falling back to the spec rule", pattern,
+            )
+            return normalized
         try:
             compiled = re.compile(pattern)
         except re.error:

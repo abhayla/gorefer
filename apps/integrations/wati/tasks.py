@@ -81,8 +81,25 @@ def send_notification(notification_id: int) -> str:
     return delivery.status
 
 
-def _finalize(n: Notification, terminal_status: str, *, meta_error_code):
-    """Record the terminal status + classification; emit the funnel notification event."""
+def _finalize(n: Notification, terminal_status: str, *, meta_error_code) -> bool:
+    """Record the terminal status + classification; emit the funnel notification event.
+
+    THE SINGLE apply-status function (T-048): both the send path and the reconcile sweep
+    go through here, so the stale-status guard lives in one place instead of two parallel
+    copies. Returns True if the status was applied, False if it was refused as stale.
+
+    Refusing is not merely tidy — it prevents a real corruption. The reconcile sweep
+    re-reads `getMessages`, an eventually-consistent list; a re-read that lands on an
+    older page (or a duplicate task, or a replayed event) would otherwise walk a message
+    back from `delivered` to `sent`, or flip a recorded delivery into a failure. The
+    daily WA report and the follow-up engine both read this field.
+    """
+    if not st.supersedes(n.status, terminal_status):
+        logger.info(
+            "stale status refused for notification %s: %s does not supersede %s",
+            n.pk, terminal_status, n.status,
+        )
+        return False
     n.status = terminal_status
     if terminal_status == st.STATUS_FAILED:
         n.meta_error_code = meta_error_code
@@ -99,6 +116,7 @@ def _finalize(n: Notification, terminal_status: str, *, meta_error_code):
         user_type="system",
         metadata={"role": n.recipient_role, "delivery_status": terminal_status},
     )
+    return True
 
 
 # How long a row may sit at ACCEPTED before the reconcile sweep re-polls it, and how
@@ -146,15 +164,21 @@ def reconcile_pending_deliveries(limit: int = 200) -> dict:
             template=n.template,
         )
         if delivery.status in st.TERMINAL_STATUSES:
-            _finalize(n, delivery.status, meta_error_code=delivery.meta_error_code)
-            finalized += 1
+            # A stale re-read (older page / duplicate task) is refused, not counted as a
+            # finalize — otherwise the sweep would report work it did not do.
+            if _finalize(n, delivery.status, meta_error_code=delivery.meta_error_code):
+                finalized += 1
+            else:
+                still_pending += 1
         elif n.updated_at <= expire_cutoff:
             # Too old and still no terminal proof — record a delivery-status failure so
             # the leak is visible (never silently 'accepted' forever).
-            _finalize(n, st.STATUS_FAILED, meta_error_code=None)
-            n.failure_classification = "no terminal status within reconcile window"
-            n.save(update_fields=["failure_classification", "updated_at"])
-            expired += 1
+            if _finalize(n, st.STATUS_FAILED, meta_error_code=None):
+                n.failure_classification = "no terminal status within reconcile window"
+                n.save(update_fields=["failure_classification", "updated_at"])
+                expired += 1
+            else:
+                still_pending += 1
         else:
             still_pending += 1
     return {"finalized": finalized, "expired": expired, "still_pending": still_pending}

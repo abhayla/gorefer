@@ -37,4 +37,9 @@ INTEGRATION_SCHEDULES = {
     # config" idiom as followup_sweep gating on quiet hours). Inert per-tenant until
     # `wa_engagement_report_enabled` is on (re-checked at fire time).
     "wa_engagement_report_daily": ("apps.integrations.wati.engagement.run_scheduled_report", 60),
+    # Hourly (T-048): drop Wati webhook replay receipts past the retention window. A
+    # receipt that old can no longer prevent harm — the 24h session window a replay
+    # would target has closed — so purging it cannot re-enable a replay; it just stops
+    # the table growing forever. Same reasoning as the Zoho nonce purge above.
+    "wati_purge_webhook_receipts": ("apps.integrations.wati.replay.purge_expired_receipts", 60),
 }
