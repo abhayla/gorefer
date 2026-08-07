@@ -11,6 +11,7 @@ from __future__ import annotations
 from django.conf import settings
 
 from apps.dashboard import profile
+from gorefer.flags import flags
 
 
 def _mask_clicks(rows: list[dict]) -> list[dict]:
@@ -39,6 +40,39 @@ def _strip_partner_code(cards: list[dict]) -> list[dict]:
     return [{**card, "partner_code": ""} for card in cards]
 
 
+def hub_url_for(tenant, client_id: str) -> str:
+    """The logged-in referrer's own `/hub/{token}` link, or "" (T-054).
+
+    Until now the share hub had no door for someone who was already logged in — it was
+    reachable only by tapping a WhatsApp button. This mints that door AT RENDER, which
+    is safe and cheap because the token is a stateless signature: nothing is persisted,
+    and a fresh string every page load is as valid as the last one.
+
+    The token is minted for the identity the SESSION'S account owns, resolved from the
+    account's bound `client_id` (the caller passes `account.client_id`, never a URL
+    parameter — `views.my_referrals` has no parameter to tamper with). A referrer whose
+    client_id has no `ReferralIdentity` row yet — bound by login but never clicked, and
+    with no Zoho-imported conversion — gets "" and no link renders: identities are
+    created at CLICK time (ADR-008), and rendering a page must not create one.
+
+    Returns "" when ENABLE_SHARE_HUB is off, so the flag-off tree has no dead link.
+    """
+    if not flags.ENABLE_SHARE_HUB:
+        return ""
+    from apps.referrals.models import ReferralIdentity
+
+    from .records_link import mint_records_token
+
+    identity = (
+        ReferralIdentity.objects.for_tenant(tenant)
+        .filter(client_id=client_id, status="active", deleted_at__isnull=True)
+        .first()
+    )
+    if identity is None:
+        return ""
+    return f"/hub/{mint_records_token(identity)}"
+
+
 def my_referrals_ctx(tenant, client_id: str) -> dict:
     """The full profile ctx, referrer-scoped + masked. Works with ZERO activity too
     (a just-bound referrer with no clicks sees zeros + their link, not an error)."""
@@ -59,6 +93,10 @@ def my_referrals_ctx(tenant, client_id: str) -> dict:
         "role": "referrer",
         "base_template": "accounts/my_base.html",
         "my_link": my_link,
+        # T-054: the logged-in door to the share hub. Blank when the flag is off or the
+        # referrer has no identity row — the template renders nothing in either case.
+        "hub_url": hub_url_for(tenant, client_id),
+        "hub_cta": "Share your link",
         # WhatsApp share prefill: routed via gorefer.in with the wa channel prefix
         # (ADR-030 — never direct-to-Zerodha; ADR-028 B1 attribution), plus the §4.4
         # disclosure host (ADR-031/032 — the light message's compliance anchor).
