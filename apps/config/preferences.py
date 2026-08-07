@@ -33,6 +33,14 @@ ENABLE_ASSISTED_REFERRAL = "enable_assisted_referral"
 RECORDS_LINK_TTL_DAYS = "records_link_ttl_days"
 RECORDS_LINK_TTL_DAYS_DEFAULT = 90
 
+# --- Token mint (T-054) -----------------------------------------------------------
+# `record_date` in a mint response is pasted straight into a message body ("as per our
+# records dated …"), so the strftime pattern that renders it is a cascade key, not a
+# literal (rail E-6 / §6d): the owner can switch "07 Aug 2026" to "07/08/2026" without
+# a deploy. A pattern strftime rejects falls back to this default (api/records_tokens).
+RECORDS_MINT_DATE_FORMAT = "records_mint_date_format"
+RECORDS_MINT_DATE_FORMAT_DEFAULT = "%d %b %Y"
+
 # --- Referral share hub (T-053; behind ENABLE_SHARE_HUB) ---------------------------
 # Every word this page says, and the brand image its link preview uses, is a cascade
 # key rather than a template literal (rail E-6 / §6d). Two reasons, both concrete:
@@ -241,6 +249,7 @@ def central_defaults() -> dict:
         SHARE_CHANNELS_ALLOWLIST: DEFAULT_SHARE_CHANNELS,
         ENABLE_ASSISTED_REFERRAL: False,
         RECORDS_LINK_TTL_DAYS: RECORDS_LINK_TTL_DAYS_DEFAULT,
+        RECORDS_MINT_DATE_FORMAT: RECORDS_MINT_DATE_FORMAT_DEFAULT,
         # Share hub (T-053) — placeholder copy pending owner compliance review.
         SHARE_HUB_HEADLINE: SHARE_HUB_HEADLINE_DEFAULT,
         SHARE_HUB_INTRO: SHARE_HUB_INTRO_DEFAULT,

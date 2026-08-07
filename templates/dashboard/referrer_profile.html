@@ -21,6 +21,10 @@
               class="rounded-full border border-line bg-white hover:bg-bg transition-colors px-4 py-2 text-[12.5px] font-bold text-ink-900 card">Copy link</button>
       <a href="https://wa.me/?text={{ share_text|urlencode }}"
          class="rounded-full bg-cobalt-600 hover:bg-cobalt-500 transition-colors px-4 py-2 text-[12.5px] font-bold text-white card">Share on WhatsApp</a>
+      {% if hub_url %}{# T-054: the logged-in door to the share hub. Absent when ENABLE_SHARE_HUB is off (no dead UI). #}
+      <a href="{{ hub_url }}" id="shareHubLink"
+         class="rounded-full border border-cobalt-600 hover:bg-cobalt-50 transition-colors px-4 py-2 text-[12.5px] font-bold text-cobalt-600 card">{{ hub_cta }}</a>
+      {% endif %}
     </div>
   </div>
 </section>
