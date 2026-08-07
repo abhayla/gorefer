@@ -220,6 +220,10 @@ RATELIMIT_LEADS_MAX = int(os.environ.get("DJANGO_RATELIMIT_LEADS_MAX", "10"))   
 RATELIMIT_SHARE_MAX = int(os.environ.get("DJANGO_RATELIMIT_SHARE_MAX", "30"))       # per min per IP
 RATELIMIT_CLICK_MAX = int(os.environ.get("DJANGO_RATELIMIT_CLICK_MAX", "60"))       # per min per IP
 RATELIMIT_API_WINDOW = int(os.environ.get("DJANGO_RATELIMIT_API_WINDOW", "60"))     # 1 min
+# T-051 records magic link (/rr/{token}) — a public, forwardable URL, so it is throttled
+# per IP like the other public endpoints. 20/min is generous for a human tapping a
+# WhatsApp button and tight enough that bulk token probing is not worth attempting.
+RATELIMIT_RECORDS_MAX = int(os.environ.get("DJANGO_RATELIMIT_RECORDS_MAX", "20"))   # per min per IP
 
 # --- Auth ------------------------------------------------------------------
 LOGIN_URL = "dashboard_login"

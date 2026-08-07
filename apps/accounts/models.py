@@ -61,6 +61,42 @@ class ReferrerAccount(TimestampedModel, TenantScopedModel):
         return f"referrer-account<{self.client_id}:{self.status}>"
 
 
+class RecordsLinkState(TimestampedModel, TenantScopedModel):
+    """Revocation state for the tokened "Referral Records" magic link (T-051).
+
+    The link token itself is STATELESS (a `django.core.signing` payload), so the only
+    thing that has to live in the database is the counter that makes revocation
+    possible: a token carries the epoch it was minted under, and verification refuses
+    any token whose epoch is not the current one. Bumping `epoch` therefore kills
+    every link ever sent to THAT referrer, and only that referrer.
+
+    Bound to `referrals.ReferralIdentity` — the lazily-created referrer entity keyed by
+    client_id — NOT to `ReferrerAccount`. The recipients of these links are referrers
+    we message on WhatsApp; the overwhelming majority have never logged in and so have
+    no ReferrerAccount row to hang state off.
+    """
+
+    identity = models.OneToOneField(
+        "referrals.ReferralIdentity",
+        on_delete=models.CASCADE,
+        related_name="records_link_state",
+    )
+    #: Monotonic revocation counter. Tokens embed the epoch current at mint time.
+    epoch = models.PositiveIntegerField(default=1)
+    rotated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "records_link_state"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "identity"], name="uq_records_link_state_tenant_identity"
+            ),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"records-link-state<{self.identity_id}:e{self.epoch}>"
+
+
 class VerificationRequest(TimestampedModel, TenantScopedModel):
     """A pending ownership-verification (ADR-027 mismatch / ADR-035 Path B)."""
 

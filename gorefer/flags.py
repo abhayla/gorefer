@@ -116,6 +116,11 @@ class FeatureFlags:
     # `/r/{channel}/{client_id}` URL server-side; never partner code / raw Zerodha URL.
     SHARE_KIT_MESSAGE_TEMPLATE: str = "Open a free Zerodha account — my referral link:\n{link}"
 
+    # T-051 — tokened, read-only "Referral Records" page (GET /rr/{token}), reached
+    # from a WhatsApp [Referral Records] URL button. OFF until the pilot template is
+    # approved; when off the ENTIRE route is absent (Constitution §4 — no dead route).
+    ENABLE_RECORDS_LINK: bool = False
+
     @classmethod
     def from_env(cls) -> "FeatureFlags":
         return cls(
@@ -134,6 +139,7 @@ class FeatureFlags:
             SHARE_KIT_MESSAGE_TEMPLATE=_str(
                 "SHARE_KIT_MESSAGE_TEMPLATE", cls.SHARE_KIT_MESSAGE_TEMPLATE
             ),
+            ENABLE_RECORDS_LINK=_bool("ENABLE_RECORDS_LINK", cls.ENABLE_RECORDS_LINK),
         )
 
     def as_dict(self) -> dict:
