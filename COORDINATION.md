@@ -5419,3 +5419,61 @@ clean, E-3 gate 0/0, E-7 rail clean, no migration drift, Tailwind rebuilt (no CS
 button reuses existing utilities).
 
 **No QUESTIONS raised.**
+
+## 2026-08-08 STATUS (Engineer) — magic-link surface GO-LIVE: T-051…T-054 deployed, flags ON, live-sanity verified
+
+**Deployed `e217489` (= main tip) to prod 02:12 IST.** Four missions, each opus-built and
+verified by a SEPARATE opus checker before merge (evidence under
+`GetWorkDone/evidence/2026-08-07-T-051`, `-T-052`, `2026-08-08-T-053`, `-T-054`):
+
+- **T-051** (PR #115) `/rr/{token}` — masked read-only records page; signed revocable token
+  (`django.core.signing` + per-identity epoch), TTL via cascade key `records_link_ttl_days` (90).
+- **T-052** (PR #116) — token verification made FAIL-CLOSED. Found by T-051's checker disproof:
+  a missing/tenant-divergent state row defaulted to epoch 1, which could revive rotated tokens.
+  Not exploitable (flag was OFF, no rows existed); the checker re-ran its five probes against
+  both commits and against the pre-fix tree to prove the new tests are real regressions.
+- **T-053** (PR #117) `/hub/{token}` — share hub: benefits (claim from `REFERRAL_INCENTIVE_CLAIM`),
+  own credit link, WhatsApp/Telegram/Facebook/X/LinkedIn + copy + native share, per-channel
+  share-intent events, OG card. **Security invariant:** share content carries
+  `gorefer.in/r/wa/{client_id}` — the token is page access only, never shared content.
+- **T-054** (PR #118) `POST /api/records-tokens/mint` — key-authed (`X-Records-Mint-Key`,
+  env-only, `hmac.compare_digest`, fail-closed on blank, auth before rate-limit and before any DB
+  work) returning `{client_id, token, rr_url, hub_url, name, record_date, error}`; plus the
+  logged-in "Share your link" entry on `/my/referrals` (mints the SESSION account's own token;
+  four cross-identity attacks by the checker all failed).
+
+**Deploy mechanics:** full-tree rsync of the 32-file delta from prod's `3db7c59`; tarball built
+`-c core.autocrlf=false` (the Windows CRLF trap); destination files hash-verified byte-exact vs
+git blobs; migration `accounts.0002_recordslinkstate` applied; collectstatic 9 files; `.env`
+backed up, `RECORDS_TOKEN_MINT_KEY` generated on the box, **`ENABLE_RECORDS_LINK=true` +
+`ENABLE_SHARE_HUB=true`**; both services restarted + active. This deploy also shipped the
+previously merged-but-undeployed **T-049 tenant-scoping refactor**.
+
+**Post-deploy live sanity — all green** (full list in `CURRENT-STATE.md`): existing paths
+unregressed; bogus tokens 404 with no oracle; mint API 401/401/200; a REAL minted token renders
+`/rr/` and `/hub/` 200 over public HTTPS; token appears exactly once per page (the sibling
+cross-link) and zero times in any share href (FB `u=` / LI `url=` carry the credit link);
+guardrail-3 clean; **masking proven live on DA1707** (`Ab••••a` / `91••••••53`, raw name and
+mobile absent).
+
+**Owner rulings recorded this session (2026-08-07/08):** (1) template lifecycle belongs to
+Wati-Project or the owner — **GoRefer NEVER creates or submits templates again**; it consumes
+template NAME + TYPE only and does not verify variables. (2) Conversation-map SSOT moves to
+Wati-Project. (3) Never proceed below 95% intent-confidence — grill one question at a time with
+a recommendation. The pilot template `gr_platform_gorefer_refrecord_en_2026_08_07` (submitted
+2026-08-07 under the pre-ruling ownership, the LAST from this project) was **APPROVED as
+UTILITY** with the dynamic tokened `/rr/{{token}}` URL button — first proof that a tokened
+self-service destination holds UTILITY; case appended to the categorization calibration table.
+
+**NOT customer-facing yet (deliberate):** hub copy is an engineering placeholder pending owner
+compliance review (all copy is cascade config — changeable with no deploy), the OG image reuses
+`static/img/og-card.png`, and no template send is wired to the mint API yet (sender-side
+integration is the next task).
+
+**QUESTION for the DA (not blocking).** T-054's checker flagged two non-security items left as
+found: (a) `ReferralIdentity` lookups in `api/records_tokens.py:185` and
+`apps/accounts/selfview.py:65` use `.filter(client_id=…).first()` with no `order_by` — single-
+valued while Zerodha is the only partner, arbitrary the day a second partner exists; (b)
+`hub_cta = "Share your link"` is a hard-coded UI literal that rail E-6 would want as a cascade
+key (the rails don't catch it). Fold both into the next GoRefer PR, or leave until a second
+partner lands?
