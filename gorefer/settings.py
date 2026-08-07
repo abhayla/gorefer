@@ -224,6 +224,10 @@ RATELIMIT_API_WINDOW = int(os.environ.get("DJANGO_RATELIMIT_API_WINDOW", "60")) 
 # per IP like the other public endpoints. 20/min is generous for a human tapping a
 # WhatsApp button and tight enough that bulk token probing is not worth attempting.
 RATELIMIT_RECORDS_MAX = int(os.environ.get("DJANGO_RATELIMIT_RECORDS_MAX", "20"))   # per min per IP
+# T-054 token mint (POST /api/records-tokens/mint) — a key-authed server-to-server
+# caller batching up to RECORDS_TOKEN_MINT_MAX_IDS ids per call, so a handful of calls
+# per minute covers a full broadcast. Tight because each call issues bearer credentials.
+RATELIMIT_MINT_MAX = int(os.environ.get("DJANGO_RATELIMIT_MINT_MAX", "10"))         # per min per IP
 
 # --- Auth ------------------------------------------------------------------
 LOGIN_URL = "dashboard_login"
@@ -331,6 +335,16 @@ ZOHO_WEBHOOK_IP_ALLOWLIST = os.environ.get("ZOHO_WEBHOOK_IP_ALLOWLIST", "")  # c
 ZOHO_WEBHOOK_HMAC_SECRET = os.environ.get("ZOHO_WEBHOOK_HMAC_SECRET", "")
 # Freshness window for a sealed request, in seconds (absorbs clock skew).
 ZOHO_WEBHOOK_MAX_SKEW_SECONDS = int(os.environ.get("ZOHO_WEBHOOK_MAX_SKEW_SECONDS", "300"))
+
+# --- Records/hub token mint auth (T-054) -----------------------------------
+# Shared secret for POST /api/records-tokens/mint, held by the EXTERNAL senders that
+# carry a [Referral Records] / [Refer Link] button (the Zoho Deluge sweep, the
+# Wati-Project broadcast scripts). SECRET — env only, never inline, never in a repo
+# file. UNSET => the endpoint refuses every call (fail-closed; see api/records_tokens).
+RECORDS_TOKEN_MINT_KEY = os.environ.get("RECORDS_TOKEN_MINT_KEY", "")
+# Cap on one mint request's client_ids list. Bounds the DB work and the response size;
+# a broadcast list is paged through in batches of this size.
+RECORDS_TOKEN_MINT_MAX_IDS = int(os.environ.get("RECORDS_TOKEN_MINT_MAX_IDS", "100"))
 
 # --- WATI webhook auth (B4, interim R2): static key + IP allowlist ----------
 # The Wati assisted-referral flow posts here. Same interim model as Zoho (static

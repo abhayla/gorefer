@@ -15,6 +15,7 @@ from gorefer.flags import flags
 from .analytics import router as analytics_router
 from .click import router as click_router
 from .leads import router as leads_router
+from .records_tokens import router as records_tokens_router
 from .share import router as share_router
 
 api = NinjaAPI(title="GoRefer API", version="0.1.0", description="GoRefer referral intelligence API")
@@ -22,6 +23,9 @@ api.add_router("/click", click_router)
 api.add_router("/leads", leads_router)
 api.add_router("/share", share_router)
 api.add_router("/analytics", analytics_router)
+# T-054 token mint — key-authed server-to-server (external senders that carry a
+# [Referral Records] / [Refer Link] button cannot compute a signed token themselves).
+api.add_router("/records-tokens", records_tokens_router)
 api.add_router("/zoho", zoho_router)
 api.add_router("/wati", wati_router)
 # Follow-up engine CRUD (M-FUP-1) — staff-only, tenant-scoped (auth on the router itself).

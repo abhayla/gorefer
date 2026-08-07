@@ -5362,3 +5362,60 @@ Rate-limited via `apps/common/ratelimit` on its own `share_hub` scope (limit reu
 clean, E-3 gate 0/0, E-7 rail clean, no migration drift, Tailwind rebuilt and committed.
 
 **No QUESTIONS raised.**
+
+---
+
+## 2026-08-08 — STATUS (Engineer): T-054 token-mint API + the logged-in door to the share hub
+
+**PR:** `feat/t054-mint-api` → main. **Endpoint:** `POST /api/records-tokens/mint`.
+**New env keys:** `RECORDS_TOKEN_MINT_KEY` (secret), `RECORDS_TOKEN_MINT_MAX_IDS` (default 100),
+`DJANGO_RATELIMIT_MINT_MAX` (default 10/min/IP).
+
+**Why it exists.** Every sender that carries a `[Referral Records]` / `[Refer Link]` URL button
+is OUTSIDE this process — the Zoho Deluge fallback sweep, the Wati-Project broadcast scripts, the
+owner's manual Wati broadcast — and none of them can compute a `django.core.signing` token. They
+now ask for one. Request `{"client_ids": [...]}` → per id `{client_id, token, rr_url, hub_url,
+name, record_date, error}`, so a CSV for a manual broadcast is one `jq` away.
+
+**Auth.** Shared-secret header `X-Records-Mint-Key`, `hmac.compare_digest`, key from env only —
+the same idiom as the Zoho/Wati webhooks (Deluge cannot hold a session + CSRF token). **A blank
+`RECORDS_TOKEN_MINT_KEY` refuses EVERY call**, tested three ways (absent header, empty header,
+any header). Auth runs before the rate limiter and before any DB work, and a test proves an
+unauthenticated call creates no `RecordsLinkState` row. Flat 401 with no reason — telling a
+caller which check failed is a probing oracle. Rate-limited on its own `records_token_mint`
+scope. Not behind the vendor boundary: no file under `apps/integrations/**` is touched.
+
+**Never fabricates.** An unknown or malformed client id is an explicit error item
+(`unknown_client_id` / `invalid_client_id`) with no token — and minting does **not** lazily
+create an identity (ADR-008 keeps that a click-time act), so a typo in a broadcast list cannot
+conjure a referrer. `rr_url`/`hub_url` come back BLANK when their flag is off, so a template
+button can never be scheduled against an unmounted route (Constitution §4). Batch capped
+(422 over cap). Tenant scoping through `for_tenant()` — E-7 rail clean.
+
+**Two deliberate calls worth your eye (neither is a spec conflict, but both are judgement):**
+
+1. **`name` is GoRefer's own `Customer` record only — no Zoho call.** Routing it through
+   `accounts.onfile.resolve_onfile` would fall back to a Zoho READ *per id*, turning one 100-id
+   request into 100 sequential HTTP round trips — a gunicorn timeout in practice. A blank name is
+   returned rather than a guess; the Deluge sweep runs inside Zoho and already has the better
+   source. Say the word if you want opt-in enrichment (`enrich_names: true` with a lower cap).
+2. **`record_date` = the referrer's MOST RECENT referral record**, falling back to their
+   identity's creation date when they have none (Zoho-imported conversion, or just-clicked).
+   Never `now()` — the date has to describe the record, not the send. Rendered in IST through the
+   new cascade key `records_mint_date_format` (default `%d %b %Y`, rail E-6): the owner can switch
+   to `%Y-%m-%d` with no deploy, and a pattern strftime rejects falls back to the default.
+
+**Selfview change.** `/my/referrals` gains a "Share your link" button next to Copy/WhatsApp:
+`selfview.hub_url_for()` mints the token AT RENDER for the identity the **session's**
+`ReferrerAccount` owns (`account.client_id` — the view has no id parameter to tamper with).
+Nothing is persisted; a fresh signature each load is as valid as the last. It renders **only**
+when `ENABLE_SHARE_HUB` is on **and** the account's client_id actually has a `ReferralIdentity`
+row — a bound-but-never-clicked referrer gets no link rather than a page that creates an
+identity. Tests assert presence with the flag on, total absence with it off, and that the token
+in the rendered `href` verifies back to the logged-in identity and not to a second referrer's.
+
+**Evidence:** 20 new tests; full suite **899 passed** (`-n 4`), ruff clean, `manage.py check`
+clean, E-3 gate 0/0, E-7 rail clean, no migration drift, Tailwind rebuilt (no CSS delta — the
+button reuses existing utilities).
+
+**No QUESTIONS raised.**
