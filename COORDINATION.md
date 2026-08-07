@@ -5216,3 +5216,15 @@ Idempotency note: throughout the duplicate's lifetime every second firing was re
 as designed while the cause was found. Dispatcher lesson (memory): Zoho settings-list
 pages serve stale caches; duplicate-existence checks must use record-level evidence
 (timeline/API), not list-page text.
+
+---
+
+## 2026-08-07 — VENDOR-LANE ESCAPE (session, recorded per pending routing rule)
+
+**What:** Wati-dashboard read-only verification (webhook URL/token confirmed post owner paste)
+ran from the gorefer session, plus gorefer-side cleanup (VPS old-token backup + TODO card
+deleted). Both-estates shape: the change was gorefer's webhook auth; Wati was only read.
+**Why this lane:** verification loop = gorefer prod (auth probe + nginx logs).
+**Gap being fixed:** the vendor-estate routing rule (hub
+`plans/2026-08-07-vendor-estate-routing-design.md`, spec under owner review) requires this
+escape record in the same turn; this entry backfills it and is the rule's first live use.
