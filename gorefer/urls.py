@@ -58,6 +58,15 @@ if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_SHARE_INTENT", False):
         path("share/<channel:channel>/<str:client_id>", share_intent_redirect, name="share_intent")
     )
 
+# Tokened read-only "Referral Records" page (T-051). The ENTIRE route exists only when
+# ENABLE_RECORDS_LINK is on — and it is a single GET; there is deliberately no POST
+# sibling, because a link that arrives by forwarded WhatsApp message must not be able
+# to change anything.
+if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_RECORDS_LINK", False):
+    from apps.accounts.records import records_view
+
+    urlpatterns.append(path("rr/<str:token>", records_view, name="records_link"))
+
 # The M7 admin dashboard (custom, built from the mockups) + Django admin base,
 # both gated by the feature flag (no dead UI when off).
 if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_ADMIN_DASHBOARD", True):
