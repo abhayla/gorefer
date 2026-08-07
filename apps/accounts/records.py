@@ -31,7 +31,6 @@ from django.views.decorators.http import require_GET
 from apps.common.masking import mask_mobile, mask_name
 from apps.common.ratelimit import RateLimited, check_rate, client_ip
 from apps.events.models import Event
-from apps.integrations.models import Conversion
 from apps.referrals.models import Lead, Referral
 
 from .records_link import verify_records_token
@@ -114,13 +113,6 @@ def records_ctx(tenant, identity) -> dict:
             last_at = lead.created_at
 
     total = len(rows)
-    # Accounts credited by Zoho to this client id — shown alongside the lead-derived
-    # count because an off-platform conversion (ADR-016) has no GoRefer lead at all.
-    credited = (
-        Conversion.objects.for_tenant(tenant)
-        .filter(referrer_client_id=identity.client_id, is_reversed=False)
-        .count()
-    )
     return {
         "config": RECORDS_CONFIG,
         "client_id": identity.client_id,
@@ -129,7 +121,6 @@ def records_ctx(tenant, identity) -> dict:
             "referrals": total,
             "converted": converted,
             "pending": total - converted,
-            "credited_accounts": credited,
         },
         "first_referred_at": first_at,
         "last_referred_at": last_at,
