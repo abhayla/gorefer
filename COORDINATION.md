@@ -5269,3 +5269,46 @@ nowhere in the response bytes.
 
 **No QUESTIONS raised** — the design decisions (signed token, epoch revocation, 90-day TTL, masked
 read-only + step-up, flag OFF) were owner-locked in the 2026-08-07 session, not open items.
+
+---
+
+## 2026-08-07 STATUS — T-052: records-link token verification now fails CLOSED (T-051 checker finding)
+
+**PR:** fix/t052-records-link-fail-closed. Follow-up to T-051 (#115, `53dc342`). Flag
+`ENABLE_RECORDS_LINK` is still **OFF** in prod, so nothing here changes live behaviour —
+but it must land before the flag is ever turned on. `apps/integrations/**` untouched.
+
+**The finding (T-051's independent checker, `disproof-attempt.md`):** `verify_records_token()`
+looked up the revocation row with `RecordsLinkState.objects.for_tenant(<tenant from the token
+payload>).filter(identity=identity)` and, when that missed, **defaulted to `epoch = 1`**. Two
+consequences the checker reproduced:
+
+- **Rotation inverts under tenant drift.** A state row whose `tenant` diverges from its
+  identity's (realistic path: identity created before the Sprint-1 tenant backfill → tenantless
+  state row → identity later backfilled → tokens now carry `t=<tenant>`) makes the lookup miss.
+  `rotate_records_token()` becomes a no-op: the OLD token keeps working and the FRESH one is
+  refused. Exactly backwards from what revocation promises.
+- **Deleting a state row revives every epoch-1 token** ever minted for that referrer.
+
+Neither is exploitable today (no such rows exist, flag OFF) — it is a latent fail-OPEN.
+
+**Fix:** the row is resolved **through the identity relation only** —
+`RecordsLinkState.objects.filter(identity=identity)` — because the identity lookup one line
+above already pinned the ADR-023 scope (`ReferralIdentity.objects.for_tenant(...)`), so the
+second tenant filter could only ever MISS, never protect. A missing row now returns `None`
+(invalid) instead of assuming epoch 1: minting always creates the row, so "no row" is state we
+cannot vouch for. Rail E-7 is unaffected — the remaining filter carries no `tenant` kwarg.
+
+**Also removed:** the per-page-view `Conversion` COUNT feeding `totals.credited_accounts` in
+`apps/accounts/records.py`. `templates/accounts/records.html` never rendered it — it was one
+extra query per public page view for a number nobody sees. Rendered output is unchanged; the
+existing page tests pass unmodified.
+
+**Evidence:** two new regression tests, both verified to FAIL on `origin/main`'s code and pass
+on the fix — `test_a_missing_state_row_fails_closed` (delete the row → all previously minted
+tokens invalid) and `test_rotation_holds_when_the_state_rows_tenant_diverges` (the checker's
+PROBE-D/E sequence verbatim: after divergence + rotation, OLD dead, NEW alive). Full suite
+**851 passed** (`-n 4`), ruff clean, `manage.py check` clean, E-3 gate 0/0, E-7 rail clean, no
+migration drift.
+
+**No QUESTIONS raised.**
