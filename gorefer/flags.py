@@ -121,6 +121,13 @@ class FeatureFlags:
     # approved; when off the ENTIRE route is absent (Constitution §4 — no dead route).
     ENABLE_RECORDS_LINK: bool = False
 
+    # T-053 — the referral SHARE HUB (GET /hub/{token}), the destination of a
+    # [Refer Link] button on a MARKETING WhatsApp template. Separate flag from
+    # ENABLE_RECORDS_LINK on purpose: the two tokened pages ship independently, and
+    # this one stays OFF until the owner has signed off on the page copy for
+    # compliance. When off the ENTIRE route is absent (Constitution §4).
+    ENABLE_SHARE_HUB: bool = False
+
     @classmethod
     def from_env(cls) -> "FeatureFlags":
         return cls(
@@ -140,6 +147,7 @@ class FeatureFlags:
                 "SHARE_KIT_MESSAGE_TEMPLATE", cls.SHARE_KIT_MESSAGE_TEMPLATE
             ),
             ENABLE_RECORDS_LINK=_bool("ENABLE_RECORDS_LINK", cls.ENABLE_RECORDS_LINK),
+            ENABLE_SHARE_HUB=_bool("ENABLE_SHARE_HUB", cls.ENABLE_SHARE_HUB),
         )
 
     def as_dict(self) -> dict:

@@ -19,9 +19,13 @@ from apps.tenants.resolve import get_current_tenant
 
 router = Router()
 
+# `telegram` and `native_share` joined the set with the T-053 share hub, whose button
+# row is wider than the landing page's single WhatsApp button. Same endpoint on purpose:
+# a second share-event writer would split one funnel across two event streams.
 _CHANNELS = {
     "whatsapp", "whatsapp_status", "facebook", "instagram",
     "linkedin", "x", "email", "copy_link", "qr",
+    "telegram", "native_share",
 }
 
 

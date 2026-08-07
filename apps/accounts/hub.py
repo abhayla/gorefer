@@ -1,0 +1,279 @@
+"""The referral SHARE HUB — `GET /hub/{token}` (T-053).
+
+Where a [Refer Link] button on a MARKETING WhatsApp template lands. Its whole job is
+to make sharing easy and attractive: what the referrer gets, how and where to share,
+their own credit link, and one-tap buttons for the channels people actually use.
+
+Deliberately a SEPARATE page from the T-051 records view (`/rr/{token}`): that one is
+dry on purpose because it is a UTILITY-button destination. The SAME signed token opens
+both — `records_link.verify_records_token` is reused verbatim, and this module adds no
+second token system. Each page cross-links to the other, and only when the other's flag
+is on (Constitution §4 — no dead links).
+
+The load-bearing security invariant, and the reason this module builds every share URL
+SERVER-SIDE rather than letting a template concatenate one:
+
+    the token is PAGE ACCESS, never shared content.
+
+A referrer who taps "WhatsApp" must forward their credit link `/r/wa/{client_id}` — a
+public identifier that already appears in the partner's own links — and never the token
+that opens their records. So nothing here interpolates `token` into a share URL, a
+prefill, or an event payload, and `tests/test_t053_share_hub.py` asserts that on the
+built URLs, the response bytes and the Event rows.
+
+Guardrail 3: client-facing surface. The partner code and any raw partner URL are absent
+by construction — every destination is either gorefer.in or a platform's own share
+intent — and a test asserts it on the response bytes.
+"""
+from __future__ import annotations
+
+import logging
+from urllib.parse import quote
+
+from django.conf import settings
+from django.shortcuts import render
+from django.urls import NoReverseMatch, reverse
+from django.views.decorators.http import require_GET
+
+from apps.common.ratelimit import RateLimited, check_rate, client_ip
+from apps.config.cascade import resolve as resolve_config
+from apps.config.preferences import (
+    REFERRER_REWARD_CLAIM,
+    SHARE_HUB_BENEFITS,
+    SHARE_HUB_BENEFITS_DEFAULT,
+    SHARE_HUB_BENEFITS_HEADING,
+    SHARE_HUB_BENEFITS_HEADING_DEFAULT,
+    SHARE_HUB_GUIDANCE,
+    SHARE_HUB_GUIDANCE_DEFAULT,
+    SHARE_HUB_GUIDANCE_HEADING,
+    SHARE_HUB_GUIDANCE_HEADING_DEFAULT,
+    SHARE_HUB_HEADLINE,
+    SHARE_HUB_HEADLINE_DEFAULT,
+    SHARE_HUB_INTRO,
+    SHARE_HUB_INTRO_DEFAULT,
+    SHARE_HUB_OG_IMAGE_DEFAULT,
+    SHARE_HUB_OG_IMAGE_URL,
+)
+from apps.events.models import Event
+from apps.referrals.og import absolute_image_url
+from apps.referrals.share_intent_service import kit_message, tracked_link
+from gorefer.flags import flags
+
+from .records import RECORDS_CONFIG
+from .records_link import verify_records_token
+
+logger = logging.getLogger("gorefer.accounts.hub")
+
+#: Rate-limit scope for this public token endpoint. Separate from the /rr/ scope so a
+#: referrer bouncing between the two pages cannot throttle themselves out of either.
+RATE_SCOPE = "share_hub"
+
+#: The channel the credit link is tagged with. `wa` because the hub is reached from a
+#: WhatsApp button — the tag records where the SHARE originated, and one link for all
+#: buttons keeps the referrer's shared URL identical wherever they paste it.
+LINK_CHANNEL = "wa"
+
+#: Static page chrome (labels, not behaviour). Copy that governs what the page CLAIMS
+#: lives in the cascade (see preferences.SHARE_HUB_*); these are button labels and
+#: section furniture, which rail E-6 treats as structural.
+HUB_CHROME = {
+    "your_link_label": "Your referral link",
+    "share_heading": "Share it",
+    "copy_label": "Copy link",
+    "copy_done_label": "Copied",
+    "more_label": "More…",
+    "records_cta": "See your referral records",
+    "expired_title": RECORDS_CONFIG["expired_title"],
+    "expired_body": RECORDS_CONFIG["expired_body"],
+    "login_cta": RECORDS_CONFIG["login_cta"],
+}
+
+#: The full platform row (owner decision 2026-08-08 — the full set, not the minimal one).
+#:
+#: `event_channel` is the code sent to the EXISTING `POST /api/share` endpoint, so taps
+#: land in the same `share_clicked` stream as the landing page's button rather than a
+#: parallel one. `kind` decides what the button carries:
+#:   "text" — platforms whose intent accepts a prefilled message (the link rides inside);
+#:   "url"  — platforms that only accept a URL (Facebook and LinkedIn strip any text
+#:            parameter, so passing one would be a silent lie about what gets posted).
+SHARE_BUTTONS = [
+    {"code": "wa", "label": "WhatsApp", "event_channel": "whatsapp", "kind": "text"},
+    {"code": "telegram", "label": "Telegram", "event_channel": "telegram", "kind": "text"},
+    {"code": "facebook", "label": "Facebook", "event_channel": "facebook", "kind": "url"},
+    {"code": "x", "label": "X", "event_channel": "x", "kind": "text"},
+    {"code": "linkedin", "label": "LinkedIn", "event_channel": "linkedin", "kind": "url"},
+]
+
+#: Channel code for the native OS share sheet (`navigator.share`) — no third-party JS,
+#: no SDK, just the browser API. Falls back to Copy where the API is absent.
+NATIVE_SHARE_CHANNEL = "native_share"
+COPY_CHANNEL = "copy_link"
+
+
+def _cfg(key: str, default, tenant_id: int | None):
+    """Cascade lookup that can never 500 a public page on a bad stored value."""
+    try:
+        value = resolve_config(key, tenant_id=tenant_id, default=default)
+    except Exception:  # pragma: no cover - resolver is not expected to raise
+        return default
+    return default if value is None else value
+
+
+def _lines(value, default: list[str]) -> list[str]:
+    """Coerce a stored bullet list to clean strings.
+
+    Accepts the JSON list it is stored as, or a newline-separated string (what an
+    operator pasting copy into a text box would produce). An empty result falls back
+    to the default rather than rendering a headless section.
+    """
+    if isinstance(value, str):
+        items = [line.strip() for line in value.splitlines()]
+    elif isinstance(value, (list, tuple)):
+        items = [str(item).strip() for item in value]
+    else:
+        items = []
+    return [item for item in items if item] or list(default)
+
+
+def _share_targets(message: str, link: str) -> dict[str, str]:
+    """Plain web intents for each platform — no SDK, no third-party script.
+
+    Every value is built from `message`/`link` only, both of which are derived from the
+    client_id. The token is not a parameter of this function on purpose: it cannot leak
+    into a destination it never receives.
+    """
+    text = quote(message, safe="")
+    url = quote(link, safe="")
+    return {
+        "wa": f"https://wa.me/?text={text}",
+        "telegram": f"https://t.me/share/url?url={url}&text={text}",
+        "facebook": f"https://www.facebook.com/sharer/sharer.php?u={url}",
+        "x": f"https://x.com/intent/post?text={text}",
+        "linkedin": f"https://www.linkedin.com/sharing/share-offsite/?url={url}",
+    }
+
+
+def _login_url() -> str:
+    """Step-up destination; mirrors records._login_url (this page can be ON while
+    ENABLE_CUSTOMER_LOGIN is off, and a NoReverseMatch must not 500 a public page)."""
+    try:
+        return reverse("referrer_login")
+    except NoReverseMatch:
+        return "/login/"
+
+
+def hub_ctx(identity, token: str) -> dict:
+    """Everything the page renders. `token` is used for ONE thing — the cross-link to
+    the records page — and never reaches a share URL or the prefill."""
+    tenant_id = identity.tenant_id
+    client_id = identity.client_id
+
+    link = tracked_link(LINK_CHANNEL, client_id)
+    message = kit_message(LINK_CHANNEL, client_id, tenant_id)
+    targets = _share_targets(message, link)
+
+    buttons = [dict(button, href=targets[button["code"]]) for button in SHARE_BUTTONS]
+
+    return {
+        "client_id": client_id,
+        "chrome": HUB_CHROME,
+        "headline": _cfg(SHARE_HUB_HEADLINE, SHARE_HUB_HEADLINE_DEFAULT, tenant_id),
+        "intro": _cfg(SHARE_HUB_INTRO, SHARE_HUB_INTRO_DEFAULT, tenant_id),
+        "benefits_heading": _cfg(
+            SHARE_HUB_BENEFITS_HEADING, SHARE_HUB_BENEFITS_HEADING_DEFAULT, tenant_id
+        ),
+        "benefits": _lines(
+            _cfg(SHARE_HUB_BENEFITS, SHARE_HUB_BENEFITS_DEFAULT, tenant_id),
+            SHARE_HUB_BENEFITS_DEFAULT,
+        ),
+        # The ONE editable incentive claim (CLAUDE.md §4) — resolved, never restated.
+        "reward_claim": str(
+            _cfg(REFERRER_REWARD_CLAIM, flags.REFERRAL_INCENTIVE_CLAIM, tenant_id) or ""
+        ),
+        "guidance_heading": _cfg(
+            SHARE_HUB_GUIDANCE_HEADING, SHARE_HUB_GUIDANCE_HEADING_DEFAULT, tenant_id
+        ),
+        "guidance": _lines(
+            _cfg(SHARE_HUB_GUIDANCE, SHARE_HUB_GUIDANCE_DEFAULT, tenant_id),
+            SHARE_HUB_GUIDANCE_DEFAULT,
+        ),
+        "my_link": link,
+        "share_message": message,
+        "buttons": buttons,
+        "native_share_channel": NATIVE_SHARE_CHANNEL,
+        "copy_channel": COPY_CHANNEL,
+        # Cross-link, only when the other surface is actually mounted.
+        "records_url": f"/rr/{token}" if flags.ENABLE_RECORDS_LINK else "",
+        "login_url": _login_url(),
+        "og": _og_context(tenant_id),
+    }
+
+
+def _og_context(tenant_id: int | None) -> dict:
+    """Link-preview card for the hub.
+
+    Title/description/site-name reuse the D2 crawler-card keys so the brand says one
+    thing everywhere; only the IMAGE gets its own key, because the hub is the page an
+    owner will want a dedicated brand card for. `og:url` is the bare public base URL,
+    NOT this request's URI — `build_absolute_uri()` would stamp the access token into a
+    meta tag that crawlers cache and preview surfaces echo.
+    """
+    from apps.referrals import og
+
+    return {
+        "title": og.cfg(og.TITLE_KEY, "OG_TITLE", tenant_id),
+        "description": og.cfg(og.DESCRIPTION_KEY, "OG_DESCRIPTION", tenant_id),
+        "site_name": og.cfg(og.SITE_NAME_KEY, "OG_SITE_NAME", tenant_id),
+        "image": absolute_image_url(
+            str(_cfg(SHARE_HUB_OG_IMAGE_URL, SHARE_HUB_OG_IMAGE_DEFAULT, tenant_id) or "")
+        ),
+        "url": (getattr(settings, "PUBLIC_BASE_URL", "") or "").rstrip("/"),
+    }
+
+
+def _log_view(tenant, identity) -> None:
+    """Page view on the immutable stream — client id only. No name, no mobile, and not
+    the token: the log is append-only and outlives erasure, so nothing that could
+    re-identify a person or replay a live link may enter it (#16/#17)."""
+    Event.objects.create(
+        tenant=tenant,
+        event_type="share_hub_viewed",
+        source="share_hub",
+        user_type="referrer",
+        metadata={"client_id": identity.client_id},
+    )
+
+
+@require_GET
+def hub_view(request, token: str):
+    """`GET /hub/{token}`. Mounted only when ENABLE_SHARE_HUB is on."""
+    try:
+        check_rate(
+            RATE_SCOPE,
+            client_ip(request),
+            limit=settings.RATELIMIT_RECORDS_MAX,
+            window=settings.RATELIMIT_API_WINDOW,
+        )
+    except RateLimited as exc:
+        return render(
+            request,
+            "accounts/records_unavailable.html",
+            {"config": RECORDS_CONFIG, "login_url": _login_url(), "retry_after": exc.retry_after},
+            status=429,
+        )
+
+    identity = verify_records_token(token)
+    if identity is None:
+        # The SAME friendly page /rr/ renders, for the same reason: telling a visitor
+        # why the link failed would make this an oracle for which client ids exist.
+        return render(
+            request,
+            "accounts/records_unavailable.html",
+            {"config": RECORDS_CONFIG, "login_url": _login_url()},
+            status=404,
+        )
+
+    tenant = identity.tenant
+    ctx = hub_ctx(identity, token)
+    _log_view(tenant, identity)
+    return render(request, "accounts/share_hub.html", ctx)

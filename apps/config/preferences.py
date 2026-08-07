@@ -33,6 +33,44 @@ ENABLE_ASSISTED_REFERRAL = "enable_assisted_referral"
 RECORDS_LINK_TTL_DAYS = "records_link_ttl_days"
 RECORDS_LINK_TTL_DAYS_DEFAULT = 90
 
+# --- Referral share hub (T-053; behind ENABLE_SHARE_HUB) ---------------------------
+# Every word this page says, and the brand image its link preview uses, is a cascade
+# key rather than a template literal (rail E-6 / §6d). Two reasons, both concrete:
+#   * the shipped copy below is a PLACEHOLDER pending the owner's compliance review —
+#     it has to be replaceable without a deploy, and it will be replaced;
+#   * the incentive claim is NOT here. It resolves from REFERRER_REWARD_CLAIM (whose
+#     central default is flags.REFERRAL_INCENTIVE_CLAIM), so the "10%" wording stays
+#     in the ONE editable field CLAUDE.md §4 requires and is never restated.
+SHARE_HUB_HEADLINE = "share_hub_headline"
+SHARE_HUB_INTRO = "share_hub_intro"
+SHARE_HUB_BENEFITS_HEADING = "share_hub_benefits_heading"
+SHARE_HUB_BENEFITS = "share_hub_benefits"              # JSON list of bullet strings
+SHARE_HUB_GUIDANCE_HEADING = "share_hub_guidance_heading"
+SHARE_HUB_GUIDANCE = "share_hub_guidance"              # JSON list of bullet strings
+SHARE_HUB_OG_IMAGE_URL = "share_hub_og_image_url"
+
+#: Static brand card for the hub's link preview. A committed placeholder asset — an
+#: operator swaps in the owner-approved image by pointing this key at a new static
+#: path or an absolute CDN URL, with no deploy (§6d).
+SHARE_HUB_OG_IMAGE_DEFAULT = "img/og-card.png"
+
+SHARE_HUB_HEADLINE_DEFAULT = "Share your referral link"
+SHARE_HUB_INTRO_DEFAULT = (
+    "Anyone who opens an account through your link is recorded against your client ID."
+)
+SHARE_HUB_BENEFITS_HEADING_DEFAULT = "What you get"
+SHARE_HUB_BENEFITS_DEFAULT = [
+    "Every referral is tracked against your client ID automatically.",
+    "You can check your records any time — no paperwork, no follow-up calls.",
+]
+SHARE_HUB_GUIDANCE_HEADING_DEFAULT = "How and where to share"
+SHARE_HUB_GUIDANCE_DEFAULT = [
+    "Send it to people who already asked you about investing — a direct message works "
+    "far better than a broadcast.",
+    "Say why you use it in your own words, then paste the link.",
+    "Family and close friends first; groups and status updates after.",
+]
+
 # --- WhatsApp notification routing (Tier 2, admin) ---------------------------------
 # Which of the three lead-time notifications actually go out (doc-08 A6 a/b/c).
 # Routing only: turning one OFF suppresses that recipient; it never changes WHAT is
@@ -203,6 +241,14 @@ def central_defaults() -> dict:
         SHARE_CHANNELS_ALLOWLIST: DEFAULT_SHARE_CHANNELS,
         ENABLE_ASSISTED_REFERRAL: False,
         RECORDS_LINK_TTL_DAYS: RECORDS_LINK_TTL_DAYS_DEFAULT,
+        # Share hub (T-053) — placeholder copy pending owner compliance review.
+        SHARE_HUB_HEADLINE: SHARE_HUB_HEADLINE_DEFAULT,
+        SHARE_HUB_INTRO: SHARE_HUB_INTRO_DEFAULT,
+        SHARE_HUB_BENEFITS_HEADING: SHARE_HUB_BENEFITS_HEADING_DEFAULT,
+        SHARE_HUB_BENEFITS: SHARE_HUB_BENEFITS_DEFAULT,
+        SHARE_HUB_GUIDANCE_HEADING: SHARE_HUB_GUIDANCE_HEADING_DEFAULT,
+        SHARE_HUB_GUIDANCE: SHARE_HUB_GUIDANCE_DEFAULT,
+        SHARE_HUB_OG_IMAGE_URL: SHARE_HUB_OG_IMAGE_DEFAULT,
         # Notification routing defaults to ON for all three — this mirrors today's
         # behaviour exactly (doc-08 A6 fires all three), so adding the toggles changes
         # nothing until an admin turns one off.
