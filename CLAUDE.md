@@ -236,8 +236,9 @@ templates hit Meta's per-user cap `131049` — the dominant cause of our ~43% de
 and cannot be rescued by retrying. Meta re-categorizes a UTILITY submission to MARKETING **silently
 and approves it**, so `ok:true` proves nothing: **always read back the `category` field after
 submitting.** Before authoring or re-cutting any template, read
-`docs/integrations/Meta-Template-Categorization-Policy.md` — it holds the actual two-part test, Meta's
-worked examples, and the authoring checklist. Precedent: three consecutive submissions (v4/v5/v6 of
+the **Meta-Template-Categorization-Policy** (canonical: `Wati-Project/docs/`, thin pointer kept at
+`docs/integrations/Meta-Template-Categorization-Policy.md`) — it holds the actual two-part test,
+Meta's worked examples, and the authoring checklist. Precedent: three consecutive submissions (v4/v5/v6 of
 the §6.1 referrer nudge) were flipped to MARKETING because each trimmed adjectives around the
 **referral link** — a cross-sell asset, and the disqualifier the policy names outright. v7 removed the
 link and held UTILITY first try. Repeated mis-categorization is detectable and penalized by Meta, so
@@ -296,7 +297,7 @@ authoring-time rule that keeps the rails from firing.
   endpoint `gorefer.in/share/wa/{client_id}` (opens the sender's own share sheet — the acquisition
   endpoint `/r/wa/` is wrong for a button the referrer taps), label must not contain "Earn".
   Hindi URL buttons flip templates to MARKETING → per-language split: EN with button, HI without
-  (or quick-reply-only). Evidence + label matrix: `docs/integrations/Meta-Template-Categorization-Policy.md` §4b.
+  (or quick-reply-only). Evidence + label matrix: Meta-Template-Categorization-Policy §4b (canonical in `Wati-Project/docs/`; local thin pointer at the old path).
 - **Universal quick-reply:** every new template carries **"Know More" / "और जानें"** wired to ONE
   exact-match keyword route → the menu flow. Benefit claims (10% brokerage share, 300 points),
   rich media, and link minting live **in-session** after that tap (no category, no cap) — never in
