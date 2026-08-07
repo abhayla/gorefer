@@ -5198,3 +5198,21 @@ invented. Footer flags the ADR-028 duplicate-number numbering debt (not renumber
 **No content changes** beyond the moves, the two new pointer/header additions, the new
 `review/README.md`, and the new ADR-023 entry — verified via `git diff --stat` showing renames/pure
 adds only.
+
+## 2026-08-07 STATUS — double-fire QUESTION answered: it was a DUPLICATE RULE (mine), now deactivated; single-fire verified
+
+Root cause found via the contact record's Zoho timeline (getTimelines): every edit executed
+`gorefer_webhook_signer_contacts` TWICE via TWO rules — "GoRefer account opened Contacts"
+(id `475281000042172012`, the verified keeper) AND "GoRefer — account opened (Contacts)"
+(id `475281000042172004`) — one of the 2026-08-06 UI attempts believed lost to the CRM-Plus
+tab-recycle actually saved; the rules list's stale cache hid it from every duplicate check
+(same cache behavior that hid the function from the workflow picker). NOT a Zoho
+create-or-edit quirk — the earlier suspicion in the T-046-era QUESTION is withdrawn.
+
+Fix: rule `...172004` DEACTIVATED (reversible; not deleted) 2026-08-07 07:54 IST. Verified
+end-to-end: one contact edit at 07:55:44 → exactly ONE POST → HTTP 200 (nginx count=1).
+Idempotency note: throughout the duplicate's lifetime every second firing was refused
+(nonce replay / receipt dedupe), so no data was ever double-applied — the guards worked
+as designed while the cause was found. Dispatcher lesson (memory): Zoho settings-list
+pages serve stale caches; duplicate-existence checks must use record-level evidence
+(timeline/API), not list-page text.
