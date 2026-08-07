@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% comment %}
+T-051 — the ONE response for tampered / expired / rotated / unknown tokens (and for a
+throttled request). Carries zero referral data on purpose: telling the visitor WHY the
+link failed would make this endpoint an oracle for which client ids exist.
+{% endcomment %}
+{% block title %}{{ config.expired_title }} — GoRefer{% endblock %}
+{% block content %}
+<section class="space-y-3">
+  <h1 class="text-[17px] font-bold">{{ config.expired_title }}</h1>
+  <p class="text-[12px] text-ink-500">{{ config.expired_body }}</p>
+  <a href="{{ login_url }}"
+     class="inline-block rounded-lg bg-cobalt-600 px-4 py-2 text-[13px] font-semibold text-white">
+    {{ config.login_cta }}
+  </a>
+</section>
+{% endblock %}

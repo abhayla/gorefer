@@ -5228,3 +5228,44 @@ deleted). Both-estates shape: the change was gorefer's webhook auth; Wati was on
 **Gap being fixed:** the vendor-estate routing rule (hub
 `plans/2026-08-07-vendor-estate-routing-design.md`, spec under owner review) requires this
 escape record in the same turn; this entry backfills it and is the rule's first live use.
+
+---
+
+## 2026-08-07 STATUS — T-051: WhatsApp magic-link "Referral Records" page (flag OFF)
+
+**PR:** feat/t051-records-magic-link. GoRefer side only — send-time injection into template
+sends and all Wati/template work are a SEPARATE task; `apps/integrations/**` is untouched.
+
+**What shipped (all dormant behind the new flag):**
+- **Route** `GET /rr/{token}` — read-only, masked "Referral Records" page. Registered ONLY
+  when `ENABLE_RECORDS_LINK` is on, exactly like `ENABLE_SHARE_INTENT` (Constitution §4). One
+  GET, no form, no POST sibling — a link that arrives by forwarded WhatsApp message must not
+  be able to change anything.
+- **Flag** `ENABLE_RECORDS_LINK` (`gorefer/flags.py`, default **False**; `.env.example` updated).
+- **Config key** `records_link_ttl_days` (default **90**), resolved through the ADR-022 cascade
+  at VERIFY time (rail E-6) — shortening the window kills links already sitting in people's
+  chat history, which a code constant could never do.
+- **Model** `accounts.RecordsLinkState` — tenant-scoped, OneToOne to `referrals.ReferralIdentity`
+  (NOT `ReferrerAccount`: most recipients have never logged in), carrying the revocation `epoch`.
+  Migration `accounts/0002_recordslinkstate.py`, forward-only.
+- **Token service** `apps/accounts/records_link.py` — `django.core.signing` (no new dependency),
+  salt `gorefer.records-link.v1`; `mint_records_token` / `verify_records_token` /
+  `rotate_records_token`. Rotation bumps the epoch, killing every token previously minted for
+  that ONE referrer.
+- **Masking** `apps/common/masking.py` — the single canonical helper (the `phone.py` pattern):
+  `mask_name("Rahul") -> "Ra••••l"`, `mask_mobile("919876543221") -> "98••••••21"`. Applied at
+  the DATA level before the template sees anything, as `selfview.py` does.
+
+**Security shape:** invalid / expired / rotated / unknown all render ONE identical 404 page with
+zero referral data — no oracle for which client ids exist. Per-IP rate limit
+(`RATELIMIT_RECORDS_MAX`, 20/min, shared DB-cache backend) returns 429 for valid and invalid
+tokens alike. Tenant scope comes from the signed token's own identity, not the request host.
+
+**Evidence:** 849 tests pass (`-n 4`), ruff clean, `manage.py check` clean, E-3 architecture gate
+0/0, E-7 tenant rail clean, no migration drift, Tailwind rebuilt + committed. Guardrail-3 coverage
+extended: a test asserts the `/rr/` response carries neither `ZMPHZC` nor any `signup.zerodha.com`
+URL, and a separate test asserts the RAW name and RAW mobile of a seeded referred lead appear
+nowhere in the response bytes.
+
+**No QUESTIONS raised** — the design decisions (signed token, epoch revocation, 90-day TTL, masked
+read-only + step-up, flag OFF) were owner-locked in the 2026-08-07 session, not open items.

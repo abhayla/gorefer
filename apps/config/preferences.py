@@ -25,6 +25,14 @@ WATI_BUSINESS_NUMBER = "wati_business_number"
 SHARE_CHANNELS_ALLOWLIST = "share_channels_allowlist"
 ENABLE_ASSISTED_REFERRAL = "enable_assisted_referral"
 
+# --- Records magic link (T-051; behind ENABLE_RECORDS_LINK) ------------------------
+# How long a WhatsApp [Referral Records] link stays usable. A cascade key, not a
+# literal (rail E-6 / §6d): shortening the window has to take effect on links ALREADY
+# in people's chat history, which a code constant could never do without a re-send.
+# Not on the Preferences screen yet — the surface it governs ships flag-OFF.
+RECORDS_LINK_TTL_DAYS = "records_link_ttl_days"
+RECORDS_LINK_TTL_DAYS_DEFAULT = 90
+
 # --- WhatsApp notification routing (Tier 2, admin) ---------------------------------
 # Which of the three lead-time notifications actually go out (doc-08 A6 a/b/c).
 # Routing only: turning one OFF suppresses that recipient; it never changes WHAT is
@@ -194,6 +202,7 @@ def central_defaults() -> dict:
         WATI_BUSINESS_NUMBER: settings.WATI_BUSINESS_NUMBER,
         SHARE_CHANNELS_ALLOWLIST: DEFAULT_SHARE_CHANNELS,
         ENABLE_ASSISTED_REFERRAL: False,
+        RECORDS_LINK_TTL_DAYS: RECORDS_LINK_TTL_DAYS_DEFAULT,
         # Notification routing defaults to ON for all three — this mirrors today's
         # behaviour exactly (doc-08 A6 fires all three), so adding the toggles changes
         # nothing until an admin turns one off.
