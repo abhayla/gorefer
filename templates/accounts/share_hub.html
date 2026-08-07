@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% load static %}{% load assetver %}
+{% comment %}
+T-053 — the referral SHARE HUB (GET /hub/{token}).
+
+Every share destination in here is built SERVER-SIDE (apps/accounts/hub.py) and arrives
+as `button.href`. Nothing on this page concatenates a URL from the token, and nothing
+should start: the token opens the page, it is never the thing being shared.
+
+Copy is config (§6d / rail E-6) — the headline, intro, benefit bullets, guidance bullets
+and the incentive claim all arrive resolved from the cascade. The shipped defaults are
+PLACEHOLDERS pending the owner's compliance review; edit them in config, not here.
+{% endcomment %}
+{% block title %}{{ headline }} — GoRefer{% endblock %}
+
+{% block head_extra %}
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{{ og.site_name }}">
+<meta property="og:title" content="{{ og.title }}">
+<meta property="og:description" content="{{ og.description }}">
+{# The bare public base URL, never this request's URI — that would stamp the access #}
+{# token into a meta tag crawlers cache and preview surfaces echo. #}
+<meta property="og:url" content="{{ og.url }}">
+{% if og.image %}<meta property="og:image" content="{{ og.image }}">{% endif %}
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{{ og.title }}">
+<meta name="twitter:description" content="{{ og.description }}">
+<meta name="robots" content="noindex, nofollow">
+{% endblock %}
+
+{% block content %}
+<section class="space-y-5" id="shareHub" data-client-id="{{ client_id }}">
+  <header class="space-y-1">
+    <h1 class="text-[17px] font-bold">{{ headline }}</h1>
+    <p class="text-[12px] text-ink-500">{{ intro }}</p>
+  </header>
+
+  {# ---- benefits: the claim comes from config, never a literal in this file ---- #}
+  <div class="rounded-lg border border-line bg-white p-4 space-y-2">
+    <h2 class="text-[13px] font-semibold">{{ benefits_heading }}</h2>
+    {% if reward_claim %}
+    <p class="text-[14px] font-bold text-cobalt-600">{{ reward_claim }}</p>
+    {% endif %}
+    <ul class="space-y-1 text-[12px] text-ink-500">
+      {% for benefit in benefits %}<li>• {{ benefit }}</li>{% endfor %}
+    </ul>
+  </div>
+
+  {# ---- the referrer's own credit link ---- #}
+  <div class="rounded-lg border border-line bg-white p-4 space-y-2">
+    <h2 class="text-[13px] font-semibold">{{ chrome.your_link_label }}</h2>
+    <p class="break-all rounded-md bg-bg px-3 py-2 font-mono text-[12px]" id="myLink">{{ my_link }}</p>
+    <p class="text-[11px] text-ink-500">Client ID: <span class="font-semibold">{{ client_id }}</span></p>
+  </div>
+
+  {# ---- share buttons ---- #}
+  <div class="space-y-2">
+    <h2 class="text-[13px] font-semibold">{{ chrome.share_heading }}</h2>
+    <div class="grid grid-cols-2 gap-2">
+      {% for button in buttons %}
+      <a href="{{ button.href }}" target="_blank" rel="noopener noreferrer"
+         data-share-channel="{{ button.event_channel }}"
+         class="rounded-lg bg-cobalt-600 px-4 py-2 text-center text-[13px] font-semibold text-white">
+        {{ button.label }}
+      </a>
+      {% endfor %}
+      <button type="button" id="copyLinkBtn"
+              data-share-channel="{{ copy_channel }}"
+              data-done-label="{{ chrome.copy_done_label }}"
+              class="rounded-lg border border-cobalt-600 px-4 py-2 text-[13px] font-semibold text-cobalt-600">
+        {{ chrome.copy_label }}
+      </button>
+      <button type="button" id="nativeShareBtn" hidden
+              data-share-channel="{{ native_share_channel }}"
+              class="rounded-lg border border-cobalt-600 px-4 py-2 text-[13px] font-semibold text-cobalt-600">
+        {{ chrome.more_label }}
+      </button>
+    </div>
+  </div>
+
+  {# ---- how / where to share ---- #}
+  <div class="rounded-lg border border-line bg-white p-4 space-y-2">
+    <h2 class="text-[13px] font-semibold">{{ guidance_heading }}</h2>
+    <ul class="space-y-1 text-[12px] text-ink-500">
+      {% for tip in guidance %}<li>• {{ tip }}</li>{% endfor %}
+    </ul>
+  </div>
+
+  {# Cross-link, present only when the records surface is actually mounted (§4). #}
+  {% if records_url %}
+  <a href="{{ records_url }}" class="inline-block text-[12px] font-semibold text-cobalt-600 underline">
+    {{ chrome.records_cta }}
+  </a>
+  {% endif %}
+</section>
+
+{% comment %}
+The share message is handed to JS as DATA (json_script escapes it), never spliced into
+a script literal where a quote in operator-edited copy would break the page.
+{% endcomment %}
+{{ share_message|json_script:"shareMessage" }}
+<script src="{% static_v 'js/share_hub.js' %}" defer></script>
+{% endblock %}

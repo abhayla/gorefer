@@ -32,6 +32,7 @@ from apps.common.masking import mask_mobile, mask_name
 from apps.common.ratelimit import RateLimited, check_rate, client_ip
 from apps.events.models import Event
 from apps.referrals.models import Lead, Referral
+from gorefer.flags import flags
 
 from .records_link import verify_records_token
 
@@ -54,6 +55,9 @@ RECORDS_CONFIG = {
     "expired_title": "This link has expired",
     "expired_body": "Referral-record links stop working after a while. Log in to see your records.",
     "empty": "No referrals recorded yet.",
+    # T-053 cross-link. Rendered only when the share hub is actually mounted, so this
+    # label can never become a dead button (Constitution §4).
+    "hub_cta": "Share your referral link",
 }
 
 #: Lead status that means the account actually opened. Set ONLY by the Zoho ingest path
@@ -71,7 +75,7 @@ def _login_url() -> str:
         return "/login/"
 
 
-def records_ctx(tenant, identity) -> dict:
+def records_ctx(tenant, identity, token: str = "") -> dict:
     """The whole page, from GoRefer's OWN data — no Zoho call on a public path.
 
     Deliberately not routed through `dashboard.profile.top_band`: that path makes a
@@ -125,6 +129,9 @@ def records_ctx(tenant, identity) -> dict:
         "first_referred_at": first_at,
         "last_referred_at": last_at,
         "login_url": _login_url(),
+        # The SAME token opens the share hub (T-053) — no second token system. Blank
+        # (and so unrendered) when that surface is off.
+        "hub_url": f"/hub/{token}" if (token and flags.ENABLE_SHARE_HUB) else "",
     }
 
 
@@ -177,6 +184,6 @@ def records_view(request, token: str):
     # the signature proves it, so a link opened on another tenant's domain can never
     # read across the ADR-023 boundary.
     tenant = identity.tenant
-    ctx = records_ctx(tenant, identity)
+    ctx = records_ctx(tenant, identity, token)
     _log_view(tenant, identity)
     return render(request, "accounts/records.html", ctx)

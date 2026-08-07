@@ -56,7 +56,7 @@ def _public_host() -> str:
     return base
 
 
-def _tracked_link(channel: str, client_id: str) -> str:
+def tracked_link(channel: str, client_id: str) -> str:
     # Full https URL, matching the selfview share builder. A scheme-less link is
     # not linkified by every client, and — observed live 2026-07-28 — it loses the
     # WhatsApp preview card to the disclosure URL (the message's only full URL),
@@ -69,7 +69,7 @@ def _tracked_link(channel: str, client_id: str) -> str:
 SHARE_KIT_MESSAGE_KEY = "share_kit_message_template"
 
 
-def _kit_message(channel: str, client_id: str, tenant_id: int | None) -> str:
+def kit_message(channel: str, client_id: str, tenant_id: int | None) -> str:
     """The share prefill, resolved through the config cascade (CLAUDE.md §6d).
 
     Two defects fixed together here (found 2026-07-27):
@@ -91,11 +91,20 @@ def _kit_message(channel: str, client_id: str, tenant_id: int | None) -> str:
         template = str(resolve(SHARE_KIT_MESSAGE_KEY, tenant_id=tenant_id, default=default) or default)
     except Exception:
         template = default
-    message = template.format(link=_tracked_link(channel, client_id))
+    message = template.format(link=tracked_link(channel, client_id))
     anchor = f"Disclosures: https://{_public_host()}/d/pifs"
     if anchor in message:
         return message
     return message + "\n\n" + anchor
+
+
+# Back-compat aliases. Both builders were module-private until the T-053 share hub
+# needed the SAME prefill text and the SAME link form; a second copy in another module
+# is exactly the drift `_tracked_link`'s own docstring warns about.
+_tracked_link = tracked_link
+_kit_message = kit_message
+
+
 def handle_share_intent(*, tenant, channel: str, client_id: str, user_agent: str | None):
     """Resolve a /share/{channel}/{client_id} hit. Returns the destination URL.
 
@@ -109,7 +118,7 @@ def handle_share_intent(*, tenant, channel: str, client_id: str, user_agent: str
         raise Http404(f"unsupported share channel: {channel!r}")
 
     program = get_active_program(tenant)
-    message = _kit_message(channel, client_id, getattr(tenant, "id", None))
+    message = kit_message(channel, client_id, getattr(tenant, "id", None))
     destination = _CHANNEL_TARGET_BUILDERS[channel](message)
 
     if is_bot_user_agent(user_agent):

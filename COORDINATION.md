@@ -5312,3 +5312,53 @@ PROBE-D/E sequence verbatim: after divergence + rotation, OLD dead, NEW alive). 
 migration drift.
 
 **No QUESTIONS raised.**
+
+---
+
+## 2026-08-08 STATUS — T-053: referral share hub `GET /hub/{token}` (flag OFF)
+
+**PR:** `feat/t053-share-hub`. New route **`/hub/{token}`**, new flag **`ENABLE_SHARE_HUB`**
+(default **false**, `.env.example` updated) — the whole route is absent when off, so nothing
+in prod changes. `apps/integrations/**` untouched.
+
+**What it is.** The destination of a `[Refer Link]` button on a MARKETING WhatsApp template:
+benefits, how/where to share, the referrer's own credit link, and a one-tap share row
+(WhatsApp · Telegram · Facebook · X · LinkedIn · Copy · native "More…"). Deliberately a
+SEPARATE page from the T-051 records view — that one stays dry because it is a UTILITY-button
+destination. The **same signed token opens both**: `records_link.verify_records_token` is
+reused verbatim, there is **no second token system**, and a new flag (not `ENABLE_RECORDS_LINK`)
+so the two pages ship independently. Each cross-links to the other, and only when the other's
+flag is on (Constitution §4 — no dead links).
+
+**The load-bearing invariant: the token is PAGE ACCESS, never shared content.** Every share URL
+is built server-side in `apps/accounts/hub.py`; `_share_targets()` is not even *given* the token,
+so it cannot leak one. Three tests assert it — on the built targets, on the rendered hrefs, and
+on the `share_hub_viewed` Event payload. The one place the token legitimately reappears is the
+`/rr/{token}` cross-link, and a test pins the occurrence count at exactly 1. `og:url` is the
+bare `PUBLIC_BASE_URL`, **not** `build_absolute_uri()` — that would stamp a live credential into
+a meta tag crawlers cache.
+
+**Config keys (rail E-6).** `share_hub_headline`, `share_hub_intro`, `share_hub_benefits_heading`,
+`share_hub_benefits`, `share_hub_guidance_heading`, `share_hub_guidance`,
+`share_hub_og_image_url` (default: the committed `static/img/og-card.png`). The incentive claim
+is **not** a new key and is never restated — it resolves from the existing `referrer_reward_claim`
+(central default `flags.REFERRAL_INCENTIVE_CLAIM`), and a test proves editing config changes the
+page. Share prefill text reuses the existing `share_kit_message_template` rather than forking a
+second copy; `_kit_message`/`_tracked_link` became public `kit_message`/`tracked_link` (aliases
+kept) so the hub and the `/share/` endpoint cannot drift apart on what a referrer sends.
+
+**COPY IS A PLACEHOLDER — owner compliance review required before the flag is ever turned on.**
+The shipped headline/intro/benefit/guidance strings are honest engineering defaults, not
+owner-approved marketing copy. They are all cascade keys precisely so the owner's final wording
+lands with no deploy.
+
+**Reused, not rebuilt:** share taps go through the EXISTING `POST /api/share` (`telegram` and
+`native_share` added to its channel set) so the hub's funnel is one stream with the landing
+page's, not a parallel one. Failure/throttle render the existing `records_unavailable.html`.
+Rate-limited via `apps/common/ratelimit` on its own `share_hub` scope (limit reuses
+`RATELIMIT_RECORDS_MAX` — worth its own setting if the two surfaces ever need different quotas).
+
+**Evidence:** 28 new tests; full suite **879 passed** (`-n 4`), ruff clean, `manage.py check`
+clean, E-3 gate 0/0, E-7 rail clean, no migration drift, Tailwind rebuilt and committed.
+
+**No QUESTIONS raised.**
