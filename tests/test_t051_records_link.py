@@ -180,6 +180,49 @@ def test_rotation_kills_that_referrers_tokens_only(seeded):
     assert verify_records_token(mint_records_token(mine)).pk == mine.pk
 
 
+def test_a_missing_state_row_fails_closed(seeded):
+    """T-052: no revocation row → every token for that referrer is INVALID.
+
+    The old code defaulted a missing row to epoch 1, so deleting the row (a manual DB
+    op, a bad cleanup script) silently revived every epoch-1 token ever minted. Minting
+    always creates the row, so "no row" can only mean state we cannot vouch for.
+    """
+    identity = _identity(seeded, CID)
+    first, second = mint_records_token(identity), mint_records_token(identity)
+    RecordsLinkState.objects.filter(identity=identity).delete()
+
+    assert verify_records_token(first) is None
+    assert verify_records_token(second) is None
+    # Minting again re-creates the row, so the referrer is not locked out forever.
+    assert verify_records_token(mint_records_token(identity)).pk == identity.pk
+
+
+def test_rotation_holds_when_the_state_rows_tenant_diverges(seeded):
+    """T-052 regression — the checker's PROBE-D/E sequence, verbatim.
+
+    A referrer whose identity predates the tenant backfill gets a TENANTLESS state row;
+    the identity is later backfilled with a tenant, so tokens minted from then on carry
+    `t=<tenant>`. The old lookup re-filtered the state row by that payload tenant, missed
+    the tenantless row, fell back to epoch 1 — and rotation INVERTED: the pre-rotation
+    token kept working while the freshly minted one was refused.
+    """
+    identity = _identity(seeded, CID)
+    mint_records_token(identity)
+    # The divergence: state row tenantless, identity still carrying its tenant.
+    RecordsLinkState.objects.filter(identity=identity).update(tenant=None)
+    assert identity.tenant_id is not None
+
+    old_token = mint_records_token(identity)
+    assert verify_records_token(old_token).pk == identity.pk, "pre-rotation token should work"
+
+    rotate_records_token(identity)
+    new_token = mint_records_token(identity)
+
+    # Rotation points the right way: OLD dead, NEW alive (the old code had it backwards).
+    assert verify_records_token(old_token) is None
+    assert verify_records_token(new_token).pk == identity.pk
+
+
 def test_disabled_identity_cannot_be_opened(seeded):
     identity = _identity(seeded, CID)
     token = mint_records_token(identity)

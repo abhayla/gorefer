@@ -136,8 +136,15 @@ def verify_records_token(token: str | None) -> ReferralIdentity | None:
     if identity is None:
         return None
 
-    state = RecordsLinkState.objects.for_tenant(tenant_id).filter(identity=identity).first()
-    current_epoch = state.epoch if state is not None else 1
-    if int(epoch) != int(current_epoch):
+    # Resolved THROUGH the identity (a OneToOne), never by re-filtering on the tenant
+    # carried in the payload: the identity lookup above already pinned the ADR-023
+    # scope, and a second tenant filter here could only ever MISS — which is exactly
+    # what a divergent `RecordsLinkState.tenant` (e.g. a row minted before the tenant
+    # backfill) would cause. When it missed, the old code fell back to epoch 1, so
+    # rotation INVERTED: pre-rotation links kept working and the new one was refused.
+    # Missing state now fails CLOSED — minting always creates the row, so a token that
+    # has no row is a token we cannot vouch for.
+    state = RecordsLinkState.objects.filter(identity=identity).first()
+    if state is None or int(epoch) != int(state.epoch):
         return None
     return identity
