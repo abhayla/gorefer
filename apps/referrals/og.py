@@ -38,6 +38,12 @@ def _cfg(key: str, setting_name: str, tenant_id: int | None) -> str:
         return default
 
 
+#: Public alias — the T-053 share hub reuses these same title/description/site-name
+#: keys so the brand card says ONE thing across every surface (the drift this module's
+#: own docstring was written about).
+cfg = _cfg
+
+
 def absolute_image_url(image: str) -> str:
     """THE one way to turn a configured OG image into a crawler-usable absolute URL.
 

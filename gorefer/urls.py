@@ -67,6 +67,14 @@ if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_RECORDS_LINK", False):
 
     urlpatterns.append(path("rr/<str:token>", records_view, name="records_link"))
 
+# Tokened referral SHARE HUB (T-053) — the destination of a [Refer Link] button. Its own
+# flag, separate from ENABLE_RECORDS_LINK: the two tokened pages ship independently, and
+# the same signed token opens both. Also a single GET, for the same forwardability reason.
+if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_SHARE_HUB", False):
+    from apps.accounts.hub import hub_view
+
+    urlpatterns.append(path("hub/<str:token>", hub_view, name="share_hub"))
+
 # The M7 admin dashboard (custom, built from the mockups) + Django admin base,
 # both gated by the feature flag (no dead UI when off).
 if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_ADMIN_DASHBOARD", True):

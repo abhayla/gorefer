@@ -57,6 +57,12 @@
   </div>
 
   <p class="text-[11px] text-ink-500">{{ config.masked_note }}</p>
+  {# T-053 cross-link — same token, the share-hub surface. Absent when that flag is off. #}
+  {% if hub_url %}
+  <a href="{{ hub_url }}" class="block text-[12px] font-semibold text-cobalt-600 underline">
+    {{ config.hub_cta }}
+  </a>
+  {% endif %}
   <a href="{{ login_url }}"
      class="inline-block rounded-lg bg-cobalt-600 px-4 py-2 text-[13px] font-semibold text-white">
     {{ config.login_cta }}
