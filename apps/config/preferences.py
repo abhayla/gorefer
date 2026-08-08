@@ -71,23 +71,27 @@ SHARE_HUB_OG_IMAGE_DEFAULT = "img/referral-preview-card.png"
 
 SHARE_HUB_HEADLINE_DEFAULT = "Your referral link is ready"
 SHARE_HUB_INTRO_DEFAULT = (
-    "Send it to one person today. Everyone who opens an account through this link is "
-    "recorded against your Client ID automatically."
+    "Send it to one person today. When someone opens an account through this link, "
+    "the referral is recorded against your Client ID."
 )
 SHARE_HUB_BENEFITS_HEADING_DEFAULT = "What you get"
 SHARE_HUB_BENEFITS_DEFAULT = [
-    "Your reward is credited by the broker's own referral programme — we make sure your "
-    "name is on the referral, and never touch the amount.",
+    "Any reward comes from the broker's own referral programme, on their terms. We "
+    "record the referral against your Client ID and pass it on — we never calculate, "
+    "hold or add to the amount.",
     "Every referral is tracked against your Client ID automatically. No forms, no "
     "follow-up calls, nothing to remember.",
-    "Your friend is guided through account opening end to end by PIFS, free of charge.",
+    "Your friend is guided through account opening end to end by PIFS. PIFS charges "
+    "your friend nothing for this help; PIFS is paid by the broker as its Authorised "
+    "Person. Account and brokerage charges are the broker's own.",
     "Open your record any time to see exactly where each person has reached.",
 ]
 SHARE_HUB_GUIDANCE_HEADING_DEFAULT = "How to share so it actually works"
 SHARE_HUB_GUIDANCE_DEFAULT = [
     "One direct message beats ten group posts. Send it to a person, not to a crowd.",
-    "Say why YOU use it in your own words, then paste the link — people act on your "
-    "reason, not on an advertisement.",
+    "Say why YOU use it in your own words — your own experience of opening and using "
+    "the account. Do not promise returns or advise anyone on what to invest in; leave "
+    "that to them and their own research.",
     "Start with family and friends who have already asked you about investing.",
     "If someone shows interest but goes quiet, one short reminder the next day helps "
     "far more than sending the link again.",
