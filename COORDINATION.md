@@ -5539,3 +5539,57 @@ PR: `feat/t055-hub-partner-header` → `main`.
   Tailwind classes — `static/css/app.css` rebuild produced no diff.
 
 PR: `fix/t056-hub-header-program` → `main`.
+
+## 2026-08-08 STATUS (Engineer) — T-055 + T-056 deployed (`14eb2f7`): hub partner header + the wrong-entity defect it exposed
+
+**T-055 (PR #120, `214c900`) — owner review of the LIVE page drove this.** The owner opened the
+hub on his phone and reported two defects: the partner was named nowhere, and six equal-weight
+share buttons recommended nothing. Shipped: brand line at top -> own referral link -> ONE large
+"Share on WhatsApp" primary CTA -> "Copy link" -> the other five as a compact row -> benefits ->
+disclosures, with **DOM order asserted by a test** so a later edit cannot silently re-scramble it.
+Attribution wording became the cascade key `share_hub_partner_attribution`. **No partner logo** —
+ADR-014 (never resemble/clone the partner) plus we hold no trademark permission; owner chose
+name-in-text.
+
+**T-056 (PR #121, `14eb2f7`) — a LIVE defect that every test and one checker missed.** T-055
+resolved the brand from `ReferralIdentity.partner.name`. Production semantics differ from the
+tests' invented seed data:
+
+```
+PARTNER  id=1  name='Passive Income Financial Solutions Pvt Ltd'   <- PIFS, the AP
+PROGRAM  id=1  name/display_name='Zerodha'                          <- the broker brand
+```
+
+so the deployed page read **"Passive Income Financial Solutions Pvt Ltd … via PIFS"** — PIFS via
+PIFS, and the owner's actual requirement (broker named at top) still unmet. Caught by the
+dispatcher's **post-deploy sanity on real data**, not by CI. Fix: resolve
+`program.display_name` -> `program.name` -> `partner.name` -> render NO brand element (never a
+blank chip); **the new tests seed the production shape** (partner-company name != broker brand) so
+this class of wrong-field binding cannot pass again. The T-056 checker rebuilt that shape
+independently and read the header back verbatim ("Zerodha", no company name), then proved
+multi-partner by rendering a second program ("Groww") that shows only its own brand.
+
+**Deploy:** byte-exact (git-blob-hash verified at destination), no migrations, collectstatic,
+services restarted. Live sanity: header = Zerodha; token appears exactly once per page (sibling
+cross-link) and zero times in any share href; every share button carries
+`gorefer.in/r/wa/{client_id}`; guardrail-3 clean; `/hub/` and `/rr/` 200 over public HTTPS. The
+lone "Passive Income Financial Solutions" string left in the body is the **mandatory SEBI/NSE
+disclosure block**, required.
+
+**Process lessons recorded (fleet, not this repo):** (1) a worker relaunched **detached** emits no
+completion notification — a turn-cap death sat unnoticed for 35 minutes until the owner asked;
+the dispatcher skill now REQUIRES arming a watcher in the same turn as any detached launch
+(hub PR #503). (2) `max_turns` must come from task shape, not tier default — a ~40-line fix whose
+DoD includes a 900-test suite plus a PR-to-merge tail is a >=70-turn task; on turn-cap death,
+resume into the SAME worktree instead of redoing finished work. (3) Two worker self-reports were
+false and caught by checkers/dispatcher: one claimed its merge was already visible in production
+(merging is not deploying — worker mandates now forbid production claims), one inflated its new-test
+count (+37 claimed, 9 real).
+
+**QUESTION for the DA (not blocking, carried + extended).** Three known-and-unfixed items:
+(a) the WhatsApp share *message text* (`apps/referrals/share_intent_service.py`) is tenant-scoped,
+not partner-scoped, and still says "Open a free Zerodha account" for ANY partner — must be fixed
+before a second broker onboards; (b) `.filter(client_id=...).first()` without `order_by` in
+`api/records_tokens.py` and `apps/accounts/selfview.py` (arbitrary row once a second partner
+exists); (c) one vacuous assertion in `test_empty_brand_name_renders_no_blank_element_in_the_header`.
+Bundle all three into the "second partner onboarding" PR, or fix (b)+(c) opportunistically sooner?
