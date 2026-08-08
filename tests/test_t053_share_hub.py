@@ -240,7 +240,9 @@ def test_the_link_preview_uses_a_config_keyed_brand_image(client, seeded):
 
     body = client.get(f"/hub/{token}").content.decode()
     assert 'property="og:image"' in body
-    assert "/static/img/og-card.png" in body, "the committed placeholder card is not served"
+    assert "/static/img/referral-preview-card.png" in body, (
+        "the committed brand card is not served"
+    )
 
     # An operator can point the key at an absolute CDN URL with no deploy.
     ConfigCentral.objects.update_or_create(

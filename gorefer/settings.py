@@ -313,7 +313,7 @@ OG_DESCRIPTION = os.environ.get(
 )
 # Card image: a PIFS-branded asset served from our own static (NOT a Zerodha asset).
 # Default is a relative static path; env can point at an absolute https URL.
-OG_IMAGE = os.environ.get("OG_IMAGE", "img/og-card.png")
+OG_IMAGE = os.environ.get("OG_IMAGE", "img/referral-preview-card.png")
 OG_SITE_NAME = os.environ.get("OG_SITE_NAME", "GoRefer · PIFS")
 # Public base used to build absolute og:url / og:image (Open Graph needs absolute URLs).
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "https://gorefer.in")
