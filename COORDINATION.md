@@ -5504,3 +5504,38 @@ was invisible, nothing pushed sharing). Changes:
   clean, `static/css/app.css` rebuilt and committed.
 
 PR: `feat/t055-hub-partner-header` → `main`.
+
+---
+
+**STATUS — T-056 (2026-08-08).** Live-defect fix found by post-deploy sanity on T-055
+(prod `214c900`). Partner-vs-Program semantics finding:
+
+- `Partner` is the AP/business row (prod: `name='Passive Income Financial Solutions
+  Pvt Ltd'` — PIFS). `ReferralProgram` is the broker/product the referral is FOR
+  (prod: `name='Zerodha'`, `display_name='Zerodha'`, `partner_id` → the PIFS row).
+  `ReferralIdentity` carries BOTH FKs. T-055 read `identity.partner.name` for the
+  header, so prod rendered **"Passive Income Financial Solutions Pvt Ltd … via
+  PIFS - Authorised Person"** — PIFS via PIFS, not the broker brand the owner asked
+  for (Zerodha today, Angel One/PolicyBazaar tomorrow). The T-055 tests didn't catch
+  it because they invented their own seed shape (Partner named like a broker)
+  instead of using `seed_program`'s prod shape.
+- Fix: `apps/accounts/hub.py` adds `_brand_name(identity)` — resolution order
+  `program.display_name` → `program.name` → `partner.name` → no brand element
+  (never a blank chip). `hub_ctx` now passes `brand_name` instead of `partner_name`;
+  `templates/accounts/share_hub.html` wraps the header line in
+  `{% if brand_name %}`. No new config key (this is DB data, same as T-055), no
+  model/migration changes.
+- `tests/test_t055_hub_partner_header.py`: its two assertions that hardcoded
+  `partner.name`-is-the-brand semantics were corrected in place (now assert
+  `program.display_name` renders and `partner.name` does NOT appear in the header;
+  the rename-proof test now renames `program.display_name`) — everything else in
+  that file (DOM order, T-053 share-URL invariants) is untouched.
+- New `tests/test_t056_hub_program_brand.py`: multi-program property (a second
+  program on the same Partner shows only its own brand), the full fallback chain
+  unit-tested directly against `_brand_name`, the empty-fallback case renders no
+  blank header element, and brand ≠ attribution-line assertion.
+- Full suite green (915 tests), ruff/`manage.py check`/architecture-gate (E-3, 0
+  vendor refs)/migrations-drift all clean. Template changed but introduced no new
+  Tailwind classes — `static/css/app.css` rebuild produced no diff.
+
+PR: `fix/t056-hub-header-program` → `main`.
