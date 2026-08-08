@@ -25,7 +25,7 @@ from apps.accounts.hub import SHARE_BUTTONS, hub_ctx
 from apps.accounts.records_link import mint_records_token
 from apps.config.models import ConfigCentral
 from apps.config.preferences import SHARE_HUB_PARTNER_ATTRIBUTION
-from apps.referrals.models import Partner, ReferralIdentity, ReferralProgram
+from apps.referrals.models import ReferralIdentity, ReferralProgram
 from apps.tenants.models import Tenant
 
 CID = "RJ4521"
@@ -52,20 +52,29 @@ def _identity(tenant, client_id: str = CID) -> ReferralIdentity:
 
 
 @HUB_URLS
-def test_partner_name_is_rendered_from_the_db_record(client, seeded):
+def test_prod_shaped_data_renders_program_brand_not_partner_company_name(client, seeded):
+    """T-056: prod has Partner='Passive Income Financial Solutions Pvt Ltd' (PIFS, the
+    AP) and ReferralProgram.display_name='Zerodha' (the broker) on the SAME identity —
+    `seed_program` already seeds exactly this shape. The header must show the broker
+    brand, never the partner-company name (that would read "PIFS ... via PIFS")."""
     identity = _identity(seeded)
     token = mint_records_token(identity)
     body = client.get(f"/hub/{token}").content.decode()
-    assert identity.partner.name in body
+
+    header = re.search(
+        r'data-test="hub-partner-header".*?</header>', body, re.S
+    ).group(0)
+    assert identity.program.display_name in header
+    assert identity.partner.name not in header
 
 
 @HUB_URLS
-def test_renaming_the_partner_row_changes_the_rendered_header(client, seeded):
-    """Proof the name is DB-driven, not a code literal (CLAUDE.md §4)."""
+def test_renaming_the_program_display_name_changes_the_rendered_header(client, seeded):
+    """Proof the brand is DB-driven, not a code literal (CLAUDE.md §4)."""
     identity = _identity(seeded)
     token = mint_records_token(identity)
 
-    Partner.objects.filter(pk=identity.partner_id).update(name="Angel One")
+    ReferralProgram.objects.filter(pk=identity.program_id).update(display_name="Angel One")
     body = client.get(f"/hub/{token}").content.decode()
 
     header = re.search(

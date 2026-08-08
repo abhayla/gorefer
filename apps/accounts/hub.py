@@ -169,6 +169,30 @@ def _login_url() -> str:
         return "/login/"
 
 
+def _brand_name(identity) -> str:
+    """The name the header shows (T-056).
+
+    `Partner` is the AP/business (e.g. PIFS) — `ReferralProgram` is the broker/product
+    it runs referrals for. Prod data has both on one identity, and they differ: the
+    header must read the PROGRAM brand, not the partner-company name (that would
+    render as "PIFS ... via PIFS"). Falls back to `program.name` if no display_name is
+    set, and only to `partner.name` if the identity carries no program at all — never
+    a blank chip.
+    """
+    program = getattr(identity, "program", None)
+    if program is not None:
+        display_name = getattr(program, "display_name", "") or ""
+        if display_name:
+            return display_name
+        name = getattr(program, "name", "") or ""
+        if name:
+            return name
+    partner = getattr(identity, "partner", None)
+    if partner is not None:
+        return getattr(partner, "name", "") or ""
+    return ""
+
+
 def hub_ctx(identity, token: str) -> dict:
     """Everything the page renders. `token` is used for ONE thing — the cross-link to
     the records page — and never reaches a share URL or the prefill."""
@@ -186,10 +210,10 @@ def hub_ctx(identity, token: str) -> dict:
     return {
         "client_id": client_id,
         "chrome": HUB_CHROME,
-        # The partner NAME comes from the DB record (never a literal — CLAUDE.md §4);
-        # renaming the Partner row changes this with no deploy. The attribution
-        # wording is the one config knob (rail E-6 / §6d).
-        "partner_name": identity.partner.name,
+        # The BRAND comes from the DB record (never a literal — CLAUDE.md §4): the
+        # broker/program, not the partner-company name (PIFS) — see `_brand_name`.
+        # The attribution wording is the one config knob (rail E-6 / §6d).
+        "brand_name": _brand_name(identity),
         "partner_attribution": _cfg(
             SHARE_HUB_PARTNER_ATTRIBUTION, SHARE_HUB_PARTNER_ATTRIBUTION_DEFAULT, tenant_id
         ),
