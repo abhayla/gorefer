@@ -57,6 +57,13 @@ SHARE_HUB_GUIDANCE_HEADING = "share_hub_guidance_heading"
 SHARE_HUB_GUIDANCE = "share_hub_guidance"              # JSON list of bullet strings
 SHARE_HUB_OG_IMAGE_URL = "share_hub_og_image_url"
 
+# The PIFS attribution line under the partner header (T-055, owner review 2026-08-08).
+# The PARTNER NAME itself is never here — it comes from the Partner DB record via the
+# identity (renaming the row must change the header with no deploy, ADR-014/§4). This
+# key only carries the fixed PIFS-attribution wording, which is config per rail E-6.
+SHARE_HUB_PARTNER_ATTRIBUTION = "share_hub_partner_attribution"
+SHARE_HUB_PARTNER_ATTRIBUTION_DEFAULT = "via PIFS - Authorised Person"
+
 #: Static brand card for the hub's link preview. A committed placeholder asset — an
 #: operator swaps in the owner-approved image by pointing this key at a new static
 #: path or an absolute CDN URL, with no deploy (§6d).
@@ -258,6 +265,7 @@ def central_defaults() -> dict:
         SHARE_HUB_GUIDANCE_HEADING: SHARE_HUB_GUIDANCE_HEADING_DEFAULT,
         SHARE_HUB_GUIDANCE: SHARE_HUB_GUIDANCE_DEFAULT,
         SHARE_HUB_OG_IMAGE_URL: SHARE_HUB_OG_IMAGE_DEFAULT,
+        SHARE_HUB_PARTNER_ATTRIBUTION: SHARE_HUB_PARTNER_ATTRIBUTION_DEFAULT,
         # Notification routing defaults to ON for all three — this mirrors today's
         # behaviour exactly (doc-08 A6 fires all three), so adding the toggles changes
         # nothing until an admin turns one off.

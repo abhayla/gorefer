@@ -53,6 +53,8 @@ from apps.config.preferences import (
     SHARE_HUB_INTRO_DEFAULT,
     SHARE_HUB_OG_IMAGE_DEFAULT,
     SHARE_HUB_OG_IMAGE_URL,
+    SHARE_HUB_PARTNER_ATTRIBUTION,
+    SHARE_HUB_PARTNER_ATTRIBUTION_DEFAULT,
 )
 from apps.events.models import Event
 from apps.referrals.og import absolute_image_url
@@ -103,6 +105,11 @@ SHARE_BUTTONS = [
     {"code": "x", "label": "X", "event_channel": "x", "kind": "text"},
     {"code": "linkedin", "label": "LinkedIn", "event_channel": "linkedin", "kind": "url"},
 ]
+
+#: The code within SHARE_BUTTONS the hub promotes to the one large primary CTA
+#: (owner ruling 2026-08-08: WhatsApp is where referrers actually share, per send
+#: data). Every other listed channel demotes to the compact icon row.
+PRIMARY_SHARE_CODE = "wa"
 
 #: Channel code for the native OS share sheet (`navigator.share`) — no third-party JS,
 #: no SDK, just the browser API. Falls back to Copy where the API is absent.
@@ -173,10 +180,19 @@ def hub_ctx(identity, token: str) -> dict:
     targets = _share_targets(message, link)
 
     buttons = [dict(button, href=targets[button["code"]]) for button in SHARE_BUTTONS]
+    primary_button = next(b for b in buttons if b["code"] == PRIMARY_SHARE_CODE)
+    secondary_buttons = [b for b in buttons if b["code"] != PRIMARY_SHARE_CODE]
 
     return {
         "client_id": client_id,
         "chrome": HUB_CHROME,
+        # The partner NAME comes from the DB record (never a literal — CLAUDE.md §4);
+        # renaming the Partner row changes this with no deploy. The attribution
+        # wording is the one config knob (rail E-6 / §6d).
+        "partner_name": identity.partner.name,
+        "partner_attribution": _cfg(
+            SHARE_HUB_PARTNER_ATTRIBUTION, SHARE_HUB_PARTNER_ATTRIBUTION_DEFAULT, tenant_id
+        ),
         "headline": _cfg(SHARE_HUB_HEADLINE, SHARE_HUB_HEADLINE_DEFAULT, tenant_id),
         "intro": _cfg(SHARE_HUB_INTRO, SHARE_HUB_INTRO_DEFAULT, tenant_id),
         "benefits_heading": _cfg(
@@ -200,6 +216,8 @@ def hub_ctx(identity, token: str) -> dict:
         "my_link": link,
         "share_message": message,
         "buttons": buttons,
+        "primary_button": primary_button,
+        "secondary_buttons": secondary_buttons,
         "native_share_channel": NATIVE_SHARE_CHANNEL,
         "copy_channel": COPY_CHANNEL,
         # Cross-link, only when the other surface is actually mounted.
