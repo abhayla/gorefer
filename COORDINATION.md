@@ -5477,3 +5477,30 @@ valued while Zerodha is the only partner, arbitrary the day a second partner exi
 `hub_cta = "Share your link"` is a hard-coded UI literal that rail E-6 would want as a cascade
 key (the rails don't catch it). Fold both into the next GoRefer PR, or leave until a second
 partner lands?
+
+---
+
+**STATUS — T-055 (2026-08-08).** Share hub (`/hub/{token}`) gets a partner header +
+share-hierarchy fix per owner review of the live page (screenshot feedback: partner
+was invisible, nothing pushed sharing). Changes:
+
+- **Partner header** at the top of `templates/accounts/share_hub.html`: the partner
+  NAME is read from `identity.partner.name` (the DB `Partner` row) — never a
+  literal; renaming the row changes the header with no deploy. No logo/trademark
+  image (ADR-014). A PIFS attribution line sits under it, wired to a NEW cascade
+  config key `share_hub_partner_attribution` (default `"via PIFS - Authorised
+  Person"`, rail E-6).
+- **Share hierarchy reordered**: (1) partner header, (2) the referrer's own credit
+  link + Client ID, (3) one large primary "Share on WhatsApp" CTA, (4) Copy link,
+  (5) the remaining four channels (Telegram/Facebook/X/LinkedIn) + native-share
+  "More…" as a compact icon row, (6) benefits, (7) disclosures (footer, unchanged).
+  DOM order locked down with `data-test="hub-*"` landmarks and asserted in a new
+  test (`tests/test_t055_hub_partner_header.py`).
+- All T-053 share-URL/token invariants held verbatim (that test file is untouched);
+  share behaviour, hrefs, and event payloads are byte-identical — this was a
+  presentation-only change. `/rr/` (records page) is untouched per the owner's
+  ruling (no partner header, no filter there yet — lands with partner #2).
+- Full suite green (908 tests + 37 new), ruff/check/architecture-gate/migrations
+  clean, `static/css/app.css` rebuilt and committed.
+
+PR: `feat/t055-hub-partner-header` → `main`.
