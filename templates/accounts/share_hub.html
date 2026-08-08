@@ -30,13 +30,60 @@ PLACEHOLDERS pending the owner's compliance review; edit them in config, not her
 
 {% block content %}
 <section class="space-y-5" id="shareHub" data-client-id="{{ client_id }}">
-  <header class="space-y-1">
+  {# ---- 1. partner header — NAME from the DB record, no logo (ADR-014) ---- #}
+  <header class="space-y-1" data-test="hub-partner-header">
+    <p class="text-[11px] font-semibold uppercase tracking-wide text-cobalt-600">{{ partner_name }}</p>
     <h1 class="text-[17px] font-bold">{{ headline }}</h1>
     <p class="text-[12px] text-ink-500">{{ intro }}</p>
+    <p class="text-[11px] text-ink-400">{{ partner_attribution }}</p>
   </header>
 
-  {# ---- benefits: the claim comes from config, never a literal in this file ---- #}
-  <div class="rounded-lg border border-line bg-white p-4 space-y-2">
+  {# ---- 2. the referrer's own credit link, right under the header ---- #}
+  <div class="rounded-lg border border-line bg-white p-4 space-y-2" data-test="hub-my-link">
+    <h2 class="text-[13px] font-semibold">{{ chrome.your_link_label }}</h2>
+    <p class="break-all rounded-md bg-bg px-3 py-2 font-mono text-[12px]" id="myLink">{{ my_link }}</p>
+    <p class="text-[11px] text-ink-500">Client ID: <span class="font-semibold">{{ client_id }}</span></p>
+  </div>
+
+  {# ---- 3-5. share hierarchy: one big primary CTA, copy second, rest as icons ---- #}
+  <div class="space-y-2">
+    <h2 class="text-[13px] font-semibold">{{ chrome.share_heading }}</h2>
+
+    <a href="{{ primary_button.href }}" target="_blank" rel="noopener noreferrer"
+       data-share-channel="{{ primary_button.event_channel }}"
+       data-test="hub-primary-cta"
+       class="block rounded-lg bg-cobalt-600 px-4 py-3 text-center text-[15px] font-bold text-white">
+      Share on {{ primary_button.label }}
+    </a>
+
+    <button type="button" id="copyLinkBtn"
+            data-share-channel="{{ copy_channel }}"
+            data-done-label="{{ chrome.copy_done_label }}"
+            data-test="hub-copy-link"
+            class="block w-full rounded-lg border border-cobalt-600 px-4 py-2 text-[13px] font-semibold text-cobalt-600">
+      {{ chrome.copy_label }}
+    </button>
+
+    <div class="grid grid-cols-5 gap-2" data-test="hub-secondary-channels">
+      {% for button in secondary_buttons %}
+      <a href="{{ button.href }}" target="_blank" rel="noopener noreferrer"
+         data-share-channel="{{ button.event_channel }}"
+         title="{{ button.label }}"
+         class="rounded-md border border-line px-2 py-2 text-center text-[10px] font-semibold text-ink-500">
+        {{ button.label }}
+      </a>
+      {% endfor %}
+      <button type="button" id="nativeShareBtn" hidden
+              data-share-channel="{{ native_share_channel }}"
+              title="{{ chrome.more_label }}"
+              class="rounded-md border border-line px-2 py-2 text-center text-[10px] font-semibold text-ink-500">
+        {{ chrome.more_label }}
+      </button>
+    </div>
+  </div>
+
+  {# ---- 6. benefits: the claim comes from config, never a literal in this file ---- #}
+  <div class="rounded-lg border border-line bg-white p-4 space-y-2" data-test="hub-benefits">
     <h2 class="text-[13px] font-semibold">{{ benefits_heading }}</h2>
     {% if reward_claim %}
     <p class="text-[14px] font-bold text-cobalt-600">{{ reward_claim }}</p>
@@ -44,38 +91,6 @@ PLACEHOLDERS pending the owner's compliance review; edit them in config, not her
     <ul class="space-y-1 text-[12px] text-ink-500">
       {% for benefit in benefits %}<li>• {{ benefit }}</li>{% endfor %}
     </ul>
-  </div>
-
-  {# ---- the referrer's own credit link ---- #}
-  <div class="rounded-lg border border-line bg-white p-4 space-y-2">
-    <h2 class="text-[13px] font-semibold">{{ chrome.your_link_label }}</h2>
-    <p class="break-all rounded-md bg-bg px-3 py-2 font-mono text-[12px]" id="myLink">{{ my_link }}</p>
-    <p class="text-[11px] text-ink-500">Client ID: <span class="font-semibold">{{ client_id }}</span></p>
-  </div>
-
-  {# ---- share buttons ---- #}
-  <div class="space-y-2">
-    <h2 class="text-[13px] font-semibold">{{ chrome.share_heading }}</h2>
-    <div class="grid grid-cols-2 gap-2">
-      {% for button in buttons %}
-      <a href="{{ button.href }}" target="_blank" rel="noopener noreferrer"
-         data-share-channel="{{ button.event_channel }}"
-         class="rounded-lg bg-cobalt-600 px-4 py-2 text-center text-[13px] font-semibold text-white">
-        {{ button.label }}
-      </a>
-      {% endfor %}
-      <button type="button" id="copyLinkBtn"
-              data-share-channel="{{ copy_channel }}"
-              data-done-label="{{ chrome.copy_done_label }}"
-              class="rounded-lg border border-cobalt-600 px-4 py-2 text-[13px] font-semibold text-cobalt-600">
-        {{ chrome.copy_label }}
-      </button>
-      <button type="button" id="nativeShareBtn" hidden
-              data-share-channel="{{ native_share_channel }}"
-              class="rounded-lg border border-cobalt-600 px-4 py-2 text-[13px] font-semibold text-cobalt-600">
-        {{ chrome.more_label }}
-      </button>
-    </div>
   </div>
 
   {# ---- how / where to share ---- #}
