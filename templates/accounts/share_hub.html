@@ -30,9 +30,9 @@ PLACEHOLDERS pending the owner's compliance review; edit them in config, not her
 
 {% block content %}
 <section class="space-y-5" id="shareHub" data-client-id="{{ client_id }}">
-  {# ---- 1. partner header — NAME from the DB record, no logo (ADR-014) ---- #}
+  {# ---- 1. partner header — BRAND from the DB record, no logo (ADR-014) ---- #}
   <header class="space-y-1" data-test="hub-partner-header">
-    <p class="text-[11px] font-semibold uppercase tracking-wide text-cobalt-600">{{ partner_name }}</p>
+    {% if brand_name %}<p class="text-[11px] font-semibold uppercase tracking-wide text-cobalt-600">{{ brand_name }}</p>{% endif %}
     <h1 class="text-[17px] font-bold">{{ headline }}</h1>
     <p class="text-[12px] text-ink-500">{{ intro }}</p>
     <p class="text-[11px] text-ink-400">{{ partner_attribution }}</p>
