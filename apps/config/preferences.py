@@ -67,23 +67,30 @@ SHARE_HUB_PARTNER_ATTRIBUTION_DEFAULT = "via PIFS - Authorised Person"
 #: Static brand card for the hub's link preview. A committed placeholder asset — an
 #: operator swaps in the owner-approved image by pointing this key at a new static
 #: path or an absolute CDN URL, with no deploy (§6d).
-SHARE_HUB_OG_IMAGE_DEFAULT = "img/og-card.png"
+SHARE_HUB_OG_IMAGE_DEFAULT = "img/referral-preview-card.png"
 
-SHARE_HUB_HEADLINE_DEFAULT = "Share your referral link"
+SHARE_HUB_HEADLINE_DEFAULT = "Your referral link is ready"
 SHARE_HUB_INTRO_DEFAULT = (
-    "Anyone who opens an account through your link is recorded against your client ID."
+    "Send it to one person today. Everyone who opens an account through this link is "
+    "recorded against your Client ID automatically."
 )
 SHARE_HUB_BENEFITS_HEADING_DEFAULT = "What you get"
 SHARE_HUB_BENEFITS_DEFAULT = [
-    "Every referral is tracked against your client ID automatically.",
-    "You can check your records any time — no paperwork, no follow-up calls.",
+    "Your reward is credited by the broker's own referral programme — we make sure your "
+    "name is on the referral, and never touch the amount.",
+    "Every referral is tracked against your Client ID automatically. No forms, no "
+    "follow-up calls, nothing to remember.",
+    "Your friend is guided through account opening end to end by PIFS, free of charge.",
+    "Open your record any time to see exactly where each person has reached.",
 ]
-SHARE_HUB_GUIDANCE_HEADING_DEFAULT = "How and where to share"
+SHARE_HUB_GUIDANCE_HEADING_DEFAULT = "How to share so it actually works"
 SHARE_HUB_GUIDANCE_DEFAULT = [
-    "Send it to people who already asked you about investing — a direct message works "
-    "far better than a broadcast.",
-    "Say why you use it in your own words, then paste the link.",
-    "Family and close friends first; groups and status updates after.",
+    "One direct message beats ten group posts. Send it to a person, not to a crowd.",
+    "Say why YOU use it in your own words, then paste the link — people act on your "
+    "reason, not on an advertisement.",
+    "Start with family and friends who have already asked you about investing.",
+    "If someone shows interest but goes quiet, one short reminder the next day helps "
+    "far more than sending the link again.",
 ]
 
 # --- WhatsApp notification routing (Tier 2, admin) ---------------------------------
