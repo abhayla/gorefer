@@ -11,7 +11,14 @@
 > wins; if either disagrees with the live system, **the live system wins** — verify, don't
 > trust (commands at the bottom).
 >
-> **Last updated:** 2026-08-09 18:00 IST (**DEPLOYED: `b623343` = main tip** — **T-060 LIVE**:
+> **Last updated:** 2026-08-09 21:15 IST (**DEPLOYED: `6db2e46` = main tip** — **T-061 Hindi
+> hub/records LIVE (?lang=hi, 34 cascade _hi keys, EN fallback, compliance line verbatim EN)
+> — and with it the TIER-A TRAIN IS COMPLETE: T-057…T-061 all deployed, checker-verified, and
+> live-probed.** Owner actions open: (1) set `referrer_conversion_congrats_template_en` to an
+> approved template name to arm the congrats template leg; (2) TODO-Manual card: broader Zoho
+> self-client token (MFA once). Known partner-#2 gaps, all parked with triggers: OG preview-card
+> copy, DF-5/9/10. Full train record in COORDINATION 2026-08-09 entries.)
+> — prior 2026-08-09 18:00 IST (**DEPLOYED: `b623343` = main tip** — **T-060 LIVE**:
 > self-click tag on the Referral Profile Clicks tab (display-only, CRM-read-gated, never a
 > guess; DF-11 count-exclusion half stays deferred), deterministic order_by on duplicate
 > client_id lookups (T-054 finding 1), `hub_cta` now a cascade key (finding 2), T-056 vacuous
