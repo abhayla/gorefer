@@ -5666,3 +5666,64 @@ A bearer token is more sensitive than the name/email params that row was designe
 (a) accept — tokens are revocable-by-epoch and TTL-bound; (b) redact the token param after the
 terminal delivery status lands; (c) hash it in template_params. Recommendation: (b), folded
 into a later hygiene PR. Decide at leisure — flag stays live either way.
+
+### [2026-08-09] — FROM ENGINEER — STATUS — T-058 referrer conversion-congrats (P-01, Gap 5 closure)
+
+Doc 04 §4.3's long-deferred "WATI congratulations to the referrer on conversion" (Gap 5), now
+shipped behind a dormant-by-default template leg.
+
+**Hook point:** `apps/integrations/zoho/ingest.py::_emit_conversion_events` — when a conversion
+reaches `account_opened` (never on reversal/no-op/replay-refused), it schedules the send via
+`transaction.on_commit` through the boundary services facade
+(`apps.integrations.services.enqueue_referrer_congrats` →
+`apps.integrations.congrats.enqueue_referrer_congrats`). The facade wraps the call in try/except —
+a broken enqueue is logged and swallowed, never propagated — so this write path gains no new
+failure mode; covered by `test_ingest_survives_congrats_enqueue_failure`.
+
+**New module:** `apps/integrations/congrats.py` — vendor-neutral (top-level in
+`apps.integrations`, not under `.wati`/`.zoho`), uses only `get_crm_read_port()` /
+`get_messaging_port()` (ADR-045 ports), same pattern `apps.followups.tasks` already uses for the
+nudge engine.
+
+**New cascade keys** (`apps/config/preferences.py`, rail E-6):
+- `referrer_conversion_congrats_template_en` — default `""` (empty). Feature ships **DORMANT**
+  on the template leg until an operator configures an approved Meta template name (template
+  creation/submission is explicitly NOT this task — owner ruling 2026-08-08). Window-closed +
+  empty template → recorded as a skipped `Notification`, reason "no template configured".
+  Session-window leg works immediately (no template dependency).
+- `referrer_conversion_congrats_body_en` — the in-session copy, `{name}`-templated, generic
+  descriptor only (never names the prospect, §6.1 precedent), no reward amount (Gap 4).
+
+**Channel selection:** open 24h follow-up window → session message through the SAME
+`apps.followups.services` gates (quiet hours, min-gap, opt-out) the nudge engine already
+enforces; otherwise the template leg above. Recipient mobile resolved via the Zoho CRM READ port
+by client_id (never from the conversion payload, which carries no mobile, and never guessed —
+unresolvable → skipped `Notification`, "referrer mobile unknown").
+
+**Idempotency:** one `Notification` row per `Conversion.pk`
+(`idempotency_key="referrer_congrats:{conversion_id}"`), reserved (via `.create()` + the unique
+constraint) BEFORE any outbound call — a re-ingest/reconciler-sweep/webhook-replay hitting the
+same conversion can re-enqueue the task, but only the first insert wins. Tested with two
+DIFFERENT event ids landing on the same conversion
+(`test_congrats_idempotent_across_double_ingest`).
+
+**Converted-suppression:** verified this congrats send is NOT gated by
+`apps.followups.services.has_converted` / `followup_stop_when_converted` — that switch only
+governs the `ScheduledFollowup` nudge cadence; the congrats path never calls it
+(`test_congrats_not_suppressed_by_followup_converted_gate`).
+
+**No new models/migrations** — dedupe reuses the existing `Notification` model (role `referrer`,
+a new idempotency-key shape); `makemigrations --check --dry-run` clean.
+
+**Contract doc updated in the same PR:** `Zoho-GoRefer/Zoho-Integration-Contract.md` §4.1 (new)
+documents the side-effect, since `apps/integrations/zoho/ingest.py` changed. No
+`[skip-contract-doc]` used.
+
+7 new tests (`tests/test_t058_conversion_congrats.py`): dormant-by-default skip, template-leg
+send once configured (mobile from the CRM read port fixture), session-leg send when the
+referrer's window is open, unresolvable-mobile skip, double-ingest idempotency, converted-
+suppression non-interference, and ingest-survives-a-broken-enqueue. Full suite green (941
+tests — 934 baseline + 7 new), ruff clean, `manage.py check` clean, architecture gate (E-3, 0/0)
+clean, migrations-drift clean.
+
+PR: `feat/t058-conversion-congrats` → `main`.

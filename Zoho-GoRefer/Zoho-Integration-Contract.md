@@ -103,6 +103,33 @@ off the true date so bulk/off-platform imports land in their real period with no
 A repeat delivery is a no-op returning `{"status":"duplicate"}`. Reversals (`reversed: true`)
 tombstone the conversion (`is_reversed=True`) rather than deleting it.
 
+### 4.1 Referrer conversion-congrats side-effect (T-058, P-01/Gap 5, 2026-08-09)
+
+When `ingest.py` applies a conversion that reaches `account_opened` (never on reversal, no-op, or
+a replay the idempotency guard refuses), it schedules a **one-time referrer notification** via
+`transaction.on_commit` through `apps.integrations.services.enqueue_referrer_congrats` →
+`apps.integrations.congrats` (vendor-neutral, uses the boundary ports only — not under
+`.wati`/`.zoho`, so this side-effect does not itself touch either vendor package).
+
+- **Best-effort, never blocking:** the facade catches and logs any enqueue failure — a broken
+  congrats send can never fail or roll back the conversion webhook/reconciler call that triggered
+  it.
+- **Recipient:** the credited referrer only. Mobile is resolved via `get_crm_read_port()
+  .fetch_contact_by_client_id(client_id=...)` (the SAME read port §6c already documents) — never
+  from the conversion payload (which carries no mobile) and never guessed.
+- **Channel:** an open 24h follow-up window → a session message (gated by the SAME quiet-hours /
+  min-gap / opt-out rules `apps.followups.services` enforces for nudges); otherwise a WhatsApp
+  template named by the cascade key `referrer_conversion_congrats_template_en`, whose default is
+  **empty** — so the template leg stays dormant (recorded as a skipped `Notification`, "no
+  template configured") until an operator configures an approved name. Session copy is the
+  `referrer_conversion_congrats_body_en` cascade key.
+- **Idempotent per conversion, not per event:** one `Notification` row per `Conversion.pk`
+  (`idempotency_key = "referrer_congrats:{conversion_id}"`), reserved before any outbound call —
+  a re-ingest, reconciler re-sweep, or webhook replay hitting the same conversion can enqueue the
+  task again, but the row's unique constraint makes every send after the first a no-op.
+- This is **not** a nudge and is **not** subject to `followup_stop_when_converted` — it fires
+  precisely because the account converted.
+
 ---
 
 ## 5. The webhook — `POST /api/zoho/status-webhook`
