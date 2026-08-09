@@ -284,18 +284,23 @@ def share_intent_redirect(request, channel: str, client_id: str):
     except RateLimited as exc:
         return HttpResponse(status=429, headers={"Retry-After": str(exc.retry_after)})
 
+    from apps.config.i18n import resolve_lang_or_stored
+
     tenant = get_current_tenant(request)
     try:
         # STRICT, per-partner — this path lazily creates the identity too.
         normalized = validate_client_id_for(tenant, client_id)
     except InvalidClientId:
         return render(request, "landing_invalid.html", status=400)
+    # T-062: explicit ?lang= always wins; otherwise the referrer's stored language.
+    lang = resolve_lang_or_stored(request, getattr(tenant, "id", None))
     try:
         destination = handle_share_intent(
             tenant=tenant,
             channel=channel,
             client_id=normalized,
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            lang=lang,
         )
     except Http404:
         return HttpResponseNotFound()

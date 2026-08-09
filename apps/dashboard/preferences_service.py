@@ -270,6 +270,26 @@ def save_preferences(tenant, data, *, user=None) -> list[str]:
         user=user,
     )
 
+    # --- Share-kit message, EN + HI (T-062) --------------------------------------
+    # A blank submission falls back to the central default rather than persisting an
+    # empty override (an empty template would break {link}/{program_brand} formatting
+    # and drop the referrer's forward-to-a-prospect message entirely).
+    defaults = prefkeys.central_defaults()
+    en_message = (data.get("share_kit_message_template") or "").strip()
+    set_tenant(
+        prefkeys.SHARE_KIT_MESSAGE_TEMPLATE,
+        en_message or defaults[prefkeys.SHARE_KIT_MESSAGE_TEMPLATE],
+        tenant_id=tenant_id,
+        user=user,
+    )
+    hi_message = (data.get("share_kit_message_template_hi") or "").strip()
+    set_tenant(
+        prefkeys.SHARE_KIT_MESSAGE_TEMPLATE_HI,
+        hi_message or defaults[prefkeys.SHARE_KIT_MESSAGE_TEMPLATE_HI],
+        tenant_id=tenant_id,
+        user=user,
+    )
+
     # --- Share channels allow-list ----------------------------------------------
     submitted = data.getlist("share_channels") if hasattr(data, "getlist") else data.get("share_channels", [])
     channels = [c for c in submitted if c in SHARE_CHANNEL_LABELS]

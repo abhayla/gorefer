@@ -124,7 +124,9 @@ _tracked_link = tracked_link
 _kit_message = kit_message
 
 
-def handle_share_intent(*, tenant, channel: str, client_id: str, user_agent: str | None):
+def handle_share_intent(
+    *, tenant, channel: str, client_id: str, user_agent: str | None, lang: str = "en"
+):
     """Resolve a /share/{channel}/{client_id} hit. Returns the destination URL.
 
     Raises Http404 for an unsupported/unlisted channel (never a silent "other"
@@ -132,12 +134,18 @@ def handle_share_intent(*, tenant, channel: str, client_id: str, user_agent: str
     endpoint actually SERVES). May raise the redirect_service PartnerUnavailable
     tuple (ReferralProgram.DoesNotExist / ProgramRedirectRule.DoesNotExist) when
     config resolution fails — the caller renders the branded 503, same as /r/.
+
+    `lang` (T-062) selects the prefill's language twin; defaults to EN so every
+    caller that omits it (tests, any future non-web caller) keeps behaving exactly
+    as before. The view resolves the effective language (explicit `?lang=` else the
+    referrer's stored language) and passes it in — this function does no resolution
+    of its own.
     """
     if channel not in SHARE_INTENT_CHANNELS or channel not in _CHANNEL_TARGET_BUILDERS:
         raise Http404(f"unsupported share channel: {channel!r}")
 
     program = get_active_program(tenant)
-    message = kit_message(channel, client_id, getattr(tenant, "id", None), program=program)
+    message = kit_message(channel, client_id, getattr(tenant, "id", None), program=program, lang=lang)
     destination = _CHANNEL_TARGET_BUILDERS[channel](message)
 
     if is_bot_user_agent(user_agent):

@@ -38,7 +38,15 @@ from django.views.decorators.http import require_GET
 from apps.common.ratelimit import RateLimited, check_rate, client_ip
 from apps.config import preferences as prefs
 from apps.config.cascade import resolve as resolve_config
-from apps.config.i18n import LANG_EN, bi_lines, bi_text, market_risk_warning_hi, resolve_lang, with_lang
+from apps.config.i18n import (
+    LANG_EN,
+    bi_lines,
+    bi_text,
+    market_risk_warning_hi,
+    resolve_lang,
+    resolve_lang_or_stored,
+    with_lang,
+)
 from apps.config.preferences import (
     REFERRER_REWARD_CLAIM,
     SHARE_HUB_BENEFITS,
@@ -409,6 +417,10 @@ def hub_view(request, token: str):
         )
 
     tenant = identity.tenant
+    # T-062: now that the tenant is known, re-resolve — explicit ?lang= still wins
+    # (unchanged from the fail-path `lang` above); with none present, default to the
+    # referrer's stored language instead of hardcoded EN.
+    lang = resolve_lang_or_stored(request, tenant.id)
     ctx = hub_ctx(identity, token, lang)
     _log_view(tenant, identity)
     return render(request, "accounts/share_hub.html", ctx)

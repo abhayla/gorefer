@@ -42,17 +42,16 @@ class RecipientIdentity:
 
 
 def _resolve_lang(tenant_id) -> str:
-    """Language from the EXISTING referrer_language rule (doc 15 §8). Never a new key."""
-    try:
-        from apps.config.cascade import resolve
-        from apps.config.preferences import (
-            _VALID_LANGUAGES,
-            LANG_EN,
-            REFERRER_LANGUAGE,
-        )
+    """Language from the EXISTING referrer_language rule (doc 15 §8). Never a new key.
 
-        lang = str(resolve(REFERRER_LANGUAGE, tenant_id=tenant_id, default=LANG_EN) or "").strip().lower()
-        return lang if lang in _VALID_LANGUAGES else LANG_EN
+    Delegates to `apps.config.i18n.resolve_stored_referrer_language` — THE canonical
+    stored-language source, also reused by the share/hub language stickiness (T-062)
+    so nothing ever invents a second source of truth for it.
+    """
+    try:
+        from apps.config.i18n import resolve_stored_referrer_language
+
+        return resolve_stored_referrer_language(tenant_id)
     except Exception:
         return "en"
 
