@@ -5727,3 +5727,24 @@ tests — 934 baseline + 7 new), ruff clean, `manage.py check` clean, architectu
 clean, migrations-drift clean.
 
 PR: `feat/t058-conversion-congrats` → `main`.
+
+## 2026-08-09 STATUS (Dispatcher) — T-058 DEPLOYED; seed_program is now a standing post-deploy step
+
+**Deployed `a641f07` (= main tip) 15:35 IST** — 8-file git-show pipe, hash-verified; services
+restarted+active; public probes 200. Checker PASS (independent sonnet, evidence
+`GetWorkDone/evidence/2026-08-09-T-058/`) — notably its deep probe patched `_send` itself to
+raise inside the on_commit callback and proved the conversion still applies (the maker's own
+adversarial test only patched the shallow wrapper). Checker also proved quiet-hours deferral
+and reversal-no-fire, two dod predicates the maker's tests skipped — its 4 probes are
+recommended for adoption into the permanent suite (queued for the T-060 hygiene PR or later).
+
+**Post-deploy config finding (process lesson):** the new cascade keys resolved as unregistered
+on prod until `manage.py seed_program` was run — central-default rows are SEEDED, not implicit.
+**Standing rule: any deploy that adds cascade keys ends with an idempotent `seed_program` run.**
+After seeding: `referrer_conversion_congrats_template_en` = '' (template leg DORMANT by design
+until the owner configures an approved template name), body default present and prospect-name-
+free, and T-057's `records_link_template_en` now properly seeded too.
+
+**Live-fire caveat (honest):** the congrats path cannot be force-verified on prod without
+fabricating a conversion (forbidden). It fires on the next REAL conversion; the checker's
+synthetic-DB probes are the evidence until then.
