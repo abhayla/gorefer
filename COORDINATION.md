@@ -5861,3 +5861,68 @@ dispatcher finished the tail: fixed one env-dependent flag assertion in the new 
 (swapped to the T-053 `_with_flag` frozen-snapshot idiom), re-ran the FULL gate (970 passed,
 ruff/check/E-3 0/0/no-drift all clean), and landed the PR. Independent checker verifies next,
 as always.
+
+### [2026-08-09] — FROM ENGINEER — STATUS — T-061: Hindi parity on /hub + /rr surfaces (web-only)
+
+`/hub/{token}` and `/rr/{token}` now render bilingually via `?lang=hi`. No Django i18n/gettext
+(pre-made decision #1) — every owner-editable string on both pages is a cascade config key that
+gains an `_hi` twin, resolved by the new `apps/config/i18n.py` (`bi_text`/`bi_lines`,
+`resolve_lang`, `with_lang`). The load-bearing guarantee, test-proven key-by-key: a HI value that
+is unset OR blank/whitespace-only falls back to the EN value — the page can never render blank
+because a translation row was missed.
+
+**New `_hi` cascade keys (34, all seeded in `central_defaults()`):**
+`share_hub_headline_hi`, `share_hub_intro_hi`, `share_hub_benefits_heading_hi`,
+`share_hub_benefits_hi`, `share_hub_guidance_heading_hi`, `share_hub_guidance_hi`,
+`share_hub_partner_attribution_hi`, `records_title_hi`, `records_not_on_file_hi`,
+`records_masked_note_hi`, `records_login_cta_hi`, `records_expired_title_hi`,
+`records_expired_body_hi`, `records_empty_hi`, `records_hub_cta_hi`, `records_stat_referred_hi`,
+`records_stat_converted_hi`, `records_stat_pending_hi`, `records_col_name_hi`,
+`records_col_mobile_hi`, `records_col_status_hi`, `records_col_referred_hi`,
+`records_status_opened_hi`, `records_status_in_progress_hi`, `hub_your_link_label_hi`,
+`hub_share_heading_hi`, `hub_copy_label_hi`, `hub_copy_done_label_hi`, `hub_more_label_hi`,
+`hub_records_cta_hi`, `market_risk_warning_hi`, `share_kit_message_template_hi`. Plus two
+EN-only toggle-label keys (no HI twin needed — they only ever show the OTHER language's name):
+`lang_toggle_to_hi_label`, `lang_toggle_to_en_label`.
+
+**Compliance (D-1 rail):** `market_risk_warning_hi` is a SEPARATE, unlocked key — never the
+locked `market_risk_warning` EN key itself. Both render together on a `lang=hi` page
+(`base.html` footer); the EN one is unconditional (D-1, always renders), the HI one is additive.
+Default wording is the exact string already approved and live in the HI WhatsApp templates
+(`"प्रतिभूति बाज़ार में निवेश बाज़ार जोखिमों के अधीन है।"`), not a fresh translation. The AP
+registration/entity line and `AP_DISCLOSURE_BLOCK` stay verbatim EN always (regulator-registered
+identifiers are never translated) — untouched by this mission.
+
+**Language selection:** `?lang=hi`, validated against `LANGUAGES = ("en", "hi")` — anything else
+(missing, `en`, garbage, empty, `<script>`) resolves to EN (tested). No session/cookie
+persistence; carried explicitly across the `/rr/`↔`/hub/` cross-link via `with_lang()`. A real
+`data-test="hub-lang-toggle"` / `data-test="records-lang-toggle"` link renders on both pages
+(never dead UI, Constitution §4) — EN page links to `?lang=hi`, HI page links back to the bare
+URL. `<html lang="…">` follows the resolved language via a new `base.html` block
+(`{% block html_lang %}`).
+
+**Share prefill:** `kit_message()` (`apps/referrals/share_intent_service.py`) gained a `lang`
+kwarg; the hub's WhatsApp prefill resolves `share_kit_message_template_hi` under `lang=hi`,
+falling back to the EN template. No WhatsApp TEMPLATE work of any kind — this stays entirely in
+web surfaces + session-copy config, per the task's pre-made decision #1; the template lane
+(`apps/integrations/wati/**`) was not touched, so no contract-doc update was needed.
+
+**Token invariants hold under `lang=hi`:** re-ran the T-053 token-never-in-a-share-href and
+exactly-once-in-the-/rr/-cross-link checks with `?lang=hi` — same guarantees, same counts.
+
+**Owner review still pending (pre-made decision #3):** the shipped HI copy is a faithful
+translation of the PR #124 compliance-reviewed EN strings, not yet owner-reviewed. Since copy is
+config, a wording edit needs no deploy — flagging here per the task contract rather than
+blocking on it.
+
+**Fixed one pre-existing test defect while here:** `test_t056_hub_program_brand.py`'s
+"no `text-cobalt-600` in the header when brand_name is empty" assertion broke once the new
+lang-toggle link legitimately shares that class — narrowed the marker to `uppercase
+tracking-wide` (unique to the brand chip). `[skip-contract-doc]`-eligible but not used since the
+commit does touch page copy, not just internals.
+
+Full gate green: 1007 tests passed (970 baseline + 37 new in `tests/test_t061_hindi_hub_records.py`),
+ruff clean, `manage.py check` clean, architecture gate (E-3, 0/0) clean, migrations-drift clean,
+Tailwind rebuilt (no diff — all classes used were already compiled from other pages).
+
+PR: `feat/t061-hindi-hub-records` → `main`.
