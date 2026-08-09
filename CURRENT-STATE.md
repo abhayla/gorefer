@@ -11,7 +11,13 @@
 > wins; if either disagrees with the live system, **the live system wins** — verify, don't
 > trust (commands at the bottom).
 >
-> **Last updated:** 2026-08-09 16:35 IST (**DEPLOYED: `15f9b94` = main tip** — **T-059
+> **Last updated:** 2026-08-09 18:00 IST (**DEPLOYED: `b623343` = main tip** — **T-060 LIVE**:
+> self-click tag on the Referral Profile Clicks tab (display-only, CRM-read-gated, never a
+> guess; DF-11 count-exclusion half stays deferred), deterministic order_by on duplicate
+> client_id lookups (T-054 finding 1), `hub_cta` now a cascade key (finding 2), T-056 vacuous
+> assertion repaired. Checker PASS incl. rollup-level display-only proof. T-061 (Hindi parity
+> on hub/records, web-only) dispatched — the LAST task of the ratified Tier-A train.)
+> — prior 2026-08-09 16:35 IST (**DEPLOYED: `15f9b94` = main tip** — **T-059
 > program-scoped message copy LIVE**: every outbound message surface (share kit, hub message,
 > selfview share text, followup nudge copy) now renders `{program_brand}` via the T-056
 > fallback chain — byte-identical output for Zerodha today (checker-proven against the parent
