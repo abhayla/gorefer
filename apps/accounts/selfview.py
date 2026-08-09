@@ -14,6 +14,24 @@ from apps.dashboard import profile
 from gorefer.flags import flags
 
 
+def _program_brand(tenant, client_id: str) -> str:
+    """T-059: the T-056 fallback chain for this referrer's own program, falling back
+    to the tenant's single active program when no ReferralIdentity exists yet (a
+    just-bound referrer with zero clicks still sees a correctly-branded share line)."""
+    from apps.referrals.branding import brand_for_program, brand_for_tenant_id
+    from apps.referrals.models import ReferralIdentity
+
+    identity = (
+        ReferralIdentity.objects.for_tenant(tenant)
+        .filter(client_id=client_id, status="active", deleted_at__isnull=True)
+        .select_related("program", "program__partner")
+        .first()
+    )
+    if identity is not None and identity.program is not None:
+        return brand_for_program(identity.program)
+    return brand_for_tenant_id(getattr(tenant, "id", None))
+
+
 def _mask_clicks(rows: list[dict]) -> list[dict]:
     """ADR-026/S2-01: customer view masks IP (city stays). Mutates copies, not admin data."""
     masked = []
@@ -101,7 +119,7 @@ def my_referrals_ctx(tenant, client_id: str) -> dict:
         # (ADR-030 — never direct-to-Zerodha; ADR-028 B1 attribution), plus the §4.4
         # disclosure host (ADR-031/032 — the light message's compliance anchor).
         "share_text": (
-            f"Open your free Zerodha account with my referral link: "
+            f"Open your free {_program_brand(tenant, client_id)} account with my referral link: "
             f"https://{profile.PROFILE_CONFIG['link_base']}wa/{client_id} "
             f"· Disclosures: {disclosure}"
         ),

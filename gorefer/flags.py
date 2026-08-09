@@ -114,7 +114,10 @@ class FeatureFlags:
     # The single swappable kit-message template (mirrors REFERRAL_INCENTIVE_CLAIM
     # above) — owner-approved EN copy. `{link}` is substituted with the tracked
     # `/r/{channel}/{client_id}` URL server-side; never partner code / raw Zerodha URL.
-    SHARE_KIT_MESSAGE_TEMPLATE: str = "Open a free Zerodha account — my referral link:\n{link}"
+    # {program_brand} resolves at build time (apps.referrals.branding, T-059) via the
+    # T-056 fallback chain — never a hard-coded partner name, so a second program
+    # (Groww, ...) renders correctly with no code change.
+    SHARE_KIT_MESSAGE_TEMPLATE: str = "Open a free {program_brand} account — my referral link:\n{link}"
 
     # T-051 — tokened, read-only "Referral Records" page (GET /rr/{token}), reached
     # from a WhatsApp [Referral Records] URL button. OFF until the pilot template is

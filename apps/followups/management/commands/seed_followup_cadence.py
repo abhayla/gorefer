@@ -14,6 +14,12 @@ API / admin; re-running this command updates them in place.
 
 This seeds `FollowupRule` rows only — it deliberately does NOT flip `followups_enabled`.
 
+Bodies carry a `{program_brand}` placeholder (T-059), resolved at FIRE time from the
+tenant's active program (apps.referrals.branding) — never a hard-coded partner name.
+Copy is stored on each `FollowupRule` row at SEED time, not re-read from this module,
+so re-running this command is what pushes an updated STEP_BODIES/STEP_BODIES_HI wording
+onto rows already scheduled — it does not happen on deploy alone.
+
     python manage.py seed_followup_cadence
     python manage.py seed_followup_cadence --interval-hours 3 --horizon-hours 24 --tenant pifs
     python manage.py seed_followup_cadence --stop-on-reply false   # keep firing after a reply (test mode)
@@ -27,19 +33,24 @@ from apps.tenants.models import Tenant
 
 # Distinct, in-progress-framed copy — one per step, cycled if there are more steps than
 # lines. NO promotional claims (keeps the nudge UTILITY-appropriate); reply-to-engage CTA.
+# {program_brand} is resolved at FIRE time (apps.followups.tasks._apply) via the T-056
+# fallback chain (apps.referrals.branding) — never a hard-coded partner name, so a
+# second program (Groww, ...) renders correctly with no code change (T-059). Changing
+# this list only reaches PENDING sends after an operator re-runs this command — see
+# the module docstring.
 STEP_BODIES = [
-    "Hi! Your Zerodha account opening is still pending — reply here and we'll help you "
+    "Hi! Your {program_brand} account opening is still pending — reply here and we'll help you "
     "complete it in a couple of minutes.",
-    "Quick nudge: your Zerodha account is almost set up. Reply here and we'll finish the "
+    "Quick nudge: your {program_brand} account is almost set up. Reply here and we'll finish the "
     "last steps with you.",
-    "Still need a hand with your Zerodha account? Reply here and we'll guide you through "
+    "Still need a hand with your {program_brand} account? Reply here and we'll guide you through "
     "what's left.",
-    "We can complete your Zerodha account opening over a short call today — reply here and "
+    "We can complete your {program_brand} account opening over a short call today — reply here and "
     "we'll ring you.",
-    "Your Zerodha account is one step away from ready. Reply here and we'll wrap it up "
+    "Your {program_brand} account is one step away from ready. Reply here and we'll wrap it up "
     "together.",
-    "Almost there on your Zerodha account — reply here and we'll take it to the finish line.",
-    "Last check-in for today on your Zerodha account setup — reply anytime and we'll help "
+    "Almost there on your {program_brand} account — reply here and we'll take it to the finish line.",
+    "Last check-in for today on your {program_brand} account setup — reply anytime and we'll help "
     "you complete it.",
 ]
 
@@ -55,17 +66,17 @@ STEP_BODIES = [
 # account, reply-to-engage CTA, and NO promotional claims — so the nudge stays honestly
 # transactional.
 STEP_BODIES_HI = [
-    "नमस्ते! आपका Zerodha अकाउंट अभी पूरा नहीं हुआ है। कहीं कुछ अटक रहा हो तो यहीं बता "
+    "नमस्ते! आपका {program_brand} अकाउंट अभी पूरा नहीं हुआ है। कहीं कुछ अटक रहा हो तो यहीं बता "
     "दीजिए — दो मिनट में पूरा करा देंगे।",
-    "थोड़ा ही बाकी है — आपका Zerodha अकाउंट लगभग तैयार है। यहीं reply कीजिए, आखिरी steps "
+    "थोड़ा ही बाकी है — आपका {program_brand} अकाउंट लगभग तैयार है। यहीं reply कीजिए, आखिरी steps "
     "हम साथ में पूरे कर देते हैं।",
-    "Zerodha अकाउंट खोलने में कोई मदद चाहिए? जो भी सवाल हो, यहीं पूछ लीजिए — आगे क्या "
+    "{program_brand} अकाउंट खोलने में कोई मदद चाहिए? जो भी सवाल हो, यहीं पूछ लीजिए — आगे क्या "
     "करना है, हम बता देंगे।",
-    "चाहें तो आज एक छोटी सी call पर आपका Zerodha अकाउंट पूरा करा देते हैं। यहीं reply "
+    "चाहें तो आज एक छोटी सी call पर आपका {program_brand} अकाउंट पूरा करा देते हैं। यहीं reply "
     "कीजिए, हम आपको कॉल कर लेंगे।",
-    "आपका Zerodha अकाउंट बस एक कदम दूर है। यहीं reply कीजिए — साथ मिलकर पूरा कर लेते हैं।",
-    "बस पूरा ही होने वाला है आपका Zerodha अकाउंट — यहीं reply कीजिए, बाकी हम संभाल लेते हैं।",
-    "आज के लिए आखिरी बार पूछ रहे हैं — आपका Zerodha अकाउंट अधूरा रह गया है। जब भी समय "
+    "आपका {program_brand} अकाउंट बस एक कदम दूर है। यहीं reply कीजिए — साथ मिलकर पूरा कर लेते हैं।",
+    "बस पूरा ही होने वाला है आपका {program_brand} अकाउंट — यहीं reply कीजिए, बाकी हम संभाल लेते हैं।",
+    "आज के लिए आखिरी बार पूछ रहे हैं — आपका {program_brand} अकाउंट अधूरा रह गया है। जब भी समय "
     "मिले, यहीं reply कर दीजिए।",
 ]
 

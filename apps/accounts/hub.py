@@ -200,7 +200,9 @@ def hub_ctx(identity, token: str) -> dict:
     client_id = identity.client_id
 
     link = tracked_link(LINK_CHANNEL, client_id)
-    message = kit_message(LINK_CHANNEL, client_id, tenant_id)
+    # T-059: pass the identity's own program so the prefill's {program_brand} matches
+    # the header's brand (same T-056 fallback chain, apps.referrals.branding).
+    message = kit_message(LINK_CHANNEL, client_id, tenant_id, program=getattr(identity, "program", None))
     targets = _share_targets(message, link)
 
     buttons = [dict(button, href=targets[button["code"]]) for button in SHARE_BUTTONS]

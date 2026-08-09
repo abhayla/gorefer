@@ -168,6 +168,13 @@ def _apply(sf: ScheduledFollowup, decision: str, reason: str, now, counts: dict)
     adapter = get_wati_adapter()
     if decision == services.DEC_SEND_SESSION:
         message = services.body_for(rule, lang)
+        if "{program_brand}" in message:
+            # T-059: no per-referral program context here (this is the PROSPECT's own
+            # cadence) — fall back to the tenant's single active program, same rule
+            # kit_message/hub_ctx apply with no identity in scope.
+            from apps.referrals.branding import brand_for_tenant_id
+
+            message = message.replace("{program_brand}", brand_for_tenant_id(sf.tenant_id))
         if "{link}" in message:
             message = message.replace("{link}", nudge_link_for(identity, tenant_id=sf.tenant_id))
         result = adapter.send_session_text(to=sf.mobile, message=message)

@@ -5748,3 +5748,79 @@ free, and T-057's `records_link_template_en` now properly seeded too.
 **Live-fire caveat (honest):** the congrats path cannot be force-verified on prod without
 fabricating a conversion (forbidden). It fires on the next REAL conversion; the checker's
 synthetic-DB probes are the evidence until then.
+
+### [2026-08-09] — FROM ENGINEER — STATUS — T-059 program-scoped message copy (P-09, the partner-#2 enabler)
+
+Closes the T-055 checker finding: the WhatsApp share MESSAGE text hard-named "Zerodha" for any
+partner's identity while pages already resolved the brand via the T-056 fallback chain. This
+gives message-copy builders the SAME chain, so a second program (Groww, ...) renders correctly
+with **no code change** — no new config tier, no schema change, no migration.
+
+**New module:** `apps/referrals/branding.py` — `brand_for_program(program)` (the T-056 fallback
+chain: `display_name` -> `name` -> `partner.name` -> `""`) and `brand_for_tenant_id(tenant_id)`
+(no identity/program in scope — falls back to the tenant's single active program via
+`redirect_service.get_active_program`). Plain code, not a cascade tier: the cascade keeps
+carrying only the template TEXT, exactly as before — `{program_brand}` is resolved by the code
+that reads that text, matching the pre-made decision in the contract.
+
+**Sweep methodology:** `grep -rn -i zerodha apps/ gorefer/ --include=*.py` (excluding
+migrations/tests), then manually classified every hit as (a) message copy a referrer/prospect
+actually reads, (b) an internal field/comment naming the domain concept (`opener_zerodha_
+account_id`, docstrings — correctly Zerodha-specific, not copy), or (c) out of scope. Four sites
+were (a) and are now converted:
+- `gorefer.flags.SHARE_KIT_MESSAGE_TEMPLATE` (used by both `share_intent_service.kit_message`
+  — the `/share/{channel}/{client_id}` prefill — and `apps.accounts.hub.hub_ctx`'s share
+  message, since the hub reuses the same builder) — one fix covers both surfaces the DoD names.
+- `apps.accounts.selfview.my_referrals_ctx`'s `share_text` (the "My Referrals" self-view share
+  line) — added `_program_brand(tenant, client_id)`, looking up the referrer's own
+  `ReferralIdentity.program` and falling back to the tenant's active program for a just-bound
+  referrer with zero clicks (identities are lazy, ADR-008).
+- `apps.followups.management.commands.seed_followup_cadence.STEP_BODIES` /
+  `STEP_BODIES_HI` (7 steps each, EN+HI) — placeholder substituted at FIRE time in
+  `apps.followups.tasks._apply`, same pattern as the existing `{link}` substitution, tenant-level
+  fallback (a prospect's own cadence carries no per-referral program in scope).
+
+**Explicitly OUT OF SCOPE** (named so this isn't a silent drop):
+- `apps/config/preferences.py` `NOTIFY_TEMPLATE_DEFAULTS` — these are Meta-approved WhatsApp
+  **template names** (`gr_brokers_zerodha_*`), not code-owned copy text. A second program needs
+  its OWN approved template, which is a Wati-Project/Meta submission — CLAUDE.md's standing rule
+  is that GoRefer never creates templates. Not swappable by a placeholder.
+- `gorefer.settings.OG_TITLE` / `OG_DESCRIPTION` — site-wide crawler-preview metadata (already
+  cascade-overridable per-tenant via `apps/referrals/og.py`'s `_cfg`), not per-identity/per-
+  program message copy; no request-time program context exists at the point they're read.
+- `AP_DISCLOSURE_BLOCK` / `MARKET_RISK_WARNING` and `ReferralProgram.disclosure_template` — these
+  are regulator-mandated legal text, already partner/program-scoped by their OWN dedicated field
+  (`disclosure_template`), not a "brand name" swap — a new partner gets its own disclosure
+  content, not a substitution into Zerodha's.
+- Field/variable names and docstrings (`opener_zerodha_account_id`, model comments, management
+  command help text) — these name the domain concept in code, not customer-facing copy.
+
+**Followup re-seed operator step (contract pre-made decision #3):** `seed_followup_cadence`
+writes the (now placeholder-carrying) STEP_BODIES onto each `FollowupRule.body_en`/`body_hi` row
+at SEED time — it does not read the Python module at fire time. This PR does NOT touch any live
+`FollowupRule` row. The dispatcher's post-deploy `seed_program` run does not re-seed followup
+cadence (separate idempotent command) — **an operator must run
+`python manage.py seed_followup_cadence` once after this deploys** to push the placeholder onto
+already-scheduled rows (for PIFS/Zerodha this changes nothing visible — `{program_brand}` still
+resolves to "Zerodha" — but it's what makes a future Groww-cadence re-seed a config action
+instead of a deploy).
+
+**Zero-behavior-change:** pinned with the exact pre-T-059 literal strings from `origin/main`
+(`OLD_KIT_MESSAGE_PREFIX`, `OLD_SELFVIEW_SHARE_PREFIX`, `OLD_STEP1_EN`/`OLD_STEP1_HI`) —
+`tests/test_t059_program_scoped_copy.py`. Every one of the four sites renders byte-identical for
+the seeded PIFS/Zerodha tenant.
+
+**Second-program proof:** a prod-shaped second `ReferralProgram` row (`seed_program`'s own
+partner, per the T-056 lesson — not an invented shape) renders its own brand with zero code
+change, across all four sites: `kit_message(program=...)`, `hub_ctx` via a Groww-bound identity,
+`selfview` via a Groww-bound identity, and the followup fire path with the tenant's ONLY active
+program swapped to Groww (proving the tenant-level fallback, the no-identity-context case).
+
+17 new tests (`tests/test_t059_program_scoped_copy.py`): branding.py fallback-chain unit tests,
+zero-behavior-change pins + second-program proofs for all four sites, plus a not-yet-re-seeded
+`FollowupRule` (no `{program_brand}` in its stored body) proving that content is left untouched.
+Full suite green (958 tests — 941 baseline + 17 new), ruff clean, `manage.py check` clean,
+architecture gate (E-3, 0/0) clean, migrations-drift clean. `apps/integrations/**` untouched, so
+no contract doc update required.
+
+PR: `feat/t059-program-scoped-copy` → `main`.
