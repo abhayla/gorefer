@@ -36,32 +36,46 @@ from django.urls import NoReverseMatch, reverse
 from django.views.decorators.http import require_GET
 
 from apps.common.ratelimit import RateLimited, check_rate, client_ip
+from apps.config import preferences as prefs
 from apps.config.cascade import resolve as resolve_config
+from apps.config.i18n import LANG_EN, bi_lines, bi_text, market_risk_warning_hi, resolve_lang, with_lang
 from apps.config.preferences import (
     REFERRER_REWARD_CLAIM,
     SHARE_HUB_BENEFITS,
     SHARE_HUB_BENEFITS_DEFAULT,
     SHARE_HUB_BENEFITS_HEADING,
     SHARE_HUB_BENEFITS_HEADING_DEFAULT,
+    SHARE_HUB_BENEFITS_HEADING_HI,
+    SHARE_HUB_BENEFITS_HEADING_HI_DEFAULT,
+    SHARE_HUB_BENEFITS_HI_DEFAULT,
     SHARE_HUB_GUIDANCE,
     SHARE_HUB_GUIDANCE_DEFAULT,
     SHARE_HUB_GUIDANCE_HEADING,
     SHARE_HUB_GUIDANCE_HEADING_DEFAULT,
+    SHARE_HUB_GUIDANCE_HEADING_HI,
+    SHARE_HUB_GUIDANCE_HEADING_HI_DEFAULT,
+    SHARE_HUB_GUIDANCE_HI_DEFAULT,
     SHARE_HUB_HEADLINE,
     SHARE_HUB_HEADLINE_DEFAULT,
+    SHARE_HUB_HEADLINE_HI,
+    SHARE_HUB_HEADLINE_HI_DEFAULT,
     SHARE_HUB_INTRO,
     SHARE_HUB_INTRO_DEFAULT,
+    SHARE_HUB_INTRO_HI,
+    SHARE_HUB_INTRO_HI_DEFAULT,
     SHARE_HUB_OG_IMAGE_DEFAULT,
     SHARE_HUB_OG_IMAGE_URL,
     SHARE_HUB_PARTNER_ATTRIBUTION,
     SHARE_HUB_PARTNER_ATTRIBUTION_DEFAULT,
+    SHARE_HUB_PARTNER_ATTRIBUTION_HI,
+    SHARE_HUB_PARTNER_ATTRIBUTION_HI_DEFAULT,
 )
 from apps.events.models import Event
 from apps.referrals.og import absolute_image_url
 from apps.referrals.share_intent_service import kit_message, tracked_link
 from gorefer.flags import flags
 
-from .records import RECORDS_CONFIG
+from .records import records_config
 from .records_link import verify_records_token
 
 logger = logging.getLogger("gorefer.accounts.hub")
@@ -75,20 +89,44 @@ RATE_SCOPE = "share_hub"
 #: buttons keeps the referrer's shared URL identical wherever they paste it.
 LINK_CHANNEL = "wa"
 
-#: Static page chrome (labels, not behaviour). Copy that governs what the page CLAIMS
-#: lives in the cascade (see preferences.SHARE_HUB_*); these are button labels and
-#: section furniture, which rail E-6 treats as structural.
-HUB_CHROME = {
-    "your_link_label": "Your referral link",
-    "share_heading": "Share it",
-    "copy_label": "Copy link",
-    "copy_done_label": "Copied",
-    "more_label": "More…",
-    "records_cta": "See your referral records",
-    "expired_title": RECORDS_CONFIG["expired_title"],
-    "expired_body": RECORDS_CONFIG["expired_body"],
-    "login_cta": RECORDS_CONFIG["login_cta"],
-}
+
+def hub_chrome(lang: str, tenant_id: int | None) -> dict:
+    """Page chrome (button labels, section furniture) — bilingual (T-061), each string
+    a cascade key with an `_hi` twin (apps.config.i18n fallback contract)."""
+    records = records_config(lang, tenant_id)
+
+    def t(base_key: str, default_en: str, hi_key: str, default_hi: str) -> str:
+        return bi_text(base_key, default_en, lang=lang, tenant_id=tenant_id, default_hi=default_hi)
+
+    return {
+        "your_link_label": t(
+            prefs.HUB_YOUR_LINK_LABEL, prefs.HUB_YOUR_LINK_LABEL_DEFAULT,
+            prefs.HUB_YOUR_LINK_LABEL_HI, prefs.HUB_YOUR_LINK_LABEL_HI_DEFAULT,
+        ),
+        "share_heading": t(
+            prefs.HUB_SHARE_HEADING, prefs.HUB_SHARE_HEADING_DEFAULT,
+            prefs.HUB_SHARE_HEADING_HI, prefs.HUB_SHARE_HEADING_HI_DEFAULT,
+        ),
+        "copy_label": t(
+            prefs.HUB_COPY_LABEL, prefs.HUB_COPY_LABEL_DEFAULT,
+            prefs.HUB_COPY_LABEL_HI, prefs.HUB_COPY_LABEL_HI_DEFAULT,
+        ),
+        "copy_done_label": t(
+            prefs.HUB_COPY_DONE_LABEL, prefs.HUB_COPY_DONE_LABEL_DEFAULT,
+            prefs.HUB_COPY_DONE_LABEL_HI, prefs.HUB_COPY_DONE_LABEL_HI_DEFAULT,
+        ),
+        "more_label": t(
+            prefs.HUB_MORE_LABEL, prefs.HUB_MORE_LABEL_DEFAULT,
+            prefs.HUB_MORE_LABEL_HI, prefs.HUB_MORE_LABEL_HI_DEFAULT,
+        ),
+        "records_cta": t(
+            prefs.HUB_RECORDS_CTA, prefs.HUB_RECORDS_CTA_DEFAULT,
+            prefs.HUB_RECORDS_CTA_HI, prefs.HUB_RECORDS_CTA_HI_DEFAULT,
+        ),
+        "expired_title": records["expired_title"],
+        "expired_body": records["expired_body"],
+        "login_cta": records["login_cta"],
+    }
 
 #: The full platform row (owner decision 2026-08-08 — the full set, not the minimal one).
 #:
@@ -193,50 +231,72 @@ def _brand_name(identity) -> str:
     return ""
 
 
-def hub_ctx(identity, token: str) -> dict:
+def hub_ctx(identity, token: str, lang: str = LANG_EN) -> dict:
     """Everything the page renders. `token` is used for ONE thing — the cross-link to
-    the records page — and never reaches a share URL or the prefill."""
+    the records page — and never reaches a share URL or the prefill. `lang` (T-061)
+    selects the bilingual copy twin; defaults to EN so every existing caller (tests,
+    the /my/referrals hub-CTA builder) keeps behaving exactly as before."""
     tenant_id = identity.tenant_id
     client_id = identity.client_id
 
     link = tracked_link(LINK_CHANNEL, client_id)
     # T-059: pass the identity's own program so the prefill's {program_brand} matches
     # the header's brand (same T-056 fallback chain, apps.referrals.branding).
-    message = kit_message(LINK_CHANNEL, client_id, tenant_id, program=getattr(identity, "program", None))
+    message = kit_message(
+        LINK_CHANNEL, client_id, tenant_id, program=getattr(identity, "program", None), lang=lang
+    )
     targets = _share_targets(message, link)
 
     buttons = [dict(button, href=targets[button["code"]]) for button in SHARE_BUTTONS]
     primary_button = next(b for b in buttons if b["code"] == PRIMARY_SHARE_CODE)
     secondary_buttons = [b for b in buttons if b["code"] != PRIMARY_SHARE_CODE]
 
+    def t(base_key: str, default_en: str, hi_key: str, default_hi: str) -> str:
+        return bi_text(base_key, default_en, lang=lang, tenant_id=tenant_id, default_hi=default_hi)
+
     return {
         "client_id": client_id,
-        "chrome": HUB_CHROME,
+        "chrome": hub_chrome(lang, tenant_id),
         # The BRAND comes from the DB record (never a literal — CLAUDE.md §4): the
         # broker/program, not the partner-company name (PIFS) — see `_brand_name`.
         # The attribution wording is the one config knob (rail E-6 / §6d).
         "brand_name": _brand_name(identity),
-        "partner_attribution": _cfg(
-            SHARE_HUB_PARTNER_ATTRIBUTION, SHARE_HUB_PARTNER_ATTRIBUTION_DEFAULT, tenant_id
+        "partner_attribution": t(
+            SHARE_HUB_PARTNER_ATTRIBUTION, SHARE_HUB_PARTNER_ATTRIBUTION_DEFAULT,
+            SHARE_HUB_PARTNER_ATTRIBUTION_HI, SHARE_HUB_PARTNER_ATTRIBUTION_HI_DEFAULT,
         ),
-        "headline": _cfg(SHARE_HUB_HEADLINE, SHARE_HUB_HEADLINE_DEFAULT, tenant_id),
-        "intro": _cfg(SHARE_HUB_INTRO, SHARE_HUB_INTRO_DEFAULT, tenant_id),
-        "benefits_heading": _cfg(
-            SHARE_HUB_BENEFITS_HEADING, SHARE_HUB_BENEFITS_HEADING_DEFAULT, tenant_id
+        "headline": t(
+            SHARE_HUB_HEADLINE, SHARE_HUB_HEADLINE_DEFAULT,
+            SHARE_HUB_HEADLINE_HI, SHARE_HUB_HEADLINE_HI_DEFAULT,
+        ),
+        "intro": t(
+            SHARE_HUB_INTRO, SHARE_HUB_INTRO_DEFAULT,
+            SHARE_HUB_INTRO_HI, SHARE_HUB_INTRO_HI_DEFAULT,
+        ),
+        "benefits_heading": t(
+            SHARE_HUB_BENEFITS_HEADING, SHARE_HUB_BENEFITS_HEADING_DEFAULT,
+            SHARE_HUB_BENEFITS_HEADING_HI, SHARE_HUB_BENEFITS_HEADING_HI_DEFAULT,
         ),
         "benefits": _lines(
-            _cfg(SHARE_HUB_BENEFITS, SHARE_HUB_BENEFITS_DEFAULT, tenant_id),
+            bi_lines(
+                SHARE_HUB_BENEFITS, SHARE_HUB_BENEFITS_DEFAULT,
+                lang=lang, tenant_id=tenant_id, default_hi=SHARE_HUB_BENEFITS_HI_DEFAULT,
+            ),
             SHARE_HUB_BENEFITS_DEFAULT,
         ),
         # The ONE editable incentive claim (CLAUDE.md §4) — resolved, never restated.
         "reward_claim": str(
             _cfg(REFERRER_REWARD_CLAIM, flags.REFERRAL_INCENTIVE_CLAIM, tenant_id) or ""
         ),
-        "guidance_heading": _cfg(
-            SHARE_HUB_GUIDANCE_HEADING, SHARE_HUB_GUIDANCE_HEADING_DEFAULT, tenant_id
+        "guidance_heading": t(
+            SHARE_HUB_GUIDANCE_HEADING, SHARE_HUB_GUIDANCE_HEADING_DEFAULT,
+            SHARE_HUB_GUIDANCE_HEADING_HI, SHARE_HUB_GUIDANCE_HEADING_HI_DEFAULT,
         ),
         "guidance": _lines(
-            _cfg(SHARE_HUB_GUIDANCE, SHARE_HUB_GUIDANCE_DEFAULT, tenant_id),
+            bi_lines(
+                SHARE_HUB_GUIDANCE, SHARE_HUB_GUIDANCE_DEFAULT,
+                lang=lang, tenant_id=tenant_id, default_hi=SHARE_HUB_GUIDANCE_HI_DEFAULT,
+            ),
             SHARE_HUB_GUIDANCE_DEFAULT,
         ),
         "my_link": link,
@@ -246,11 +306,32 @@ def hub_ctx(identity, token: str) -> dict:
         "secondary_buttons": secondary_buttons,
         "native_share_channel": NATIVE_SHARE_CHANNEL,
         "copy_channel": COPY_CHANNEL,
-        # Cross-link, only when the other surface is actually mounted.
-        "records_url": f"/rr/{token}" if flags.ENABLE_RECORDS_LINK else "",
+        # Cross-link, only when the other surface is actually mounted. Carries the
+        # current lang so the referrer stays in the language they picked (T-061).
+        "records_url": with_lang(f"/rr/{token}", lang) if flags.ENABLE_RECORDS_LINK else "",
         "login_url": _login_url(),
         "og": _og_context(tenant_id),
+        "lang": lang,
+        "lang_toggle": _hub_lang_toggle(lang, tenant_id),
+        "market_risk_warning_hi": market_risk_warning_hi(tenant_id) if lang == "hi" else "",
     }
+
+
+def _hub_lang_toggle(lang: str, tenant_id: int | None) -> dict:
+    """Same toggle contract as `apps.accounts.records._lang_toggle` — a REAL EN<->HI
+    link on this page too (Constitution §4), not shared code across apps to keep each
+    page's context builder self-contained the way this module already is."""
+    to_hi = bi_text(
+        prefs.LANG_TOGGLE_TO_HI_LABEL, prefs.LANG_TOGGLE_TO_HI_LABEL_DEFAULT,
+        lang=LANG_EN, tenant_id=tenant_id,
+    )
+    to_en = bi_text(
+        prefs.LANG_TOGGLE_TO_EN_LABEL, prefs.LANG_TOGGLE_TO_EN_LABEL_DEFAULT,
+        lang=LANG_EN, tenant_id=tenant_id,
+    )
+    if lang == "hi":
+        return {"target_lang": "en", "label": to_en, "query_suffix": ""}
+    return {"target_lang": "hi", "label": to_hi, "query_suffix": "?lang=hi"}
 
 
 def _og_context(tenant_id: int | None) -> dict:
@@ -291,6 +372,16 @@ def _log_view(tenant, identity) -> None:
 @require_GET
 def hub_view(request, token: str):
     """`GET /hub/{token}`. Mounted only when ENABLE_SHARE_HUB is on."""
+    lang = resolve_lang(request)
+    # No tenant known yet on the failure paths (token unverified) — the central-tier
+    # default (tenant_id=None) is the correct, identical-for-everyone fallback config.
+    fail_config = records_config(lang, None)
+    fail_ctx = {
+        "config": fail_config,
+        "login_url": _login_url(),
+        "lang": lang,
+        "market_risk_warning_hi": market_risk_warning_hi(None) if lang == "hi" else "",
+    }
     try:
         check_rate(
             RATE_SCOPE,
@@ -302,7 +393,7 @@ def hub_view(request, token: str):
         return render(
             request,
             "accounts/records_unavailable.html",
-            {"config": RECORDS_CONFIG, "login_url": _login_url(), "retry_after": exc.retry_after},
+            {**fail_ctx, "retry_after": exc.retry_after},
             status=429,
         )
 
@@ -313,11 +404,11 @@ def hub_view(request, token: str):
         return render(
             request,
             "accounts/records_unavailable.html",
-            {"config": RECORDS_CONFIG, "login_url": _login_url()},
+            fail_ctx,
             status=404,
         )
 
     tenant = identity.tenant
-    ctx = hub_ctx(identity, token)
+    ctx = hub_ctx(identity, token, lang)
     _log_view(tenant, identity)
     return render(request, "accounts/share_hub.html", ctx)
