@@ -5991,3 +5991,19 @@ failures in `tests/test_t058_conversion_congrats.py` (confirmed failing identica
 unmodified `origin/main` via `git stash` — unrelated to this change, not touched here). No
 migrations (spec-conflict rule: none needed). Tailwind rebuilt — `app.css` had zero diff (only
 pre-existing utility classes used).
+
+**QUESTION — T-062 (2026-08-10, Worker).** CI on this PR (#141) fails
+`tests/test_t058_conversion_congrats.py::test_congrats_session_when_referrer_window_open` and
+`::test_congrats_not_suppressed_by_followup_converted_gate` (both: `assert 'skipped' ==
+'accepted'`). Confirmed PRE-EXISTING and unrelated to this PR: `git stash`-ing every T-062 change
+inside this same worktree and re-running just `tests/test_t058_conversion_congrats.py` reproduces
+the identical 2 failures / 5 passed on unmodified `origin/main` (f77ded2). Not touched by this PR
+— `apps/integrations/congrats.py` is untouched, and the only shared-surface change
+(`apps.referrals.recipient_identity._resolve_lang` now delegates to
+`apps.config.i18n.resolve_stored_referrer_language`) is behavior-pinned identical by test. Full
+local suite (`-n 4`) shows the same 2 failures / 1025 passed both before and after this PR's
+changes. Recommendation: file this as its own fix task (session-window congrats path — Notification
+recorded `skipped` where `accepted` is expected) rather than blocking T-062's merge on an unrelated
+break; PR #141 stays open pending owner guidance on whether to merge with this known-red check or
+wait for a separate fix. Stopping here rather than guessing at or silently patching T-058 code
+outside this task's scope.
