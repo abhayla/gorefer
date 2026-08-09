@@ -32,6 +32,10 @@ Thumbs.db
 .idea/
 .vscode/
 
+# Checker worktrees — accidental artifacts from fleet session runs
+# Pattern: ..<repo>-chk-<task> (e.g. ..gorefer-chk-t061)
+.*-chk-*/
+
 # Claude Code project config — the SHAREABLE parts are committed so skills/agents created
 # on one machine (e.g. the Windows VPS session) reach every other machine. Needed explicitly
 # because a machine-GLOBAL git ignore (~/.config/git/ignore) excludes `.claude/` wholesale;
