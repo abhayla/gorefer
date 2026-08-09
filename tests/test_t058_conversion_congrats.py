@@ -16,6 +16,7 @@ from apps.config.cascade import set_tenant
 from apps.config.preferences import (
     REFERRER_CONVERSION_CONGRATS_TEMPLATE_EN,
 )
+from apps.followups import services as fup_services
 from apps.followups.models import FollowupWindow
 from apps.integrations.models import Conversion, Notification
 from apps.referrals.models import Referral
@@ -87,7 +88,12 @@ def test_congrats_sent_via_template_when_window_closed_and_configured(settings):
 # --- session leg, window open ------------------------------------------------
 
 @pytest.mark.django_db(transaction=True)
-def test_congrats_session_when_referrer_window_open(settings):
+def test_congrats_session_when_referrer_window_open(settings, monkeypatch):
+    # Pin outside quiet hours (23:00-06:00 IST) — this test asserts a real session SEND,
+    # and the real wall clock crossing into quiet hours must not turn it into a HOLD
+    # (same flaky-by-time pattern documented in test_followups.py: this test fails
+    # whenever it happens to run between 23:00-06:00 IST without pinning).
+    monkeypatch.setattr(fup_services, "in_quiet_hours", lambda *a, **k: False)
     _seed(settings)
     tenant = get_bootstrap_tenant()
     FollowupWindow.objects.create(
@@ -157,11 +163,13 @@ def test_congrats_idempotent_across_double_ingest(settings):
 # --- converted-suppression must NOT block this send (it IS the converted case) ---
 
 @pytest.mark.django_db(transaction=True)
-def test_congrats_not_suppressed_by_followup_converted_gate(settings):
+def test_congrats_not_suppressed_by_followup_converted_gate(settings, monkeypatch):
     """`apps.followups.services.has_converted` / the converted-suppression switch stop
     the NUDGE cadence, never this one-time congrats — the congrats send path does not
     consult that gate at all, and the followup engine's own suppression must remain
     scoped to ScheduledFollowup sends only."""
+    # Pin outside quiet hours — see test_congrats_session_when_referrer_window_open.
+    monkeypatch.setattr(fup_services, "in_quiet_hours", lambda *a, **k: False)
     _seed(settings)
     tenant = get_bootstrap_tenant()
     FollowupWindow.objects.create(
