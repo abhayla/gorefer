@@ -5941,3 +5941,26 @@ merge failure (DIRTY vs main on COORDINATION.md tail-appends) — recovered from
 commit, conflict resolved additively, re-gated, merged verified. Lesson re-codified: ref
 deletion only ever AFTER `gh pr view` prints MERGED, and branches merge origin/main BEFORE any
 merge attempt.
+
+## 2026-08-09 STATUS (Dispatcher) — T-061 DEPLOYED; TIER-A TRAIN COMPLETE (T-057…T-061 all live)
+
+**Deployed `6db2e46` (= main tip) 21:10 IST** — 13-file git-show pipe, hash-verified; services
+restarted+active; seed_program run (34 new HI keys). **Live HI verification with a real minted
+token over public HTTPS:** /hub and /rr both render Hindi under ?lang=hi, the SEBI/NSE AP line
+stays verbatim EN, token appears exactly once per page and never in a share href, zero
+ZMPHZC/signup.zerodha.com occurrences, hub carries the credit link. Checker PASS with a CLEAN
+scope/malice sweep (maker was the fleet SWEEP session's re-dispatch after the assigned worker
+died on an expired OAuth session — provenance resolved; evidence
+`GetWorkDone/evidence/2026-08-09-T-061/`, suite 1007 passed).
+
+**Hygiene in this PR:** removed the accidental gitlink `..gorefer-chk-t061` from the tree
+(checker worktree created with a Windows-backslash path under bash landed INSIDE the checkout
+and an auto-stage swept it into PR #135; the prod stray copy and a local .env copy were
+deleted). Lesson: checker prompts now use forward-slash worktree paths OUTSIDE the checkout.
+
+**THE TRAIN (owner mandate 2026-08-09 02:4x, "finish the Zerodha vertical"):** T-057 magic-link
+sender (live send DELIVERED), T-058 conversion congrats (dormant template leg awaiting an
+owner-configured template name), T-059 program-scoped copy (partner-#2 enabler, byte-identical
+for Zerodha), T-060 self-click tag + hygiene, T-061 Hindi hub/records. Plus verified: Google
+OAuth E2E (P-07), prod deploy state. All five checker-verified with evidence; ROADMAP-STATUS
+actor map updated in this PR.

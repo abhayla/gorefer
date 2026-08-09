@@ -1,6 +1,6 @@
 # GoRefer — Feature Roadmap & Status
 
-> **As of 2026-08-08.** Grounded in `COORDINATION.md` (DA⇆Engineer log), `CLAUDE.md`, `CURRENT-STATE.md`, `review/Deferred-Features-Backlog.md`, `docs/sprint2/`, and the `main` git history. Status vocabulary: **Discussed** (spec'd only) · **Implemented** (code+tests merged, not yet in prod) · **Deployed** (on `main` and running at gorefer.in). **For live flag/deploy state, `CURRENT-STATE.md` is the maintained snapshot — this file's headline is refreshed on milestones only** (the stale 07-13 headline here corroborated the 2026-07-21 wrong-state incident; hence the split).
+> **As of 2026-08-09 (Tier-A train complete).** Grounded in `COORDINATION.md` (DA⇆Engineer log), `CLAUDE.md`, `CURRENT-STATE.md`, `review/Deferred-Features-Backlog.md`, `docs/sprint2/`, and the `main` git history. Status vocabulary: **Discussed** (spec'd only) · **Implemented** (code+tests merged, not yet in prod) · **Deployed** (on `main` and running at gorefer.in). **For live flag/deploy state, `CURRENT-STATE.md` is the maintained snapshot — this file's headline is refreshed on milestones only** (the stale 07-13 headline here corroborated the 2026-07-21 wrong-state incident; hence the split).
 
 ## Deploy headline
 
@@ -83,13 +83,13 @@ GoRefer is **LIVE in production AND live-integrated** at **https://gorefer.in** 
 
 | P-id | Pending | Source / trigger |
 |---|---|---|
-| P-01 | **Conversion notification** — "your referral's account opened" congrats nudge | Gap 5 (deferred to Sprint 2, still unbuilt); channel now reliable enough to revisit |
+| ~~P-01~~ | **DONE (T-058, 2026-08-09)** — congrats on conversion ingest; session leg live, template leg dormant until the owner sets `referrer_conversion_congrats_template_en` | Gap 5 closed |
 | P-02 | **M14 poster / downloadable branded creative** | Spec'd Phase 4; prototype + compliance analysis started 08-Aug, nothing shipped |
 | P-03 | **M12 remainder** — per-platform creatives + `?s=` per-platform attribution polish (channel launcher itself = done via T-053) | `S2-01`; Sprint 3 |
-| P-04 | **Hindi parity** on login / hub / records surfaces | M13 follow-up note |
+| ~~P-04~~ | **DONE for hub/records (T-061, 2026-08-09)** — ?lang=hi + 34 config twins, EN fallback; login surfaces deliberately excluded (OAuth/consent copy not ours) | Web-only per owner's HI-template deferral |
 | P-05 | **SMS OTP fallback** (DF-OTP-SMS) | Referrers without WhatsApp |
-| P-06 | **Self-click tagging** (DF-11) | Self-referral inflation concern |
-| P-07 | **Google OAuth live verification** — the PRIMARY login path has never been tested in prod | D8 deferral; a verification task, not a build |
+| ~~P-06~~ | **DONE — display half (T-060, 2026-08-09)**; count-exclusion half stays deferred with DF-11's trigger | DF-11 row updated |
+| ~~P-07~~ | **VERIFIED E2E 2026-08-09** — chooser → callback → real session on /my/referrals | Closed |
 
 ### 2. Prospect / referral visitor (the friend)
 
@@ -98,7 +98,7 @@ GoRefer is **LIVE in production AND live-integrated** at **https://gorefer.in** 
 | P-id | Pending | Source / trigger |
 |---|---|---|
 | P-08 | **OTP verification on the capture form** (DF-6) | Junk/mistyped leads becoming a problem |
-| P-09 | **Partner-scoped share/nudge message text** — copy is tenant-scoped and says "Zerodha" regardless of program | T-055 checker finding; **hard blocker before partner #2** |
+| ~~P-09~~ | **DONE (T-059, 2026-08-09)** — {program_brand} in all message copy, byte-identical for Zerodha, second program proven. Residual partner-#2 item: OG preview-card copy (page metadata, parked) | Blocker cleared |
 
 ### 3. Partner-direct visitor
 
@@ -129,7 +129,7 @@ GoRefer is **LIVE in production AND live-integrated** at **https://gorefer.in** 
 |---|---|---|
 | P-13 | **Delivery rate** (DF-WATI-REL) — ~42-43%, dominated by Meta per-user marketing cap 131049; §6f marketing-primary/utility-fallback strategy is the countermeasure | Ongoing; measured toward ≥90% by the daily report |
 | P-14 | **Zoho polling as primary sync** (DF-1) — durable-automation variant: mint a broader-scope self-client token so workflow rules are API-manageable (needs owner MFA once) | Webhook unreliability / Zoho hardening |
-| P-15 | **Template send wired to the mint API** — nothing sends `/rr/`+`/hub/` links over WhatsApp yet; T-054 built the mint, not the distribution | The share-hub go-to-market step |
+| ~~P-15~~ | **DONE (T-057, 2026-08-09)** — `send_records_links` operator command (dry-run default, cap/dedupe/opt-out gates); first real send terminal-DELIVERED | Go-to-market unblocked |
 
 ### 7. Future partner / tenant #2 (readiness)
 
