@@ -5825,6 +5825,26 @@ no contract doc update required.
 
 PR: `feat/t059-program-scoped-copy` → `main`.
 
+## 2026-08-09 STATUS (Dispatcher) — T-059 DEPLOYED (program-scoped copy — the partner-#2 enabler)
+
+**Deployed `15f9b94` (= main tip) 16:30 IST** — 10-file git-show pipe, hash-verified; services
+restarted+active; seed_program run (standing rule); home/health 200, `/share/wa/DA1707` 302.
+Checker PASS (evidence `GetWorkDone/evidence/2026-08-09-T-059/`): zero-behavior-change proven
+by running an IDENTICAL probe against the parent and merge commits — byte-diff of all four
+message surfaces (share kit, hub message, selfview share_text, followup fire-time copy) exit 0;
+a prod-shaped second program ("Groww") renders its own brand at all four sites with zero code
+change. The flags.py hunk was judged legitimate (the pre-existing SHARE_KIT_MESSAGE_TEMPLATE
+literal gaining {program_brand}).
+
+**Known boundary (disclosed, parked for partner #2):** OG_TITLE/OG_DESCRIPTION (crawler
+preview card, apps/referrals/og.py) still hard-name Zerodha — page metadata, out of T-059's
+message-copy scope. Add to the partner-#2 checklist alongside DF-5/DF-9/DF-10.
+
+**Process defect + fix:** the T-059 worker ended its run "waiting for the Monitor notification
+when CI completes" — a headless worker can never receive notifications; it died with PR #131
+unmerged (dispatcher completed the tail: merge on green, worktree/branch cleanup). From T-060
+onward every worker prompt carries: "you are HEADLESS — poll CI with a blocking gh pr checks
+--watch; never end your turn waiting."
 ## 2026-08-09 STATUS (Engineer/Dispatcher) — T-060: self-click tag + queued hygiene fixes
 
 Referral Profile Clicks tab now tags a click **self-click** when its promoted lead-side mobile
