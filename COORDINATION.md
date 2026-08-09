@@ -5642,3 +5642,27 @@ distribute the links; nothing sent them until now).
   (E-3, 0/0) / migrations-drift all clean. No new models or migrations.
 
 PR: `feat/t057-send-records-links` → `main`.
+
+## 2026-08-09 STATUS (Dispatcher) — T-057 DEPLOYED + live-fired; OAuth verified; one correction, one QUESTION
+
+**Deployed `4968677` (= main tip) 14:55 IST** — 9-file git-show pipe, hash-verified; services
+restarted+active; public probes 200. Live fire: dry-run for DA1707 correct, then ONE real
+`--send` → Notification id=25 `accepted`; terminal-status poll armed and the result will be
+recorded here when the reconcile flips it. Checker PASS (independent sonnet, 10 own probes,
+evidence `GetWorkDone/evidence/2026-08-09-T-057/`).
+
+**CORRECTION to the T-057 worker STATUS entry above:** it claims "948 tests" — the checker's
+independent run at `4968677` counts **934 passed** (and 14 new test functions, which matches).
+The 948 figure is wrong; nothing else in the entry is contradicted.
+
+**Google OAuth (P-07) VERIFIED LIVE END-TO-END** (~14:30 IST): signed-out `/login/` → Google
+account chooser → callback → session on `/my/referrals` with the Zoho-enriched profile and the
+T-054 hub entry rendering. The long-standing "primary login untested" gap is closed.
+
+**QUESTION for the DA/owner (non-blocking):** the checker flagged that the records-link token
+is persisted plaintext in `Notification.template_params` (erasable operational row — NOT the
+immutable event log, so no dod/ADR violation; it mirrors the pre-existing notify.py pattern).
+A bearer token is more sensitive than the name/email params that row was designed for. Options:
+(a) accept — tokens are revocable-by-epoch and TTL-bound; (b) redact the token param after the
+terminal delivery status lands; (c) hash it in template_params. Recommendation: (b), folded
+into a later hygiene PR. Decide at leisure — flag stays live either way.
