@@ -6055,3 +6055,115 @@ path (accept + reject-with-notice + blank-by-default). Full suite green: 1044 pa
 architecture gate (E-3) clean (0 vendor refs outside boundary); no migrations (none needed —
 plain cascade keys). Tailwind rebuilt — `app.css` had zero diff (only pre-existing utility
 classes reused). No contract-doc changes needed (no `apps/integrations/**` touched).
+
+---
+
+## 2026-08-10 — STATUS (Engineer): T-064 referrer-personalized share opener (PR: feat/t064-referrer-opener)
+
+**What shipped.** A referrer can now write their OWN opening line for the message they forward,
+edited directly on `/hub/{token}`, on top of T-062 (official message + language stickiness) and
+composing with T-063 (native share). Owner decisions of 2026-08-10 implemented as given:
+token-as-identity for the edit surface, free-text opener, ~300 chars, ONE text (no EN/HI twin),
+admin reset.
+
+**Model.** `accounts.ReferrerShareOpener` — `TenantScopedModel`, `OneToOne` to
+`referrals.ReferralIdentity` (the `RecordsLinkState` pattern: hub visitors arrive from a WhatsApp
+tap and mostly have no `ReferrerAccount`). Holds one field, `text`. ONE forward-only migration,
+`accounts/0003_referrershareopener.py`, and nothing else in it. Reads go through
+`objects.for_tenant(...)` (rail E-7).
+
+**Endpoint.** `POST /hub/{token}/opener` (`share_hub_opener`), mounted by the SAME
+`ENABLE_SHARE_HUB` flag as the page, authenticated by the SAME token via `verify_records_token`
+**reused verbatim** — no second token system. Rate-limited on its own scope `share_hub_opener`
+(separate bucket, so hammering Save cannot lock a referrer out of the hub). CSRF enforced by the
+standard middleware + `{% csrf_token %}` — proved with `Client(enforce_csrf_checks=True)`, since
+the default test client would have passed even with the middleware bypassed.
+
+**Config keys (rail E-6).** `referrer_share_opener_enabled` (default **True** — the surface ships
+complete: edit + reset + composition + admin reset, so a False default would mean shipping a
+finished feature nobody can see; one tenant row turns it off, no deploy) and
+`referrer_share_opener_max_chars` (default **300**, owner's figure). Both editable on Preferences
+under a new "Personal share message" section; a non-positive cap is refused with a notice rather
+than stored (a zero cap would silently erase every referrer's text on their next save). Five
+bilingual chrome keys for the editor's copy (`hub_opener_heading` / `_help` / `_locked_note` /
+`_save_label` / `_reset_label`, each with an `_hi` twin, T-061 `bi_text` contract).
+
+**THE LOCKED COMPOSITION.** `apps.referrals.share_intent_service._compose_with_opener` is the
+whole security argument, and it is structural rather than a validation rule:
+
+    [ referrer's own words ] + [ their credit link ] + [ the disclosure line ]
+
+The two trailing parts are concatenated on unconditionally. They are never searched for inside
+the opener, never de-duplicated against it, and `.format()` is applied to the OFFICIAL template
+only — never to referrer text. So removal has no code path, reordering is fixed by the
+expression, and a `{link}`-shaped payload is inert. Deliberately NOT reusing the official path's
+`if anchor in message` shortcut: safe for operator-authored copy, but applied to referrer text it
+would hand the referrer a control — type the anchor early and the real tail stops being appended
+last. Newline flooding (pushing the tail behind a WhatsApp "Read more") is capped upstream by
+`apps.accounts.opener.sanitize`, which also strips control characters and truncates to the
+cascade cap. Seven hostile-input probes assert the invariant.
+
+**No-opener regression pin.** With nothing set, output is byte-identical to the T-062 state —
+pinned as a hardcoded literal, not recomputed from the code under test.
+
+**Security.** Fails closed with no oracle: absent/tampered/expired/rotated tokens and a
+tenant-disabled feature all get the identical 404 page the GET renders (asserted byte-equal).
+Cross-identity attack is impossible by construction — the endpoint takes NO client id from the
+request; a POST carrying `client_id`/`identity`/`tenant` fields for a victim writes only the
+token's own identity (tested). Opener rendered escaped on the hub and in the `json_script` share
+payload (XSS probe). Token still never reaches a share URL, prefill or event. The edit event
+`share_opener_edited` carries `{client_id, length, reset}` — the text lives ONLY in the erasable
+model row, never in the append-only stream (#16/#17).
+
+**Admin reset.** `POST /admin-panel/referrer/{client_id}/opener/reset`, `_staff_required`
+(T-047 auth), rendered on the Referral Profile only when that referrer has actually personalized
+(no dead control). Reset only — never edit: an operator putting words in a referrer's mouth that
+then go out from that referrer's own phone is not a power this screen should hand out.
+
+**Gate.** 1080 passed (`TEST_DB_NAME=gorefer_test_t064 python -m pytest -q -n 4`); ruff clean;
+`manage.py check` clean; E-3 architecture gate clean; `makemigrations --check` clean after the
+migration; Tailwind rebuilt + committed. New file `tests/test_t064_referrer_opener.py` (37 tests).
+No `apps/integrations/**` touched, so no contract-doc change.
+
+**Four existing tests changed, and why** (each encodes a pre-T-064 design the owner has now
+explicitly superseded — the share invariants themselves are untouched and passing):
+`test_t053_share_hub.py::test_the_page_is_read_only` (renamed `..._the_page_itself_takes_no_writes`
+— its "no `<form>` anywhere" clause is exactly what T-064 was authorized to change; the
+load-bearing half, `POST /hub/{token}` to 405, is unchanged, and the test now pins that the opener
+form is the ONLY form and posts only to the opener endpoint);
+`..._the_flag_mounts_exactly_one_new_get_route` (now asserts the closed 3-route set, so a fourth
+surface still needs a reviewed edit);
+`..._the_only_place_the_token_appears_is_the_records_cross_link` and its T-061 HI twin (now 2
+occurrences — the /rr/ cross-link plus the form action, both links to the referrer's own surfaces;
+the assertion carrying the security weight, "no share URL/prefill/event contains the token", is
+unmodified).
+
+### QUESTION Q-T064-1 — the compliance tail is the Disclosures line only; no market-risk line was added
+
+The contract's DoD names the locked tail as "market-risk line + Disclosures link", and in the same
+breath requires no-opener output to be **byte-identical** to the T-062 state. Those cannot both
+hold: today's share message (`kit_message`) appends only `Disclosures: https://.../d/pifs` — there
+is no market-risk line in it, and never has been (the market-risk warning is auto-injected on
+every *page* by the context processor, which is a different surface).
+
+Decision taken: the byte-identity predicate is explicit and testable, so **the locked tail = the
+existing Disclosures anchor**, appended after the opener exactly as it is after the official
+message. I did not add a market-risk line to the share message. If the Design Authority wants one
+in the forwarded WhatsApp text, that is a separate, compliance-reviewed copy change affecting
+EVERY share (personalized or not), not something to smuggle in behind a personalization feature —
+and it needs the §6c conversation-map update first.
+
+### QUESTION Q-T064-2 — `/my/referrals` builds its share text separately and was left alone
+
+The DoD says "everywhere", then enumerates three surfaces: hub buttons, native share, and
+`/share/{channel}` one-tap. All three are covered — they share ONE composition path
+(`kit_message`), so there is no second place that could forget the tail.
+
+There is a FOURTH share builder: `apps/accounts/selfview.py` composes `share_text` for the
+logged-in `/my/referrals` page from hardcoded f-string literals — it does not go through
+`kit_message`, is not cascade-driven (a standing §6e/§6d violation predating T-064), and
+therefore does not pick up a referrer's personal opener. I left it unchanged: it is outside the
+three enumerated surfaces, and folding it into `kit_message` is a behaviour change to a live page
+with its own copy, which is an architecture call, not mine. Recommend a follow-up task to move
+`selfview.share_text` onto `kit_message` — that would fix the §6e violation and give the M13
+logged-in surface personalization in one move.

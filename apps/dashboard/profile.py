@@ -237,6 +237,30 @@ def profile_exists(tenant, client_id: str) -> bool:
     return conv.exists()
 
 
+def identity_for(tenant, client_id: str):
+    """This client id's live `ReferralIdentity` for the tenant, or None (T-064).
+
+    Tenant-scoped through `for_tenant()` (rail E-7). A client id with a footprint but
+    no identity row — a Zoho-imported off-platform conversion, ADR-015 — correctly
+    returns None: there is nobody who could have written a personal opener.
+    """
+    from apps.referrals.models import ReferralIdentity
+
+    return (
+        ReferralIdentity.objects.for_tenant(tenant)
+        .filter(client_id=client_id, deleted_at__isnull=True)
+        .first()
+    )
+
+
+def personal_opener(tenant, client_id: str) -> str:
+    """This referrer's saved personal share opener, or "" (T-064)."""
+    from apps.accounts.opener import get_opener
+
+    identity = identity_for(tenant, client_id)
+    return get_opener(identity) if identity is not None else ""
+
+
 def _safe_zoho_contact(client_id: str) -> ZohoContact:
     """Zoho enrichment, degraded to "unmatched" if Zoho is unreachable.
 

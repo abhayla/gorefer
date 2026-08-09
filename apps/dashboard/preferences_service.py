@@ -320,6 +320,31 @@ def save_preferences(tenant, data, *, user=None) -> list[str]:
             channels.append(always_on)
     set_tenant(prefkeys.SHARE_CHANNELS_ALLOWLIST, channels, tenant_id=tenant_id, user=user)
 
+    # --- Personal share message (T-064) -----------------------------------------
+    # The gate and the length cap. A non-numeric or non-positive cap is REFUSED with a
+    # notice rather than stored: a zero cap would silently erase every referrer's text
+    # on their next save, and an operator would have no way to see that from the screen.
+    set_tenant(
+        prefkeys.REFERRER_SHARE_OPENER_ENABLED,
+        _checkbox(data, "referrer_share_opener_enabled"),
+        tenant_id=tenant_id,
+        user=user,
+    )
+    raw_cap = str(data.get("referrer_share_opener_max_chars", "") or "").strip()
+    try:
+        cap = int(raw_cap)
+    except ValueError:
+        cap = 0
+    if cap <= 0:
+        notices.append(
+            "“Personal message length” was not saved — it must be a whole number "
+            "greater than zero."
+        )
+    else:
+        set_tenant(
+            prefkeys.REFERRER_SHARE_OPENER_MAX_CHARS, cap, tenant_id=tenant_id, user=user
+        )
+
     # --- Allow "Refer directly" (assisted) --------------------------------------
     set_tenant(
         prefkeys.ENABLE_ASSISTED_REFERRAL,
