@@ -6167,3 +6167,40 @@ three enumerated surfaces, and folding it into `kit_message` is a behaviour chan
 with its own copy, which is an architecture call, not mine. Recommend a follow-up task to move
 `selfview.share_text` onto `kit_message` — that would fix the §6e violation and give the M13
 logged-in surface personalization in one move.
+
+## 2026-08-10 STATUS (Dispatcher) — T-062 + T-063 + T-064 DEPLOYED; customization block complete
+
+**Three deploys this night, each checker-PASSed first, all hash-verified byte-exact, services
+active, seed_program run after each (standing rule):**
+- **T-062 `7104b60`** (deployed ~03:10 IST): share-message editors EN/HI on Preferences
+  (`share_kit_message_template` + `_hi`); language stickiness — `/share/{channel}` + `/hub/`
+  default to the referrer's STORED language via the one canonical source
+  (`resolve_stored_referrer_language`, delegated to by `recipient_identity`); `?lang=` overrides.
+  Checker: byte-identical EN output vs parent, Hindi stickiness proven live-shaped, 1027 tests.
+- **T-063 `604d77a`** (deployed ~03:55 IST): hub share images — config slots
+  `share_hub_image_1_url`/`_2_url` (EMPTY = no UI), native-share-with-files (feature-detected,
+  defensive), Download-poster buttons, same-origin enforced at save AND render. Checker PASS
+  (1044 tests, line-by-line JS audit); the physical native-share tap is UNVERIFIED pending an
+  owner phone test once images are configured.
+- **T-064 `758f64a`** (deployed ~04:55 IST, migration `accounts.0003_referrershareopener`):
+  referrer-personalized share opener on `/hub/{token}` (POST `/hub/{token}/opener`, token-authed,
+  300-char cap via `referrer_share_opener_max_chars`, feature switch
+  `referrer_share_opener_enabled`); credit link + compliance tail composed server-side and
+  NON-REMOVABLE (`_compose_with_opener`); admin reset on the referral profile. OPUS maker x2
+  (turn-cap auto-resume per v0.5) + OPUS checker: 67 adversarial probes (format-injection,
+  unicode, cap bypass, cross-identity, no-oracle 404s) all defended; 10 mutation tests all
+  caught; the four changed pre-existing assertions each audited as design-forced with
+  as-tight-or-tighter replacements; 1081 tests. Live probe: 5 share buttons carry zero token
+  occurrences; token sites = exactly 2 (opener form action + /rr/ cross-link — the new accepted
+  page shape).
+
+**Checker findings logged (non-blocking):** T-064 F-1 — a t053 docstring cites a test name that
+does not exist (`test_no_share_url_or_prefill_contains_the_token`); the claim is true but carried
+by three differently-named tests — one-line docstring fix queued for the next hygiene PR. F-2 —
+the maker changed two share-invariant test files despite the contract's literal "unmodified"
+predicate (each change audited as forced + non-weakening; recorded as process precedent to
+tighten future contract wording, not as a defect).
+
+**Owner items open:** congrats template name (T-058 leg), poster file for the preview-card
+variant + T-063 images, ONE phone tap-test of native share after configuring images,
+Zoho broader-token MFA (TODO-Manual card).
