@@ -27,6 +27,14 @@
     try { message = JSON.parse(payload.textContent) || link; } catch (e) { /* keep link */ }
   }
 
+  // Configured share-poster images (T-063) — already same-origin-resolved server-side
+  // (apps.accounts.hub.resolve_share_image_url). Empty list when unconfigured.
+  var shareImages = [];
+  var imagesPayload = document.getElementById("shareImages");
+  if (imagesPayload) {
+    try { shareImages = JSON.parse(imagesPayload.textContent) || []; } catch (e) { /* none */ }
+  }
+
   function recordShare(channel) {
     if (!clientId || !channel) return;
     fetch("/api/share/", {
@@ -75,14 +83,53 @@
   }
 
   // ---- native share sheet ----
+  // Text-only share (today's behaviour) works on any browser with navigator.share.
+  // When at least one poster image is configured AND the browser's Web Share API
+  // level 2 supports file attachments (navigator.canShare({files})), the sheet
+  // carries the image file(s) too. Everything here is feature-detected at runtime —
+  // a browser without file support (or without navigator.share at all) gets exactly
+  // today's text-only share, never a broken button or a console error.
+  function fetchAsFiles(images) {
+    return Promise.all(images.map(function (image) {
+      return fetch(image.url).then(function (resp) {
+        if (!resp.ok) throw new Error("share image fetch failed: " + image.url);
+        return resp.blob().then(function (blob) {
+          return new File([blob], image.filename, { type: blob.type || "image/png" });
+        });
+      });
+    }));
+  }
+
+  function doTextShare(nativeBtn) {
+    return navigator.share({ text: message, url: link }).then(
+      function () { recordShare(nativeBtn.getAttribute("data-share-channel")); },
+      function () { /* user dismissed the sheet — not a share */ }
+    );
+  }
+
   var nativeBtn = document.getElementById("nativeShareBtn");
   if (nativeBtn && navigator.share) {
     nativeBtn.hidden = false;
     nativeBtn.addEventListener("click", function () {
-      navigator.share({ text: message, url: link }).then(
-        function () { recordShare(nativeBtn.getAttribute("data-share-channel")); },
-        function () { /* user dismissed the sheet — not a share */ }
-      );
+      if (!shareImages.length || !navigator.canShare) {
+        doTextShare(nativeBtn);
+        return;
+      }
+      fetchAsFiles(shareImages).then(function (files) {
+        var filesShare = { files: files, text: message };
+        if (navigator.canShare(filesShare)) {
+          navigator.share(filesShare).then(
+            function () { recordShare(nativeBtn.getAttribute("data-share-channel")); },
+            function () { /* user dismissed the sheet — not a share */ }
+          );
+        } else {
+          doTextShare(nativeBtn);
+        }
+      }).catch(function () {
+        // Fetch/File construction failed (offline, CORS, unsupported blob type) —
+        // fall back to the text-only sheet rather than leaving the tap dead.
+        doTextShare(nativeBtn);
+      });
     });
   }
 })();

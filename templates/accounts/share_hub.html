@@ -114,6 +114,22 @@ twin, falling back to EN when unset.
     </ul>
   </div>
 
+  {# ---- share-poster downloads (T-063) — absent until images are configured ---- #}
+  {% if share_images %}
+  <div class="rounded-lg border border-line bg-white p-4 space-y-2" data-test="hub-share-images">
+    <h2 class="text-[13px] font-semibold">{{ chrome.download_label }}</h2>
+    <div class="grid grid-cols-2 gap-2">
+      {% for image in share_images %}
+      <a href="{{ image.url }}" download="{{ image.filename }}"
+         data-test="hub-download-image"
+         class="rounded-md border border-line px-2 py-2 text-center text-[11px] font-semibold text-cobalt-600">
+        {{ chrome.download_label }} {{ forloop.counter }}
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
   {# Cross-link, present only when the records surface is actually mounted (§4). #}
   {% if records_url %}
   <a href="{{ records_url }}" class="inline-block text-[12px] font-semibold text-cobalt-600 underline">
@@ -123,9 +139,12 @@ twin, falling back to EN when unset.
 </section>
 
 {% comment %}
-The share message is handed to JS as DATA (json_script escapes it), never spliced into
-a script literal where a quote in operator-edited copy would break the page.
+The share message and the configured share-image list are handed to JS as DATA
+(json_script escapes them), never spliced into a script literal. `share_images` is
+already same-origin-resolved server-side (apps.accounts.hub.resolve_share_image_url)
+— the JS only fetches what is handed to it here.
 {% endcomment %}
 {{ share_message|json_script:"shareMessage" }}
+{{ share_images|json_script:"shareImages" }}
 <script src="{% static_v 'js/share_hub.js' %}" defer></script>
 {% endblock %}
