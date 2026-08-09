@@ -5845,3 +5845,63 @@ when CI completes" — a headless worker can never receive notifications; it die
 unmerged (dispatcher completed the tail: merge on green, worktree/branch cleanup). From T-060
 onward every worker prompt carries: "you are HEADLESS — poll CI with a blocking gh pr checks
 --watch; never end your turn waiting."
+
+## 2026-08-09 STATUS (Engineer) — T-060 self-click display tag (DF-11) + hygiene fixes, PR opened
+
+**Auto-resumed** from a prior attempt that died at 71/70 turns mid-implementation; continued from
+the existing uncommitted diff (never restarted from `origin/main`) and closed out the remaining
+DoD items.
+
+**DF-11 display half shipped.** `apps/dashboard/profile.py::clicks_rows` now tags a click
+"self-click" when the promoted lead-side mobile (the prospect whose `lead_captured` event falls
+in that click's window, same window definition `_click_outcome` already uses, ADR-018 identity)
+equals the referrer's own mobile, resolved via the CRM read port (`_referrer_own_mobile` →
+`_safe_zoho_contact`, already resolved-flag-gated — `ENABLE_ZOHO_READ` off or Zoho unreachable
+→ unmatched → no tag, never a guess). Both mobiles normalize through `apps.common.phone` before
+compare. Rendered as a small inline badge in `static/js/referral_profile.js`.
+**Display-only** — `self_click` is a new dict key alongside the existing `outcome`/
+`outcome_class`; neither of those, nor any rollup/aggregate, is touched. DF-11's count-exclusion
+half stays deferred with its **original trigger** (self-referral inflation becomes a concern, or
+after the customer/referrer view ships further) — backlog row updated in
+`review/Deferred-Features-Backlog.md`.
+
+**T-054 checker finding 1 fixed:** `ReferralIdentity.objects...filter(client_id=...).first()`
+had no defined order when two partners share a raw `client_id` (uniqueness is
+`(tenant, partner, client_id, id_source)`, not `client_id` alone) — added `.order_by("id")` at
+both call sites (`api/records_tokens.py::_mint_one`, `apps/accounts/selfview.py::_program_brand`
+and `::hub_url_for`), so the OLDEST identity always wins deterministically. Covered by
+`tests/test_t060_order_by_id.py` (5-iteration repeat-call proof against a seeded two-partner
+duplicate-`client_id` fixture, all three call sites).
+
+**T-054 checker finding 2 fixed:** `hub_cta`'s `"Share your link"` literal in
+`apps/accounts/selfview.py::my_referrals_ctx` is now a cascade-resolved config key
+(`apps/config/preferences.py::MY_REFERRALS_HUB_CTA`, rail E-6) — default unchanged, so this is
+zero behavior change for the live tenant.
+
+**T-056 vacuous assertion fixed.** The original assertion in
+`test_empty_brand_name_renders_no_blank_element_in_the_header` checked for a `hub-brand` class
+string that never existed anywhere in the template — it would pass identically whether the
+`{% if brand_name %}` guard worked or was deleted. Replaced with an assertion against the
+template's real class string (`text-cobalt-600`) plus a new disproof test
+(`test_the_above_assertion_actually_catches_a_broken_guard`) that renders a deliberately
+guard-stripped copy of the template and proves the SAME assertion now fails. Non-obvious gotcha
+hit and fixed along the way: Django's `cached.Loader` freezes `Engine.dirs` at construction, and
+mutating `settings.TEMPLATES[0]["DIRS"]` in place (rather than reassigning `settings.TEMPLATES`
+wholesale) never fires the `setting_changed` signal that resets the engine cache — so the first,
+naive version of the disproof silently rendered the real template regardless of the shadow copy
+and produced a false pass. Fixed by reassigning `settings.TEMPLATES` as a new list.
+
+**Full gate green:** 960/962 tests pass (serial — `pytest-xdist` is not installed in this
+environment, so `-n 4` was not available; ran serially instead, ~6 min, matching CLAUDE.md's
+documented serial runtime). The 2 remaining `tests/test_zoho_client.py` failures are pre-existing
+and environmental only — this worktree had no `.env` (the venv itself had zero packages
+installed either; both were bootstrap gaps in the fresh worktree, not code issues), and the
+`.env` borrowed from a sibling worktree (`gorefer-T038`) for local Postgres access has a blank
+`ZOHO_ACCOUNTS_BASE`, breaking `urllib.request` URL construction in `apps/integrations/zoho/
+client.py` for those two tests only; confirmed unrelated by isolated re-run — `apps/integrations/
+**` is untouched by this branch. ruff clean, `manage.py check` clean, architecture gate (E-3,
+0 vendor refs / baseline 0) clean, `makemigrations --check --dry-run` clean (no migrations, as
+expected — no model changes). `apps/integrations/**` untouched, so no contract doc update
+required ([skip-contract-doc] not needed since no code there changed at all).
+
+PR: `feat/t060-selfclick-hygiene` → `main`.
