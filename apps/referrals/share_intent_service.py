@@ -69,10 +69,12 @@ def tracked_link(channel: str, client_id: str) -> str:
 SHARE_KIT_MESSAGE_KEY = "share_kit_message_template"
 
 
-def kit_message(channel: str, client_id: str, tenant_id: int | None, *, program=None) -> str:
+def kit_message(
+    channel: str, client_id: str, tenant_id: int | None, *, program=None, lang: str = "en"
+) -> str:
     """The share prefill, resolved through the config cascade (CLAUDE.md §6d).
 
-    Three things fixed together here:
+    Four things fixed together here:
 
     1. COMPLIANCE (found 2026-07-27). This prefill is a generated asset a referrer
        forwards to prospects, so §4 requires the disclosure anchor on it — and the
@@ -88,14 +90,23 @@ def kit_message(channel: str, client_id: str, tenant_id: int | None, *, program=
        chain (apps.referrals.branding). `program` is the caller's already-resolved
        program when it has one in scope (e.g. handle_share_intent); with no identity
        context the tenant's single active program is used instead — never a literal.
+    4. T-061. `lang="hi"` resolves the `share_kit_message_template_hi` cascade twin
+       (falling back to the EN template when unset/blank — apps.config.i18n contract)
+       so a referrer sharing from the Hindi hub forwards a Hindi prefill.
     """
-    from apps.config.cascade import resolve
+    from apps.config.i18n import bi_text
+    from apps.config.preferences import SHARE_KIT_MESSAGE_TEMPLATE_HI_DEFAULT
 
     from .branding import brand_for_program, brand_for_tenant_id
 
     default = flags.SHARE_KIT_MESSAGE_TEMPLATE
     try:
-        template = str(resolve(SHARE_KIT_MESSAGE_KEY, tenant_id=tenant_id, default=default) or default)
+        template = str(
+            bi_text(
+                SHARE_KIT_MESSAGE_KEY, default, lang=lang, tenant_id=tenant_id,
+                default_hi=SHARE_KIT_MESSAGE_TEMPLATE_HI_DEFAULT,
+            ) or default
+        )
     except Exception:
         template = default
     brand = brand_for_program(program) if program is not None else brand_for_tenant_id(tenant_id)
