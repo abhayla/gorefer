@@ -17,6 +17,7 @@ __all__ = [
     "record_inbound",
     "ingest_conversion",
     "observe_zoho_upsert_action",
+    "enqueue_referrer_congrats",
     "MAX_SYNC_ATTEMPTS",
 ]
 
@@ -54,6 +55,27 @@ def ingest_conversion(*, tenant, payload: dict):
     from apps.integrations.zoho.ingest import ingest_conversion as _impl
 
     return _impl(tenant=tenant, payload=payload)
+
+
+def enqueue_referrer_congrats(*, referral_id: int, conversion_id: int) -> None:
+    """Enqueue the one-time referrer conversion-congrats send (T-058, P-01/Gap 5).
+    See `congrats.enqueue_referrer_congrats`.
+
+    Best-effort: any failure to enqueue is caught and logged, never raised. This is
+    called from `zoho.ingest` via `transaction.on_commit` — the conversion write it
+    rides on must gain NO new failure mode from a downstream notification.
+    """
+    try:
+        from apps.integrations.congrats import enqueue_referrer_congrats as _impl
+
+        _impl(referral_id=referral_id, conversion_id=conversion_id)
+    except Exception:
+        import logging
+
+        logging.getLogger("gorefer.integrations.congrats").warning(
+            "referrer congrats enqueue failed: referral=%s conversion=%s",
+            referral_id, conversion_id, exc_info=True,
+        )
 
 
 @contextlib.contextmanager

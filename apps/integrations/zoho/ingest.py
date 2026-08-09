@@ -257,6 +257,18 @@ def _emit_conversion_events(tenant, referral, stage, conversion, open_dt):
             referral=referral, user_type="system",
             metadata={"account": conversion.opener_zerodha_account_id},
         )
+        # T-058 (P-01/Gap 5): one-time referrer congrats. Enqueued only on commit,
+        # through the boundary services facade (which swallows any enqueue failure)
+        # — this write path must gain NO new failure mode from a downstream send.
+        from apps.integrations import services
+
+        transaction.on_commit(
+            lambda referral_id=referral.pk, conversion_id=conversion.pk: (
+                services.enqueue_referrer_congrats(
+                    referral_id=referral_id, conversion_id=conversion_id
+                )
+            )
+        )
         if open_dt:
             # IST date, not `.date()` — see the P0-H note in apply_conversion above.
             mark_dirty(
