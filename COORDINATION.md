@@ -5593,3 +5593,52 @@ before a second broker onboards; (b) `.filter(client_id=...).first()` without `o
 `api/records_tokens.py` and `apps/accounts/selfview.py` (arbitrary row once a second partner
 exists); (c) one vacuous assertion in `test_empty_brand_name_renders_no_blank_element_in_the_header`.
 Bundle all three into the "second partner onboarding" PR, or fix (b)+(c) opportunistically sooner?
+
+---
+
+**STATUS — T-057 (2026-08-09).** `send_records_links` operator command — the first
+sender for the T-051 records-link/T-053 share-hub magic links (owner mandate: P-15,
+distribute the links; nothing sent them until now).
+
+- `manage.py send_records_links --client-ids A,B,C [--limit N] [--send] [--json]`.
+  Dry-run is the default (previews every gate — cap, dedupe, opt-out, mobile
+  resolution — without sending or writing anything); `--send` fires real messages
+  and refuses (non-zero exit) unless BOTH `ENABLE_WATI_SEND` (resolved,
+  admin-override-aware) and `flags.ENABLE_RECORDS_LINK` are on.
+- Mobile is resolved LIVE per client_id via the vendor-neutral CRM read port
+  (`get_crm_read_port().fetch_contact_by_client_id`) — never GoRefer's own Customer
+  record, and never fabricated: an unknown client_id or one with no mobile on file
+  is skipped with an explicit per-item reason. Token/name/record_date come from a
+  new public wrapper, `api/records_tokens.resolve_link_details`, over the SAME
+  `_mint_one` helper the mint endpoint already uses — no loopback HTTP call, and a
+  records link handed out here can never disagree with one minted through that API.
+- Sends go through the existing vendor-neutral messaging port
+  (`apps.integrations.ports.get_messaging_port`) and the SAME accepted ->
+  terminal-status discipline `wati/tasks.py` established: a submit is recorded
+  ACCEPTED on a `Notification` row (`recipient_role="referrer"` — no new model/
+  migration), then the port's `get_message_status` is asked before a send counts as
+  delivered. Every attempted send also emits ONE vendor-neutral `Event`
+  (`kind="records_link"`, client_id + template + outcome) — client_id is not PII
+  (CLAUDE.md §4), and the token NEVER enters it (T-051 precedent).
+- Three new cascade keys (rail E-6, registered in `apps/config/preferences.py`):
+  `records_link_template_en` (default `gr_platform_gorefer_refrecord_en_2026_08_07`),
+  `records_link_send_max_per_run` (default 50), `records_link_send_min_gap_days`
+  (default 7, dedupe keyed on a prior `records_link` Event for that client_id).
+  Opt-out reuses `apps.followups.services.is_opted_out` (the same suppression
+  check the follow-up engine's sends use); the fail-closed WATI allowlist block is
+  recorded as a skip, not a failure — mirroring `wati/tasks.py`.
+- Placement: `apps/integrations/records_link_send.py` (core) +
+  `apps/integrations/management/commands/send_records_links.py` (CLI) — inside
+  `apps/integrations/`, so the E-3 architecture gate stays 0/0 without needing the
+  port/facade extended, and `apps/integrations/wati/**` / `apps/integrations/zoho/**`
+  are untouched — no Wati-GoRefer/Zoho-GoRefer contract-doc update triggers.
+- 14 new tests (`tests/test_t057_send_records_links.py`): dry-run writes nothing,
+  the CLI never prints a raw mobile, the refusal gate (both as a Python exception
+  and a `CommandError` from the command), a full send + terminal-status + event
+  assertion, send-not-accepted -> failed, unknown-id / no-mobile skip (never
+  fabricated), invalid client_id, per-run cap, min-gap dedupe (+ a 0-day override
+  proving it re-opens), opt-out, and the allowlist-block-is-a-skip-not-a-failure
+  case. Full suite green (948 tests), ruff / `manage.py check` / architecture gate
+  (E-3, 0/0) / migrations-drift all clean. No new models or migrations.
+
+PR: `feat/t057-send-records-links` → `main`.
