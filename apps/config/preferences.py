@@ -271,6 +271,7 @@ HUB_COPY_LABEL = "hub_copy_label"
 HUB_COPY_DONE_LABEL = "hub_copy_done_label"
 HUB_MORE_LABEL = "hub_more_label"
 HUB_RECORDS_CTA = "hub_records_cta"
+HUB_DOWNLOAD_LABEL = "hub_download_label"
 
 HUB_YOUR_LINK_LABEL_DEFAULT = "Your referral link"
 HUB_SHARE_HEADING_DEFAULT = "Share it"
@@ -278,6 +279,7 @@ HUB_COPY_LABEL_DEFAULT = "Copy link"
 HUB_COPY_DONE_LABEL_DEFAULT = "Copied"
 HUB_MORE_LABEL_DEFAULT = "More…"
 HUB_RECORDS_CTA_DEFAULT = "See your referral records"
+HUB_DOWNLOAD_LABEL_DEFAULT = "Download poster"
 
 HUB_YOUR_LINK_LABEL_HI = "hub_your_link_label_hi"
 HUB_SHARE_HEADING_HI = "hub_share_heading_hi"
@@ -285,6 +287,7 @@ HUB_COPY_LABEL_HI = "hub_copy_label_hi"
 HUB_COPY_DONE_LABEL_HI = "hub_copy_done_label_hi"
 HUB_MORE_LABEL_HI = "hub_more_label_hi"
 HUB_RECORDS_CTA_HI = "hub_records_cta_hi"
+HUB_DOWNLOAD_LABEL_HI = "hub_download_label_hi"
 
 HUB_YOUR_LINK_LABEL_HI_DEFAULT = "आपका रेफ़रल लिंक"
 HUB_SHARE_HEADING_HI_DEFAULT = "इसे शेयर करें"
@@ -292,6 +295,20 @@ HUB_COPY_LABEL_HI_DEFAULT = "लिंक कॉपी करें"
 HUB_COPY_DONE_LABEL_HI_DEFAULT = "कॉपी हो गया"
 HUB_MORE_LABEL_HI_DEFAULT = "और…"
 HUB_RECORDS_CTA_HI_DEFAULT = "अपने रेफ़रल रिकॉर्ड देखें"
+HUB_DOWNLOAD_LABEL_HI_DEFAULT = "पोस्टर डाउनलोड करें"
+
+# --- Share hub images (T-063) — up to two configurable share-poster image slots ----
+# EMPTY by default so no image UI renders anywhere until the owner points these at a
+# compliance-reviewed asset (Constitution §4: no dead buttons). Consumed by
+# `apps.accounts.hub.resolve_share_image_url`, which enforces same-origin (a
+# cross-origin value is rejected, never rendered — see that function's docstring for
+# the reasoning) both when the Preferences screen saves a value and when the hub
+# renders one, so a value written directly to the DB can't slip past the render-time
+# check either.
+SHARE_HUB_IMAGE_1_URL = "share_hub_image_1_url"
+SHARE_HUB_IMAGE_2_URL = "share_hub_image_2_url"
+SHARE_HUB_IMAGE_1_URL_DEFAULT = ""
+SHARE_HUB_IMAGE_2_URL_DEFAULT = ""
 
 # --- Language toggle label (T-061) --------------------------------------------------
 LANG_TOGGLE_TO_HI_LABEL = "lang_toggle_to_hi_label"
@@ -579,12 +596,17 @@ def central_defaults() -> dict:
         HUB_COPY_DONE_LABEL: HUB_COPY_DONE_LABEL_DEFAULT,
         HUB_MORE_LABEL: HUB_MORE_LABEL_DEFAULT,
         HUB_RECORDS_CTA: HUB_RECORDS_CTA_DEFAULT,
+        HUB_DOWNLOAD_LABEL: HUB_DOWNLOAD_LABEL_DEFAULT,
         HUB_YOUR_LINK_LABEL_HI: HUB_YOUR_LINK_LABEL_HI_DEFAULT,
         HUB_SHARE_HEADING_HI: HUB_SHARE_HEADING_HI_DEFAULT,
         HUB_COPY_LABEL_HI: HUB_COPY_LABEL_HI_DEFAULT,
         HUB_COPY_DONE_LABEL_HI: HUB_COPY_DONE_LABEL_HI_DEFAULT,
         HUB_MORE_LABEL_HI: HUB_MORE_LABEL_HI_DEFAULT,
         HUB_RECORDS_CTA_HI: HUB_RECORDS_CTA_HI_DEFAULT,
+        HUB_DOWNLOAD_LABEL_HI: HUB_DOWNLOAD_LABEL_HI_DEFAULT,
+        # Share hub images (T-063) — EMPTY by default (no image UI until configured).
+        SHARE_HUB_IMAGE_1_URL: SHARE_HUB_IMAGE_1_URL_DEFAULT,
+        SHARE_HUB_IMAGE_2_URL: SHARE_HUB_IMAGE_2_URL_DEFAULT,
         # Language toggle label — T-061.
         LANG_TOGGLE_TO_HI_LABEL: LANG_TOGGLE_TO_HI_LABEL_DEFAULT,
         LANG_TOGGLE_TO_EN_LABEL: LANG_TOGGLE_TO_EN_LABEL_DEFAULT,
@@ -731,6 +753,14 @@ def get_preferences(tenant_id: int | None) -> dict:
             default=defaults[SHARE_KIT_MESSAGE_TEMPLATE_HI],
         ),
         SHARE_CHANNELS_ALLOWLIST: list(channels),
+        # Share hub images (T-063) — resolved raw here; `apps.accounts.hub` is the one
+        # place that turns a value into a same-origin render URL (or drops it).
+        SHARE_HUB_IMAGE_1_URL: resolve(
+            SHARE_HUB_IMAGE_1_URL, tenant_id=tenant_id, default=defaults[SHARE_HUB_IMAGE_1_URL]
+        ),
+        SHARE_HUB_IMAGE_2_URL: resolve(
+            SHARE_HUB_IMAGE_2_URL, tenant_id=tenant_id, default=defaults[SHARE_HUB_IMAGE_2_URL]
+        ),
         ENABLE_ASSISTED_REFERRAL: _as_bool(
             resolve(ENABLE_ASSISTED_REFERRAL, tenant_id=tenant_id, default=defaults[ENABLE_ASSISTED_REFERRAL])
         ),

@@ -67,6 +67,8 @@ from apps.config.preferences import (
     SHARE_HUB_HEADLINE_DEFAULT,
     SHARE_HUB_HEADLINE_HI,
     SHARE_HUB_HEADLINE_HI_DEFAULT,
+    SHARE_HUB_IMAGE_1_URL,
+    SHARE_HUB_IMAGE_2_URL,
     SHARE_HUB_INTRO,
     SHARE_HUB_INTRO_DEFAULT,
     SHARE_HUB_INTRO_HI,
@@ -130,6 +132,10 @@ def hub_chrome(lang: str, tenant_id: int | None) -> dict:
         "records_cta": t(
             prefs.HUB_RECORDS_CTA, prefs.HUB_RECORDS_CTA_DEFAULT,
             prefs.HUB_RECORDS_CTA_HI, prefs.HUB_RECORDS_CTA_HI_DEFAULT,
+        ),
+        "download_label": t(
+            prefs.HUB_DOWNLOAD_LABEL, prefs.HUB_DOWNLOAD_LABEL_DEFAULT,
+            prefs.HUB_DOWNLOAD_LABEL_HI, prefs.HUB_DOWNLOAD_LABEL_HI_DEFAULT,
         ),
         "expired_title": records["expired_title"],
         "expired_body": records["expired_body"],
@@ -314,6 +320,7 @@ def hub_ctx(identity, token: str, lang: str = LANG_EN) -> dict:
         "secondary_buttons": secondary_buttons,
         "native_share_channel": NATIVE_SHARE_CHANNEL,
         "copy_channel": COPY_CHANNEL,
+        "share_images": _share_images(tenant_id),
         # Cross-link, only when the other surface is actually mounted. Carries the
         # current lang so the referrer stays in the language they picked (T-061).
         "records_url": with_lang(f"/rr/{token}", lang) if flags.ENABLE_RECORDS_LINK else "",
@@ -340,6 +347,61 @@ def _hub_lang_toggle(lang: str, tenant_id: int | None) -> dict:
     if lang == "hi":
         return {"target_lang": "en", "label": to_en, "query_suffix": ""}
     return {"target_lang": "hi", "label": to_hi, "query_suffix": "?lang=hi"}
+
+
+def resolve_share_image_url(value: str) -> str:
+    """Turn a configured share-image value into a SAME-ORIGIN render/fetch URL, or "".
+
+    Three shapes are accepted, all same-origin by construction:
+      - a bare static path (e.g. "img/poster-1.png") -> resolved via Django `static()`;
+      - a site-relative path (starting "/") -> returned as-is;
+      - an absolute URL that starts with `PUBLIC_BASE_URL` -> returned as-is.
+
+    Anything else (a different host, a scheme-relative "//" URL to another origin) is
+    REJECTED — returns "" rather than the raw value. This is deliberately stricter
+    than `apps.referrals.og.absolute_image_url` (which allows any absolute CDN URL for
+    the crawler-only OG card): these images are `fetch()`-ed by JS for the native
+    share sheet and linked as direct downloads, so a cross-origin value would either
+    break `tests/test_no_third_party_origin.py` (a same-origin page pulling a
+    cross-origin subresource) or fail CORS in the browser silently. Called from BOTH
+    the Preferences-screen save path and here at render time, so a value written
+    straight to the DB (bypassing the screen) can't slip past the check either.
+    """
+    from django.conf import settings
+    from django.templatetags.static import static
+
+    value = (value or "").strip()
+    if not value:
+        return ""
+    if value.startswith("//"):
+        return ""  # scheme-relative: always a different origin from our https: pages
+    if value.startswith(("http://", "https://")):
+        base = (getattr(settings, "PUBLIC_BASE_URL", "") or "").rstrip("/")
+        if base and value.startswith(base + "/"):
+            return value
+        return ""
+    if value.startswith("/"):
+        return value
+    return static(value)
+
+
+def _share_images(tenant_id: int | None) -> list[dict]:
+    """Up to two configured share-poster images (T-063), each same-origin-resolved.
+
+    Empty by default (Constitution §4: no image UI until the owner configures one).
+    `filename` drives the download button's `download=` attribute and the file name
+    handed to `navigator.canShare({files})` — taken from the resolved URL so it always
+    matches what actually gets fetched.
+    """
+    images = []
+    for index, key in enumerate((SHARE_HUB_IMAGE_1_URL, SHARE_HUB_IMAGE_2_URL), start=1):
+        raw = str(_cfg(key, "", tenant_id) or "")
+        url = resolve_share_image_url(raw)
+        if not url:
+            continue
+        filename = url.rsplit("/", 1)[-1] or f"referral-poster-{index}.png"
+        images.append({"url": url, "filename": filename})
+    return images
 
 
 def _og_context(tenant_id: int | None) -> dict:
