@@ -11,7 +11,16 @@
 > wins; if either disagrees with the live system, **the live system wins** — verify, don't
 > trust (commands at the bottom).
 >
-> **Last updated:** 2026-08-09 21:15 IST (**DEPLOYED: `6db2e46` = main tip** — **T-061 Hindi
+> **Last updated:** 2026-08-10 05:00 IST (**DEPLOYED: `758f64a` = main tip** — the overnight
+> CUSTOMIZATION BLOCK is complete and live: **T-062** share-message self-serve (Preferences
+> editors EN/HI) + language stickiness (stored-language resolution on /share and /hub),
+> **T-063** hub share images (config slots, native-share-with-files, download buttons — dormant
+> until image URLs configured), **T-064** referrer-personalized share opener (token-authed,
+> compliance tail + credit link locked server-side, migration accounts.0003). All three
+> checker-PASSed (T-064 by an opus checker with 67 adversarial probes + mutation testing),
+> deployed byte-exact, live-probed. Fleet queue EMPTY (T-057…T-064 done). Details + findings in
+> the COORDINATION 2026-08-10 dispatcher entry.)
+> — prior 2026-08-09 21:15 IST (**DEPLOYED: `6db2e46` = main tip** — **T-061 Hindi
 > hub/records LIVE (?lang=hi, 34 cascade _hi keys, EN fallback, compliance line verbatim EN)
 > — and with it the TIER-A TRAIN IS COMPLETE: T-057…T-061 all deployed, checker-verified, and
 > live-probed.** Owner actions open: (1) set `referrer_conversion_congrats_template_en` to an
