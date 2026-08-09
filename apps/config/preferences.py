@@ -152,6 +152,13 @@ NOTIFY_ROLE_KEYS = {
 }
 
 
+# --- My Referrals self-view (T-054 door to the share hub) --------------------------
+# The CTA label on the referrer's own "go to your share hub" button/link — a rail E-6
+# cascade key (T-060 checker finding, COORDINATION.md 2026-08-08) rather than a
+# template/view literal, so the owner can re-word it with no deploy.
+MY_REFERRALS_HUB_CTA = "my_referrals_hub_cta"
+MY_REFERRALS_HUB_CTA_DEFAULT = "Share your link"
+
 # --- Per-referrer (Tier 3) — STAGED, dormant until ENABLE_CUSTOMER_LOGIN ----------
 # These resolve at the USER tier of the cascade (ADR-022), which the resolver only
 # consults when ENABLE_CUSTOMER_LOGIN is on — so they are inert today by construction,
@@ -317,6 +324,7 @@ def central_defaults() -> dict:
         SHARE_HUB_GUIDANCE: SHARE_HUB_GUIDANCE_DEFAULT,
         SHARE_HUB_OG_IMAGE_URL: SHARE_HUB_OG_IMAGE_DEFAULT,
         SHARE_HUB_PARTNER_ATTRIBUTION: SHARE_HUB_PARTNER_ATTRIBUTION_DEFAULT,
+        MY_REFERRALS_HUB_CTA: MY_REFERRALS_HUB_CTA_DEFAULT,
         # Notification routing defaults to ON for all three — this mirrors today's
         # behaviour exactly (doc-08 A6 fires all three), so adding the toggles changes
         # nothing until an admin turns one off.

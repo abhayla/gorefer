@@ -25,6 +25,7 @@ def _program_brand(tenant, client_id: str) -> str:
         ReferralIdentity.objects.for_tenant(tenant)
         .filter(client_id=client_id, status="active", deleted_at__isnull=True)
         .select_related("program", "program__partner")
+        .order_by("id")
         .first()
     )
     if identity is not None and identity.program is not None:
@@ -84,6 +85,7 @@ def hub_url_for(tenant, client_id: str) -> str:
     identity = (
         ReferralIdentity.objects.for_tenant(tenant)
         .filter(client_id=client_id, status="active", deleted_at__isnull=True)
+        .order_by("id")
         .first()
     )
     if identity is None:
@@ -94,6 +96,9 @@ def hub_url_for(tenant, client_id: str) -> str:
 def my_referrals_ctx(tenant, client_id: str) -> dict:
     """The full profile ctx, referrer-scoped + masked. Works with ZERO activity too
     (a just-bound referrer with no clicks sees zeros + their link, not an error)."""
+    from apps.config.cascade import resolve as resolve_config
+    from apps.config.preferences import MY_REFERRALS_HUB_CTA, MY_REFERRALS_HUB_CTA_DEFAULT
+
     band = profile.top_band(tenant, client_id)
     clicks = profile.clicks_rows(tenant, client_id)
     if getattr(settings, "PII_MASK_FOR_CUSTOMER_VIEW", True):
@@ -114,7 +119,13 @@ def my_referrals_ctx(tenant, client_id: str) -> dict:
         # T-054: the logged-in door to the share hub. Blank when the flag is off or the
         # referrer has no identity row — the template renders nothing in either case.
         "hub_url": hub_url_for(tenant, client_id),
-        "hub_cta": "Share your link",
+        # T-060 (rail E-6 / §6e): the CTA label was a literal — now cascade-resolved
+        # so the owner can re-word it with no deploy. Default unchanged.
+        "hub_cta": resolve_config(
+            MY_REFERRALS_HUB_CTA,
+            tenant_id=getattr(tenant, "id", None),
+            default=MY_REFERRALS_HUB_CTA_DEFAULT,
+        ),
         # WhatsApp share prefill: routed via gorefer.in with the wa channel prefix
         # (ADR-030 — never direct-to-Zerodha; ADR-028 B1 attribution), plus the §4.4
         # disclosure host (ADR-031/032 — the light message's compliance anchor).
