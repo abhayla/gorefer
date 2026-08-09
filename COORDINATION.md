@@ -5926,3 +5926,18 @@ ruff clean, `manage.py check` clean, architecture gate (E-3, 0/0) clean, migrati
 Tailwind rebuilt (no diff — all classes used were already compiled from other pages).
 
 PR: `feat/t061-hindi-hub-records` → `main`.
+## 2026-08-09 STATUS (Dispatcher) — T-060 DEPLOYED
+
+**Deployed `b623343` (= main tip) 17:55 IST** — 10-file git-show pipe, hash-verified;
+collectstatic (1 file: referral_profile.js); services restarted+active; seed_program run;
+home/health 200, admin-panel 302. Checker PASS on all 8 probes (evidence
+`GetWorkDone/evidence/2026-08-09-T-060/`) — its display-only probe went beyond the shipped
+tests (diffed rollup rows too, byte-identical), its negative control reverted the order_by fix
+and proved the determinism test bites, and it audited the dispatcher's own test repair as the
+suite's established `_with_flag` idiom (dispatcher was a co-maker on this task — two sonnet
+workers died at turn caps; full story in the T-060 STATUS entry above). PR #133 also survived
+a mid-flight mishap: a chained cleanup deleted the branch of the still-OPEN PR after a silent
+merge failure (DIRTY vs main on COORDINATION.md tail-appends) — recovered from the PR's head
+commit, conflict resolved additively, re-gated, merged verified. Lesson re-codified: ref
+deletion only ever AFTER `gh pr view` prints MERGED, and branches merge origin/main BEFORE any
+merge attempt.
