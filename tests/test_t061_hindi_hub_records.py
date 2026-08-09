@@ -357,14 +357,18 @@ def test_token_never_in_a_share_href_under_lang_hi(client, seeded):
 
 
 @HUB_URLS
-def test_token_appears_exactly_once_under_lang_hi_the_records_cross_link(client, seeded, monkeypatch):
+def test_token_appears_only_on_own_page_links_under_lang_hi(client, seeded, monkeypatch):
+    """HI twin of the T-053 token-placement test. Two occurrences since T-064: the /rr/
+    cross-link and the opener editor's form action — both links to the referrer's own
+    surfaces, neither a share destination."""
     _with_flag(monkeypatch, "apps.accounts.hub", ENABLE_RECORDS_LINK=True)
     identity = _identity(seeded)
     token = mint_records_token(identity)
     body = client.get(f"/hub/{token}?lang=hi").content.decode()
     occurrences = body.count(token)
-    assert occurrences == 1, f"token appears {occurrences}x under lang=hi"
+    assert occurrences == 2, f"token appears {occurrences}x under lang=hi"
     assert f"/rr/{token}?lang=hi" in body
+    assert f'action="/hub/{token}/opener"' in body
 
 
 # --------------------------------------------------------------------- unavailable page

@@ -70,10 +70,17 @@ if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_RECORDS_LINK", False):
 # Tokened referral SHARE HUB (T-053) — the destination of a [Refer Link] button. Its own
 # flag, separate from ENABLE_RECORDS_LINK: the two tokened pages ship independently, and
 # the same signed token opens both. Also a single GET, for the same forwardability reason.
+#
+# T-064 adds the ONE exception to "no POST sibling": `/hub/{token}/opener`, which edits
+# the referrer's OWN opening line and nothing else. It is safe to reach by forwarded
+# link in the way the records page is not, because the only thing a holder of the token
+# can change is text that the composer then appends the credit link and the disclosure
+# line to — server-side, unconditionally. See apps/accounts/hub.py:hub_opener_view.
 if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_SHARE_HUB", False):
-    from apps.accounts.hub import hub_view
+    from apps.accounts.hub import hub_opener_view, hub_view
 
     urlpatterns.append(path("hub/<str:token>", hub_view, name="share_hub"))
+    urlpatterns.append(path("hub/<str:token>/opener", hub_opener_view, name="share_hub_opener"))
 
 # The M7 admin dashboard (custom, built from the mockups) + Django admin base,
 # both gated by the feature flag (no dead UI when off).

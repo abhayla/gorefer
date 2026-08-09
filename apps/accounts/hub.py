@@ -31,9 +31,9 @@ import logging
 from urllib.parse import quote
 
 from django.conf import settings
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.urls import NoReverseMatch, reverse
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_POST
 
 from apps.common.ratelimit import RateLimited, check_rate, client_ip
 from apps.config import preferences as prefs
@@ -85,6 +85,7 @@ from apps.referrals.og import absolute_image_url
 from apps.referrals.share_intent_service import kit_message, tracked_link
 from gorefer.flags import flags
 
+from . import opener as opener_service
 from .records import records_config
 from .records_link import verify_records_token
 
@@ -140,6 +141,27 @@ def hub_chrome(lang: str, tenant_id: int | None) -> dict:
         "expired_title": records["expired_title"],
         "expired_body": records["expired_body"],
         "login_cta": records["login_cta"],
+        # T-064 — the personal-opener editor's copy.
+        "opener_heading": t(
+            prefs.HUB_OPENER_HEADING, prefs.HUB_OPENER_HEADING_DEFAULT,
+            prefs.HUB_OPENER_HEADING_HI, prefs.HUB_OPENER_HEADING_HI_DEFAULT,
+        ),
+        "opener_help": t(
+            prefs.HUB_OPENER_HELP, prefs.HUB_OPENER_HELP_DEFAULT,
+            prefs.HUB_OPENER_HELP_HI, prefs.HUB_OPENER_HELP_HI_DEFAULT,
+        ),
+        "opener_locked_note": t(
+            prefs.HUB_OPENER_LOCKED_NOTE, prefs.HUB_OPENER_LOCKED_NOTE_DEFAULT,
+            prefs.HUB_OPENER_LOCKED_NOTE_HI, prefs.HUB_OPENER_LOCKED_NOTE_HI_DEFAULT,
+        ),
+        "opener_save_label": t(
+            prefs.HUB_OPENER_SAVE_LABEL, prefs.HUB_OPENER_SAVE_LABEL_DEFAULT,
+            prefs.HUB_OPENER_SAVE_LABEL_HI, prefs.HUB_OPENER_SAVE_LABEL_HI_DEFAULT,
+        ),
+        "opener_reset_label": t(
+            prefs.HUB_OPENER_RESET_LABEL, prefs.HUB_OPENER_RESET_LABEL_DEFAULT,
+            prefs.HUB_OPENER_RESET_LABEL_HI, prefs.HUB_OPENER_RESET_LABEL_HI_DEFAULT,
+        ),
     }
 
 #: The full platform row (owner decision 2026-08-08 — the full set, not the minimal one).
@@ -167,6 +189,15 @@ PRIMARY_SHARE_CODE = "wa"
 #: no SDK, just the browser API. Falls back to Copy where the API is absent.
 NATIVE_SHARE_CHANNEL = "native_share"
 COPY_CHANNEL = "copy_link"
+
+#: Rate-limit scope for the T-064 opener WRITE. Its own bucket, separate from the page
+#: read: a referrer hammering Save must not lock themselves out of the hub itself.
+OPENER_RATE_SCOPE = "share_hub_opener"
+
+#: Form field + action names on the opener editor.
+OPENER_FIELD = "opener"
+OPENER_ACTION_FIELD = "action"
+OPENER_ACTION_RESET = "reset"
 
 
 def _cfg(key: str, default, tenant_id: int | None):
@@ -221,6 +252,29 @@ def _login_url() -> str:
         return "/login/"
 
 
+def _hub_url(token: str) -> str:
+    """This page's own URL. Reversed when mounted, literal otherwise — same
+    NoReverseMatch guard as `_login_url`, for the same reason."""
+    try:
+        return reverse("share_hub", args=[token])
+    except NoReverseMatch:
+        return f"/hub/{token}"
+
+
+def _opener_post_url(token: str) -> str:
+    """Where the opener editor POSTs (T-064).
+
+    The token is in the FORM ACTION, which is the same place it already is — the page
+    URL the referrer is looking at. It still never enters a share destination, a
+    prefill, or an event payload; `tests/test_t064_referrer_opener.py` re-asserts that
+    on this page exactly as T-053 does.
+    """
+    try:
+        return reverse("share_hub_opener", args=[token])
+    except NoReverseMatch:
+        return f"/hub/{token}/opener"
+
+
 def _brand_name(identity) -> str:
     """The name the header shows (T-056).
 
@@ -254,10 +308,22 @@ def hub_ctx(identity, token: str, lang: str = LANG_EN) -> dict:
     client_id = identity.client_id
 
     link = tracked_link(LINK_CHANNEL, client_id)
+    # T-064: the referrer's own opening line, when they have written one and the
+    # feature is on for this tenant. It reaches EVERY share surface on this page
+    # through the single `message` below — the platform buttons, the copy button and
+    # the native share sheet all read that one string, so there is no second
+    # composition path that could forget the locked link/disclosure tail.
+    opener_enabled = opener_service.is_enabled(tenant_id)
+    opener_text = opener_service.get_opener(identity)
     # T-059: pass the identity's own program so the prefill's {program_brand} matches
     # the header's brand (same T-056 fallback chain, apps.referrals.branding).
     message = kit_message(
-        LINK_CHANNEL, client_id, tenant_id, program=getattr(identity, "program", None), lang=lang
+        LINK_CHANNEL,
+        client_id,
+        tenant_id,
+        program=getattr(identity, "program", None),
+        lang=lang,
+        opener=opener_text,
     )
     targets = _share_targets(message, link)
 
@@ -321,6 +387,12 @@ def hub_ctx(identity, token: str, lang: str = LANG_EN) -> dict:
         "native_share_channel": NATIVE_SHARE_CHANNEL,
         "copy_channel": COPY_CHANNEL,
         "share_images": _share_images(tenant_id),
+        # T-064 — the personalization surface. `opener_enabled` False means the whole
+        # block is absent from the page, not disabled on it (Constitution §4).
+        "opener_enabled": opener_enabled,
+        "opener_text": opener_text,
+        "opener_max_chars": opener_service.max_chars(tenant_id),
+        "opener_post_url": _opener_post_url(token) if opener_enabled else "",
         # Cross-link, only when the other surface is actually mounted. Carries the
         # current lang so the referrer stays in the language they picked (T-061).
         "records_url": with_lang(f"/rr/{token}", lang) if flags.ENABLE_RECORDS_LINK else "",
@@ -437,6 +509,81 @@ def _log_view(tenant, identity) -> None:
         user_type="referrer",
         metadata={"client_id": identity.client_id},
     )
+
+
+def _log_opener_edit(tenant, identity, length: int, reset: bool) -> None:
+    """Record THAT an opener changed — never WHAT it says.
+
+    The event stream is append-only, outlives DPDP erasure, and is explicitly
+    PII/content-free (#16/#17). A referrer's personal sentence can name a person, so
+    the text lives only in `accounts.ReferrerShareOpener` (erasable, one row) and this
+    log carries the client id, the resulting length, and whether it was a reset.
+    """
+    Event.objects.create(
+        tenant=tenant,
+        event_type="share_opener_edited",
+        source="share_hub",
+        user_type="referrer",
+        metadata={"client_id": identity.client_id, "length": length, "reset": reset},
+    )
+
+
+@require_POST
+def hub_opener_view(request, token: str):
+    """`POST /hub/{token}/opener` — save or reset the referrer's personal opener (T-064).
+
+    Authenticated by the SAME signed records-link token that gates the page, verified by
+    the same `verify_records_token` (no second token system, owner decision 2026-08-10:
+    token-as-identity, like a password-reset link).
+
+    Fails CLOSED and without an oracle. An absent, tampered, expired or rotated token
+    gets the identical 404 page `GET /hub/{token}` renders — the write path can no more
+    reveal which client ids exist than the read path can. And because the identity is
+    resolved FROM the token rather than from anything the form posts, a request carrying
+    identity A's token cannot reach identity B: there is no request-supplied client id
+    on this endpoint at all.
+    """
+    lang = resolve_lang(request)
+    fail_ctx = {
+        "config": records_config(lang, None),
+        "login_url": _login_url(),
+        "lang": lang,
+        "market_risk_warning_hi": market_risk_warning_hi(None) if lang == "hi" else "",
+    }
+    try:
+        check_rate(
+            OPENER_RATE_SCOPE,
+            client_ip(request),
+            limit=settings.RATELIMIT_RECORDS_MAX,
+            window=settings.RATELIMIT_API_WINDOW,
+        )
+    except RateLimited as exc:
+        return render(
+            request,
+            "accounts/records_unavailable.html",
+            {**fail_ctx, "retry_after": exc.retry_after},
+            status=429,
+        )
+
+    identity = verify_records_token(token)
+    if identity is None:
+        return render(request, "accounts/records_unavailable.html", fail_ctx, status=404)
+
+    tenant = identity.tenant
+    if not opener_service.is_enabled(tenant.id):
+        # The tenant turned personalization off. Same blank 404 as a bad token: with
+        # the feature off the editor is not rendered either, so a POST here is a
+        # request for a surface that does not exist.
+        return render(request, "accounts/records_unavailable.html", fail_ctx, status=404)
+
+    reset = request.POST.get(OPENER_ACTION_FIELD, "") == OPENER_ACTION_RESET
+    raw = "" if reset else request.POST.get(OPENER_FIELD, "")
+    stored = opener_service.set_opener(identity, raw)
+    _log_opener_edit(tenant, identity, len(stored), reset)
+
+    # Back to the hub, keeping the language the referrer was reading in (T-061/T-062).
+    lang = resolve_lang_or_stored(request, tenant.id)
+    return redirect(with_lang(_hub_url(token), lang))
 
 
 @require_GET

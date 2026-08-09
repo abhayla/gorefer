@@ -97,6 +97,47 @@ class RecordsLinkState(TimestampedModel, TenantScopedModel):
         return f"records-link-state<{self.identity_id}:e{self.epoch}>"
 
 
+class ReferrerShareOpener(TimestampedModel, TenantScopedModel):
+    """One referrer's PERSONAL opening line for the message they forward (T-064).
+
+    Bound to `referrals.ReferralIdentity` for the same reason `RecordsLinkState` is:
+    the people editing this arrive from a WhatsApp tap on `/hub/{token}` and mostly
+    have no `ReferrerAccount` row to hang state off.
+
+    This table holds ONLY the opener. It is deliberately NOT the whole message: the
+    credit link and the compliance disclosure line are appended server-side, after
+    this text, every time a message is composed
+    (`apps.referrals.share_intent_service.kit_message`). So the worst a referrer can
+    do by editing here is write a bad sentence — they cannot delete the link they get
+    paid for, and they cannot delete the disclosure.
+
+    Empty `text` means "use the tenant's official message", which is also what a
+    missing row means. The two are equivalent on purpose: clearing the box and never
+    having opened it must produce byte-identical output.
+    """
+
+    identity = models.OneToOneField(
+        "referrals.ReferralIdentity",
+        on_delete=models.CASCADE,
+        related_name="share_opener",
+    )
+    #: The referrer's own words. Length is capped at WRITE time against the
+    #: `referrer_share_opener_max_chars` cascade key, not by a column limit — the cap
+    #: is owner-tunable config (rail E-6) and a migration must not be needed to change it.
+    text = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "referrer_share_opener"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "identity"], name="uq_referrer_share_opener_tenant_identity"
+            ),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"share-opener<{self.identity_id}:{len(self.text)}c>"
+
+
 class VerificationRequest(TimestampedModel, TenantScopedModel):
     """A pending ownership-verification (ADR-027 mismatch / ADR-035 Path B)."""
 

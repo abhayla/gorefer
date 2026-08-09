@@ -283,8 +283,36 @@ def referrer_profile(request, client_id: str):
         "config": profile.PROFILE_CONFIG,
         "sync_health": _sync_health(tenant),
         "nav_active": "referrer",
+        # T-064: this referrer's personal share opener, so an operator can see what is
+        # actually going out under the brand's name — and reset it in one click.
+        "personal_opener": profile.personal_opener(tenant, cid),
     }
     return render(request, "dashboard/referrer_profile.html", ctx)
+
+
+@_staff_required
+@require_http_methods(["POST"])
+def referrer_opener_reset(request, client_id: str):
+    """Clear one referrer's personal share opener (T-064), reverting them to the
+    tenant's official message. Staff-only, same gate as the profile it posts from.
+
+    Deliberately not an "edit" — an operator setting words a referrer never wrote, and
+    then having them forwarded from that referrer's own phone, is not a power this
+    screen should hand out. Reset is the whole remedy: it puts the compliance-reviewed
+    official copy back.
+    """
+    from apps.accounts.opener import clear_opener
+
+    tenant = get_current_tenant(request)
+    try:
+        cid = validate_client_id(client_id)
+    except InvalidClientId:
+        raise Http404("invalid client id")
+    identity = profile.identity_for(tenant, cid)
+    if identity is None:
+        raise Http404("no referral profile for this client id")
+    clear_opener(identity)
+    return redirect("dashboard_referrer", client_id=cid)
 
 
 @_staff_required
