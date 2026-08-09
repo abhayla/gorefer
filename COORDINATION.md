@@ -6007,3 +6007,9 @@ recorded `skipped` where `accepted` is expected) rather than blocking T-062's me
 break; PR #141 stays open pending owner guidance on whether to merge with this known-red check or
 wait for a separate fix. Stopping here rather than guessing at or silently patching T-058 code
 outside this task's scope.
+
+**ADDENDUM — T-062 QUESTION above.** `gh run list --branch main` confirms `origin/main`'s own
+HEAD commit (f77ded2, merged 2026-08-09 before this task started) already ran CI and is RED with
+the identical 2 `test_t058_conversion_congrats.py` failures (run 31332697697). Main was already
+broken before this PR branched from it — this is not something PR #141 introduced or can fix by
+rebasing.
