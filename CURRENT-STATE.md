@@ -11,7 +11,14 @@
 > wins; if either disagrees with the live system, **the live system wins** — verify, don't
 > trust (commands at the bottom).
 >
-> **Last updated:** 2026-08-09 15:45 IST (**DEPLOYED: `a641f07` = main tip** — **T-058
+> **Last updated:** 2026-08-09 16:35 IST (**DEPLOYED: `15f9b94` = main tip** — **T-059
+> program-scoped message copy LIVE**: every outbound message surface (share kit, hub message,
+> selfview share text, followup nudge copy) now renders `{program_brand}` via the T-056
+> fallback chain — byte-identical output for Zerodha today (checker-proven against the parent
+> commit), a second program is copy-ready with zero code change. Remaining partner-#2 gap:
+> OG preview-card title/description still hard-name Zerodha (page metadata, disclosed, parked).
+> T-060 (self-click tag + hygiene) dispatched with the new headless-worker CI rule.)
+> — prior 2026-08-09 15:45 IST (**DEPLOYED: `a641f07` = main tip** — **T-058
 > conversion-congrats nudge LIVE (dormant template leg)**, PR #129, checker PASS with deep
 > adversarial probes (evidence `GetWorkDone/evidence/2026-08-09-T-058/`). On the next REAL Zoho
 > conversion the credited referrer gets a session congrats if their 24h window is open;
