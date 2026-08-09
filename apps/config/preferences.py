@@ -57,6 +57,25 @@ RECORDS_LINK_SEND_MAX_PER_RUN_DEFAULT = 50
 RECORDS_LINK_SEND_MIN_GAP_DAYS = "records_link_send_min_gap_days"
 RECORDS_LINK_SEND_MIN_GAP_DAYS_DEFAULT = 7
 
+# --- Referrer conversion congrats (T-058; P-01/Gap 5) ------------------------------
+# The one-time "your referral just opened their account" notification to the CREDITED
+# referrer, fired once per conversion from the Zoho ingest path
+# (apps.integrations.congrats). Two cascade keys (rail E-6 / §6d): the in-session copy
+# (used when the referrer's own 24h WhatsApp window is open) and the WhatsApp template
+# name (used otherwise). The template default is EMPTY — this feature ships DORMANT
+# on the template leg until the owner configures an approved name; template
+# creation/submission is NOT this task (owner ruling 2026-08-08, CLAUDE.md). The body
+# never names the prospect (generic descriptor only, §6.1 precedent) and states no
+# reward amount (Gap 4: GoRefer never computes rewards).
+REFERRER_CONVERSION_CONGRATS_TEMPLATE_EN = "referrer_conversion_congrats_template_en"
+REFERRER_CONVERSION_CONGRATS_TEMPLATE_EN_DEFAULT = ""
+
+REFERRER_CONVERSION_CONGRATS_BODY_EN = "referrer_conversion_congrats_body_en"
+REFERRER_CONVERSION_CONGRATS_BODY_EN_DEFAULT = (
+    "Great news {name}! A referral of yours just completed their account opening. "
+    "Thank you for referring — view your records anytime from your GoRefer link."
+)
+
 # --- Referral share hub (T-053; behind ENABLE_SHARE_HUB) ---------------------------
 # Every word this page says, and the brand image its link preview uses, is a cascade
 # key rather than a template literal (rail E-6 / §6d). Two reasons, both concrete:
@@ -287,6 +306,8 @@ def central_defaults() -> dict:
         RECORDS_LINK_TEMPLATE_EN: RECORDS_LINK_TEMPLATE_EN_DEFAULT,
         RECORDS_LINK_SEND_MAX_PER_RUN: RECORDS_LINK_SEND_MAX_PER_RUN_DEFAULT,
         RECORDS_LINK_SEND_MIN_GAP_DAYS: RECORDS_LINK_SEND_MIN_GAP_DAYS_DEFAULT,
+        REFERRER_CONVERSION_CONGRATS_TEMPLATE_EN: REFERRER_CONVERSION_CONGRATS_TEMPLATE_EN_DEFAULT,
+        REFERRER_CONVERSION_CONGRATS_BODY_EN: REFERRER_CONVERSION_CONGRATS_BODY_EN_DEFAULT,
         # Share hub (T-053) — placeholder copy pending owner compliance review.
         SHARE_HUB_HEADLINE: SHARE_HUB_HEADLINE_DEFAULT,
         SHARE_HUB_INTRO: SHARE_HUB_INTRO_DEFAULT,
