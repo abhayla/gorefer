@@ -127,12 +127,14 @@ def test_empty_brand_name_renders_no_blank_element_in_the_header(seeded):
     body = render_to_string("accounts/share_hub.html", ctx)
     header = body[body.index('data-test="hub-partner-header"') : body.index("</header>")]
     # A real check on the actual markup: the brand paragraph is the only element in
-    # the header carrying `text-cobalt-600` (share_hub.html), so its absence proves
-    # the `{% if brand_name %}` guard suppressed the WHOLE element, not just its text.
-    # (The old `"hub-brand" not in header` assertion checked for a string that never
-    # appears in the template at all, brand_name empty or not — it would pass even
-    # against a deliberately-broken template that always rendered a blank `<p>` chip.)
-    assert "text-cobalt-600" not in header
+    # the header carrying `uppercase tracking-wide` (share_hub.html), so its absence
+    # proves the `{% if brand_name %}` guard suppressed the WHOLE element, not just its
+    # text. (The old `"hub-brand" not in header` assertion checked for a string that
+    # never appears in the template at all, brand_name empty or not — it would pass
+    # even against a deliberately-broken template that always rendered a blank `<p>`
+    # chip.) T-061's lang-toggle link shares `text-cobalt-600` with the brand chip, so
+    # the marker narrows to the classes unique to the brand `<p>`.
+    assert "uppercase tracking-wide" not in header
     assert "hub-partner-header" in header
 
 

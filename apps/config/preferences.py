@@ -132,6 +132,195 @@ SHARE_HUB_GUIDANCE_DEFAULT = [
     "far more than sending the link again.",
 ]
 
+# --- Share hub HI twins (T-061) -----------------------------------------------------
+# `apps.config.i18n.bi_text`/`bi_lines` resolve `{key}_hi` beside the EN key above and
+# fall back to EN whenever the HI value is unset/blank — a missing HI row can never
+# blank the page. Drafts below are a faithful translation of the PR #124
+# compliance-reviewed EN copy (owner review pending, CLAUDE.md pre-made decision #3;
+# copy is config, so a wording edit needs no deploy).
+SHARE_HUB_HEADLINE_HI_DEFAULT = "आपका रेफ़रल लिंक तैयार है"
+SHARE_HUB_INTRO_HI_DEFAULT = (
+    "आज ही किसी एक व्यक्ति को यह भेजें। जब कोई इस लिंक से खाता खोलता है, तो रेफ़रल आपकी "
+    "क्लाइंट आईडी पर दर्ज होता है।"
+)
+SHARE_HUB_BENEFITS_HEADING_HI_DEFAULT = "आपको क्या मिलता है"
+SHARE_HUB_BENEFITS_HI_DEFAULT = [
+    "कोई भी रिवॉर्ड ब्रोकर के अपने रेफ़रल प्रोग्राम से, उन्हीं की शर्तों पर आता है। हम रेफ़रल "
+    "को आपकी क्लाइंट आईडी पर दर्ज कर आगे पहुंचाते हैं — हम कभी राशि की गणना, होल्ड या उसमें "
+    "जोड़ नहीं करते।",
+    "हर रेफ़रल आपकी क्लाइंट आईडी पर अपने-आप ट्रैक होता है। कोई फ़ॉर्म नहीं, कोई फॉलो-अप कॉल "
+    "नहीं, याद रखने को कुछ नहीं।",
+    "आपके मित्र को खाता खोलने की पूरी प्रक्रिया में PIFS द्वारा शुरू से अंत तक मदद दी जाती है। "
+    "PIFS आपके मित्र से इसके लिए कोई शुल्क नहीं लेता; PIFS को ब्रोकर द्वारा उसके ऑथराइज़्ड "
+    "पर्सन के रूप में भुगतान किया जाता है। खाता और ब्रोकरेज शुल्क ब्रोकर के अपने हैं।",
+    "किसी भी समय अपना रिकॉर्ड खोलकर देखें कि हर व्यक्ति कहां तक पहुंचा है।",
+]
+SHARE_HUB_GUIDANCE_HEADING_HI_DEFAULT = "असरदार तरीके से कैसे शेयर करें"
+SHARE_HUB_GUIDANCE_HI_DEFAULT = [
+    "दस ग्रुप पोस्ट से बेहतर है एक सीधा मैसेज। इसे किसी व्यक्ति को भेजें, भीड़ को नहीं।",
+    "अपने शब्दों में बताएं कि आप इसे क्यों इस्तेमाल करते हैं — खाता खोलने और इस्तेमाल करने का "
+    "अपना अनुभव साझा करें। किसी को रिटर्न का वादा न करें या निवेश की सलाह न दें; यह उन पर और "
+    "उनकी अपनी रिसर्च पर छोड़ दें।",
+    "उन परिवार और दोस्तों से शुरुआत करें जिन्होंने पहले ही आपसे निवेश के बारे में पूछा है।",
+    "अगर कोई दिलचस्पी दिखाकर चुप हो जाए, तो अगले दिन एक छोटा-सा रिमाइंडर लिंक दोबारा भेजने "
+    "से कहीं ज़्यादा असरदार होता है।",
+]
+SHARE_HUB_PARTNER_ATTRIBUTION_HI_DEFAULT = "PIFS - ऑथराइज़्ड पर्सन के माध्यम से"
+
+# HI cascade key names (`{key}_hi`, resolved by apps.config.i18n against the EN key
+# above). Named explicitly rather than string-built at every call site.
+SHARE_HUB_HEADLINE_HI = "share_hub_headline_hi"
+SHARE_HUB_INTRO_HI = "share_hub_intro_hi"
+SHARE_HUB_BENEFITS_HEADING_HI = "share_hub_benefits_heading_hi"
+SHARE_HUB_BENEFITS_HI = "share_hub_benefits_hi"
+SHARE_HUB_GUIDANCE_HEADING_HI = "share_hub_guidance_heading_hi"
+SHARE_HUB_GUIDANCE_HI = "share_hub_guidance_hi"
+SHARE_HUB_PARTNER_ATTRIBUTION_HI = "share_hub_partner_attribution_hi"
+
+# --- Records page (T-051) + share-hub chrome bilingual copy (T-061) ----------------
+# The `/rr/{token}` page copy (RECORDS_CONFIG in apps.accounts.records) and the
+# `/hub/{token}` chrome labels (HUB_CHROME in apps.accounts.hub) were plain module
+# dicts — page furniture, not owner-editable via the Preferences screen, but still
+# text a Hindi-first referrer reads. Rail E-6 / §6d already treats SHARE_HUB_* the
+# same way; these keys extend the identical cascade-key pattern to the remaining
+# strings on both pages so every one of them gets an EN default + an `_hi` twin.
+RECORDS_TITLE = "records_title"
+RECORDS_NOT_ON_FILE = "records_not_on_file"
+RECORDS_MASKED_NOTE = "records_masked_note"
+RECORDS_LOGIN_CTA = "records_login_cta"
+RECORDS_EXPIRED_TITLE = "records_expired_title"
+RECORDS_EXPIRED_BODY = "records_expired_body"
+RECORDS_EMPTY = "records_empty"
+RECORDS_HUB_CTA = "records_hub_cta"
+RECORDS_STAT_REFERRED = "records_stat_referred"
+RECORDS_STAT_CONVERTED = "records_stat_converted"
+RECORDS_STAT_PENDING = "records_stat_pending"
+RECORDS_COL_NAME = "records_col_name"
+RECORDS_COL_MOBILE = "records_col_mobile"
+RECORDS_COL_STATUS = "records_col_status"
+RECORDS_COL_REFERRED = "records_col_referred"
+RECORDS_STATUS_OPENED = "records_status_opened"
+RECORDS_STATUS_IN_PROGRESS = "records_status_in_progress"
+
+RECORDS_TITLE_DEFAULT = "Your referral records"
+RECORDS_NOT_ON_FILE_DEFAULT = "— not on file —"
+RECORDS_MASKED_NOTE_DEFAULT = (
+    "Names and numbers are partly hidden on this link because it can be forwarded. "
+    "Log in to see full details."
+)
+RECORDS_LOGIN_CTA_DEFAULT = "Log in for full details"
+RECORDS_EXPIRED_TITLE_DEFAULT = "This link has expired"
+RECORDS_EXPIRED_BODY_DEFAULT = "Referral-record links stop working after a while. Log in to see your records."
+RECORDS_EMPTY_DEFAULT = "No referrals recorded yet."
+RECORDS_HUB_CTA_DEFAULT = "Share your referral link"
+RECORDS_STAT_REFERRED_DEFAULT = "Referred"
+RECORDS_STAT_CONVERTED_DEFAULT = "Accounts opened"
+RECORDS_STAT_PENDING_DEFAULT = "In progress"
+RECORDS_COL_NAME_DEFAULT = "Name"
+RECORDS_COL_MOBILE_DEFAULT = "Mobile"
+RECORDS_COL_STATUS_DEFAULT = "Status"
+RECORDS_COL_REFERRED_DEFAULT = "Referred"
+RECORDS_STATUS_OPENED_DEFAULT = "Account opened"
+RECORDS_STATUS_IN_PROGRESS_DEFAULT = "In progress"
+
+RECORDS_TITLE_HI = "records_title_hi"
+RECORDS_NOT_ON_FILE_HI = "records_not_on_file_hi"
+RECORDS_MASKED_NOTE_HI = "records_masked_note_hi"
+RECORDS_LOGIN_CTA_HI = "records_login_cta_hi"
+RECORDS_EXPIRED_TITLE_HI = "records_expired_title_hi"
+RECORDS_EXPIRED_BODY_HI = "records_expired_body_hi"
+RECORDS_EMPTY_HI = "records_empty_hi"
+RECORDS_HUB_CTA_HI = "records_hub_cta_hi"
+RECORDS_STAT_REFERRED_HI = "records_stat_referred_hi"
+RECORDS_STAT_CONVERTED_HI = "records_stat_converted_hi"
+RECORDS_STAT_PENDING_HI = "records_stat_pending_hi"
+RECORDS_COL_NAME_HI = "records_col_name_hi"
+RECORDS_COL_MOBILE_HI = "records_col_mobile_hi"
+RECORDS_COL_STATUS_HI = "records_col_status_hi"
+RECORDS_COL_REFERRED_HI = "records_col_referred_hi"
+RECORDS_STATUS_OPENED_HI = "records_status_opened_hi"
+RECORDS_STATUS_IN_PROGRESS_HI = "records_status_in_progress_hi"
+
+RECORDS_TITLE_HI_DEFAULT = "आपके रेफ़रल रिकॉर्ड"
+RECORDS_NOT_ON_FILE_HI_DEFAULT = "— उपलब्ध नहीं —"
+RECORDS_MASKED_NOTE_HI_DEFAULT = (
+    "इस लिंक को आगे भेजा जा सकता है, इसलिए नाम और नंबर आंशिक रूप से छिपाए गए हैं। पूरी "
+    "जानकारी देखने के लिए लॉग इन करें।"
+)
+RECORDS_LOGIN_CTA_HI_DEFAULT = "पूरी जानकारी के लिए लॉग इन करें"
+RECORDS_EXPIRED_TITLE_HI_DEFAULT = "यह लिंक समाप्त हो गया है"
+RECORDS_EXPIRED_BODY_HI_DEFAULT = (
+    "रेफ़रल-रिकॉर्ड लिंक कुछ समय बाद काम करना बंद कर देते हैं। अपने रिकॉर्ड देखने के लिए लॉग इन करें।"
+)
+RECORDS_EMPTY_HI_DEFAULT = "अभी तक कोई रेफ़रल दर्ज नहीं हुआ है।"
+RECORDS_HUB_CTA_HI_DEFAULT = "अपना रेफ़रल लिंक शेयर करें"
+RECORDS_STAT_REFERRED_HI_DEFAULT = "रेफ़र किए गए"
+RECORDS_STAT_CONVERTED_HI_DEFAULT = "खाते खुले"
+RECORDS_STAT_PENDING_HI_DEFAULT = "प्रगति में"
+RECORDS_COL_NAME_HI_DEFAULT = "नाम"
+RECORDS_COL_MOBILE_HI_DEFAULT = "मोबाइल"
+RECORDS_COL_STATUS_HI_DEFAULT = "स्थिति"
+RECORDS_COL_REFERRED_HI_DEFAULT = "रेफ़र किया गया"
+RECORDS_STATUS_OPENED_HI_DEFAULT = "खाता खुल गया"
+RECORDS_STATUS_IN_PROGRESS_HI_DEFAULT = "प्रगति में"
+
+# --- Share hub chrome (button labels, section furniture — T-061 HI twins) ----------
+HUB_YOUR_LINK_LABEL = "hub_your_link_label"
+HUB_SHARE_HEADING = "hub_share_heading"
+HUB_COPY_LABEL = "hub_copy_label"
+HUB_COPY_DONE_LABEL = "hub_copy_done_label"
+HUB_MORE_LABEL = "hub_more_label"
+HUB_RECORDS_CTA = "hub_records_cta"
+
+HUB_YOUR_LINK_LABEL_DEFAULT = "Your referral link"
+HUB_SHARE_HEADING_DEFAULT = "Share it"
+HUB_COPY_LABEL_DEFAULT = "Copy link"
+HUB_COPY_DONE_LABEL_DEFAULT = "Copied"
+HUB_MORE_LABEL_DEFAULT = "More…"
+HUB_RECORDS_CTA_DEFAULT = "See your referral records"
+
+HUB_YOUR_LINK_LABEL_HI = "hub_your_link_label_hi"
+HUB_SHARE_HEADING_HI = "hub_share_heading_hi"
+HUB_COPY_LABEL_HI = "hub_copy_label_hi"
+HUB_COPY_DONE_LABEL_HI = "hub_copy_done_label_hi"
+HUB_MORE_LABEL_HI = "hub_more_label_hi"
+HUB_RECORDS_CTA_HI = "hub_records_cta_hi"
+
+HUB_YOUR_LINK_LABEL_HI_DEFAULT = "आपका रेफ़रल लिंक"
+HUB_SHARE_HEADING_HI_DEFAULT = "इसे शेयर करें"
+HUB_COPY_LABEL_HI_DEFAULT = "लिंक कॉपी करें"
+HUB_COPY_DONE_LABEL_HI_DEFAULT = "कॉपी हो गया"
+HUB_MORE_LABEL_HI_DEFAULT = "और…"
+HUB_RECORDS_CTA_HI_DEFAULT = "अपने रेफ़रल रिकॉर्ड देखें"
+
+# --- Language toggle label (T-061) --------------------------------------------------
+LANG_TOGGLE_TO_HI_LABEL = "lang_toggle_to_hi_label"
+LANG_TOGGLE_TO_EN_LABEL = "lang_toggle_to_en_label"
+LANG_TOGGLE_TO_HI_LABEL_DEFAULT = "हिंदी में देखें"
+LANG_TOGGLE_TO_EN_LABEL_DEFAULT = "View in English"
+
+# --- Compliance — market-risk warning HI twin (T-061) -------------------------------
+# The EN `market_risk_warning` key stays COMPLIANCE-LOCKED and untouched (D-1 rail,
+# central-only, ADR-014) — this is a SEPARATE, unlocked cascade key carrying only the
+# Hindi wording, so it can never weaken or replace the locked EN claim; the two render
+# together (this string + the verbatim-EN AP_DISCLOSURE_BLOCK/NSE reg. no., which are
+# regulator-registered identifiers and are never translated). Default is the exact
+# wording already approved and live in the HI WhatsApp templates (owner precedent,
+# Wati-Project docs) — not a fresh translation.
+MARKET_RISK_WARNING_HI = "market_risk_warning_hi"
+MARKET_RISK_WARNING_HI_DEFAULT = (
+    "प्रतिभूति बाज़ार में निवेश बाज़ार जोखिमों के अधीन है।"
+)
+
+# --- Share-kit message HI twin (T-061) ----------------------------------------------
+# Mirrors SHARE_KIT_MESSAGE_TEMPLATE (flags.py / apps.referrals.share_intent_service) —
+# same {link}/{program_brand} placeholders, resolved by kit_message() when the caller's
+# lang is "hi". Falls back to the EN template when unset (apps.config.i18n contract).
+SHARE_KIT_MESSAGE_TEMPLATE_HI = "share_kit_message_template_hi"
+SHARE_KIT_MESSAGE_TEMPLATE_HI_DEFAULT = (
+    "एक मुफ़्त {program_brand} खाता खोलें — मेरा रेफ़रल लिंक:\n{link}"
+)
+
 # --- WhatsApp notification routing (Tier 2, admin) ---------------------------------
 # Which of the three lead-time notifications actually go out (doc-08 A6 a/b/c).
 # Routing only: turning one OFF suppresses that recipient; it never changes WHAT is
@@ -325,6 +514,69 @@ def central_defaults() -> dict:
         SHARE_HUB_OG_IMAGE_URL: SHARE_HUB_OG_IMAGE_DEFAULT,
         SHARE_HUB_PARTNER_ATTRIBUTION: SHARE_HUB_PARTNER_ATTRIBUTION_DEFAULT,
         MY_REFERRALS_HUB_CTA: MY_REFERRALS_HUB_CTA_DEFAULT,
+        # Share hub — Hindi twins (T-061). Owner review pending (pre-made decision #3).
+        SHARE_HUB_HEADLINE_HI: SHARE_HUB_HEADLINE_HI_DEFAULT,
+        SHARE_HUB_INTRO_HI: SHARE_HUB_INTRO_HI_DEFAULT,
+        SHARE_HUB_BENEFITS_HEADING_HI: SHARE_HUB_BENEFITS_HEADING_HI_DEFAULT,
+        SHARE_HUB_BENEFITS_HI: SHARE_HUB_BENEFITS_HI_DEFAULT,
+        SHARE_HUB_GUIDANCE_HEADING_HI: SHARE_HUB_GUIDANCE_HEADING_HI_DEFAULT,
+        SHARE_HUB_GUIDANCE_HI: SHARE_HUB_GUIDANCE_HI_DEFAULT,
+        SHARE_HUB_PARTNER_ATTRIBUTION_HI: SHARE_HUB_PARTNER_ATTRIBUTION_HI_DEFAULT,
+        # Records page (EN + HI) — T-061.
+        RECORDS_TITLE: RECORDS_TITLE_DEFAULT,
+        RECORDS_NOT_ON_FILE: RECORDS_NOT_ON_FILE_DEFAULT,
+        RECORDS_MASKED_NOTE: RECORDS_MASKED_NOTE_DEFAULT,
+        RECORDS_LOGIN_CTA: RECORDS_LOGIN_CTA_DEFAULT,
+        RECORDS_EXPIRED_TITLE: RECORDS_EXPIRED_TITLE_DEFAULT,
+        RECORDS_EXPIRED_BODY: RECORDS_EXPIRED_BODY_DEFAULT,
+        RECORDS_EMPTY: RECORDS_EMPTY_DEFAULT,
+        RECORDS_HUB_CTA: RECORDS_HUB_CTA_DEFAULT,
+        RECORDS_STAT_REFERRED: RECORDS_STAT_REFERRED_DEFAULT,
+        RECORDS_STAT_CONVERTED: RECORDS_STAT_CONVERTED_DEFAULT,
+        RECORDS_STAT_PENDING: RECORDS_STAT_PENDING_DEFAULT,
+        RECORDS_COL_NAME: RECORDS_COL_NAME_DEFAULT,
+        RECORDS_COL_MOBILE: RECORDS_COL_MOBILE_DEFAULT,
+        RECORDS_COL_STATUS: RECORDS_COL_STATUS_DEFAULT,
+        RECORDS_COL_REFERRED: RECORDS_COL_REFERRED_DEFAULT,
+        RECORDS_STATUS_OPENED: RECORDS_STATUS_OPENED_DEFAULT,
+        RECORDS_STATUS_IN_PROGRESS: RECORDS_STATUS_IN_PROGRESS_DEFAULT,
+        RECORDS_TITLE_HI: RECORDS_TITLE_HI_DEFAULT,
+        RECORDS_NOT_ON_FILE_HI: RECORDS_NOT_ON_FILE_HI_DEFAULT,
+        RECORDS_MASKED_NOTE_HI: RECORDS_MASKED_NOTE_HI_DEFAULT,
+        RECORDS_LOGIN_CTA_HI: RECORDS_LOGIN_CTA_HI_DEFAULT,
+        RECORDS_EXPIRED_TITLE_HI: RECORDS_EXPIRED_TITLE_HI_DEFAULT,
+        RECORDS_EXPIRED_BODY_HI: RECORDS_EXPIRED_BODY_HI_DEFAULT,
+        RECORDS_EMPTY_HI: RECORDS_EMPTY_HI_DEFAULT,
+        RECORDS_HUB_CTA_HI: RECORDS_HUB_CTA_HI_DEFAULT,
+        RECORDS_STAT_REFERRED_HI: RECORDS_STAT_REFERRED_HI_DEFAULT,
+        RECORDS_STAT_CONVERTED_HI: RECORDS_STAT_CONVERTED_HI_DEFAULT,
+        RECORDS_STAT_PENDING_HI: RECORDS_STAT_PENDING_HI_DEFAULT,
+        RECORDS_COL_NAME_HI: RECORDS_COL_NAME_HI_DEFAULT,
+        RECORDS_COL_MOBILE_HI: RECORDS_COL_MOBILE_HI_DEFAULT,
+        RECORDS_COL_STATUS_HI: RECORDS_COL_STATUS_HI_DEFAULT,
+        RECORDS_COL_REFERRED_HI: RECORDS_COL_REFERRED_HI_DEFAULT,
+        RECORDS_STATUS_OPENED_HI: RECORDS_STATUS_OPENED_HI_DEFAULT,
+        RECORDS_STATUS_IN_PROGRESS_HI: RECORDS_STATUS_IN_PROGRESS_HI_DEFAULT,
+        # Hub chrome (EN + HI) — T-061.
+        HUB_YOUR_LINK_LABEL: HUB_YOUR_LINK_LABEL_DEFAULT,
+        HUB_SHARE_HEADING: HUB_SHARE_HEADING_DEFAULT,
+        HUB_COPY_LABEL: HUB_COPY_LABEL_DEFAULT,
+        HUB_COPY_DONE_LABEL: HUB_COPY_DONE_LABEL_DEFAULT,
+        HUB_MORE_LABEL: HUB_MORE_LABEL_DEFAULT,
+        HUB_RECORDS_CTA: HUB_RECORDS_CTA_DEFAULT,
+        HUB_YOUR_LINK_LABEL_HI: HUB_YOUR_LINK_LABEL_HI_DEFAULT,
+        HUB_SHARE_HEADING_HI: HUB_SHARE_HEADING_HI_DEFAULT,
+        HUB_COPY_LABEL_HI: HUB_COPY_LABEL_HI_DEFAULT,
+        HUB_COPY_DONE_LABEL_HI: HUB_COPY_DONE_LABEL_HI_DEFAULT,
+        HUB_MORE_LABEL_HI: HUB_MORE_LABEL_HI_DEFAULT,
+        HUB_RECORDS_CTA_HI: HUB_RECORDS_CTA_HI_DEFAULT,
+        # Language toggle label — T-061.
+        LANG_TOGGLE_TO_HI_LABEL: LANG_TOGGLE_TO_HI_LABEL_DEFAULT,
+        LANG_TOGGLE_TO_EN_LABEL: LANG_TOGGLE_TO_EN_LABEL_DEFAULT,
+        # Market-risk warning HI twin — unlocked, separate from the locked EN key.
+        MARKET_RISK_WARNING_HI: MARKET_RISK_WARNING_HI_DEFAULT,
+        # Share-kit message HI twin (mirrors flags.SHARE_KIT_MESSAGE_TEMPLATE).
+        SHARE_KIT_MESSAGE_TEMPLATE_HI: SHARE_KIT_MESSAGE_TEMPLATE_HI_DEFAULT,
         # Notification routing defaults to ON for all three — this mirrors today's
         # behaviour exactly (doc-08 A6 fires all three), so adding the toggles changes
         # nothing until an admin turns one off.

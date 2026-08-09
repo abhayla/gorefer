@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="{% block html_lang %}en{% endblock %}">
 <head>
   <title>{% block title %}GoRefer{% endblock %}</title>
   {% include "partials/pifs_head.html" %}
@@ -17,6 +17,13 @@
   <footer class="mx-auto max-w-xl px-4 pb-10 text-[11px] text-ink-500">
     <p>{{ AP_DISCLOSURE_BLOCK }}</p>
     <p class="mt-1">{{ MARKET_RISK_WARNING }}</p>
+    {% comment %}
+    T-061: the locked EN market-risk warning above always renders (D-1 rail —
+    compliance-locked, central-only). This ADDS the Hindi wording alongside it for a
+    lang=hi page; the AP registration/entity line (regulator-registered identifiers)
+    stays verbatim EN always, per DoD.
+    {% endcomment %}
+    {% if market_risk_warning_hi %}<p class="mt-1">{{ market_risk_warning_hi }}</p>{% endif %}
   </footer>
   {% endblock %}
 </body>
