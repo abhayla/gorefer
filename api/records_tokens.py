@@ -174,6 +174,17 @@ def _local_name(tenant, client_id: str) -> str:
     return f"{customer.first_name} {customer.last_name}".strip()
 
 
+def resolve_link_details(tenant, client_id: str) -> dict:
+    """Public reuse point for the token/name/record_date a records-link send needs
+    (T-057). Thin wrapper around `_mint_one` — same shape, same "never fabricate a
+    row" guarantee — so a sender never re-implements the mint logic or calls this
+    module's own HTTP endpoint from inside the process.
+    """
+    base = _base_url()
+    fmt = _date_format(getattr(tenant, "id", None))
+    return _mint_one(tenant, client_id, base=base, fmt=fmt)
+
+
 def _mint_one(tenant, raw_client_id: str, *, base: str, fmt: str) -> dict:
     """One list entry — either a full minted row or an error row, never a half one."""
     client_id = (raw_client_id or "").strip()
