@@ -30,6 +30,26 @@
 </section>
 {% endif %}
 
+{% comment %}
+T-064 admin reset — visible only when this referrer has actually personalized their
+share opener, so an operator never sees a control with nothing to act on (§4).
+Admin chrome, never the referrer self view.
+{% endcomment %}
+{% if role != "referrer" and personal_opener %}
+<section class="bg-white border border-line rounded-2xl card p-5 space-y-2" data-test="profile-opener">
+  <div class="text-[10px] uppercase tracking-wide text-ink-300 font-semibold">Personal share message</div>
+  <p class="text-[12.5px] text-ink-900 whitespace-pre-line" data-test="profile-opener-text">{{ personal_opener }}</p>
+  <p class="text-[11px] text-ink-300">The referral link and the disclosure line are appended automatically — this is only the opening line.</p>
+  <form method="post" action="{% url 'dashboard_referrer_opener_reset' client_id=client_id %}">
+    {% csrf_token %}
+    <button type="submit" data-test="profile-opener-reset"
+            class="rounded-full border border-line bg-white hover:bg-bg transition-colors px-4 py-2 text-[12.5px] font-bold text-ink-900 card">
+      Reset to the standard message
+    </button>
+  </form>
+</section>
+{% endif %}
+
 {# Identity card + KPI rings + Zoho enrichment chips #}
 <section class="bg-white border border-line rounded-2xl card p-5 flex flex-col lg:flex-row lg:items-center gap-5">
   <div class="flex items-start gap-4 flex-1">

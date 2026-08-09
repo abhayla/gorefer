@@ -58,6 +58,44 @@ twin, falling back to EN when unset.
     <p class="text-[11px] text-ink-500">Client ID: <span class="font-semibold">{{ client_id }}</span></p>
   </div>
 
+  {% comment %}
+  2b. The referrer's own opening line (T-064).
+
+  Present only when `referrer_share_opener_enabled` resolves true — when it does not,
+  this whole block is absent rather than disabled (Constitution §4).
+
+  `opener_text` is rendered through Django's autoescape (and only ever reaches the share
+  payload via `json_script` below), so markup a referrer types shows as the characters
+  they typed. The credit link and the disclosure line are NOT in this form: they are
+  appended server-side by apps.referrals.share_intent_service.kit_message, which is why
+  nothing typed here can drop them.
+  {% endcomment %}
+  {% if opener_enabled %}
+  <form method="post" action="{{ opener_post_url }}"
+        class="rounded-lg border border-line bg-white p-4 space-y-2" data-test="hub-opener-form">
+    {% csrf_token %}
+    <h2 class="text-[13px] font-semibold">{{ chrome.opener_heading }}</h2>
+    <p class="text-[11px] text-ink-500">{{ chrome.opener_help }}</p>
+    <textarea name="opener" rows="3" maxlength="{{ opener_max_chars }}"
+              data-test="hub-opener-input"
+              class="w-full rounded-md border border-line bg-bg px-3 py-2 text-[12px]">{{ opener_text }}</textarea>
+    <p class="text-[11px] text-ink-400" data-test="hub-opener-locked-note">{{ chrome.opener_locked_note }}</p>
+    <div class="flex gap-2">
+      <button type="submit"
+              class="rounded-lg bg-cobalt-600 px-4 py-2 text-[13px] font-semibold text-white">
+        {{ chrome.opener_save_label }}
+      </button>
+      {% if opener_text %}
+      <button type="submit" name="action" value="reset"
+              data-test="hub-opener-reset"
+              class="rounded-lg border border-line px-4 py-2 text-[13px] font-semibold text-ink-500">
+        {{ chrome.opener_reset_label }}
+      </button>
+      {% endif %}
+    </div>
+  </form>
+  {% endif %}
+
   {# ---- 3-5. share hierarchy: one big primary CTA, copy second, rest as icons ---- #}
   <div class="space-y-2">
     <h2 class="text-[13px] font-semibold">{{ chrome.share_heading }}</h2>

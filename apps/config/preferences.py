@@ -310,6 +310,56 @@ SHARE_HUB_IMAGE_2_URL = "share_hub_image_2_url"
 SHARE_HUB_IMAGE_1_URL_DEFAULT = ""
 SHARE_HUB_IMAGE_2_URL_DEFAULT = ""
 
+# --- Referrer-personalized share opener (T-064) -------------------------------------
+# A referrer may replace the OPENING sentence of the message they forward — nothing
+# more. The credit link and the compliance disclosure line are appended SERVER-SIDE
+# after whatever the referrer wrote (apps.referrals.share_intent_service.kit_message),
+# so no text a referrer can type is able to remove or reorder them.
+#
+# Both knobs are cascade keys (rail E-6 / §6d) rather than literals:
+#   * `..._enabled` — the surface's own gate. Default TRUE because the feature ships
+#     COMPLETE (edit + reset + composition + admin reset), so a False default would
+#     mean shipping a finished surface nobody can see; an owner who wants it off flips
+#     one tenant row, with no deploy.
+#   * `..._max_chars` — the server-side length cap. 300 is the owner's figure
+#     (2026-08-10): long enough for a real personal note, short enough that the link
+#     and disclosure line stay visible in a WhatsApp preview without a "read more" tap.
+REFERRER_SHARE_OPENER_ENABLED = "referrer_share_opener_enabled"
+REFERRER_SHARE_OPENER_ENABLED_DEFAULT = True
+REFERRER_SHARE_OPENER_MAX_CHARS = "referrer_share_opener_max_chars"
+REFERRER_SHARE_OPENER_MAX_CHARS_DEFAULT = 300
+
+# Hub copy for the opener editor — bilingual (T-061 contract: every base key has an
+# `_hi` twin that falls back to EN when unset/blank).
+HUB_OPENER_HEADING = "hub_opener_heading"
+HUB_OPENER_HEADING_DEFAULT = "Your personal message"
+HUB_OPENER_HEADING_HI = "hub_opener_heading_hi"
+HUB_OPENER_HEADING_HI_DEFAULT = "आपका निजी संदेश"
+
+HUB_OPENER_HELP = "hub_opener_help"
+HUB_OPENER_HELP_DEFAULT = "Write your own opening line. Leave it empty to use the standard message."
+HUB_OPENER_HELP_HI = "hub_opener_help_hi"
+HUB_OPENER_HELP_HI_DEFAULT = "अपनी शुरुआती पंक्ति लिखें। खाली छोड़ने पर सामान्य संदेश भेजा जाएगा।"
+
+HUB_OPENER_LOCKED_NOTE = "hub_opener_locked_note"
+HUB_OPENER_LOCKED_NOTE_DEFAULT = (
+    "Your referral link and the disclosure line are always added automatically."
+)
+HUB_OPENER_LOCKED_NOTE_HI = "hub_opener_locked_note_hi"
+HUB_OPENER_LOCKED_NOTE_HI_DEFAULT = (
+    "आपका रेफ़रल लिंक और डिस्क्लोज़र लाइन हमेशा अपने आप जोड़ दी जाती है।"
+)
+
+HUB_OPENER_SAVE_LABEL = "hub_opener_save_label"
+HUB_OPENER_SAVE_LABEL_DEFAULT = "Save message"
+HUB_OPENER_SAVE_LABEL_HI = "hub_opener_save_label_hi"
+HUB_OPENER_SAVE_LABEL_HI_DEFAULT = "संदेश सेव करें"
+
+HUB_OPENER_RESET_LABEL = "hub_opener_reset_label"
+HUB_OPENER_RESET_LABEL_DEFAULT = "Use the standard message"
+HUB_OPENER_RESET_LABEL_HI = "hub_opener_reset_label_hi"
+HUB_OPENER_RESET_LABEL_HI_DEFAULT = "सामान्य संदेश इस्तेमाल करें"
+
 # --- Language toggle label (T-061) --------------------------------------------------
 LANG_TOGGLE_TO_HI_LABEL = "lang_toggle_to_hi_label"
 LANG_TOGGLE_TO_EN_LABEL = "lang_toggle_to_en_label"
@@ -607,6 +657,20 @@ def central_defaults() -> dict:
         # Share hub images (T-063) — EMPTY by default (no image UI until configured).
         SHARE_HUB_IMAGE_1_URL: SHARE_HUB_IMAGE_1_URL_DEFAULT,
         SHARE_HUB_IMAGE_2_URL: SHARE_HUB_IMAGE_2_URL_DEFAULT,
+        # Referrer-personalized share opener (T-064) — the gate + the length cap, plus
+        # the editor's bilingual copy. Enabled by default: the surface ships complete.
+        REFERRER_SHARE_OPENER_ENABLED: REFERRER_SHARE_OPENER_ENABLED_DEFAULT,
+        REFERRER_SHARE_OPENER_MAX_CHARS: REFERRER_SHARE_OPENER_MAX_CHARS_DEFAULT,
+        HUB_OPENER_HEADING: HUB_OPENER_HEADING_DEFAULT,
+        HUB_OPENER_HELP: HUB_OPENER_HELP_DEFAULT,
+        HUB_OPENER_LOCKED_NOTE: HUB_OPENER_LOCKED_NOTE_DEFAULT,
+        HUB_OPENER_SAVE_LABEL: HUB_OPENER_SAVE_LABEL_DEFAULT,
+        HUB_OPENER_RESET_LABEL: HUB_OPENER_RESET_LABEL_DEFAULT,
+        HUB_OPENER_HEADING_HI: HUB_OPENER_HEADING_HI_DEFAULT,
+        HUB_OPENER_HELP_HI: HUB_OPENER_HELP_HI_DEFAULT,
+        HUB_OPENER_LOCKED_NOTE_HI: HUB_OPENER_LOCKED_NOTE_HI_DEFAULT,
+        HUB_OPENER_SAVE_LABEL_HI: HUB_OPENER_SAVE_LABEL_HI_DEFAULT,
+        HUB_OPENER_RESET_LABEL_HI: HUB_OPENER_RESET_LABEL_HI_DEFAULT,
         # Language toggle label — T-061.
         LANG_TOGGLE_TO_HI_LABEL: LANG_TOGGLE_TO_HI_LABEL_DEFAULT,
         LANG_TOGGLE_TO_EN_LABEL: LANG_TOGGLE_TO_EN_LABEL_DEFAULT,
@@ -760,6 +824,21 @@ def get_preferences(tenant_id: int | None) -> dict:
         ),
         SHARE_HUB_IMAGE_2_URL: resolve(
             SHARE_HUB_IMAGE_2_URL, tenant_id=tenant_id, default=defaults[SHARE_HUB_IMAGE_2_URL]
+        ),
+        # Referrer-personalized share opener (T-064) — the gate and the length cap.
+        # Only these two are surfaced on the screen; the editor's five copy strings
+        # resolve through the cascade like every other bilingual hub label.
+        REFERRER_SHARE_OPENER_ENABLED: _as_bool(
+            resolve(
+                REFERRER_SHARE_OPENER_ENABLED,
+                tenant_id=tenant_id,
+                default=defaults[REFERRER_SHARE_OPENER_ENABLED],
+            )
+        ),
+        REFERRER_SHARE_OPENER_MAX_CHARS: resolve(
+            REFERRER_SHARE_OPENER_MAX_CHARS,
+            tenant_id=tenant_id,
+            default=defaults[REFERRER_SHARE_OPENER_MAX_CHARS],
         ),
         ENABLE_ASSISTED_REFERRAL: _as_bool(
             resolve(ENABLE_ASSISTED_REFERRAL, tenant_id=tenant_id, default=defaults[ENABLE_ASSISTED_REFERRAL])

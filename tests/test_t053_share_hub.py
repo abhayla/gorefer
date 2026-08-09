@@ -112,8 +112,14 @@ def test_rendered_share_buttons_carry_the_credit_link_not_the_token(client, seed
 def test_the_only_place_the_token_appears_is_the_records_cross_link(
     client, seeded, monkeypatch
 ):
-    """The token is page access. The single legitimate re-use is the /rr/ cross-link —
-    a link to another page of the referrer's own, never something they forward."""
+    """The token is page access, never shared content.
+
+    Two legitimate re-uses, both addressing a surface of the referrer's OWN and neither
+    forwardable as a share: the /rr/ cross-link, and (T-064) the opener editor's form
+    action. The assertion that carries the security weight is unchanged and lives in
+    `test_no_share_url_or_prefill_contains_the_token`: the token reaches no share
+    destination, no prefill and no event.
+    """
     _with_flag(monkeypatch, "apps.accounts.hub", ENABLE_RECORDS_LINK=True)
 
     identity = _identity(seeded)
@@ -121,8 +127,11 @@ def test_the_only_place_the_token_appears_is_the_records_cross_link(
     body = client.get(f"/hub/{token}").content.decode()
 
     occurrences = body.count(token)
-    assert occurrences == 1, f"token appears {occurrences}x; expected only the /rr/ cross-link"
+    assert occurrences == 2, (
+        f"token appears {occurrences}x; expected the /rr/ cross-link + the opener form action"
+    )
     assert f"/rr/{token}" in body
+    assert f'action="/hub/{token}/opener"' in body
 
 
 @HUB_URLS
@@ -288,11 +297,26 @@ def test_the_compliance_block_is_auto_injected(client, seeded, settings):
 
 
 @HUB_URLS
-def test_the_page_is_read_only(client, seeded):
+def test_the_page_itself_takes_no_writes(client, seeded):
+    """The PAGE is still GET-only.
+
+    T-064 (owner decision 2026-08-10) added exactly ONE write on this surface — the
+    personal-opener editor, which POSTs to the separate `/hub/{token}/opener` endpoint
+    and can change nothing but the referrer's own opening line. This test's original
+    "no <form> anywhere" assertion encoded the pre-T-064 design and was superseded by
+    that decision; what it was really protecting — that `/hub/{token}` accepts no
+    writes, so a forwarded link cannot change state through the page URL — is asserted
+    below and is unchanged. The opener endpoint's own security is covered in
+    tests/test_t064_referrer_opener.py.
+    """
     identity = _identity(seeded)
     token = mint_records_token(identity)
-    assert "<form" not in client.get(f"/hub/{token}").content.decode().lower()
+    body = client.get(f"/hub/{token}").content.decode()
+
     assert client.post(f"/hub/{token}").status_code == 405
+    # The opener editor is the ONLY form, and it posts to the opener endpoint alone.
+    actions = re.findall(r"""<form[^>]+action=["']([^"']+)["']""", body, re.I)
+    assert actions == [f"/hub/{token}/opener"]
 
 
 @HUB_URLS
@@ -365,14 +389,24 @@ def test_route_is_present_when_the_flag_is_on(client, seeded):
     assert client.get(f"/hub/{mint_records_token(identity)}").status_code == 200
 
 
-def test_the_flag_mounts_exactly_one_new_get_route():
-    """Structural proof of "one page, one GET": the gated urlconf adds /rr/ + /hub/ over
-    base, and nothing else."""
+def test_the_flag_mounts_exactly_the_expected_routes():
+    """Structural proof that the gated urlconf adds a KNOWN, closed set of routes and
+    nothing else.
+
+    Was "one page, one GET" until T-064 added the opener write endpoint by owner
+    decision. The guarantee that still matters — and that this list enforces — is that
+    the flag cannot quietly grow a third surface: any new route here is a deliberate
+    edit to this expectation, reviewed as such.
+    """
     from gorefer.urls import urlpatterns as base
     from tests import urls_share_hub
 
     added = urls_share_hub.urlpatterns[len(base):]
-    assert [pattern.name for pattern in added] == ["records_link", "share_hub"]
+    assert [pattern.name for pattern in added] == [
+        "records_link",
+        "share_hub",
+        "share_hub_opener",
+    ]
 
 
 @HUB_URLS

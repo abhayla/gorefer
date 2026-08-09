@@ -70,11 +70,17 @@ SHARE_KIT_MESSAGE_KEY = "share_kit_message_template"
 
 
 def kit_message(
-    channel: str, client_id: str, tenant_id: int | None, *, program=None, lang: str = "en"
+    channel: str,
+    client_id: str,
+    tenant_id: int | None,
+    *,
+    program=None,
+    lang: str = "en",
+    opener: str | None = None,
 ) -> str:
     """The share prefill, resolved through the config cascade (CLAUDE.md §6d).
 
-    Four things fixed together here:
+    Five things fixed together here:
 
     1. COMPLIANCE (found 2026-07-27). This prefill is a generated asset a referrer
        forwards to prospects, so §4 requires the disclosure anchor on it — and the
@@ -93,6 +99,13 @@ def kit_message(
     4. T-061. `lang="hi"` resolves the `share_kit_message_template_hi` cascade twin
        (falling back to the EN template when unset/blank — apps.config.i18n contract)
        so a referrer sharing from the Hindi hub forwards a Hindi prefill.
+    5. T-064. `opener` is the referrer's OWN opening line (apps.accounts.opener),
+       edited on the share hub. When set it REPLACES the official template — and only
+       the template. See `_compose_with_opener` for why that can never cost the
+       referrer their link or the reader their disclosure line.
+
+    Callers that pass no `opener` (every non-web caller, and any referrer who has not
+    personalized) get byte-identical output to the pre-T-064 build.
     """
     from apps.config.i18n import bi_text
     from apps.config.preferences import SHARE_KIT_MESSAGE_TEMPLATE_HI_DEFAULT
@@ -110,11 +123,55 @@ def kit_message(
     except Exception:
         template = default
     brand = brand_for_program(program) if program is not None else brand_for_tenant_id(tenant_id)
-    message = template.format(link=tracked_link(channel, client_id), program_brand=brand)
-    anchor = f"Disclosures: https://{_public_host()}/d/pifs"
+    link = tracked_link(channel, client_id)
+    anchor = disclosure_anchor()
+
+    personal = str(opener or "").strip()
+    if personal:
+        return _compose_with_opener(personal, link, anchor)
+
+    message = template.format(link=link, program_brand=brand)
     if anchor in message:
         return message
     return message + "\n\n" + anchor
+
+
+def disclosure_anchor() -> str:
+    """The compliance tail line appended to every share message (§4.4 / ADR-031).
+
+    Named and exported so the T-064 composition and its tests refer to ONE definition
+    of "the locked tail" rather than each restating the literal.
+    """
+    return f"Disclosures: https://{_public_host()}/d/pifs"
+
+
+def _compose_with_opener(opener: str, link: str, anchor: str) -> str:
+    """THE LOCKED COMPOSITION (T-064). Read this before changing anything about it.
+
+        [ the referrer's own words ] + [ their credit link ] + [ the disclosure line ]
+
+    The two trailing parts are CONCATENATED ON, unconditionally, in this order. They
+    are never searched for inside the opener, never de-duplicated against it, and
+    never templated through it. That is the whole security argument:
+
+      * removal is impossible — there is no code path where a property of `opener`
+        decides whether `link` or `anchor` is emitted;
+      * reordering is impossible — position is fixed by this expression, not by
+        anything parsed out of the text;
+      * `{link}`-style format tricks are inert — `.format()` is applied to the
+        OFFICIAL template only, never to referrer-supplied text;
+      * newline flooding is already capped upstream (`apps.accounts.opener.sanitize`
+        collapses blank runs), so the tail cannot be pushed behind a "Read more".
+
+    Deliberately NOT reusing the official path's `if anchor in message` shortcut: that
+    check exists so an operator who typed the disclosure into the template does not get
+    it twice, and it is safe there because the template is operator-authored. Applied
+    to referrer text it would become a control the referrer holds — type the anchor
+    early, and the real tail stops being appended last. A duplicated line in the rare
+    case someone pastes it is a cosmetic cost worth paying for an invariant that has no
+    exceptions.
+    """
+    return f"{opener}\n{link}\n\n{anchor}"
 
 
 # Back-compat aliases. Both builders were module-private until the T-053 share hub
@@ -122,6 +179,25 @@ def kit_message(
 # is exactly the drift `_tracked_link`'s own docstring warns about.
 _tracked_link = tracked_link
 _kit_message = kit_message
+
+
+def _opener_for(tenant_id: int | None, client_id: str) -> str:
+    """This client_id's saved personal opener, or "" — for the /share/ endpoint.
+
+    Tenant-scoped (rail E-7) and read-only: an identity that does not exist yet simply
+    has no opener. Imported lazily because `apps.accounts` imports this module for its
+    share builders, and a module-level import would close that cycle.
+    """
+    from apps.accounts.opener import get_opener
+
+    from .models import ReferralIdentity
+
+    identity = (
+        ReferralIdentity.objects.for_tenant(tenant_id)
+        .filter(client_id=client_id, status="active", deleted_at__isnull=True)
+        .first()
+    )
+    return get_opener(identity) if identity is not None else ""
 
 
 def handle_share_intent(
@@ -145,7 +221,17 @@ def handle_share_intent(
         raise Http404(f"unsupported share channel: {channel!r}")
 
     program = get_active_program(tenant)
-    message = kit_message(channel, client_id, getattr(tenant, "id", None), program=program, lang=lang)
+    tenant_id = getattr(tenant, "id", None)
+
+    # T-064: the one-tap endpoint must forward the SAME message the hub shows, so it
+    # reads the referrer's personal opener too. Resolved from the already-existing
+    # identity only — this lookup never creates one, so a bot hit (handled below) and
+    # a first-ever share still behave exactly as they did before.
+    opener = _opener_for(tenant_id, client_id)
+
+    message = kit_message(
+        channel, client_id, tenant_id, program=program, lang=lang, opener=opener
+    )
     destination = _CHANNEL_TARGET_BUILDERS[channel](message)
 
     if is_bot_user_agent(user_agent):
