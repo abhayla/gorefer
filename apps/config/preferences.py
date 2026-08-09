@@ -41,6 +41,22 @@ RECORDS_LINK_TTL_DAYS_DEFAULT = 90
 RECORDS_MINT_DATE_FORMAT = "records_mint_date_format"
 RECORDS_MINT_DATE_FORMAT_DEFAULT = "%d %b %Y"
 
+# --- Records-link operator send (T-057; `send_records_links` management command) --
+# The approved UTILITY template the command sends — a cascade key (rail E-6 / §6d) so
+# a re-cut template name swaps in with no deploy, exactly like `notify_template_name`.
+RECORDS_LINK_TEMPLATE_EN = "records_link_template_en"
+RECORDS_LINK_TEMPLATE_EN_DEFAULT = "gr_platform_gorefer_refrecord_en_2026_08_07"
+
+# Per-run send cap. A literal here would mean a bad `--client-ids` list could only be
+# bounded by a deploy; a cascade key lets the owner tighten/loosen it without one.
+RECORDS_LINK_SEND_MAX_PER_RUN = "records_link_send_max_per_run"
+RECORDS_LINK_SEND_MAX_PER_RUN_DEFAULT = 50
+
+# Minimum days between two records-link sends to the same client_id — the anti-spam
+# floor mirroring `followup_min_gap_minutes`'s reasoning at a slower cadence.
+RECORDS_LINK_SEND_MIN_GAP_DAYS = "records_link_send_min_gap_days"
+RECORDS_LINK_SEND_MIN_GAP_DAYS_DEFAULT = 7
+
 # --- Referral share hub (T-053; behind ENABLE_SHARE_HUB) ---------------------------
 # Every word this page says, and the brand image its link preview uses, is a cascade
 # key rather than a template literal (rail E-6 / §6d). Two reasons, both concrete:
@@ -268,6 +284,9 @@ def central_defaults() -> dict:
         ENABLE_ASSISTED_REFERRAL: False,
         RECORDS_LINK_TTL_DAYS: RECORDS_LINK_TTL_DAYS_DEFAULT,
         RECORDS_MINT_DATE_FORMAT: RECORDS_MINT_DATE_FORMAT_DEFAULT,
+        RECORDS_LINK_TEMPLATE_EN: RECORDS_LINK_TEMPLATE_EN_DEFAULT,
+        RECORDS_LINK_SEND_MAX_PER_RUN: RECORDS_LINK_SEND_MAX_PER_RUN_DEFAULT,
+        RECORDS_LINK_SEND_MIN_GAP_DAYS: RECORDS_LINK_SEND_MIN_GAP_DAYS_DEFAULT,
         # Share hub (T-053) — placeholder copy pending owner compliance review.
         SHARE_HUB_HEADLINE: SHARE_HUB_HEADLINE_DEFAULT,
         SHARE_HUB_INTRO: SHARE_HUB_INTRO_DEFAULT,
