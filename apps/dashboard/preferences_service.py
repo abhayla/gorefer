@@ -290,6 +290,27 @@ def save_preferences(tenant, data, *, user=None) -> list[str]:
         user=user,
     )
 
+    # --- Share hub images (T-063) — up to two poster-image slots, same-origin only --
+    # A cross-origin value is REJECTED here (never persisted) — `resolve_share_image_url`
+    # is the single same-origin check shared with render time (apps.accounts.hub), so
+    # the rule can't drift between "what saves" and "what renders". Rejecting rather
+    # than silently keeping the previous value makes the failure visible to the owner
+    # via the notice, matching the `direct` landing-mode coupling's pattern above.
+    from apps.accounts.hub import resolve_share_image_url
+
+    for form_key, pref_key, label in (
+        ("share_hub_image_1_url", prefkeys.SHARE_HUB_IMAGE_1_URL, "Share image 1"),
+        ("share_hub_image_2_url", prefkeys.SHARE_HUB_IMAGE_2_URL, "Share image 2"),
+    ):
+        raw = (data.get(form_key) or "").strip()
+        if raw and not resolve_share_image_url(raw):
+            notices.append(
+                f"“{label}” was not saved — it must be a path/URL on gorefer.in "
+                "(cross-origin images cannot be used for native share or downloads)."
+            )
+            raw = ""
+        set_tenant(pref_key, raw, tenant_id=tenant_id, user=user)
+
     # --- Share channels allow-list ----------------------------------------------
     submitted = data.getlist("share_channels") if hasattr(data, "getlist") else data.get("share_channels", [])
     channels = [c for c in submitted if c in SHARE_CHANNEL_LABELS]

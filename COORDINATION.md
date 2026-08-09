@@ -6013,3 +6013,45 @@ HEAD commit (f77ded2, merged 2026-08-09 before this task started) already ran CI
 the identical 2 `test_t058_conversion_congrats.py` failures (run 31332697697). Main was already
 broken before this PR branched from it — this is not something PR #141 introduced or can fix by
 rebasing.
+
+**STATUS — T-063 (2026-08-10, Worker).** Opened PR for share images on the hub (native-share
+files + download posters), config-driven. New cascade keys: `share_hub_image_1_url` /
+`share_hub_image_2_url` (both default EMPTY — no image UI renders anywhere until the owner
+configures one, Constitution §4), plus a new bilingual chrome key `hub_download_label` (EN
+"Download poster" / HI twin) via the existing T-061 `bi_text` pattern. Both new keys are editable
+on the Preferences screen under a new "Share images" section.
+
+Same-origin enforcement lives in ONE function, `apps.accounts.hub.resolve_share_image_url`,
+called both at Preferences-screen save time (`apps/dashboard/preferences_service.py`) and at hub
+render time (`apps/accounts/hub.py:_share_images`) — a cross-origin value is rejected at save
+(never persisted, a notice explains why) and, as defense-in-depth, at render too (a value written
+straight to the DB can't slip past the check either). Accepted shapes: a bare static path
+(resolved via Django `static()`), a site-relative path, or an absolute URL under
+`settings.PUBLIC_BASE_URL`. Everything else (`http(s)://` to another host, or a scheme-relative
+`//` URL) is rejected — this is deliberately stricter than the existing
+`apps.referrals.og.absolute_image_url` (which allows any absolute CDN URL for the crawler-only OG
+card), because these images are `fetch()`-ed by JS and linked as direct downloads on a page
+`tests/test_no_third_party_origin.py` requires to stay same-origin.
+
+Native share: `static/js/share_hub.js`'s existing "More…" button now feature-detects
+`navigator.canShare({files})` at tap time — when at least one image is configured AND the browser
+supports it, the fetched image file(s) are attached to the share sheet alongside the existing kit
+message; unsupported browsers keep exactly today's text-only `navigator.share({text, url})`
+behaviour (no broken button, no console error, all wrapped in try/catch with a text-only
+fallback on any fetch/File failure). No JS test harness exists in this repo, so this is
+render-level-tested only (the `id="shareImages"` `json_script` data payload, the download
+buttons' `data-test`/`href`/`download` attributes) — manual phone test plan is in the PR body
+(Android Chrome + iOS Safari + desktop-no-`navigator.share` + download-button check).
+
+Download buttons ("Download poster" x{1,2}) render only when the corresponding image is
+configured (tested ON/OFF). All T-053/T-055/T-056/T-061/T-062 share invariants hold unmodified —
+the token never enters the `share_images` payload/href (asserted directly), DOM-order/guardrail-3
+unaffected, existing share-hub test files unmodified and passing. New test file
+`tests/test_t063_share_images.py` (22 tests) covers `resolve_share_image_url` edge cases
+(bare-static/site-relative/PUBLIC_BASE_URL-absolute accepted; cross-origin/scheme-relative
+rejected), hub_ctx wiring, render presence/absence, bilingual label, and the Preferences save
+path (accept + reject-with-notice + blank-by-default). Full suite green: 1044 passed
+(`TEST_DB_NAME=gorefer_test_t063 python -m pytest -q -n 4`); ruff clean; `manage.py check` clean;
+architecture gate (E-3) clean (0 vendor refs outside boundary); no migrations (none needed —
+plain cascade keys). Tailwind rebuilt — `app.css` had zero diff (only pre-existing utility
+classes reused). No contract-doc changes needed (no `apps/integrations/**` touched).
