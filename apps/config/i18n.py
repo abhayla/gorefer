@@ -33,6 +33,31 @@ def resolve_lang(request) -> str:
     return raw if raw in LANGUAGES else LANG_EN
 
 
+def resolve_stored_referrer_language(tenant_id) -> str:
+    """The tenant's configured referrer language — `apps.config.preferences.REFERRER_LANGUAGE`.
+
+    THE canonical stored-language source (doc 15 §8): `apps.followups` reads this exact
+    cascade key via `apps.referrals.recipient_identity._resolve_lang`, and T-062 reuses
+    it here rather than inventing a second source. Unset/unknown -> EN.
+    """
+    from .preferences import _VALID_LANGUAGES, REFERRER_LANGUAGE
+    from .preferences import LANG_EN as _LANG_EN
+
+    lang = str(resolve_config(REFERRER_LANGUAGE, tenant_id=tenant_id, default=_LANG_EN) or "").strip().lower()
+    return lang if lang in _VALID_LANGUAGES else LANG_EN
+
+
+def resolve_lang_or_stored(request, tenant_id) -> str:
+    """Effective language for a request: an explicit `?lang=` always wins (the T-061
+    toggle contract); with none present, falls back to the referrer's STORED language
+    (T-062) instead of hardcoding EN — see `resolve_stored_referrer_language`.
+    """
+    raw = str(request.GET.get(LANG_PARAM, "") or "").strip().lower()
+    if raw in LANGUAGES:
+        return raw
+    return resolve_stored_referrer_language(tenant_id)
+
+
 def hi_key(base_key: str) -> str:
     return f"{base_key}_hi"
 

@@ -5964,3 +5964,52 @@ owner-configured template name), T-059 program-scoped copy (partner-#2 enabler, 
 for Zerodha), T-060 self-click tag + hygiene, T-061 Hindi hub/records. Plus verified: Google
 OAuth E2E (P-07), prod deploy state. All five checker-verified with evidence; ROADMAP-STATUS
 actor map updated in this PR.
+
+**STATUS — T-062 (2026-08-10, Worker).** Share-message self-serve editing + language
+stickiness. Preferences screen (`/admin-panel/preferences`) gains two editable fields —
+`share_kit_message_template` (EN) and `share_kit_message_template_hi` — with on-screen help
+text documenting the `{link}`/`{program_brand}` placeholders `kit_message()` actually supports;
+a blank submission resets to the central default rather than persisting an empty override. Both
+keys already matched what `apps.referrals.share_intent_service.kit_message()` reads, so a saved
+edit changes the live `/share/wa` prefill and hub share message immediately, no deploy.
+
+Language stickiness: `GET /share/{channel}/{client_id}` and `GET /hub/{token}` now default their
+message language to the referrer's STORED language whenever no explicit `?lang=` is given — an
+explicit `?lang=` still always wins (T-061 toggle contract unchanged). The stored-language
+source reused is the EXISTING `referrer_language` cascade key that `apps.followups` already
+reads via `apps.referrals.recipient_identity._resolve_lang` — no second source was invented.
+That resolver now delegates to a new public `apps.config.i18n.resolve_stored_referrer_language`
+(and its request-aware sibling `resolve_lang_or_stored`), so `apps.config.i18n` is the one
+canonical implementation and `apps.referrals.recipient_identity` / `apps.followups` keep
+behaving identically (zero change there, pinned by test). Zero behavior change for EN/unset
+referrers on the share/hub surfaces too — pinned against the exact pre-T-062 output shape.
+
+Guardrails re-run unmodified: T-053/T-055/T-056/T-061 token-never-in-share-href, credit-link,
+DOM-landmark, and guardrail-3 (no partner code / raw Zerodha URL) invariants all hold under a
+stored Hindi language, same as under `?lang=hi`. Full suite green except two PRE-EXISTING
+failures in `tests/test_t058_conversion_congrats.py` (confirmed failing identically on
+unmodified `origin/main` via `git stash` — unrelated to this change, not touched here). No
+migrations (spec-conflict rule: none needed). Tailwind rebuilt — `app.css` had zero diff (only
+pre-existing utility classes used).
+
+**QUESTION — T-062 (2026-08-10, Worker).** CI on this PR (#141) fails
+`tests/test_t058_conversion_congrats.py::test_congrats_session_when_referrer_window_open` and
+`::test_congrats_not_suppressed_by_followup_converted_gate` (both: `assert 'skipped' ==
+'accepted'`). Confirmed PRE-EXISTING and unrelated to this PR: `git stash`-ing every T-062 change
+inside this same worktree and re-running just `tests/test_t058_conversion_congrats.py` reproduces
+the identical 2 failures / 5 passed on unmodified `origin/main` (f77ded2). Not touched by this PR
+— `apps/integrations/congrats.py` is untouched, and the only shared-surface change
+(`apps.referrals.recipient_identity._resolve_lang` now delegates to
+`apps.config.i18n.resolve_stored_referrer_language`) is behavior-pinned identical by test. Full
+local suite (`-n 4`) shows the same 2 failures / 1025 passed both before and after this PR's
+changes. Recommendation: file this as its own fix task (session-window congrats path — Notification
+recorded `skipped` where `accepted` is expected) rather than blocking T-062's merge on an unrelated
+break; PR #141 stays open pending owner guidance on whether to merge with this known-red check or
+wait for a separate fix. Stopping here rather than guessing at or silently patching T-058 code
+outside this task's scope.
+
+**ADDENDUM — T-062 QUESTION above.** `gh run list --branch main` confirms `origin/main`'s own
+HEAD commit (f77ded2, merged 2026-08-09 before this task started) already ran CI and is RED with
+the identical 2 `test_t058_conversion_congrats.py` failures (run 31332697697). Main was already
+broken before this PR branched from it — this is not something PR #141 introduced or can fix by
+rebasing.

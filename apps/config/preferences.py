@@ -312,10 +312,25 @@ MARKET_RISK_WARNING_HI_DEFAULT = (
     "प्रतिभूति बाज़ार में निवेश बाज़ार जोखिमों के अधीन है।"
 )
 
-# --- Share-kit message HI twin (T-061) ----------------------------------------------
-# Mirrors SHARE_KIT_MESSAGE_TEMPLATE (flags.py / apps.referrals.share_intent_service) —
-# same {link}/{program_brand} placeholders, resolved by kit_message() when the caller's
-# lang is "hi". Falls back to the EN template when unset (apps.config.i18n contract).
+# --- Share-kit message, EN + HI (T-062 self-serve editing) -------------------------
+# The one-tap /share/{channel}/{client_id} + referral share hub prefill (a referrer's
+# forward-to-a-prospect message). Editable through Preferences (rail E-6 / §6d) — it is
+# customer-facing copy, so the owner edits it directly, no deploy. Key name MUST match
+# apps.referrals.share_intent_service.SHARE_KIT_MESSAGE_KEY exactly; kept as a literal
+# here (not imported) to avoid a preferences<->share_intent_service import cycle —
+# tests/test_t062_share_message_prefs.py pin the two strings equal.
+#
+# Placeholders the template supports (read from kit_message() — never guessed):
+#   {link}          the referrer's own tracked referral link
+#   {program_brand} the resolved partner/program brand name (T-059)
+# The compliance disclosure line (`Disclosures: https://…/d/{slug}`) is appended by
+# kit_message() automatically and is NOT part of this editable template — an operator
+# cannot drop it by rewording.
+SHARE_KIT_MESSAGE_TEMPLATE = "share_kit_message_template"
+
+# HI twin — same {link}/{program_brand} placeholders, resolved by kit_message() when
+# the caller's lang is "hi". Falls back to the EN template when unset (apps.config.i18n
+# contract).
 SHARE_KIT_MESSAGE_TEMPLATE_HI = "share_kit_message_template_hi"
 SHARE_KIT_MESSAGE_TEMPLATE_HI_DEFAULT = (
     "एक मुफ़्त {program_brand} खाता खोलें — मेरा रेफ़रल लिंक:\n{link}"
@@ -575,7 +590,10 @@ def central_defaults() -> dict:
         LANG_TOGGLE_TO_EN_LABEL: LANG_TOGGLE_TO_EN_LABEL_DEFAULT,
         # Market-risk warning HI twin — unlocked, separate from the locked EN key.
         MARKET_RISK_WARNING_HI: MARKET_RISK_WARNING_HI_DEFAULT,
-        # Share-kit message HI twin (mirrors flags.SHARE_KIT_MESSAGE_TEMPLATE).
+        # Share-kit message, EN + HI (T-062). EN default mirrors the pre-existing
+        # flags.SHARE_KIT_MESSAGE_TEMPLATE env flag exactly — zero behavior change
+        # until an admin edits it through the screen.
+        SHARE_KIT_MESSAGE_TEMPLATE: flags.SHARE_KIT_MESSAGE_TEMPLATE,
         SHARE_KIT_MESSAGE_TEMPLATE_HI: SHARE_KIT_MESSAGE_TEMPLATE_HI_DEFAULT,
         # Notification routing defaults to ON for all three — this mirrors today's
         # behaviour exactly (doc-08 A6 fires all three), so adding the toggles changes
@@ -702,6 +720,15 @@ def get_preferences(tenant_id: int | None) -> dict:
         ),
         WATI_BUSINESS_NUMBER: resolve(
             WATI_BUSINESS_NUMBER, tenant_id=tenant_id, default=defaults[WATI_BUSINESS_NUMBER]
+        ),
+        # Share-kit message, EN + HI (T-062) — what the Preferences screen edits.
+        SHARE_KIT_MESSAGE_TEMPLATE: resolve(
+            SHARE_KIT_MESSAGE_TEMPLATE, tenant_id=tenant_id, default=defaults[SHARE_KIT_MESSAGE_TEMPLATE]
+        ),
+        SHARE_KIT_MESSAGE_TEMPLATE_HI: resolve(
+            SHARE_KIT_MESSAGE_TEMPLATE_HI,
+            tenant_id=tenant_id,
+            default=defaults[SHARE_KIT_MESSAGE_TEMPLATE_HI],
         ),
         SHARE_CHANNELS_ALLOWLIST: list(channels),
         ENABLE_ASSISTED_REFERRAL: _as_bool(
