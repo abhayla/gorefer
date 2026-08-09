@@ -5845,3 +5845,19 @@ when CI completes" — a headless worker can never receive notifications; it die
 unmerged (dispatcher completed the tail: merge on green, worktree/branch cleanup). From T-060
 onward every worker prompt carries: "you are HEADLESS — poll CI with a blocking gh pr checks
 --watch; never end your turn waiting."
+## 2026-08-09 STATUS (Engineer/Dispatcher) — T-060: self-click tag + queued hygiene fixes
+
+Referral Profile Clicks tab now tags a click **self-click** when its promoted lead-side mobile
+equals the referrer's own Zoho mobile (CRM read port, resolved-flag-gated; READ unavailable →
+no tag, never a guess). DISPLAY-ONLY — zero analytics/rollup mutation; DF-11's count-exclusion
+half stays deferred (backlog row updated). Also lands the two T-054 checker findings
+(deterministic `.order_by("id")` on the duplicate-client_id lookups in `api/records_tokens.py`
++ `apps/accounts/selfview.py`, `hub_cta` literal → cascade key) and replaces the vacuous
+assertion in the T-056 fallback-c test with a real one.
+
+Process note: built across two turn-capped sonnet workers (both died in the landing tail — the
+second armed a Monitor it could never receive, see the T-059 entry's headless rule); the
+dispatcher finished the tail: fixed one env-dependent flag assertion in the new test file
+(swapped to the T-053 `_with_flag` frozen-snapshot idiom), re-ran the FULL gate (970 passed,
+ruff/check/E-3 0/0/no-drift all clean), and landed the PR. Independent checker verifies next,
+as always.
