@@ -108,6 +108,31 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
       </div>
     </div>
 
+    {# ---- Share message (T-062) — the referrer's forward-to-a-prospect prefill ---- #}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Share message</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-3">
+      <div class="text-[11.5px] text-ink-500">
+        What a referrer's link prefills as when they tap “Share on WhatsApp” — from the landing
+        page, their share hub, and the one-tap share link. Placeholders:
+        <code class="text-[11px] bg-ink-50 rounded px-1">{link}</code> (their tracked referral
+        link) and <code class="text-[11px] bg-ink-50 rounded px-1">{program_brand}</code>
+        (the partner/program name). The compliance disclosure line is added automatically —
+        do not type it in. Leave blank to reset to the default.
+      </div>
+      <div class="py-1.5 border-t border-line">
+        <label for="share_kit_message_template" class="text-[13.5px] font-semibold">Share message (English)</label>
+        <textarea id="share_kit_message_template" name="share_kit_message_template" rows="3"
+                  class="mt-1.5 w-full rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none"
+                  >{{ prefs.share_kit_message_template }}</textarea>
+      </div>
+      <div class="py-1.5 border-t border-line">
+        <label for="share_kit_message_template_hi" class="text-[13.5px] font-semibold">Share message (Hindi)</label>
+        <textarea id="share_kit_message_template_hi" name="share_kit_message_template_hi" rows="3"
+                  class="mt-1.5 w-full rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none"
+                  >{{ prefs.share_kit_message_template_hi }}</textarea>
+      </div>
+    </div>
+
     {# ---- Sharing & channels --------------------------------------------- #}
     <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Sharing &amp; channels</div>
     <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">
