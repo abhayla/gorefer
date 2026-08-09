@@ -11,7 +11,16 @@
 > wins; if either disagrees with the live system, **the live system wins** — verify, don't
 > trust (commands at the bottom).
 >
-> **Last updated:** 2026-08-09 14:55 IST (**DEPLOYED to prod: `4968677` = main tip** — **T-057
+> **Last updated:** 2026-08-09 15:45 IST (**DEPLOYED: `a641f07` = main tip** — **T-058
+> conversion-congrats nudge LIVE (dormant template leg)**, PR #129, checker PASS with deep
+> adversarial probes (evidence `GetWorkDone/evidence/2026-08-09-T-058/`). On the next REAL Zoho
+> conversion the credited referrer gets a session congrats if their 24h window is open;
+> otherwise the template leg is DORMANT until `referrer_conversion_congrats_template_en` is
+> set to an approved template name (owner action, template lane). New standing deploy rule:
+> **cascade-key deploys end with `manage.py seed_program`** — keys resolved unregistered until
+> it ran. T-057's live send TERMINAL: Notification 25 = **delivered**. T-059 (program-scoped
+> copy) dispatched.)
+> — prior 2026-08-09 14:55 IST (**DEPLOYED to prod: `4968677` = main tip** — **T-057
 > `send_records_links` operator command LIVE**, PR #127, sonnet worker + independent sonnet
 > checker PASS (evidence `GetWorkDone/evidence/2026-08-09-T-057/`). The magic-link surfaces
 > finally have a sender: `manage.py send_records_links --client-ids ... [--send]` (dry-run
