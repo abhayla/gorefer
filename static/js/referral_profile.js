@@ -79,7 +79,9 @@
         '<td class="py-1.5 px-3">' + c.device + "</td>" +
         '<td class="py-1.5 px-3 text-ink-500 whitespace-nowrap">' + c.ua + "</td>" +
         '<td class="py-1.5 px-3">' + traffic + "</td>" +
-        '<td class="py-1.5 px-3 ' + (c.outcome_class || "") + '">' + c.outcome + "</td>";
+        '<td class="py-1.5 px-3 ' + (c.outcome_class || "") + '">' + c.outcome +
+          (c.self_click ? ' <span class="text-[10px] font-semibold text-amber-600" data-test="self-click-tag">· Self-click</span>' : "") +
+        "</td>";
       b.appendChild(tr);
     });
     document.getElementById("clicksEmpty").classList.toggle("hidden", rows.length !== 0);

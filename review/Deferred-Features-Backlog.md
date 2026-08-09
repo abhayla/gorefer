@@ -19,7 +19,7 @@
 | DF-8 | Physical monthly partitioning of `events` | 🟡 Open | P4 | Tens of millions of rows / vacuum degrades |
 | DF-9 | Pluggable per-user "Lead Destination" adapter | 🟡 Open | P2 | 2nd tenant with a different sink. **PIFS-specific rationale SUPERSEDED 2026-07-15: `ENABLE_ZOHO_WRITE` now goes ON (Model 2 upsert-by-mobile).** The generic pluggable-sink feature stays deferred. |
 | DF-10 | Runtime theming / theme-switcher | 🟡 Open | P3 | Tenants wanting their own branding |
-| DF-11 | Self-click tagging on the Referral Profile | 🟡 Open | P3 | Self-referral inflation concern / after customer view ships |
+| DF-11 | Self-click tagging on the Referral Profile | 🟢 Display half shipped (T-060) / 🟡 count-exclusion open | P3 | Self-referral inflation concern / after customer view ships |
 | DF-PII-PURGE | Automated 12-month unconverted-PII purge job (scheduled) | ✅ Done (verified in-repo 2026-08-08) | P2 | **BUILT + SCHEDULED:** `apps/common/privacy.py:purge_expired_pii` + management command, registered daily as `pii_retention_purge` in `setup_schedules.py`, covered by `tests/test_privacy_erasure.py` (incl. a test asserting the schedule row). This row had gone stale — closed on verification, not on a new build. |
 | DF-OTP-SMS | Real SMS OTP provider behind the stub (Q-M-OTP-1) | 🟡 Open | P3 | Referrers without WhatsApp become common; provider chosen |
 | DF-TESTDB-ISOLATION | Serialize / isolate the shared Postgres test DB | ✅ Done (2026-07-16, Eng#2) | P2 | **FIXED** via pytest-xdist: `-n 4` gives each worker its own DB (`gorefer_test_gwN`) — no shared-DB deadlock. Suite 6m21s → 2m03s. CI left serial (unchanged behaviour); README documents the parallel run + the "two concurrent invocations collide" caveat. |
@@ -89,8 +89,9 @@
 
 ### DF-11 — Self-click tagging on the Referral Profile
 - **What:** on the Referral Profile Clicks tab, if a click's mobile later matches the referrer's own Zoho mobile, tag it "self-click" and exclude from conversion counts.
-- **Why deferred (DA, M9, 2026-07-08):** raised in the User Referral Screen mission as later polish, not built in M9. Needs a reliable click→mobile link and the referrer's own mobile from Zoho READ.
-- **Revisit when:** self-referral inflation becomes a concern, or after the customer/referrer view ships. Relates to ADR-018, M9, DF-6.
+- **Status (T-060, 2026-08-09): DISPLAY half SHIPPED.** The Clicks tab now tags a click "self-click" when the promoted lead-side mobile (ADR-018 identity, normalized via `apps/common/phone`) equals the referrer's own mobile resolved via the CRM read port (`apps/dashboard/profile.py::_referrer_own_mobile`, resolved-flag-gated through `_safe_zoho_contact` — READ unavailable/unmatched → no tag, never a guess). Rendered in `static/js/referral_profile.js` as a small inline badge. **Display-only — zero analytics/rollup/count mutation**; `outcome`/`outcome_class` (what counts/filters use) are untouched.
+- **Why deferred (DA, M9, 2026-07-08):** raised in the User Referral Screen mission as later polish, not built in M9. Needed a reliable click→mobile link and the referrer's own mobile from Zoho READ — both now exist.
+- **Revisit when:** the count-exclusion half is scoped — excluding self-clicks from conversion counts touches analytics/rollups and the never-fabricate rules, so it keeps its **original trigger**: self-referral inflation becomes a concern, or after the customer/referrer view ships further. Relates to ADR-018, M9, DF-6.
 
 ### DF-OTP-SMS — SMS OTP provider (fallback channel for referrer login)
 - **What:** choose + wire a real SMS provider (MSG91 / Twilio / Gupshup / Kaleyra / …) behind the existing `SmsOtpAdapter` interface so `sms` becomes a live OTP channel, selectable per-tenant on the Preferences screen (Q-M-OTP / ADR-035).

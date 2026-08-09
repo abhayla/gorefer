@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 
+from apps.common.phone import normalize_phone
 from apps.events.models import Event, VisitorPII
 from apps.integrations.models import Conversion
 from apps.integrations.ports import (
@@ -148,6 +149,26 @@ def _click_outcome(click_ts, next_click_ts, journey_events, live_lead_prospects=
                 return label if alive else "Lead captured (since removed)"
             return label
     return "Clicked"
+
+
+def _click_is_self_click(click_ts, next_click_ts, journey_events, prospect_mobiles, referrer_mobile) -> bool:
+    """True if a `lead_captured` event in THIS click's window promoted a prospect
+    whose normalized mobile equals the referrer's own (T-060/DF-11 display tag).
+
+    Shares `_click_outcome`'s window definition so the two never disagree about
+    which lead belongs to which click. `prospect_mobiles` only holds prospects with
+    a still-live Lead row (mirrors the "(since removed)" honesty in `_click_outcome`
+    — a deleted lead's mobile is not re-fetched to tag a click after the fact).
+    """
+    for event_type, ts, pid in journey_events:
+        if event_type != "lead_captured" or pid is None:
+            continue
+        if not (click_ts <= ts and (next_click_ts is None or ts < next_click_ts)):
+            continue
+        mobile = prospect_mobiles.get(pid)
+        if mobile and mobile == referrer_mobile:
+            return True
+    return False
 
 
 def _referrer_referrals(tenant, client_id: str):
@@ -321,14 +342,36 @@ def per_link_cards(tenant, client_id: str) -> list[dict]:
     return list(by_program.values())
 
 
+def _referrer_own_mobile(client_id: str) -> str:
+    """The referrer's OWN mobile, resolved via the CRM read port (T-060/DF-11).
+
+    Resolved-flag-gated through `_safe_zoho_contact` — with `ENABLE_ZOHO_READ` off
+    or Zoho unreachable, `matched` is False and this returns "" (no tag, never a
+    guess, per the DoD). `mobile` is preferred over `phone`; either normalizes via
+    the one canonical helper so it compares equal to a lead's promoted mobile.
+    """
+    contact = _safe_zoho_contact(client_id)
+    if not contact.matched:
+        return ""
+    return normalize_phone(contact.mobile or contact.phone or "")
+
+
 def clicks_rows(tenant, client_id: str) -> list[dict]:
     """One row per click event (human + bot) with geo/device/outcome enrichment.
 
     Geo/device come from GoRefer's OWN captured signals: country/state on the Event,
     city + raw IP on the linked VisitorPII, device/OS from the user-agent. Bot rows
     are included but flagged (the template dims them + excludes from totals).
+
+    T-060/DF-11 (display half): a click is tagged "self-click" when the PROMOTED
+    lead-side mobile (the prospect whose `lead_captured` event falls in this click's
+    window, ADR-018 identity) equals the referrer's OWN mobile from Zoho READ. This
+    is DISPLAY-ONLY — it never changes `outcome`/`outcome_class` (used by counts/
+    filters elsewhere) and never mutates aggregates. The count-exclusion half of
+    DF-11 stays deferred.
     """
     referrals = {r.id: r for r in _referrer_referrals(tenant, client_id)}
+    referrer_mobile = _referrer_own_mobile(client_id)
     events = (
         Event.objects.filter(referral_id__in=list(referrals), event_type="click")
         .order_by("-timestamp")
@@ -361,6 +404,19 @@ def clicks_rows(tenant, client_id: str) -> list[dict]:
         referral_id__in=list(referrals), deleted_at__isnull=True
     ).values_list("referral_id", "prospect_id"):
         live_lead_prospects.setdefault(rid, set()).add(pid)
+    # Prospect id -> normalized mobile, for the self-click compare. Only fetched
+    # when the referrer's own mobile actually resolved — an unmatched/READ-off
+    # referrer can never produce a self-click tag, so skip the query entirely.
+    prospect_mobiles: dict[int, str] = {}
+    if referrer_mobile:
+        from apps.referrals.models import Prospect
+
+        all_lead_prospect_ids = {pid for ids in live_lead_prospects.values() for pid in ids}
+        if all_lead_prospect_ids:
+            for pid, mobile in Prospect.objects.filter(
+                id__in=all_lead_prospect_ids
+            ).values_list("id", "mobile"):
+                prospect_mobiles[pid] = normalize_phone(mobile)
     # Resolve city/IP from VisitorPII by visitor_id (erasable PII record).
     vids = [e.visitor_id for e in events if e.visitor_id]
     pii = {}
@@ -379,6 +435,7 @@ def clicks_rows(tenant, client_id: str) -> list[dict]:
         device, ua_label = _device_and_ua(e.user_agent)
         channel = (e.metadata or {}).get("channel") or "Direct"
         synthetic = is_synthetic_user_agent(e.user_agent)
+        self_click = False
         if e.is_bot:
             outcome = "Bot — excluded"
             device = device if device != "—" else "—"
@@ -386,11 +443,18 @@ def clicks_rows(tenant, client_id: str) -> list[dict]:
             outcome = "Synthetic — excluded"
         else:
             later = [t for t in click_times.get(e.referral_id, []) if t > e.timestamp]
+            next_click_ts = min(later) if later else None
             outcome = _click_outcome(
-                e.timestamp, min(later) if later else None,
+                e.timestamp, next_click_ts,
                 stage_events.get(e.referral_id, []),
                 frozenset(live_lead_prospects.get(e.referral_id, set())),
             )
+            if referrer_mobile:
+                self_click = _click_is_self_click(
+                    e.timestamp, next_click_ts,
+                    stage_events.get(e.referral_id, []),
+                    prospect_mobiles, referrer_mobile,
+                )
         rows.append({
             "t": e.timestamp,
             "partner": program.name if program else "—",
@@ -405,6 +469,9 @@ def clicks_rows(tenant, client_id: str) -> list[dict]:
             "synthetic": synthetic,
             "outcome": outcome,
             "outcome_class": _OUTCOME_CLASS.get(outcome, "text-ink-500"),
+            # T-060/DF-11: display-only tag, never fed into outcome/outcome_class
+            # or any aggregate — see the function docstring.
+            "self_click": self_click,
         })
     return rows
 

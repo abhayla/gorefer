@@ -196,6 +196,7 @@ def _mint_one(tenant, raw_client_id: str, *, base: str, fmt: str) -> dict:
     identity = (
         ReferralIdentity.objects.for_tenant(tenant)
         .filter(client_id=client_id, status="active", deleted_at__isnull=True)
+        .order_by("id")
         .first()
     )
     if identity is None:

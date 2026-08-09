@@ -132,6 +132,14 @@ SHARE_HUB_GUIDANCE_DEFAULT = [
     "far more than sending the link again.",
 ]
 
+# --- My Referrals — the door to the share hub (T-054/T-060) ------------------------
+# The button label the `/my/referrals` page shows next to the hub_url door (T-054).
+# A cascade key (rail E-6 / §6d), not a literal — same reasoning as SHARE_HUB_HEADLINE
+# above: it is copy a real person reads, so the owner must be able to change it without
+# a deploy. Default is the shipped literal, so this is zero behaviour change.
+MY_REFERRALS_HUB_CTA = "my_referrals_hub_cta"
+MY_REFERRALS_HUB_CTA_DEFAULT = "Share your link"
+
 # --- WhatsApp notification routing (Tier 2, admin) ---------------------------------
 # Which of the three lead-time notifications actually go out (doc-08 A6 a/b/c).
 # Routing only: turning one OFF suppresses that recipient; it never changes WHAT is

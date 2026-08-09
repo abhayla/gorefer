@@ -118,7 +118,13 @@ def test_empty_brand_name_renders_no_blank_element_in_the_header(seeded):
     neither program nor partner (the ultimate fallback) must not leave a blank chip
     in the header — it degrades to the headline + attribution line alone. `hub_ctx`
     only needs `.tenant_id`/`.client_id` off `identity` plus the two brand fields, so
-    a stub stands in without touching the DB's NOT NULL program/partner columns."""
+    a stub stands in without touching the DB's NOT NULL program/partner columns.
+
+    The assertion checks for the brand `<p>` tag's own class string
+    (`text-cobalt-600`, the element `{% if brand_name %}` wraps), not a `hub-brand`
+    class — no such class exists anywhere in the template, so asserting its absence
+    would pass identically whether the `{% if %}` guard worked or was deleted
+    entirely (proven below against a deliberately broken copy of the template)."""
     identity = _stub_identity(program=None, partner=None)
     identity.tenant_id = seeded.id
     ctx = hub_ctx(identity, "unused-token")
@@ -126,8 +132,56 @@ def test_empty_brand_name_renders_no_blank_element_in_the_header(seeded):
 
     body = render_to_string("accounts/share_hub.html", ctx)
     header = body[body.index('data-test="hub-partner-header"') : body.index("</header>")]
-    assert "hub-brand" not in header
+    assert "text-cobalt-600" not in header
     assert "hub-partner-header" in header
+
+
+def test_the_above_assertion_actually_catches_a_broken_guard(tmp_path, settings, seeded):
+    """Disproof: point the template loader at a copy of share_hub.html with the
+    `{% if brand_name %}` guard DELETED (the brand `<p>` always renders), and prove
+    the same assertion the test above makes now FAILS. This is what makes the
+    previous test real — a check that cannot fail against a broken template proves
+    nothing (the `hub-brand` string it used to check for never existed at all)."""
+    import re
+
+    from django.template.loader import get_template
+
+    source = get_template("accounts/share_hub.html").origin.name
+    original = open(source, encoding="utf-8").read()
+    broken = re.sub(
+        r"\{% if brand_name %\}(<p[^>]*text-cobalt-600[^>]*>\{\{ brand_name \}\}</p>)\{% endif %\}",
+        r"\1",
+        original,
+        count=1,
+    )
+    assert broken != original, "fixture regex did not match the live template — update it"
+
+    broken_dir = tmp_path / "accounts"
+    broken_dir.mkdir()
+    (broken_dir / "share_hub.html").write_text(broken, encoding="utf-8")
+    # Prepend a loader path so this broken copy shadows the real template, while
+    # every other template (base, etc.) still resolves normally. Reassign the WHOLE
+    # TEMPLATES list (never mutate TEMPLATES[0]["DIRS"] in place) — pytest-django's
+    # `settings` fixture only fires Django's `setting_changed` signal on assignment,
+    # and it's that signal which resets the cached `Engine` (whose `.dirs` is frozen
+    # at construction time). An in-place mutation leaves the live engine reading the
+    # OLD dirs, so the broken copy is silently never loaded and the disproof below
+    # would pass for the wrong reason.
+    import copy
+
+    new_templates = copy.deepcopy(settings.TEMPLATES)
+    new_templates[0]["DIRS"] = [str(tmp_path)] + [str(d) for d in new_templates[0]["DIRS"]]
+    settings.TEMPLATES = new_templates
+
+    identity = _stub_identity(program=None, partner=None)
+    identity.tenant_id = seeded.id
+    ctx = hub_ctx(identity, "unused-token")
+    assert ctx["brand_name"] == ""
+
+    body = render_to_string("accounts/share_hub.html", ctx)
+    header = body[body.index('data-test="hub-partner-header"') : body.index("</header>")]
+    with pytest.raises(AssertionError):
+        assert "text-cobalt-600" not in header
 
 
 # ------------------------------------------------------------- attribution line intact
