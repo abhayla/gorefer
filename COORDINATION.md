@@ -6204,3 +6204,61 @@ tighten future contract wording, not as a defect).
 **Owner items open:** congrats template name (T-058 leg), poster file for the preview-card
 variant + T-063 images, ONE phone tap-test of native share after configuring images,
 Zoho broader-token MFA (TODO-Manual card).
+
+## 2026-08-10 STATUS (Engineer) — T-073 fail-closed computed-variable guard + per-recipient invite sender (PR)
+
+**Root cause this closes.** A WhatsApp template can carry a variable only GoRefer can compute
+(`{{token}}`, the signed value behind `/rr/` and `/hub/`), and nothing checked that a sender able
+to mint one existed. A Wati dashboard broadcast fills an unknown variable from a contact attribute
+nobody sets, ships `https://gorefer.in/hub/` — a dead link — to every recipient, and both Wati and
+Meta report success. Only the recipient sees the failure.
+
+**The fail-closed check (primary deliverable).** `apps/integrations/computed_vars.py` — one
+registry, one function:
+- `required_computed_vars(template)` matches an EXACT `elementName` **and** a family substring
+  (`refrecord`, `referandearn_invite`), so a version bump or Hindi twin cannot fall out of the
+  registry on rename; `register_computed_vars()` lets a future template register next to the code
+  that mints its value.
+- `assert_computed_vars_filled(template, params)` raises `MissingComputedVar` on an absent, blank
+  or whitespace-only required param. Stable machine reason: **`missing_computed_var:token`**.
+- Enforcement is fitted at the PORT, not at one caller: `ports.GuardedMessagingPort` wraps every
+  adapter `get_messaging_port()` returns, and the check runs BEFORE the adapter — a refused send
+  makes zero network calls. Templates with no computed variable pass through untouched, so no
+  existing send path changes behaviour. (Protocol methods are delegated explicitly because
+  `isinstance` uses `getattr_static`, which never fires `__getattr__`.)
+
+**Template-approval assertion (new).** There was no approval check anywhere in the codebase, so I
+added one: `MessagingPort.get_template_status()` → `TemplateStatus`. Live reads
+`GET /api/v1/getMessageTemplates` matched on `elementName`; log-only returns APPROVED with
+`simulated=True` (demo mode stays honest, §5 precedent). It **fails closed** — HTTP error,
+unparseable body, name absent from the inventory, adapter that cannot be asked, all refuse. Note
+this is a real behaviour change for the existing `send_records_links --send` path: if Wati's
+template-list call fails, that run now refuses rather than sending. Deliberate, and visible
+(operator-run command, loud `SendRefused`), but flagging it explicitly.
+
+**Per-recipient invite sender.** `records_link_send.py` now serves two families through ONE
+`SendFamily`-parameterized path, so gates cannot drift: records link (UTILITY, `name`/
+`record_date`/`token`) and referral invite (MARKETING, `name`/`client_id`/`token`). Token is minted
+per recipient via `resolve_link_details` → `mint_records_token` — the same helper the mint API and
+the hub CTA use; a test asserts byte-equality between the two paths, and another asserts two
+recipients never share a token. New command `manage.py send_invite_links`, **dry-run by default**;
+the preview prints `token=minted`, never the value, and the token stays out of logs and out of the
+event stream (T-051).
+
+**NO REAL BLAST IS FIRED BY THIS TASK.** The configured invite template is a DRAFT at Meta, and
+`--send` refuses an unapproved template — that refusal is a tested assertion, not a promise. This
+is capability only; the actual blast remains a separate owner-triggered action.
+
+**New cascade keys (rail E-6):** `invite_template_en` (default
+`gr_brokers_zerodha_referandearn_invite_en_2026_08_10`), `invite_send_max_per_run` (50),
+`invite_send_min_gap_days` (30). Invite dedupe uses its own event kind (`referral_invite`), so the
+two families never suppress each other.
+
+**QUESTION (non-blocking, proceeding as specified).** The invite's link is the share HUB, but the
+contract's `--send` gate is `ENABLE_WATI_SEND` + `ENABLE_RECORDS_LINK` (as written in the task), so
+that is what I implemented for both families. Arguably the invite should gate on `ENABLE_SHARE_HUB`
+instead/as well. Flagging for the DA rather than silently widening the gate.
+
+**Gates:** 1117 tests green (`-n 4`), ruff clean, `manage.py check` clean, architecture gate 0/0,
+`makemigrations --check` reports no changes (no new models — correct per the contract).
+`Wati-GoRefer/Wati-Integration-Contract.md` §12 updated in the same PR (no `[skip-contract-doc]`).

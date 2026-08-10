@@ -50,6 +50,32 @@ class DeliveryResult:
     classification: str | None
 
 
+#: `TemplateStatus.status` when the vendor could not be asked (HTTP error, bad JSON)
+#: or does not know the name. Deliberately NOT "APPROVED": a sender that cannot prove
+#: approval must refuse, never assume (T-073 fail-closed).
+TEMPLATE_STATUS_UNKNOWN = "UNKNOWN"
+TEMPLATE_STATUS_APPROVED = "APPROVED"
+
+
+@dataclass
+class TemplateStatus:
+    """Vendor's own view of a template: is it APPROVED, and in which category.
+
+    `simulated` is True when no network call was made (the log-only adapter), so a
+    caller can tell "the vendor said APPROVED" apart from "we are in demo mode" —
+    the same honesty rule `STATUS_SIMULATED_DELIVERED` follows for delivery.
+    """
+
+    name: str
+    status: str
+    category: str = ""
+    simulated: bool = False
+
+    @property
+    def approved(self) -> bool:
+        return (self.status or "").strip().upper() == TEMPLATE_STATUS_APPROVED
+
+
 class LogOnlyWatiAdapter:
     """Demo/dev adapter: logs the intended send, simulates a delivered terminal status.
 
@@ -98,6 +124,14 @@ class LogOnlyWatiAdapter:
     def get_latest_inbound_at(self, mobile: str):
         # Demo/dev: no real inbound to read (no network) — the poll finds nothing to do.
         return None
+
+    def get_template_status(self, *, template: str) -> TemplateStatus:
+        # Demo/dev made NO network call, so this is a SIMULATED approval, flagged as
+        # such — demo mode must still run end-to-end (CLAUDE.md §7) without ever
+        # letting a caller mistake it for the vendor actually saying APPROVED.
+        return TemplateStatus(
+            name=template, status=TEMPLATE_STATUS_APPROVED, category="", simulated=True,
+        )
 
 
 class LiveWatiAdapter:
@@ -399,6 +433,58 @@ class LiveWatiAdapter:
                 except (ValueError, TypeError, OSError):
                     return None
         return None
+
+
+    def get_template_status(self, *, template: str) -> TemplateStatus:
+        """Read the template's REAL state from Wati (`getMessageTemplates`).
+
+        Why a sender asks at all: template state is vendor-side and mutable. A name
+        can be DRAFT, REJECTED, PAUSED or simply never have existed — prod's
+        `otp_whatsapp_template` was a name Meta had never seen, and every OTP send
+        400-ed silently for a day (CLAUDE.md §6c). Sending into that produces a
+        confident-looking failure, so the sender proves approval FIRST.
+
+        Fails CLOSED: an HTTP error, unparseable body, or a name absent from the
+        inventory all return UNKNOWN — never a hopeful APPROVED.
+        """
+        name = (template or "").strip()
+        if not name:
+            return TemplateStatus(name="", status=TEMPLATE_STATUS_UNKNOWN)
+
+        url = f"{self.base_url}/api/v1/getMessageTemplates?pageSize=200&pageNumber=0"
+        code, text = self._transport("GET", url, self._auth_headers(json_body=False), None)
+        if not (200 <= code < 300):
+            logger.warning("WATI getMessageTemplates http=%s — template state UNKNOWN", code)
+            return TemplateStatus(name=name, status=TEMPLATE_STATUS_UNKNOWN)
+        try:
+            payload = json.loads(text or "{}")
+        except ValueError:
+            return TemplateStatus(name=name, status=TEMPLATE_STATUS_UNKNOWN)
+
+        # Wati has shipped this list under more than one key across versions; read
+        # the shapes we have seen rather than betting the send on one of them.
+        items = None
+        for key in ("messageTemplates", "items", "data", "result"):
+            candidate = payload.get(key) if isinstance(payload, dict) else None
+            if isinstance(candidate, list):
+                items = candidate
+                break
+        if items is None:
+            return TemplateStatus(name=name, status=TEMPLATE_STATUS_UNKNOWN)
+
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            element = str(it.get("elementName") or it.get("name") or "").strip()
+            if element != name:
+                continue
+            return TemplateStatus(
+                name=name,
+                status=str(it.get("status") or TEMPLATE_STATUS_UNKNOWN).strip().upper(),
+                category=str(it.get("category") or "").strip().upper(),
+            )
+        logger.warning("WATI template %s not present in the inventory — state UNKNOWN", name)
+        return TemplateStatus(name=name, status=TEMPLATE_STATUS_UNKNOWN)
 
 
 def _redact_param_names(params: dict) -> str:

@@ -57,6 +57,24 @@ RECORDS_LINK_SEND_MAX_PER_RUN_DEFAULT = 50
 RECORDS_LINK_SEND_MIN_GAP_DAYS = "records_link_send_min_gap_days"
 RECORDS_LINK_SEND_MIN_GAP_DAYS_DEFAULT = 7
 
+# --- Referral invite per-recipient send (T-073; `send_invite_links` command) -------
+# The invite template carries a SERVER-COMPUTED {{token}} behind its share-hub URL
+# button, so it can only be sent by a sender that mints one PER RECIPIENT — a
+# dashboard broadcast would fill that variable from a contact attribute nobody sets
+# and ship a dead `…/hub/` link to every recipient. Three cascade keys (rail E-6 /
+# §6d), matching the records-link family's shape: template name, per-run cap, and
+# the anti-spam min-gap. The template named here is a DRAFT at Meta today, and the
+# sender refuses to send an unapproved template — this ships as CAPABILITY only, it
+# fires no blast.
+INVITE_TEMPLATE_EN = "invite_template_en"
+INVITE_TEMPLATE_EN_DEFAULT = "gr_brokers_zerodha_referandearn_invite_en_2026_08_10"
+
+INVITE_SEND_MAX_PER_RUN = "invite_send_max_per_run"
+INVITE_SEND_MAX_PER_RUN_DEFAULT = 50
+
+INVITE_SEND_MIN_GAP_DAYS = "invite_send_min_gap_days"
+INVITE_SEND_MIN_GAP_DAYS_DEFAULT = 30
+
 # --- Referrer conversion congrats (T-058; P-01/Gap 5) ------------------------------
 # The one-time "your referral just opened their account" notification to the CREDITED
 # referrer, fired once per conversion from the Zoho ingest path
@@ -584,6 +602,9 @@ def central_defaults() -> dict:
         RECORDS_LINK_TEMPLATE_EN: RECORDS_LINK_TEMPLATE_EN_DEFAULT,
         RECORDS_LINK_SEND_MAX_PER_RUN: RECORDS_LINK_SEND_MAX_PER_RUN_DEFAULT,
         RECORDS_LINK_SEND_MIN_GAP_DAYS: RECORDS_LINK_SEND_MIN_GAP_DAYS_DEFAULT,
+        INVITE_TEMPLATE_EN: INVITE_TEMPLATE_EN_DEFAULT,
+        INVITE_SEND_MAX_PER_RUN: INVITE_SEND_MAX_PER_RUN_DEFAULT,
+        INVITE_SEND_MIN_GAP_DAYS: INVITE_SEND_MIN_GAP_DAYS_DEFAULT,
         REFERRER_CONVERSION_CONGRATS_TEMPLATE_EN: REFERRER_CONVERSION_CONGRATS_TEMPLATE_EN_DEFAULT,
         REFERRER_CONVERSION_CONGRATS_BODY_EN: REFERRER_CONVERSION_CONGRATS_BODY_EN_DEFAULT,
         # Share hub (T-053) — placeholder copy pending owner compliance review.
