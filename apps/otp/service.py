@@ -180,6 +180,8 @@ class OtpService:
             # Copy is config (§6d / rail E-6) — resolved per tenant, read at send time.
             "subject": self._cfg[prefkeys.OTP_EMAIL_SUBJECT],
             "body_template": self._cfg[prefkeys.OTP_EMAIL_BODY_TEMPLATE],
+            # T-081 — owner-editable sender address; "" means "no override".
+            "from_address": self._cfg[prefkeys.OTP_EMAIL_FROM_ADDRESS],
         }
         try:
             result = adapter.send(recipient=address, code=code, ttl_seconds=ttl, context=context)

@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import re
 
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.db import transaction
 from django.utils.text import slugify
 
@@ -372,7 +374,7 @@ def save_preferences(tenant, data, *, user=None) -> list[str]:
     # --- OTP login channel (Q-M-OTP) — config-over-code: swap channel/order/limits
     # here, no deploy. Persisted at the tenant tier of the same cascade the OtpService
     # reads, so a change takes effect immediately.
-    _save_otp(tenant_id, data, user=user)
+    notices.extend(_save_otp(tenant_id, data, user=user))
 
     # --- WhatsApp notification template NAMES — swap the approved template each role/
     # language sends with NO deploy (config-over-code). Persisted at the tenant tier the
@@ -413,8 +415,9 @@ def _save_notify_templates(tenant_id, data, *, user=None) -> list[str]:
     return notices
 
 
-def _save_otp(tenant_id, data, *, user=None) -> None:
-    """Persist the OTP config block (validated) to the tenant tier."""
+def _save_otp(tenant_id, data, *, user=None) -> list[str]:
+    """Persist the OTP config block (validated) to the tenant tier. Returns notices."""
+    notices: list[str] = []
     # Primary channel — must be a known channel code, else keep the default.
     primary = (data.get("otp_primary_channel") or "").strip().lower()
     if primary in prefkeys._VALID_OTP_CHANNELS:
@@ -447,6 +450,24 @@ def _save_otp(tenant_id, data, *, user=None) -> None:
     if body:
         set_tenant(prefkeys.OTP_EMAIL_BODY_TEMPLATE, body, tenant_id=tenant_id, user=user)
 
+    # T-081 — the sender address (non-secret; the SMTP credential itself stays env-
+    # only, see gorefer/settings.py). Blank input is ignored, same as subject/body
+    # above — it means "keep whatever override exists" (or "no override", falling
+    # back to settings.DEFAULT_FROM_EMAIL). A non-blank value that is not a plausible
+    # email is REJECTED with a notice and left unchanged — a bad value must never be
+    # able to make the OTP email fail to send or send with a broken From.
+    from_address = (data.get("otp_email_from_address") or "").strip()
+    if from_address:
+        try:
+            validate_email(from_address)
+        except ValidationError:
+            notices.append(
+                f"“{from_address}” doesn't look like a valid email address — the OTP "
+                "email 'From' address was not changed."
+            )
+        else:
+            set_tenant(prefkeys.OTP_EMAIL_FROM_ADDRESS, from_address, tenant_id=tenant_id, user=user)
+
     # Numeric knobs — clamped to sane bounds so a bad admin entry can't disable OTP
     # security (e.g. TTL=0 or attempts=0).
     for key, field, lo, hi in (
@@ -465,6 +486,8 @@ def _save_otp(tenant_id, data, *, user=None) -> None:
             continue
         val = max(lo, min(val, hi))
         set_tenant(key, val, tenant_id=tenant_id, user=user)
+
+    return notices
 
 
 # ---------------------------------------------------------------- partnerships
