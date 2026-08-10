@@ -84,7 +84,10 @@ def _set_flags(monkeypatch, **overrides):
 
 
 def _sending_enabled(monkeypatch):
-    _set_flags(monkeypatch, ENABLE_RECORDS_LINK=True, ENABLE_WATI_SEND=True)
+    # The invite family's link_flag is ENABLE_SHARE_HUB (it links to /hub/{token}),
+    # NOT ENABLE_RECORDS_LINK — T-074 RULING-3. Flip both on here since a few tests in
+    # this file exercise flag-gating directly rather than through this helper.
+    _set_flags(monkeypatch, ENABLE_SHARE_HUB=True, ENABLE_RECORDS_LINK=True, ENABLE_WATI_SEND=True)
 
 
 class _FakeAdapter:

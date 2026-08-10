@@ -438,6 +438,12 @@ all** — not with a blank, not with a placeholder. Refused, with a reason.
   fires `__getattr__`); `kind` and vendor extras still delegate dynamically.
 - Senders that prefer a clean row over an exception (`records_link_send`) call the same check ahead
   of the write and record the recipient as `skipped` with that reason. One check, two call sites.
+- **`apps/integrations/wati/tasks.py:send_notification`** (the M5 role-template path — office /
+  prospect / referrer alerts) now calls `get_messaging_port()` too, not `wati.adapter.get_wati_adapter()`
+  directly (T-074, 2026-08-10 — fixes a T-073 checker finding: the guard was fitted at the port
+  factory, but this one caller still bypassed it by importing the raw adapter). Today's M5 templates
+  carry no computed variable, so this is a pure pass-through; the fix means a future token-carrying
+  template routed through this path is guarded too, instead of silently reopening the T-073 gap.
 
 **Adding a template with a computed variable:** register it in `computed_vars` in the SAME change
 that adds it, or the guard does not know to protect it. A template that needs a value only GoRefer
@@ -475,10 +481,16 @@ can mint has no safe dashboard-broadcast path — the sender is the only way to 
   `api.records_tokens.resolve_link_details` → `apps.accounts.records_link.mint_records_token` — the
   same helper the mint API and the logged-in hub CTA use, so links from a broadcast and from the
   hub can never diverge for one identity. This module never HTTP-calls its own mint endpoint.
-- Gates, all applied to both families: `ENABLE_WATI_SEND` (resolved, override-aware) **and**
-  `ENABLE_RECORDS_LINK`; vendor-confirmed approval; per-run cap; per-family min-gap dedupe
+- Gates, all applied to both families: `ENABLE_WATI_SEND` (resolved, override-aware) **and each
+  family's own `link_flag`** — vendor-confirmed approval; per-run cap; per-family min-gap dedupe
   (separate `kind`s, so the two never suppress each other); opt-out; the allowlist (§3); and
   accepted → terminal-status recording (§4).
+- **`link_flag` is NOT the same knob for both families (T-074, 2026-08-10 — fixes a T-073 checker
+  finding).** Records link gates on `ENABLE_RECORDS_LINK` (mounts `/records/`); the invite gates on
+  **`ENABLE_SHARE_HUB`** (mounts `/hub/{token}`, the page the invite CTA actually links to) — using
+  `ENABLE_RECORDS_LINK` for the invite would have let a SHARE_HUB-off + RECORDS_LINK-on tenant send
+  an invite whose button opens an unmounted page. `SendFamily.link_flag` names the `flags.*`
+  attribute per family; `_assert_flags_on` reads it off the family, never a shared literal.
 - **Dry-run is the default** (`manage.py send_invite_links --client-ids …`); `--send` is explicit.
   The preview reports `token=minted`, **never the token value** — a preview a human reads is still
   a place a credential leaks. The token likewise never enters the immutable event log (T-051).
