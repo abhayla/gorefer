@@ -404,6 +404,24 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
                placeholder="gr_platform_gorefer_login_otp_en_2026_07_21">
       </div>
 
+      {# Email OTP copy (T-078) — the second leg, sent alongside WhatsApp #}
+      <div class="flex flex-col gap-2 py-1.5 border-t border-line">
+        <div>
+          <div class="text-[13px] font-semibold">Email code — subject &amp; message</div>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">
+            The same login code is also emailed to the address already on file.
+            Placeholders: <code>{code}</code>, <code>{minutes}</code>, <code>{sender_identity}</code>.
+          </div>
+        </div>
+        <input type="text" id="otp_email_subject" name="otp_email_subject"
+               value="{{ prefs.otp_email_subject }}"
+               class="w-full rounded-lg border border-line text-[13px] px-3 py-2 bg-white"
+               placeholder="Your GoRefer login code">
+        <textarea id="otp_email_body_template" name="otp_email_body_template" rows="5"
+                  class="w-full rounded-lg border border-line text-[13px] px-3 py-2 bg-white"
+                  >{{ prefs.otp_email_body_template }}</textarea>
+      </div>
+
       {# Numeric knobs #}
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 py-1.5 border-t border-line">
         <div>

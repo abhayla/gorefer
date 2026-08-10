@@ -593,6 +593,10 @@ OTP_CODE_TTL_SECONDS = "otp_code_ttl_seconds"
 OTP_MAX_VERIFY_ATTEMPTS = "otp_max_verify_attempts"
 OTP_RESEND_COOLDOWN_SECONDS = "otp_resend_cooldown_seconds"
 OTP_RATE_LIMIT_PER_IDENTITY_PER_HOUR = "otp_rate_limit_per_identity_per_hour"
+# T-078 email leg copy. Rail E-6: what a message SAYS is config, never a literal.
+# Body placeholders: {code}, {minutes}, {sender_identity}.
+OTP_EMAIL_SUBJECT = "otp_email_subject"
+OTP_EMAIL_BODY_TEMPLATE = "otp_email_body_template"
 
 # OTP channel codes an admin may pick (must match apps.otp.channels registry keys).
 OTP_CHANNEL_WHATSAPP_WATI = "whatsapp_wati"
@@ -762,6 +766,16 @@ def central_defaults() -> dict:
         OTP_MAX_VERIFY_ATTEMPTS: 5,
         OTP_RESEND_COOLDOWN_SECONDS: 60,
         OTP_RATE_LIMIT_PER_IDENTITY_PER_HOUR: 5,
+        # T-078 — the second (email) leg's copy. Transactional and minimal: the code,
+        # its expiry, the ignore-if-not-you line, and the sender identity. No account
+        # details, no PII, no marketing.
+        OTP_EMAIL_SUBJECT: "Your GoRefer login code",
+        OTP_EMAIL_BODY_TEMPLATE: (
+            "Your GoRefer login code is {code}.\n\n"
+            "It is valid for {minutes} minute(s) and can be used once.\n"
+            "If you didn't request this code, please ignore this email.\n\n"
+            "— {sender_identity}"
+        ),
     }
 
 
@@ -950,4 +964,11 @@ def get_preferences(tenant_id: int | None) -> dict:
             ),
             defaults[OTP_RATE_LIMIT_PER_IDENTITY_PER_HOUR],
         ),
+        # T-078 email copy — read at SEND time, so an edit changes the very next code.
+        OTP_EMAIL_SUBJECT: resolve(
+            OTP_EMAIL_SUBJECT, tenant_id=tenant_id, default=defaults[OTP_EMAIL_SUBJECT]
+        ) or defaults[OTP_EMAIL_SUBJECT],
+        OTP_EMAIL_BODY_TEMPLATE: resolve(
+            OTP_EMAIL_BODY_TEMPLATE, tenant_id=tenant_id, default=defaults[OTP_EMAIL_BODY_TEMPLATE]
+        ) or defaults[OTP_EMAIL_BODY_TEMPLATE],
     }

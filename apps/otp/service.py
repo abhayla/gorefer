@@ -6,7 +6,11 @@ issue(identity):
   3. supersede any prior active code for the identity (single active code),
   4. send via the PRIMARY channel; on non-delivery, AUTO-CASCADE down the configured
      fallback list — all read from the ADR-022 config cascade (config-over-code:
-     switching OTP_PRIMARY_CHANNEL takes effect with no code change).
+     switching OTP_PRIMARY_CHANNEL takes effect with no code change),
+  5. ALSO send the same code to the referrer's ON-FILE email (T-078), when
+     ENABLE_EMAIL_OTP + ENABLE_OTP_LOGIN are on and an address is on file. This is a
+     FAN-OUT, not a fallback: the two legs are independent and either one arriving
+     is enough to log in.
 
 verify(identity, code):
   check hash + expiry + attempts; single-use (a correct code consumes the challenge;
@@ -55,6 +59,10 @@ class IssueResult:
     channel: str          # the channel that produced the terminal outcome
     delivery_status: str  # delivered / queued / suppressed / failed(all-cascaded)
     delivered: bool
+    # T-078 second leg. `email_status` is "" when the leg did not run at all (flag
+    # off / no on-file address); otherwise the EmailOtpAdapter's own status.
+    email_status: str = ""
+    email_sent: bool = False
 
 
 @dataclass
@@ -66,13 +74,17 @@ class VerifyResult:
 class OtpService:
     """Issue + verify OTP codes for a `(tenant, identity)` login subject."""
 
-    def __init__(self, tenant, *, recipient_resolver=None):
+    def __init__(self, tenant, *, recipient_resolver=None, email_resolver=None):
         """`tenant` scopes every read/write. `recipient_resolver(identity) -> phone`
         supplies the ON-FILE channel (Zoho/Customer) — NEVER a user-typed number
-        (S2-03 §15 Path A). Defaults to a resolver that fails closed (no channel)."""
+        (S2-03 §15 Path A). `email_resolver(identity) -> email` is the same contract
+        for the T-078 second leg. BOTH default to resolvers that fail closed (no
+        channel), so a caller that forgets to pass one sends nowhere rather than
+        somewhere attacker-chosen."""
         self.tenant = tenant
         self.tenant_id = getattr(tenant, "id", None)
         self._resolve_recipient = recipient_resolver or (lambda identity: "")
+        self._resolve_email = email_resolver or (lambda identity: "")
         self._cfg = prefkeys.get_preferences(self.tenant_id)
 
     # ------------------------------------------------------------------ issue
@@ -109,6 +121,12 @@ class OtpService:
 
         # Deliver: primary then configured fallbacks, in order (config-over-code).
         result = self._deliver(recipient=recipient, code=code, ttl=ttl, purpose=purpose)
+
+        # SECOND LEG (T-078) — the SAME code also goes to the on-file email. This is
+        # a fan-out, not a fallback: it runs whatever the WhatsApp leg returned, and
+        # it runs AFTER it so a slow/rejecting mail server can never delay or block
+        # the WhatsApp send. Its own failures are swallowed inside _deliver_email.
+        email_result = self._deliver_email(identity=identity, code=code, ttl=ttl, purpose=purpose)
         # NB: `code` goes out of scope here — never persisted, never logged.
 
         challenge.channel = result.channel or ""
@@ -116,12 +134,60 @@ class OtpService:
         challenge.delivery_status = result.status
         challenge.save(update_fields=["channel", "provider_ref", "delivery_status", "updated_at"])
 
+        primary_ok = result.status in {STATUS_DELIVERED, STATUS_QUEUED, STATUS_SUPPRESSED}
+        email_ok = email_result is not None and email_result.status in {
+            STATUS_DELIVERED, STATUS_QUEUED
+        }
         return IssueResult(
             challenge_id=challenge.id,
             channel=result.channel or "",
             delivery_status=result.status,
-            delivered=result.status in {STATUS_DELIVERED, STATUS_QUEUED, STATUS_SUPPRESSED},
+            # The user needs the code on EITHER channel — an emailed code is a real
+            # code, so a WhatsApp-only failure must not tell them login is broken.
+            delivered=primary_ok or email_ok,
+            email_status=email_result.status if email_result is not None else "",
+            email_sent=email_ok,
         )
+
+    def _deliver_email(self, *, identity: str, code: str, ttl: int, purpose: str):
+        """The independent email leg. Returns a DeliveryResult, or None if it never ran.
+
+        Skips (returns None) when the flag pair is off. Skips cleanly INSIDE the
+        adapter (STATUS_SUPPRESSED) when there is no on-file address or no SMTP
+        config. Never raises: every failure is caught here so the WhatsApp leg's
+        outcome — and the login — stand regardless.
+
+        Rate limiting: this runs exactly once per `issue()` call, and `issue()` is
+        already gated by the per-identity hourly cap + resend cooldown. So the email
+        leg inherits the same limits and can never become a separate spam vector.
+        """
+        from .channels import EMAIL_CHANNEL, is_email_otp_live
+
+        if not is_email_otp_live():
+            return None
+
+        try:
+            address = (self._resolve_email(identity) or "").strip()
+        except Exception:  # noqa: BLE001 — a resolver outage must not break login
+            logger.warning("OTP on-file email resolver raised — skipping the email leg")
+            return None
+
+        adapter = resolve_channel(EMAIL_CHANNEL)
+        context = {
+            "tenant_id": self.tenant_id,
+            "purpose": purpose,
+            "intended_channel": EMAIL_CHANNEL,
+            # Copy is config (§6d / rail E-6) — resolved per tenant, read at send time.
+            "subject": self._cfg[prefkeys.OTP_EMAIL_SUBJECT],
+            "body_template": self._cfg[prefkeys.OTP_EMAIL_BODY_TEMPLATE],
+        }
+        try:
+            result = adapter.send(recipient=address, code=code, ttl_seconds=ttl, context=context)
+        except Exception as exc:  # noqa: BLE001 — same rule as the cascade: never crash login
+            logger.warning("OTP email leg raised %s — WhatsApp leg unaffected", type(exc).__name__)
+            return DeliveryResult(status=STATUS_FAILED, error=type(exc).__name__, channel=EMAIL_CHANNEL)
+        result.channel = EMAIL_CHANNEL
+        return result
 
     def _deliver(self, *, recipient: str, code: str, ttl: int, purpose: str):
         """Try primary, then each fallback, until one is delivered/queued/suppressed.
