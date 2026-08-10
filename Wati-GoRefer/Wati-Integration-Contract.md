@@ -409,7 +409,86 @@ fail-closed 401-before-schema auth ordering, and response shapes are unchanged �
 this was a move, not a rewrite. Everything else in this contract (send shape,
 terminal-status rule, allowlist gate, reconcile matching) is untouched.
 
-## 12. Related
+## 12. Fail-closed SERVER-COMPUTED variables — the rule that outranks "it sent" (T-073, 2026-08-10)
+
+**The failure, concretely.** The referral-invite template carries `{{token}}` in its share-hub URL
+button. That token is a `django.core.signing` value only GoRefer can compute. A Wati **dashboard
+broadcast** does not know that: it fills an unrecognised variable from a contact attribute nobody
+sets, the value comes out **blank**, and every recipient receives `https://gorefer.in/hub/` — a
+dead link — with a green delivered tick. Wati reports success. Meta reports success. Only the
+recipient sees the failure, and nobody tells us.
+
+**The rule.** A template whose server-computed variables the sender cannot fill is **not sent at
+all** — not with a blank, not with a placeholder. Refused, with a reason.
+
+**Where it lives (GoRefer side).**
+
+- `apps/integrations/computed_vars.py` — the REGISTRY + the single check.
+  - `required_computed_vars(template)` → the params GoRefer itself must mint. Matched on exact
+    `elementName` **and** on family substring (`refrecord`, `referandearn_invite`), so a version
+    bump or Hindi twin cannot quietly fall out of the registry on rename.
+  - `assert_computed_vars_filled(template, params)` → raises `MissingComputedVar` when a required
+    param is absent, blank, or whitespace-only. Templates carrying no computed variable pass
+    through untouched.
+  - Stable machine reason: **`missing_computed_var:<param>`**.
+- `apps/integrations/ports.py` — `GuardedMessagingPort` wraps **every** adapter returned by
+  `get_messaging_port()`. The guard is therefore a property of the port, not of one caller's good
+  manners; the check runs **before** the adapter, so a refused send makes **zero** network calls.
+  The Protocol surface is delegated explicitly (`isinstance` uses `getattr_static`, which never
+  fires `__getattr__`); `kind` and vendor extras still delegate dynamically.
+- Senders that prefer a clean row over an exception (`records_link_send`) call the same check ahead
+  of the write and record the recipient as `skipped` with that reason. One check, two call sites.
+
+**Adding a template with a computed variable:** register it in `computed_vars` in the SAME change
+that adds it, or the guard does not know to protect it. A template that needs a value only GoRefer
+can mint has no safe dashboard-broadcast path — the sender is the only way to send it.
+
+### 12a. Template-approval assertion before a real send
+
+`MessagingPort.get_template_status(template=…)` → `TemplateStatus(name, status, category, simulated)`.
+
+- **Live:** `GET {base}/api/v1/getMessageTemplates?pageSize=200&pageNumber=0`, matched on
+  `elementName`. Reads the list from `messageTemplates` / `items` / `data` / `result` (Wati has
+  shipped more than one shape). **Fails CLOSED** — HTTP error, unparseable body, or a name absent
+  from the inventory all return `UNKNOWN`, never a hopeful `APPROVED`.
+- **Log-only:** returns `APPROVED` with **`simulated=True`**, so demo mode runs end-to-end while a
+  caller can still tell a simulated approval from a vendor-confirmed one (same honesty rule as
+  `simulated_delivered`, §5).
+- `records_link_send._assert_template_approved` refuses a whole run (`SendRefused`) when the
+  resolved template is not APPROVED, when the check errors, or when the port cannot be asked at
+  all. Precedent for why this exists: prod's `otp_whatsapp_template` was a name Meta had **never
+  seen**, and every WhatsApp login OTP 400-ed silently while the flag read ON (CLAUDE.md §6c).
+
+### 12b. Per-recipient token-carrying senders
+
+`apps/integrations/records_link_send.py` now serves **two template families** through one code path
+(`SendFamily`), so gates cannot drift between them:
+
+| Family | Template cascade key (default) | Params | Category | Event `kind` |
+|---|---|---|---|---|
+| Records link (T-057) | `records_link_template_en` | `name`, `record_date`, **`token`** | UTILITY | `records_link` |
+| Referral invite (T-073) | `invite_template_en` | `name`, `client_id`, **`token`** | MARKETING | `referral_invite` |
+
+- Send shape is unchanged: `template_params_named: True` + a `{"name","value"}` list (§2). Named
+  params are mandatory here — a dynamic URL button can only be filled by name.
+- One **distinct** token per recipient, minted at send time through
+  `api.records_tokens.resolve_link_details` → `apps.accounts.records_link.mint_records_token` — the
+  same helper the mint API and the logged-in hub CTA use, so links from a broadcast and from the
+  hub can never diverge for one identity. This module never HTTP-calls its own mint endpoint.
+- Gates, all applied to both families: `ENABLE_WATI_SEND` (resolved, override-aware) **and**
+  `ENABLE_RECORDS_LINK`; vendor-confirmed approval; per-run cap; per-family min-gap dedupe
+  (separate `kind`s, so the two never suppress each other); opt-out; the allowlist (§3); and
+  accepted → terminal-status recording (§4).
+- **Dry-run is the default** (`manage.py send_invite_links --client-ids …`); `--send` is explicit.
+  The preview reports `token=minted`, **never the token value** — a preview a human reads is still
+  a place a credential leaks. The token likewise never enters the immutable event log (T-051).
+- New cascade keys (rail E-6): `invite_template_en`, `invite_send_max_per_run`,
+  `invite_send_min_gap_days`.
+
+**Status today:** the configured invite template is a **DRAFT** at Meta, so `--send` refuses it.
+This is capability only — landing it fires no blast.
+
+## 13. Related
 
 - Channel health, template approvals, nightly report: `C:\Abhay\5Wealths\Wati-Project\`
 - Templates GoRefer uses: [`Wati-GoRefer-Templates.md`](./Wati-GoRefer-Templates.md)

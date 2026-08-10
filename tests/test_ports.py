@@ -36,7 +36,11 @@ def test_crm_read_port_satisfies_protocol():
 
 def test_messaging_port_is_log_only_when_flag_off():
     port = ports.get_messaging_port()
-    assert isinstance(port, LogOnlyWatiAdapter)
+    # T-073: the factory now returns the adapter WRAPPED in the fail-closed
+    # computed-variable guard. The flag still decides which adapter is inside.
+    assert isinstance(port, ports.GuardedMessagingPort)
+    assert isinstance(port._inner, LogOnlyWatiAdapter)
+    assert port.kind == "log_only"  # delegation keeps the wrapper invisible
 
 
 def test_crm_port_is_log_only_when_flag_off():
