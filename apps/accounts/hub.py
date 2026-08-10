@@ -31,6 +31,7 @@ import logging
 from urllib.parse import quote
 
 from django.conf import settings
+from django.http import Http404
 from django.shortcuts import redirect, render
 from django.urls import NoReverseMatch, reverse
 from django.views.decorators.http import require_GET, require_POST
@@ -83,9 +84,11 @@ from apps.config.preferences import (
 from apps.events.models import Event
 from apps.referrals.og import absolute_image_url
 from apps.referrals.share_intent_service import kit_message, tracked_link
+from apps.tenants.resolve import get_current_tenant
 from gorefer.flags import flags
 
 from . import opener as opener_service
+from . import service
 from .records import records_config
 from .records_link import verify_records_token
 
@@ -261,6 +264,28 @@ def _hub_url(token: str) -> str:
         return f"/hub/{token}"
 
 
+def _me_hub_url() -> str:
+    """The LOGIN-GATED hub's own URL (T-075) — a static path with no token in it."""
+    try:
+        return reverse("share_hub_me")
+    except NoReverseMatch:
+        return "/hub"
+
+
+def _me_opener_post_url() -> str:
+    """Where the opener editor POSTs on the login-gated hub (T-075).
+
+    No token anywhere: the SESSION is the identity, so the form action is a static
+    path and the server resolves whose opener is being edited from the signed session
+    cookie. That is what makes a cross-identity edit impossible here — there is no
+    identity input on the request to swap.
+    """
+    try:
+        return reverse("share_hub_me_opener")
+    except NoReverseMatch:
+        return "/hub/opener"
+
+
 def _opener_post_url(token: str) -> str:
     """Where the opener editor POSTs (T-064).
 
@@ -299,11 +324,21 @@ def _brand_name(identity) -> str:
     return ""
 
 
-def hub_ctx(identity, token: str, lang: str = LANG_EN) -> dict:
+def hub_ctx(identity, token: str, lang: str = LANG_EN, *, session_mode: bool = False) -> dict:
     """Everything the page renders. `token` is used for ONE thing — the cross-link to
     the records page — and never reaches a share URL or the prefill. `lang` (T-061)
     selects the bilingual copy twin; defaults to EN so every existing caller (tests,
-    the /my/referrals hub-CTA builder) keeps behaving exactly as before."""
+    the /my/referrals hub-CTA builder) keeps behaving exactly as before.
+
+    `session_mode` (T-075) renders the SAME page for a logged-in referrer on the
+    token-free `/hub` route. Two things change, both about the token and nothing else:
+    the opener editor posts to the session endpoint, and the records cross-link is
+    omitted — that page is still token-only, and minting a token here would put one
+    back on a route whose whole point is not having one. (Phase 2 puts the records
+    page behind login and the cross-link comes back.) Every other value — brand,
+    credit link, share buttons, benefits, images, disclosures — is built from the same
+    identity by the same code, so there is no second hub to keep in step.
+    """
     tenant_id = identity.tenant_id
     client_id = identity.client_id
 
@@ -392,10 +427,19 @@ def hub_ctx(identity, token: str, lang: str = LANG_EN) -> dict:
         "opener_enabled": opener_enabled,
         "opener_text": opener_text,
         "opener_max_chars": opener_service.max_chars(tenant_id),
-        "opener_post_url": _opener_post_url(token) if opener_enabled else "",
+        "opener_post_url": (
+            "" if not opener_enabled
+            else _me_opener_post_url() if session_mode
+            else _opener_post_url(token)
+        ),
         # Cross-link, only when the other surface is actually mounted. Carries the
         # current lang so the referrer stays in the language they picked (T-061).
-        "records_url": with_lang(f"/rr/{token}", lang) if flags.ENABLE_RECORDS_LINK else "",
+        # Absent in session mode — see this function's docstring.
+        "records_url": (
+            with_lang(f"/rr/{token}", lang)
+            if (flags.ENABLE_RECORDS_LINK and not session_mode)
+            else ""
+        ),
         "login_url": _login_url(),
         "og": _og_context(tenant_id),
         "lang": lang,
@@ -633,3 +677,150 @@ def hub_view(request, token: str):
     ctx = hub_ctx(identity, token, lang)
     _log_view(tenant, identity)
     return render(request, "accounts/share_hub.html", ctx)
+
+
+# --- T-075: the LOGIN-GATED hub — same page, no token ------------------------------
+#
+# Phase 1 of retiring the token surfaces. The token model is fragile in exactly one
+# place that matters: a `{{token}}` in a WhatsApp template button only works if the
+# GoRefer sender mints it, so a Wati DASHBOARD broadcast — a path people actually use
+# — ships a blank or broken link. Login is universal: the invite button can point at a
+# STATIC `gorefer.in/hub` and it works no matter who sent the message.
+#
+# `/hub/{token}` stays live and untouched during the transition (Phase 3 deletes it).
+
+
+def _unlinked_ctx(lang: str, tenant_id: int | None) -> dict:
+    """Copy for a referrer who is signed in but has no `ReferralIdentity` row yet.
+
+    Never a blank or half-rendered hub: there is no credit link to show, so the page
+    says so and points at the ownership-verification path. All cascade keys with HI
+    twins (rail E-6 / §6d) — an operator can re-word this without a deploy.
+    """
+    def t(base_key: str, default_en: str, hi_key: str, default_hi: str) -> str:
+        return bi_text(base_key, default_en, lang=lang, tenant_id=tenant_id, default_hi=default_hi)
+
+    try:
+        verify_url = reverse("referrer_pathb")
+    except NoReverseMatch:
+        verify_url = "/login/verify-ownership"
+    return {
+        "title": t(
+            prefs.HUB_UNLINKED_TITLE, prefs.HUB_UNLINKED_TITLE_DEFAULT,
+            prefs.HUB_UNLINKED_TITLE_HI, prefs.HUB_UNLINKED_TITLE_HI_DEFAULT,
+        ),
+        "body": t(
+            prefs.HUB_UNLINKED_BODY, prefs.HUB_UNLINKED_BODY_DEFAULT,
+            prefs.HUB_UNLINKED_BODY_HI, prefs.HUB_UNLINKED_BODY_HI_DEFAULT,
+        ),
+        "cta": t(
+            prefs.HUB_UNLINKED_CTA, prefs.HUB_UNLINKED_CTA_DEFAULT,
+            prefs.HUB_UNLINKED_CTA_HI, prefs.HUB_UNLINKED_CTA_HI_DEFAULT,
+        ),
+        "verify_url": verify_url,
+    }
+
+
+def _session_identity(request):
+    """The identity the CURRENT SESSION owns, or None.
+
+    Resolved exactly the way `/my/referrals` resolves it — session → ReferrerAccount →
+    `selfview.identity_for` — from `request.referrer_account.client_id`. There is no
+    client_id parameter on either session route, so a request cannot name someone
+    else's record: cross-identity access is impossible by construction, not by a
+    check that a later edit could drop.
+    """
+    from . import selfview
+
+    account = request.referrer_account
+    tenant = get_current_tenant(request)
+    return selfview.identity_for(tenant, account.client_id)
+
+
+@require_GET
+@service.referrer_required
+def hub_me_view(request):
+    """`GET /hub` — the share hub for whoever is logged in. No token, anywhere.
+
+    Mounted only when ENABLE_CUSTOMER_LOGIN **and** ENABLE_SHARE_HUB are both on
+    (Constitution §4: with either off the route does not exist, rather than existing
+    and refusing). Anonymous visitors are 302'd to `/login/?next=/hub` by the gate and
+    land back here once they have proved who they are.
+    """
+    lang = resolve_lang(request)
+    identity = _session_identity(request)
+    if identity is None:
+        tenant = get_current_tenant(request)
+        tenant_id = getattr(tenant, "id", None)
+        lang = resolve_lang_or_stored(request, tenant_id)
+        return render(
+            request,
+            "accounts/hub_unlinked.html",
+            {
+                "unlinked": _unlinked_ctx(lang, tenant_id),
+                "lang": lang,
+                "market_risk_warning_hi": market_risk_warning_hi(tenant_id) if lang == "hi" else "",
+            },
+        )
+
+    tenant = identity.tenant
+    lang = resolve_lang_or_stored(request, tenant.id)
+    ctx = hub_ctx(identity, "", lang, session_mode=True)
+    _log_view(tenant, identity)
+    return render(request, "accounts/share_hub.html", ctx)
+
+
+@require_POST
+@service.referrer_required
+def hub_me_opener_view(request):
+    """`POST /hub/opener` — save or reset the personal opener, authenticated by the
+    SESSION (T-075 re-homes the T-064 edit off the token).
+
+    Every T-064 guarantee is preserved because the guarantees are structural, not
+    per-route: `opener_service.set_opener` stores an OPENING LINE only, the credit
+    link and the disclosure tail are appended afterwards by `kit_message`, the cap is
+    the same cascade-resolved one, the render escapes, and the event log records the
+    length and never the text. The one thing that changes is WHO is proven: a signed
+    session cookie instead of a signed URL token.
+    """
+    identity = _session_identity(request)
+    if identity is None:
+        # Signed in, but no record to attach an opener to. Same page the GET renders —
+        # not a 404, because there is nothing hidden here to be coy about.
+        return redirect(_me_hub_url())
+
+    tenant = identity.tenant
+    if not opener_service.is_enabled(tenant.id):
+        # Personalization is off for this tenant, so the editor is not rendered either;
+        # a POST is a request for a surface that does not exist.
+        raise Http404()
+
+    try:
+        check_rate(
+            OPENER_RATE_SCOPE,
+            client_ip(request),
+            limit=settings.RATELIMIT_RECORDS_MAX,
+            window=settings.RATELIMIT_API_WINDOW,
+        )
+    except RateLimited as exc:
+        lang = resolve_lang(request)
+        return render(
+            request,
+            "accounts/records_unavailable.html",
+            {
+                "config": records_config(lang, tenant.id),
+                "login_url": _login_url(),
+                "lang": lang,
+                "market_risk_warning_hi": market_risk_warning_hi(tenant.id) if lang == "hi" else "",
+                "retry_after": exc.retry_after,
+            },
+            status=429,
+        )
+
+    reset = request.POST.get(OPENER_ACTION_FIELD, "") == OPENER_ACTION_RESET
+    raw = "" if reset else request.POST.get(OPENER_FIELD, "")
+    stored = opener_service.set_opener(identity, raw)
+    _log_opener_edit(tenant, identity, len(stored), reset)
+
+    lang = resolve_lang_or_stored(request, tenant.id)
+    return redirect(with_lang(_me_hub_url(), lang))

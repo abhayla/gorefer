@@ -76,6 +76,22 @@ if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_RECORDS_LINK", False):
 # link in the way the records page is not, because the only thing a holder of the token
 # can change is text that the composer then appends the credit link and the disclosure
 # line to — server-side, unconditionally. See apps/accounts/hub.py:hub_opener_view.
+#
+# T-075 (Phase 1 of the token -> login retirement) adds the LOGIN-GATED twin at the
+# static, token-free `/hub`, mounted only when BOTH ENABLE_SHARE_HUB and
+# ENABLE_CUSTOMER_LOGIN are on — it renders the same page from the session's identity,
+# and with the login surface off there would be no door to send an anonymous visitor
+# to. Listed BEFORE the tokened routes on purpose: `hub/<str:token>` would otherwise
+# swallow `/hub/opener` as a token named "opener".
+if (
+    getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_SHARE_HUB", False)
+    and getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_CUSTOMER_LOGIN", False)
+):
+    from apps.accounts.hub import hub_me_opener_view, hub_me_view
+
+    urlpatterns.append(path("hub", hub_me_view, name="share_hub_me"))
+    urlpatterns.append(path("hub/opener", hub_me_opener_view, name="share_hub_me_opener"))
+
 if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_SHARE_HUB", False):
     from apps.accounts.hub import hub_opener_view, hub_view
 
