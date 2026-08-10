@@ -597,6 +597,14 @@ OTP_RATE_LIMIT_PER_IDENTITY_PER_HOUR = "otp_rate_limit_per_identity_per_hour"
 # Body placeholders: {code}, {minutes}, {sender_identity}.
 OTP_EMAIL_SUBJECT = "otp_email_subject"
 OTP_EMAIL_BODY_TEMPLATE = "otp_email_body_template"
+# T-081 — the sender ADDRESS is self-serve too (owner rule 2026-08-10, §6d): where
+# the OTP email appears to come FROM is customer-facing behavior, same category as
+# subject/body above. The SMTP credential (host/port/user/password) stays env-only —
+# only this non-secret address is exposed here. "" = no override; the adapter falls
+# back to settings.DEFAULT_FROM_EMAIL exactly as T-078 shipped (byte-identical when
+# unset).
+OTP_EMAIL_FROM_ADDRESS = "otp_email_from_address"
+OTP_EMAIL_FROM_ADDRESS_DEFAULT = ""
 
 # OTP channel codes an admin may pick (must match apps.otp.channels registry keys).
 OTP_CHANNEL_WHATSAPP_WATI = "whatsapp_wati"
@@ -776,6 +784,9 @@ def central_defaults() -> dict:
             "If you didn't request this code, please ignore this email.\n\n"
             "— {sender_identity}"
         ),
+        # T-081 — empty by default (no override); the adapter falls back to
+        # settings.DEFAULT_FROM_EMAIL, exactly what T-078 already sends.
+        OTP_EMAIL_FROM_ADDRESS: OTP_EMAIL_FROM_ADDRESS_DEFAULT,
     }
 
 
@@ -971,4 +982,10 @@ def get_preferences(tenant_id: int | None) -> dict:
         OTP_EMAIL_BODY_TEMPLATE: resolve(
             OTP_EMAIL_BODY_TEMPLATE, tenant_id=tenant_id, default=defaults[OTP_EMAIL_BODY_TEMPLATE]
         ) or defaults[OTP_EMAIL_BODY_TEMPLATE],
+        # T-081 — "" is a legitimate resolved value (means "no override"), so there is
+        # no "or default" fallback here (unlike subject/body, whose defaults are never
+        # blank).
+        OTP_EMAIL_FROM_ADDRESS: resolve(
+            OTP_EMAIL_FROM_ADDRESS, tenant_id=tenant_id, default=defaults[OTP_EMAIL_FROM_ADDRESS]
+        ),
     }

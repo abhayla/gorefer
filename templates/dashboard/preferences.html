@@ -420,6 +420,18 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
         <textarea id="otp_email_body_template" name="otp_email_body_template" rows="5"
                   class="w-full rounded-lg border border-line text-[13px] px-3 py-2 bg-white"
                   >{{ prefs.otp_email_body_template }}</textarea>
+        <label for="otp_email_from_address" class="text-[12px] font-semibold text-ink-600 mt-1">
+          Sender ("From") address
+        </label>
+        <div class="text-[11.5px] text-ink-500">
+          Leave blank to use the server's default sending address. This changes only who the
+          email appears to come FROM — the mail server login itself is configured separately
+          and never shown here.
+        </div>
+        <input type="email" id="otp_email_from_address" name="otp_email_from_address"
+               value="{{ prefs.otp_email_from_address }}"
+               class="w-full rounded-lg border border-line text-[13px] px-3 py-2 bg-white"
+               placeholder="login@yourdomain.com">
       </div>
 
       {# Numeric knobs #}

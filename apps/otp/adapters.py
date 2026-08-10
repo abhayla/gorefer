@@ -15,6 +15,10 @@ Each adapter implements `OtpDeliveryChannel.send()`:
     the referrer's ON-FILE email over Django's mail framework (SMTP config from env;
     Zoho Mail). It is an ADDITION to WhatsApp, never a fallback — the service fires
     both on one challenge. Unconfigured SMTP => STATUS_SUPPRESSED (clean no-op).
+    The FROM address (T-081) is owner-editable via Preferences (`context["from_address"]`,
+    cascade key `otp_email_from_address`) — the SMTP credential itself stays env-only.
+    A blank or invalid configured address falls back to `settings.DEFAULT_FROM_EMAIL`
+    (never an empty/broken From).
   - DemoOtpAdapter — log-only offline stand-in used whenever OTP is not live
     (ENABLE_OTP_LOGIN off). Logs the INTENDED send + returns STATUS_SUPPRESSED —
     sends nothing. (With OTP on but WATI off, the WhatsApp adapter still runs, routing
@@ -183,11 +187,14 @@ class EmailOtpAdapter:
             "OTP email send: to=%s subject_len=%d code_len=%d ttl=%ds",
             _mask_email(recipient), len(subject), len(code), ttl_seconds,
         )
+        from_email = _valid_from_address(context.get("from_address", "")) or (
+            getattr(settings, "DEFAULT_FROM_EMAIL", "") or None
+        )
         try:
             sent = EmailMessage(
                 subject=subject,
                 body=body,
-                from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "") or None,
+                from_email=from_email,
                 to=[recipient],
             ).send(fail_silently=False)
         except Exception as exc:  # noqa: BLE001 — a mail outage never breaks login
@@ -201,6 +208,28 @@ class EmailOtpAdapter:
         # status (the same distinction the WhatsApp adapter draws). There is no
         # per-message read-back channel for SMTP, so it never becomes DELIVERED.
         return DeliveryResult(status=STATUS_QUEUED, provider_ref="email")
+
+
+def _valid_from_address(value: str) -> str:
+    """A plausible From address from config, or "" if blank/garbage — never raises.
+
+    Defense in depth: `preferences_service._save_otp` already rejects a garbage value
+    at save time, but a value written any other way (direct DB edit, an older row)
+    must not be trusted blindly here either — a bad config value must never break the
+    send or ship a broken From, so we validate again and fall back on failure.
+    """
+    from django.core.exceptions import ValidationError
+    from django.core.validators import validate_email
+
+    value = (value or "").strip()
+    if not value:
+        return ""
+    try:
+        validate_email(value)
+    except ValidationError:
+        logger.warning("OTP email from-address config value is not a valid email — using the env default")
+        return ""
+    return value
 
 
 def _mail_configured() -> bool:
