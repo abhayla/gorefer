@@ -9,10 +9,12 @@ sending or writing anything, and reports that a DISTINCT token was minted for ea
 recipient WITHOUT ever printing the token (a preview a human reads is still a place
 a credential can leak).
 
-`--send` additionally requires both `ENABLE_WATI_SEND` and `ENABLE_RECORDS_LINK`,
-AND that the vendor itself reports the resolved template as APPROVED. The invite
-template is a DRAFT at Meta today, so `--send` refuses — this command ships as
-capability, not as a blast.
+`--send` additionally requires both `ENABLE_WATI_SEND` and `ENABLE_SHARE_HUB` (the
+flag that mounts the `/hub/{token}` page this invite links to — NOT
+`ENABLE_RECORDS_LINK`, which gates the unrelated `/records/` page), AND that the
+vendor itself reports the resolved template as APPROVED. The invite template is a
+DRAFT at Meta today, so `--send` refuses — this command ships as capability, not as
+a blast.
 """
 from __future__ import annotations
 

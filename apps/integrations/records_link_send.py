@@ -111,6 +111,7 @@ class SendFamily:
     gap_default: int
     category: str                 # Meta category recorded on the Notification
     build_params: Callable[[str, dict], list]   # (client_id, details) -> [{name,value}]
+    link_flag: str                # name of the `flags.*` attribute gating this family's link
 
 
 def _records_params(client_id: str, details: dict) -> list:
@@ -140,6 +141,7 @@ RECORDS_FAMILY = SendFamily(
     gap_default=RECORDS_LINK_SEND_MIN_GAP_DAYS_DEFAULT,
     category="UTILITY",
     build_params=_records_params,
+    link_flag="ENABLE_RECORDS_LINK",
 )
 
 INVITE_FAMILY = SendFamily(
@@ -155,6 +157,11 @@ INVITE_FAMILY = SendFamily(
     # so delivery analysis can tell a 131049 cap failure apart from a utility failure.
     category="MARKETING",
     build_params=_invite_params,
+    # The invite CTA links to /hub/{token}, mounted only under ENABLE_SHARE_HUB — NOT
+    # ENABLE_RECORDS_LINK (that gates the unrelated /records/ page). Gating on the
+    # wrong flag would let a SHARE_HUB-off + RECORDS_LINK-on tenant ship a dead button
+    # with a green delivered tick (T-073 checker RULING-3).
+    link_flag="ENABLE_SHARE_HUB",
 )
 
 
@@ -262,16 +269,17 @@ def _assert_template_approved(messaging, template: str) -> None:
         )
 
 
-def _assert_flags_on(tenant_id: int | None) -> None:
+def _assert_flags_on(family: SendFamily, tenant_id: int | None) -> None:
     # Local imports (not top-of-module) so tests can monkeypatch the resolver / the
     # frozen flags snapshot in place — the same convention `wati/adapter.py` and
     # `zoho/read.py` use for their own flag reads.
     from apps.config.integration_flags import ENABLE_WATI_SEND, resolve_flag
     from gorefer.flags import flags
 
-    if not (resolve_flag(ENABLE_WATI_SEND, tenant_id=tenant_id) and flags.ENABLE_RECORDS_LINK):
+    link_on = getattr(flags, family.link_flag)
+    if not (resolve_flag(ENABLE_WATI_SEND, tenant_id=tenant_id) and link_on):
         raise SendRefused(
-            "refused: --send requires BOTH ENABLE_WATI_SEND and ENABLE_RECORDS_LINK to be on"
+            f"refused: --send requires BOTH ENABLE_WATI_SEND and {family.link_flag} to be on"
         )
 
 
@@ -402,9 +410,11 @@ def _run(family: SendFamily, client_ids: list[str], *, dry_run: bool) -> dict:
     """Send (or preview) one family's template to an explicit client_id list.
 
     Real sends require BOTH `ENABLE_WATI_SEND` (resolved, admin-override-aware) AND
-    `flags.ENABLE_RECORDS_LINK`, plus vendor-confirmed template APPROVAL — all
-    checked ONCE up front so a mid-run flip can never produce a half-sent batch.
-    Dry-run needs none of them: it never touches the messaging port.
+    the family's own `link_flag` (records -> `ENABLE_RECORDS_LINK`, invite ->
+    `ENABLE_SHARE_HUB` — the flag that actually mounts the link the template points
+    at), plus vendor-confirmed template APPROVAL — all checked ONCE up front so a
+    mid-run flip can never produce a half-sent batch. Dry-run needs none of them: it
+    never touches the messaging port.
     """
     tenant = get_current_tenant()
     tenant_id = getattr(tenant, "id", None)
@@ -413,7 +423,7 @@ def _run(family: SendFamily, client_ids: list[str], *, dry_run: bool) -> dict:
 
     messaging = None
     if not dry_run:
-        _assert_flags_on(tenant_id)
+        _assert_flags_on(family, tenant_id)
         messaging = get_messaging_port()
         _assert_template_approved(messaging, template)
 
