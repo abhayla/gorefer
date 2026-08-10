@@ -438,6 +438,15 @@ def _save_otp(tenant_id, data, *, user=None) -> None:
     if template:
         set_tenant(prefkeys.OTP_WHATSAPP_TEMPLATE, template, tenant_id=tenant_id, user=user)
 
+    # T-078 — the email leg's copy (§6d: what a message says is config). Blank input
+    # is ignored rather than saved, so an empty box can never send an empty email.
+    subject = (data.get("otp_email_subject") or "").strip()
+    if subject:
+        set_tenant(prefkeys.OTP_EMAIL_SUBJECT, subject, tenant_id=tenant_id, user=user)
+    body = (data.get("otp_email_body_template") or "").strip()
+    if body:
+        set_tenant(prefkeys.OTP_EMAIL_BODY_TEMPLATE, body, tenant_id=tenant_id, user=user)
+
     # Numeric knobs — clamped to sane bounds so a bad admin entry can't disable OTP
     # security (e.g. TTL=0 or attempts=0).
     for key, field, lo, hi in (

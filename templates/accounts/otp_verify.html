@@ -5,6 +5,9 @@
     <h1 class="text-xl font-extrabold tracking-tight text-ink-900">Enter the code</h1>
     {% if recipient_masked %}
       <p class="mt-1.5 text-sm text-ink-500">We sent a one-time code on WhatsApp to <span class="font-semibold">{{ recipient_masked }}</span> — the number on file for <span class="font-mono font-semibold text-cobalt-600">{{ client_id }}</span>.</p>
+      {% if email_also_sent %}
+        <p class="mt-1 text-sm text-ink-500">We also emailed the same code to the address on file.</p>
+      {% endif %}
     {% else %}
       <p class="mt-1.5 text-sm text-ink-500">Verifying <span class="font-mono font-semibold text-cobalt-600">{{ client_id }}</span>.</p>
     {% endif %}

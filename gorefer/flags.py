@@ -82,6 +82,13 @@ class FeatureFlags:
     # through the DemoOtpAdapter (log-only, sends nothing). Independent of
     # ENABLE_WATI_SEND: even with OTP on, real WhatsApp sending still needs WATI on.
     ENABLE_OTP_LOGIN: bool = False
+    # T-078 — the SECOND OTP delivery leg: the same login code also goes to the
+    # referrer's ON-FILE email (Zoho Contact / Customer), never a typed address.
+    # ADDITION, not fallback: WhatsApp still sends exactly as before and the two
+    # legs are independent. OFF by default — prod activation waits on the Zoho Mail
+    # app-specific password (TODO-Manual gorefer-email-otp-zoho-smtp-cred). With it
+    # OFF, behaviour is byte-identical to WhatsApp-only.
+    ENABLE_EMAIL_OTP: bool = False
 
     # External-system adapters — OFF until credentials/templates verified.
     # When OFF, adapters log the intended call instead of sending (demo-safe).
@@ -136,6 +143,7 @@ class FeatureFlags:
         return cls(
             ENABLE_CUSTOMER_LOGIN=_bool("ENABLE_CUSTOMER_LOGIN", cls.ENABLE_CUSTOMER_LOGIN),
             ENABLE_OTP_LOGIN=_bool("ENABLE_OTP_LOGIN", cls.ENABLE_OTP_LOGIN),
+            ENABLE_EMAIL_OTP=_bool("ENABLE_EMAIL_OTP", cls.ENABLE_EMAIL_OTP),
             ENABLE_WATI_SEND=_bool("ENABLE_WATI_SEND", cls.ENABLE_WATI_SEND),
             ENABLE_ZOHO_WRITE=_bool("ENABLE_ZOHO_WRITE", cls.ENABLE_ZOHO_WRITE),
             ENABLE_ZOHO_READ=_bool("ENABLE_ZOHO_READ", cls.ENABLE_ZOHO_READ),
