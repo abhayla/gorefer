@@ -6456,3 +6456,44 @@ doc is affected.
 **Owner-gated to activate in prod:** the Zoho Mail app-specific password. TODO-Manual card
 `gorefer-email-otp-zoho-smtp-cred`. Until it is set, `ENABLE_EMAIL_OTP` stays off and nothing about
 today's login changes.
+
+---
+
+## STATUS — T-081: OTP email FROM-address self-serve on Preferences (2026-08-10)
+
+Owner rule (2026-08-10, §6d): the OTP-sending email address must be changeable later with
+NO deploy. T-078 shipped the email OTP leg's FROM address hardcoded to
+`settings.DEFAULT_FROM_EMAIL` (env-only). This makes **only the from-address** an
+owner-editable cascade key — the SMTP credential (host/port/user/password) stays env-only,
+exactly as it shipped in T-078.
+
+**New cascade key:** `otp_email_from_address` (`apps/config/preferences.py`). Default `""`
+means "no override" — the adapter falls back to `settings.DEFAULT_FROM_EMAIL`, so behaviour
+is byte-identical to T-078 until an admin sets a value.
+
+**Surfaced on Preferences** (`templates/dashboard/preferences.html`, next to the existing
+subject/body fields), persisted via `apps/dashboard/preferences_service.py::_save_otp`, read
+by `EmailOtpAdapter.send()` (`apps/otp/adapters.py`) via `context["from_address"]`
+(threaded through `apps/otp/service.py::_deliver_email`). A change takes effect on the very
+next OTP send — no restart, no redeploy.
+
+**Validation.** A non-blank value is checked with Django's `validate_email` at SAVE time; a
+bad value is rejected with a notice and the previous override (or the unset default) is left
+untouched. Defense in depth: the adapter re-validates at SEND time too (`_valid_from_address`)
+so a value written any other way (direct DB edit, a stale row) can never break the send or
+ship a broken `From:` header — it silently falls back to the env default instead.
+
+**Secrets stay secret.** `EMAIL_HOST_PASSWORD`/`EMAIL_HOST_USER`/`EMAIL_HOST` are NOT cascade
+keys, not on Preferences, and never appear in a `get_preferences()` read — only the non-secret
+from-address is exposed. Tested directly (`tests/test_t081_otp_email_from.py`).
+
+**Cleanup (checker note from T-078).** `.env.example`'s SMTP example comments were
+Zoho-shaped; prod actually runs Gmail SMTP (owner cost decision). Re-worded to a
+Gmail-shaped example (`smtp.gmail.com:465`, app password) — comment-only, no behaviour
+change, `[skip-contract-doc]`-eligible (no `apps/integrations/**` touched).
+
+**Gates.** 1183 tests green (`-n 4`, `TEST_DB_NAME=gorefer_test_081`) — the existing 21
+T-078 tests unmodified and passing, plus 13 new in `tests/test_t081_otp_email_from.py`
+(locmem backend only, no real SMTP); ruff clean; `manage.py check` clean; architecture gate
+0/0; `makemigrations --check` reports no changes (no new model — a cascade key, not a
+column). No `apps/integrations/**` change, so no vendor contract doc is affected.
