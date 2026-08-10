@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% comment %}
+T-075 — the login-gated hub's "no referral record yet" state.
+
+Reached when someone IS signed in (so we know exactly who they are) but their bound
+client_id has no ReferralIdentity row: bound at login, never clicked, and no
+Zoho-imported conversion. Identities are created at CLICK time (ADR-008) and rendering
+a page must not create one — so this says so plainly and points at the ownership
+verification path, rather than rendering a hub with an empty link in it.
+
+All copy arrives cascade-resolved (rail E-6 / §6d) with its `_hi` twin (T-061).
+{% endcomment %}
+{% block html_lang %}{{ lang|default:"en" }}{% endblock %}
+{% block title %}{{ unlinked.title }} — GoRefer{% endblock %}
+{% block head_extra %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block content %}
+<section class="space-y-3" data-test="hub-unlinked">
+  <h1 class="text-[17px] font-bold">{{ unlinked.title }}</h1>
+  <p class="text-[12px] text-ink-500">{{ unlinked.body }}</p>
+  <a href="{{ unlinked.verify_url }}"
+     data-test="hub-unlinked-cta"
+     class="inline-block rounded-lg bg-cobalt-600 px-4 py-2 text-[13px] font-semibold text-white">
+    {{ unlinked.cta }}
+  </a>
+</section>
+{% endblock %}

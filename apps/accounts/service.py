@@ -95,6 +95,80 @@ def account_for_request(request) -> ReferrerAccount | None:
     return account
 
 
+# --- The session gate (T-075) -----------------------------------------------------
+#
+# Lives HERE rather than in views.py because `apps.accounts.hub` needs the same gate
+# for the login-gated share hub, and views.py already imports hub-adjacent modules —
+# one shared definition beats a second, drifting copy of "what counts as logged in".
+
+#: Where a gated view stashes the URL the visitor was actually asking for, so the
+#: login flow can send them back after they prove who they are. Session-held rather
+#: than carried through every POST: the Google door leaves the site entirely and
+#: comes back on a callback that has no room for our own query string.
+LOGIN_NEXT_SESSION_KEY = "referrer_login_next"
+
+
+def safe_next(raw: str | None) -> str:
+    """A same-site, path-only redirect target, or "".
+
+    Deliberately stricter than Django's own check: only a value starting with a single
+    "/" survives, so neither an absolute URL nor a scheme-relative "//evil.example"
+    (which a browser reads as another host) can be handed back as a post-login
+    destination. An open redirect on a login flow is a phishing primitive.
+    """
+    from django.utils.http import url_has_allowed_host_and_scheme
+
+    value = (raw or "").strip()
+    if not value.startswith("/") or value.startswith("//") or value.startswith("/\\"):
+        return ""
+    if not url_has_allowed_host_and_scheme(value, allowed_hosts=None):
+        return ""
+    return value
+
+
+def login_url() -> str:
+    """The referrer login door. Reversed when mounted, literal otherwise — a
+    NoReverseMatch must not 500 a page that can render with the flag off."""
+    from django.urls import NoReverseMatch, reverse
+
+    try:
+        return reverse("referrer_login")
+    except NoReverseMatch:
+        return "/login/"
+
+
+def login_redirect(request):
+    """302 to the login door, remembering where the visitor was heading."""
+    from urllib.parse import quote
+
+    from django.shortcuts import redirect
+
+    target = safe_next(request.get_full_path())
+    door = login_url()
+    return redirect(f"{door}?next={quote(target, safe='/')}" if target else door)
+
+
+def referrer_required(view):
+    """Gate a view behind an ACTIVE referrer session.
+
+    On success the account is attached as `request.referrer_account`, which is the
+    ONLY identity the wrapped view may use: nothing downstream reads a client_id from
+    the URL or the form, so there is no parameter to tamper with (the M13 own-record
+    scoping rule, applied to every session-gated surface).
+    """
+
+    def wrapped(request, *args, **kwargs):
+        account = account_for_request(request)
+        if account is None:
+            return login_redirect(request)
+        request.referrer_account = account
+        return view(request, *args, **kwargs)
+
+    wrapped.__name__ = view.__name__
+    wrapped.__doc__ = view.__doc__
+    return wrapped
+
+
 # --- Verification queue (ADR-027 mismatch + ADR-035 Path B) -----------------------
 
 def submit_evidence_request(
