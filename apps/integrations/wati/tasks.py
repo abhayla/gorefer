@@ -20,8 +20,8 @@ from django_q.tasks import async_task
 from apps.events import vocab
 from apps.events.models import Event
 from apps.integrations.models import Notification
+from apps.integrations.ports import get_messaging_port
 from apps.integrations.wati import status as st
-from apps.integrations.wati.adapter import get_wati_adapter
 
 logger = logging.getLogger("gorefer.wati.tasks")
 
@@ -37,7 +37,10 @@ def send_notification(notification_id: int) -> str:
     if n is None or n.status not in {"queued"}:
         return "noop"
 
-    adapter = get_wati_adapter()
+    # Routed through the guarded port (T-073/T-074), not the raw adapter, so any
+    # future token-carrying template enqueued here is also fail-closed-checked —
+    # today's M5 role templates carry no computed variable, so this is a pass-through.
+    adapter = get_messaging_port()
     # Stamp which adapter handled this send, so a demo/log-only "delivery" is always
     # distinguishable from a real Wati delivery (Fable5 M7).
     n.adapter_kind = getattr(adapter, "kind", "")

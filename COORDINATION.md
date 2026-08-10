@@ -6262,3 +6262,39 @@ instead/as well. Flagging for the DA rather than silently widening the gate.
 **Gates:** 1117 tests green (`-n 4`), ruff clean, `manage.py check` clean, architecture gate 0/0,
 `makemigrations --check` reports no changes (no new models — correct per the contract).
 `Wati-GoRefer/Wati-Integration-Contract.md` §12 updated in the same PR (no `[skip-contract-doc]`).
+
+## 2026-08-10 STATUS (Engineer) — T-074 closes the two T-073 checker findings (PR)
+
+Closes the opus checker's two non-blocking findings on T-073, and resolves the QUESTION logged
+above in favour of the DA's own instinct: the invite gates on `ENABLE_SHARE_HUB`, not
+`ENABLE_RECORDS_LINK`.
+
+**RULING-3 fix.** `SendFamily` gained a `link_flag` field naming the `flags.*` attribute that must
+be on for that family's `--send` to proceed — `ENABLE_RECORDS_LINK` for records (mounts
+`/records/`), **`ENABLE_SHARE_HUB`** for the invite (mounts `/hub/{token}`, what the invite CTA
+actually links to). `_assert_flags_on` now reads `family.link_flag` instead of a shared literal.
+Before this fix a SHARE_HUB-off + RECORDS_LINK-on tenant could send the invite with a button
+pointing at an unmounted page; a new test (`test_invite_send_refused_when_share_hub_off_even_with_records_link_on`)
+locks the old wrong-pass state out, and the inverse (SHARE_HUB on, RECORDS_LINK off → invite sends)
+and the records family's own unchanged gating are each covered too.
+
+**FINDING-A fix.** `apps/integrations/wati/tasks.py:send_notification` (the M5 office/prospect/
+referrer alert path) now calls `apps.integrations.ports.get_messaging_port()` instead of
+`wati.adapter.get_wati_adapter()` directly — it was the one caller still bypassing the T-073
+port-level guard. Today's M5 templates carry no computed variable, so this is a pure pass-through
+(asserted by test); a future token-carrying template enqueued through this path is now guarded too.
+
+**Gates:** 1123 tests green (`-n 4`), ruff clean, `manage.py check` clean, architecture gate 0/0,
+`makemigrations --check` reports no changes. `Wati-GoRefer/Wati-Integration-Contract.md` §12/§12b
+updated in the same PR (no `[skip-contract-doc]`) — the boundary contract's send-gate mapping and
+guard coverage both shifted.
+
+**Note on test infra (non-blocking, flagging for visibility):** hit a pre-existing test-order
+hazard while adding coverage — the `_set_flags` monkeypatch helper (copied from T-057/T-073) binds
+`apps.config.integration_flags.flags` permanently to a mutated copy if that module's first import
+in the whole pytest session happens to occur *after* `gorefer.flags.flags` was already monkeypatched
+(a lazy `from X import Y` binds once, at first import). Full-suite runs are unaffected today because
+some earlier-collected file imports the module first while flags are still pristine, but under
+`-n 4` sharding this is order-dependent per worker. Worked around it locally by forcing an eager
+top-of-file import in the new test file; did not touch the shared helper since it is out of this
+task's scope — worth a follow-up if it ever flakes in CI.
