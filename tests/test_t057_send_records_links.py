@@ -25,7 +25,7 @@ from apps.followups.models import FollowupWindow
 from apps.integrations import records_link_send as rls
 from apps.integrations.models import Notification
 from apps.integrations.wati import status as wati_status
-from apps.integrations.wati.adapter import DeliveryResult, SendResult
+from apps.integrations.wati.adapter import DeliveryResult, SendResult, TemplateStatus
 from apps.referrals.models import ReferralIdentity, ReferralProgram
 from apps.tenants.models import Tenant
 
@@ -92,6 +92,11 @@ class _FakeAdapter:
 
     def get_message_status(self, *, provider_message_id, recipient_mobile=None, template=None):
         return DeliveryResult(status=self._terminal_status, meta_error_code=None, classification=None)
+
+    def get_template_status(self, *, template):
+        # T-073: a real send now proves vendor-side approval first. The records-link
+        # template IS approved in production, so the fake reports it as such.
+        return TemplateStatus(name=template, status="APPROVED", category="UTILITY")
 
 
 # --------------------------------------------------------------------------- dry-run
