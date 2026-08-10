@@ -11,7 +11,16 @@
 > wins; if either disagrees with the live system, **the live system wins** — verify, don't
 > trust (commands at the bottom).
 >
-> **Last updated:** 2026-08-10 05:00 IST (**DEPLOYED: `758f64a` = main tip** — the overnight
+> **Last updated:** 2026-08-10 12:35 IST (**DEPLOYED: `c89c8cd` = main tip** — **T-073 fail-closed
+> computed-variable send guard LIVE**: GoRefer now refuses to send ANY WhatsApp template whose
+> server-computed vars (e.g. {{token}}) are missing/blank, enforced at the messaging-port factory
+> before any network call — the root-cause fix for the "template with a token but no sender ships
+> blank/broken links silently" gap. Plus a fail-closed vendor-approval check + a per-recipient
+> invite sender (send_invite_links, dry-run default). Live-proven: the DRAFT invite is REFUSED by
+> --send. Opus checker PASS (24 probes, 1117 tests). Two non-blocking findings (invite gate should
+> be ENABLE_SHARE_HUB; wati/tasks.py raw-adapter path) being closed by T-074 in flight. NO blast
+> fired — invite send still gated on owner trigger + Zerodha sign-off + Meta approval.)
+> — prior 2026-08-10 05:00 IST (**DEPLOYED: `758f64a` = main tip** — the overnight
 > CUSTOMIZATION BLOCK is complete and live: **T-062** share-message self-serve (Preferences
 > editors EN/HI) + language stickiness (stored-language resolution on /share and /hub),
 > **T-063** hub share images (config slots, native-share-with-files, download buttons — dormant
