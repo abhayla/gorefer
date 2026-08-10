@@ -377,3 +377,32 @@ GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
 # Optional explicit redirect URI (must EXACTLY match the one registered in Google
 # Cloud Console). Empty => derived from the request (https://<host>/login/google/callback).
 GOOGLE_OAUTH_REDIRECT_URL = os.environ.get("GOOGLE_OAUTH_REDIRECT_URL", "")
+
+# --- Outbound email / SMTP (T-078, behind ENABLE_EMAIL_OTP) -----------------
+# GoRefer's ONLY email capability today is the second OTP delivery leg (the login
+# code also goes to the referrer's ON-FILE email, so a capped/undelivered WhatsApp
+# no longer locks a referrer out). Transport is Zoho Mail SMTP (owner-delegated
+# 2026-08-10) — smtp.zoho.in:465 over SSL with an app-specific password.
+#
+# EVERY value is env-only; the password is a SECRET and must never appear inline.
+# With EMAIL_HOST unset the adapter no-ops (STATUS_SUPPRESSED) instead of raising,
+# so a box with no mail creds behaves exactly like today.
+EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "465") or 465)
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")  # SECRET — env only
+EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "true").strip().lower() in {"1", "true", "yes", "on"}
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "false").strip().lower() in {"1", "true", "yes", "on"}
+# Django refuses to start a connection with BOTH set; SSL (Zoho's 465) wins.
+if EMAIL_USE_SSL:
+    EMAIL_USE_TLS = False
+# A synchronous login request must never hang on a stalled mail server.
+EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "10") or 10)
+# From-address: explicit env, else the authenticated mailbox (Zoho rejects a From
+# that is not the authenticated user / a verified alias).
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "") or EMAIL_HOST_USER
+# Sender identity line printed in the OTP email body (config, not a secret).
+EMAIL_SENDER_IDENTITY = os.environ.get(
+    "EMAIL_SENDER_IDENTITY", "Passive Income Financial Solutions"
+)

@@ -6383,3 +6383,76 @@ check` clean, architecture gate 0/0, `makemigrations --check` reports no changes
 this reuses `ReferrerAccount` / `ReferralIdentity` / `ReferrerShareOpener`). Tailwind rebuild
 produced no diff (the new template uses existing classes). No `apps/integrations/**` change, so no
 vendor contract doc is affected.
+
+---
+
+## 2026-08-10 — STATUS (Engineer): T-078 email OTP — a SECOND, simultaneous login channel
+
+**PR:** `feat/t078-email-otp` — *email as a second OTP delivery leg (Zoho Mail SMTP), behind
+`ENABLE_EMAIL_OTP` (default OFF).*
+
+**Why.** WhatsApp OTP delivery sits at roughly 43% (Meta per-user cap). A referrer whose code
+never arrives has no second door except Path B. Owner decision 2026-08-10: *"for OTP, in addition
+to WhatsApp message for OTP, also send OTP in email"*, transport delegated to Zoho Mail SMTP.
+
+**Shape — ADDITION, not cascade.** `OtpService.issue()` runs the existing WhatsApp cascade exactly
+as before, then fires an INDEPENDENT email leg (`_deliver_email`) carrying the SAME code. Neither
+leg can block the other: email runs after WhatsApp (so a stalled mail server cannot delay the
+WhatsApp send) and every email failure is swallowed inside `_deliver_email`. `IssueResult` gains
+`email_status` / `email_sent`, and `delivered` is now "WhatsApp OK **or** email sent" — an emailed
+code is a real code, so a WhatsApp-only failure no longer tells the referrer login is broken.
+
+**New pieces.** `EmailOtpAdapter` (`apps/otp/adapters.py`, registered in `apps/otp/channels.py` as
+`EMAIL_CHANNEL = "email"`, resolved through the same demo gate as every other channel) sends via
+Django's `EmailMessage`; SMTP config is env-only in `gorefer/settings.py`
+(`EMAIL_HOST/PORT/HOST_USER/HOST_PASSWORD/USE_SSL/USE_TLS/TIMEOUT`, `DEFAULT_FROM_EMAIL`,
+`EMAIL_SENDER_IDENTITY`), `.env.example` carries the Zoho shape `smtp.zoho.in:465` SSL with an
+**app-specific password**. `email` is deliberately NOT added to `OTP_CHANNEL_CHOICES` — it is a
+simultaneous leg governed by a flag, not a cascade slot an admin picks as primary/fallback.
+
+**On-file only (ADR-035 Path A, mirrored for email).** `resolve_onfile_email(tenant, client_id)` in
+`apps/otp/recipient.py` reads Customer.email, then the Zoho Contact `Email` through the M9 read
+port (already in `CONTACT_ENRICHMENT_FIELDS` — no Zoho-side change). It takes **no address
+argument**, so there is no parameter through which a user-supplied email could be injected; the
+login view resolves from the client_id alone. `OtpService`'s `email_resolver` defaults to a
+fail-closed resolver: a caller that forgets to pass one sends nowhere. No on-file email ⇒ the leg
+skips cleanly (`suppressed`) and WhatsApp still sends.
+
+**Gating.** `ENABLE_EMAIL_OTP` (flags.py, default False) **and** `ENABLE_OTP_LOGIN` must both be
+on. Flag off ⇒ the leg never runs at all (`email_status == ""`), behaviour identical to today —
+tested. With the SMTP backend selected but `EMAIL_HOST` unset (prod's state until the credential
+lands) the adapter no-ops with `suppressed` instead of raising — login keeps working.
+
+**Security.** Codes stay hashed+peppered+single-use and inherit the existing per-identity hourly
+cap + resend cooldown — one email per challenge, and a rate-limited challenge sends none, so the
+second channel is not an amplification vector. The plaintext code is in the mail body only (that is
+what an email OTP is); it is never persisted and never logged, and the log line masks the address
+(`r***h@example.com`). Body carries the code, the live TTL, an "if you didn't request this, ignore"
+line and the sender identity — no name, no client_id, no phone, no account details.
+
+**Compliance ruling (per CLAUDE.md §4).** The AP disclosure block + market-risk warning are
+required on **customer-facing marketing/asset surfaces**; a one-to-one transactional login code is
+not such a surface, and padding a security email with promotional-adjacent claim text would work
+against it. So: **no disclosure block in the OTP email**, but the sender is identified in plain
+words ("Passive Income Financial Solutions"). Every public page keeps its auto-injected block
+unchanged. Flagging for DA dissent if this reading is wrong.
+
+**Config, not literals (§6d / rail E-6).** `otp_email_subject` + `otp_email_body_template` are
+cascade keys (placeholders `{code}` / `{minutes}` / `{sender_identity}`), seeded with today's copy,
+editable on the Preferences screen, read at SEND time. A bad admin placeholder falls back to the
+known-good copy rather than locking anyone out.
+
+**Not changed (deliberate, flagging for DA):** a referrer with an email on file but **no phone** on
+file still gets the Path-B redirect before any OTP is issued — today's behaviour, untouched. If the
+DA wants email-only referrers to log in, that is a separate decision on the `views.otp_request`
+gate, not a side effect of this task.
+
+**Gates.** 1170 tests green (`-n 4`, `TEST_DB_NAME=gorefer_test_t078`) including 21 new in
+`tests/test_t078_email_otp.py` (locmem backend only — no real SMTP anywhere); ruff clean;
+`manage.py check` clean; architecture gate 0/0; `makemigrations --check` reports no changes (no new
+model); Tailwind rebuild produced no diff. No `apps/integrations/**` change, so no vendor contract
+doc is affected.
+
+**Owner-gated to activate in prod:** the Zoho Mail app-specific password. TODO-Manual card
+`gorefer-email-otp-zoho-smtp-cred`. Until it is set, `ENABLE_EMAIL_OTP` stays off and nothing about
+today's login changes.

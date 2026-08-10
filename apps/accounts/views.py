@@ -22,7 +22,7 @@ from django.http import Http404
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from apps.otp.recipient import resolve_onfile_recipient
+from apps.otp.recipient import resolve_onfile_email, resolve_onfile_recipient
 from apps.otp.service import OtpError, OtpRateLimited, OtpService
 from apps.referrals.validators import InvalidClientId, validate_client_id
 from apps.tenants.resolve import get_current_tenant
@@ -149,7 +149,13 @@ def otp_request(request):
         # Unknown referrer — no on-file channel. Never guess; offer Path B.
         return redirect(f"{_url('referrer_pathb')}?client_id={cid}")
 
-    otp = OtpService(tenant, recipient_resolver=lambda i: resolve_onfile_recipient(tenant, i))
+    # Both channels resolve from the client_id alone (ADR-035 Path A): nothing the
+    # visitor typed can steer where the code goes — for WhatsApp or for email.
+    otp = OtpService(
+        tenant,
+        recipient_resolver=lambda i: resolve_onfile_recipient(tenant, i),
+        email_resolver=lambda i: resolve_onfile_email(tenant, i),
+    )
     try:
         result = otp.issue(cid, purpose="login")
     except OtpRateLimited as exc:
@@ -176,7 +182,13 @@ def otp_request(request):
         )
     return render(
         request, "accounts/otp_verify.html",
-        {"client_id": cid, "recipient_masked": _mask_recipient(recipient)},
+        {
+            "client_id": cid,
+            "recipient_masked": _mask_recipient(recipient),
+            # Only stated when the email leg actually went out (T-078) — never a
+            # promise of a message we didn't send.
+            "email_also_sent": result.email_sent,
+        },
     )
 
 

@@ -11,6 +11,10 @@ Each adapter implements `OtpDeliveryChannel.send()`:
   - ManualOtpAdapter — routes to the assisted/Ashok path (Path B). Logs/queues an
     assisted-verification request; returns STATUS_QUEUED (handoff, not proven
     delivery) so it terminates a cascade without claiming machine delivery.
+  - EmailOtpAdapter — the SECOND, SIMULTANEOUS leg (T-078). Sends the same code to
+    the referrer's ON-FILE email over Django's mail framework (SMTP config from env;
+    Zoho Mail). It is an ADDITION to WhatsApp, never a fallback — the service fires
+    both on one challenge. Unconfigured SMTP => STATUS_SUPPRESSED (clean no-op).
   - DemoOtpAdapter — log-only offline stand-in used whenever OTP is not live
     (ENABLE_OTP_LOGIN off). Logs the INTENDED send + returns STATUS_SUPPRESSED —
     sends nothing. (With OTP on but WATI off, the WhatsApp adapter still runs, routing
@@ -113,6 +117,116 @@ class WatiWhatsAppOtpAdapter:
             provider_ref=result.provider_message_id,
             error=st.classify_failure(delivery.meta_error_code),
         )
+
+
+class EmailOtpAdapter:
+    """SECOND OTP channel (T-078) — the same code, also emailed to the ON-FILE address.
+
+    Transport is Django's own mail framework (`EmailMessage`), so the backend is a
+    settings concern: SMTP in production (Zoho Mail, env-configured), locmem in tests.
+    This adapter never picks a recipient — the service hands it the on-file address
+    resolved from Zoho/Customer, never anything the user typed (ADR-035 Path A).
+
+    Copy is CONFIG, not code (§6d / rail E-6): `context["subject"]` and
+    `context["body_template"]` come from the cascade and are formatted with
+    `{code}` / `{minutes}` / `{sender_identity}`. The plaintext code is in the mail
+    body (that is what an email OTP is) but NEVER in a log line and never in the DB.
+
+    An unconfigured mail server is a clean no-op (STATUS_SUPPRESSED), not a crash:
+    a login must not 500 because the SMTP password has not been pasted in yet.
+    """
+
+    code = "email"
+
+    #: Fallbacks used only if the cascade somehow yields blank copy — same wording as
+    #: the seeded central defaults, so a blank row can never send an empty email.
+    DEFAULT_SUBJECT = "Your GoRefer login code"
+    DEFAULT_BODY = (
+        "Your GoRefer login code is {code}.\n\n"
+        "It is valid for {minutes} minute(s) and can be used once.\n"
+        "If you didn't request this code, please ignore this email.\n\n"
+        "— {sender_identity}"
+    )
+
+    def send(self, *, recipient: str, code: str, ttl_seconds: int, context: dict) -> DeliveryResult:
+        from django.conf import settings
+        from django.core.mail import EmailMessage
+
+        recipient = (recipient or "").strip()
+        if not recipient:
+            # No on-file email for this client_id — skip the leg cleanly. WhatsApp
+            # has already run; this is not a failure of the challenge.
+            logger.info("OTP email skipped: no on-file address for this identity")
+            return DeliveryResult(status=STATUS_SUPPRESSED, provider_ref="no-onfile-email")
+
+        if not _mail_configured():
+            logger.info("OTP email skipped: no SMTP configuration (EMAIL_HOST unset)")
+            return DeliveryResult(status=STATUS_SUPPRESSED, provider_ref="smtp-unconfigured")
+
+        sender_identity = getattr(settings, "EMAIL_SENDER_IDENTITY", "") or "GoRefer"
+        minutes = max(1, ttl_seconds // 60)
+        subject = (context.get("subject") or "").strip() or self.DEFAULT_SUBJECT
+        body_template = context.get("body_template") or self.DEFAULT_BODY
+        try:
+            body = body_template.format(
+                code=code, minutes=minutes, sender_identity=sender_identity
+            )
+        except (KeyError, IndexError, ValueError):
+            # A bad admin-entered placeholder must not lock anyone out of login —
+            # fall back to the known-good copy rather than raising.
+            logger.warning("OTP email body template has a bad placeholder — using the default copy")
+            body = self.DEFAULT_BODY.format(
+                code=code, minutes=minutes, sender_identity=sender_identity
+            )
+
+        logger.info(
+            "OTP email send: to=%s subject_len=%d code_len=%d ttl=%ds",
+            _mask_email(recipient), len(subject), len(code), ttl_seconds,
+        )
+        try:
+            sent = EmailMessage(
+                subject=subject,
+                body=body,
+                from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "") or None,
+                to=[recipient],
+            ).send(fail_silently=False)
+        except Exception as exc:  # noqa: BLE001 — a mail outage never breaks login
+            # Type only: an SMTP exception can echo the message envelope.
+            logger.warning("OTP email send failed (%s)", type(exc).__name__)
+            return DeliveryResult(status=STATUS_FAILED, error=f"email:{type(exc).__name__}")
+
+        if not sent:
+            return DeliveryResult(status=STATUS_FAILED, error="email not accepted")
+        # SMTP acceptance is not proof of inbox delivery — QUEUED is the honest
+        # status (the same distinction the WhatsApp adapter draws). There is no
+        # per-message read-back channel for SMTP, so it never becomes DELIVERED.
+        return DeliveryResult(status=STATUS_QUEUED, provider_ref="email")
+
+
+def _mail_configured() -> bool:
+    """True when a send can actually go somewhere.
+
+    An SMTP backend needs EMAIL_HOST; every other backend (locmem in tests, console
+    in dev, file) is self-contained and always "configured".
+    """
+    from django.conf import settings
+
+    backend = str(getattr(settings, "EMAIL_BACKEND", "") or "")
+    if "smtp" not in backend.lower():
+        return True
+    return bool(getattr(settings, "EMAIL_HOST", ""))
+
+
+def _mask_email(address: str) -> str:
+    """`abhay@example.com` -> `a***y@example.com` — enough to audit, not to harvest."""
+    local, _, domain = address.partition("@")
+    if not domain:
+        return "***"
+    if len(local) <= 2:
+        masked = local[:1] + "***"
+    else:
+        masked = f"{local[0]}***{local[-1]}"
+    return f"{masked}@{domain}"
 
 
 class SmsOtpAdapter:
