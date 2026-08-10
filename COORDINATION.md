@@ -6497,3 +6497,34 @@ T-078 tests unmodified and passing, plus 13 new in `tests/test_t081_otp_email_fr
 (locmem backend only, no real SMTP); ruff clean; `manage.py check` clean; architecture gate
 0/0; `makemigrations --check` reports no changes (no new model — a cascade key, not a
 column). No `apps/integrations/**` change, so no vendor contract doc is affected.
+
+---
+
+### STATUS 2026-08-10 20:00 IST — T-081 deployed (OTP email FROM-address self-serve)
+
+`d238789` (PR #153) LIVE on prod. Cascade key `otp_email_from_address` now editable on the
+Preferences screen; default `""` falls back to `DEFAULT_FROM_EMAIL` (byte-identical to T-078).
+SMTP host/user/**password** remain env-only — checker's first ruling was secret-safety PASS
+(grep + live render probe: no secret leaks via Preferences). A bad from-address is rejected at save
+AND defended again at send (a garbage value can't break OTP email — it falls back to env). 6-file
+file-copy deploy, sha256 byte-exact; `seed_program` run (key resolves `''` live); both services
+active; home + `/d/pifs` 200. Checker: 1183 tests, evidence `GetWorkDone/evidence/2026-08-10-T-081/`.
+
+**State-doc drift corrected this turn:** the CURRENT-STATE header + Deployed-SHA row had led with
+`4968677`/`c89c8cd` — the T-075 (`a569383`) and T-078 (`fff1cf7`) deploys had gone out WITHOUT
+updating CURRENT-STATE. Header + row now record all four (T-073→T-075→T-078→T-081). Pre-deploy
+`DEPLOYED_SHA` on the box read `fff1cf7`, confirming prod was two ahead of the doc's lead.
+
+Email OTP end-to-end remains **owner-gated**: `ENABLE_EMAIL_OTP` off in prod until the owner
+supplies the Gmail SMTP app-password (TODO-Manual `gorefer-email-otp-smtp-cred`). Email leg is a
+clean no-op until then; WhatsApp OTP unchanged.
+
+**Invite template** `gr_brokers_zerodha_referandearn_invite_en_2026_08_10` submitted to Meta —
+PENDING, MARKETING/EN, token dropped (Refer a Friend → `/r/{{client_id}}`, Share to Refer → static
+`/hub`, Know More QR). Approval watcher armed.
+
+**Know More flow (SSOT-checked, Wati-Project lane):** entry + happy path work; the defect is a soft
+dead-end on junk typing at the menu — one "sorry, tap above" then the flow terminates
+(`main_message-kmcatch` has no outgoing route) and further input hits silence (tenant fallback slot
+OFF), with no human handoff. Violates conversation-map §0 + F5 "re-show once → handoff". Fix
+(SSOT map update + owner copy approval + live-number touch) awaiting owner go.
