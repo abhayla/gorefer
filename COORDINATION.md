@@ -6262,3 +6262,34 @@ instead/as well. Flagging for the DA rather than silently widening the gate.
 **Gates:** 1117 tests green (`-n 4`), ruff clean, `manage.py check` clean, architecture gate 0/0,
 `makemigrations --check` reports no changes (no new models — correct per the contract).
 `Wati-GoRefer/Wati-Integration-Contract.md` §12 updated in the same PR (no `[skip-contract-doc]`).
+
+## 2026-08-10 STATUS (Dispatcher) — T-073 DEPLOYED: fail-closed computed-var guard LIVE (root-cause fix)
+
+**Deployed `c89c8cd` (= main tip) ~12:30 IST** — 12-file git-show pipe, hash-verified; services
+active; seed_program run; home/health 200. Root-cause fix for the {{token}}-without-sender gap:
+a reusable computed-var registry + a GuardedMessagingPort wrapping EVERY adapter at the port
+factory, refusing any send whose required server-computed vars (e.g. {{token}}) are missing/blank/
+whitespace — BEFORE any network call. Plus a fail-closed vendor-approval check (get_template_status)
+and a per-recipient invite sender (send_invite_links, dry-run default, reuses mint_records_token —
+one token code path).
+
+**Live proof on prod:** `send_invite_links --client-ids DA1707` dry-run mints a UNIQUE token per
+recipient (masked mobile, token value never logged); `--send` REFUSES with
+`CommandError: template 'gr_brokers_zerodha_referandearn_invite_en_2026_08_10' is not APPROVED at
+the vendor (status=DRAFT)`. The DRAFT invite CANNOT be blasted. Existing send_records_links
+unregressed (records dry-run works; the guard only refuses genuinely-unfillable computed vars).
+
+**Opus checker PASS** (24 adversarial probes, evidence `GetWorkDone/evidence/2026-08-10-T-073/`):
+no whitespace/None/tab bypass; Wati slowness handled fail-closed (15s cap, loud CommandError, no
+silent send, no wedge — operator command, safe rerun via min-gap dedupe); 1117 tests.
+
+**Two checker findings — both being CLOSED by T-074 (dispatched, in flight) while the invite is
+still DRAFT so nothing latent survives:** (Ruling-3) the invite --send gate names
+ENABLE_RECORDS_LINK but the invite links to /hub/ (ENABLE_SHARE_HUB) — a SHARE_HUB-off state would
+ship a dead /hub/ button; fix = invite family → ENABLE_SHARE_HUB, records stays RECORDS_LINK.
+(Finding-A) apps/integrations/wati/tasks.py:send_notification uses the raw adapter, bypassing the
+port guard — harmless today (only M5 role templates, no token family) but routed through
+get_messaging_port() by T-074 before any token template can land there.
+
+**No blast fired. Marketing invite send still gated on: owner trigger + Zerodha written sign-off +
+template Meta-approval.** Lesson in auto-memory: template-computed-var-needs-verified-sender.
