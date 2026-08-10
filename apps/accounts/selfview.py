@@ -19,15 +19,8 @@ def _program_brand(tenant, client_id: str) -> str:
     to the tenant's single active program when no ReferralIdentity exists yet (a
     just-bound referrer with zero clicks still sees a correctly-branded share line)."""
     from apps.referrals.branding import brand_for_program, brand_for_tenant_id
-    from apps.referrals.models import ReferralIdentity
 
-    identity = (
-        ReferralIdentity.objects.for_tenant(tenant)
-        .filter(client_id=client_id, status="active", deleted_at__isnull=True)
-        .select_related("program", "program__partner")
-        .order_by("id")
-        .first()
-    )
+    identity = identity_for(tenant, client_id)
     if identity is not None and identity.program is not None:
         return brand_for_program(identity.program)
     return brand_for_tenant_id(getattr(tenant, "id", None))
@@ -59,6 +52,30 @@ def _strip_partner_code(cards: list[dict]) -> list[dict]:
     return [{**card, "partner_code": ""} for card in cards]
 
 
+def identity_for(tenant, client_id: str):
+    """The session referrer's own `ReferralIdentity`, or None (T-075).
+
+    THE session→identity path. `/my/referrals`, its hub-CTA builder and the
+    login-gated `/hub` all resolve through this one function, so "which record does
+    this session own" has exactly one answer in the codebase.
+
+    `client_id` always comes from the bound `ReferrerAccount`, never from a URL or a
+    form — that is what makes cross-identity access impossible by construction rather
+    than by a check. None means the referrer is bound but has no identity row yet
+    (never clicked, no Zoho-imported conversion): identities are created at CLICK time
+    (ADR-008) and rendering a page must not create one.
+    """
+    from apps.referrals.models import ReferralIdentity
+
+    return (
+        ReferralIdentity.objects.for_tenant(tenant)
+        .filter(client_id=client_id, status="active", deleted_at__isnull=True)
+        .select_related("program", "program__partner", "partner", "tenant")
+        .order_by("id")
+        .first()
+    )
+
+
 def hub_url_for(tenant, client_id: str) -> str:
     """The logged-in referrer's own `/hub/{token}` link, or "" (T-054).
 
@@ -78,16 +95,9 @@ def hub_url_for(tenant, client_id: str) -> str:
     """
     if not flags.ENABLE_SHARE_HUB:
         return ""
-    from apps.referrals.models import ReferralIdentity
-
     from .records_link import mint_records_token
 
-    identity = (
-        ReferralIdentity.objects.for_tenant(tenant)
-        .filter(client_id=client_id, status="active", deleted_at__isnull=True)
-        .order_by("id")
-        .first()
-    )
+    identity = identity_for(tenant, client_id)
     if identity is None:
         return ""
     return f"/hub/{mint_records_token(identity)}"

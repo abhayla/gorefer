@@ -6328,3 +6328,58 @@ some earlier-collected file imports the module first while flags are still prist
 `-n 4` sharding this is order-dependent per worker. Worked around it locally by forcing an eager
 top-of-file import in the new test file; did not touch the shared helper since it is out of this
 task's scope — worth a follow-up if it ever flakes in CI.
+
+## 2026-08-10 STATUS (Engineer) — T-075: the LOGIN-GATED hub at a token-free `/hub` (PR)
+
+**Phase 1 of the token -> login retirement** (owner decision 2026-08-10 ~16:20 IST). Phase 2 =
+records page behind login + a new Meta template; Phase 3 = delete the token code. Nothing is
+deleted here: `/hub/{token}`, `/hub/{token}/opener` and `/rr/{token}` are untouched and still live.
+
+**Why.** A `{{token}}` in a WhatsApp template button only resolves if GoRefer's own sender mints it
+per recipient. A Wati DASHBOARD broadcast — a path people actually use — bypasses GoRefer and ships
+a blank or broken link, and the T-073 fail-closed guard only protects GoRefer's own sends. A static
+`gorefer.in/hub` behind the already-live M13 login works no matter who sent the message.
+
+**New routes** (mounted only when `ENABLE_SHARE_HUB` **and** `ENABLE_CUSTOMER_LOGIN` are both on;
+listed BEFORE the tokened routes so `hub/<str:token>` cannot swallow `/hub/opener`):
+
+  * `GET  /hub`        — `apps.accounts.hub.hub_me_view`
+  * `POST /hub/opener` — `apps.accounts.hub.hub_me_opener_view` (the T-064 edit, session-authed)
+
+**Identity comes from the SESSION**, resolved by the same path `/my/referrals` uses:
+session -> `ReferrerAccount` -> `selfview.identity_for(tenant, account.client_id)` (extracted in
+this PR; `hub_url_for` and `_program_brand` now call it instead of each rebuilding the query).
+Neither route takes a `client_id` parameter, so cross-identity access is impossible by
+construction rather than by a check — a probe posting `client_id` / `identity` / `identity_id` /
+`token` for another referrer is asserted to leave that referrer's row untouched.
+
+**One page, one template.** `hub_ctx(..., session_mode=True)` renders `accounts/share_hub.html`
+unchanged — brand header, credit link `/r/wa/{client_id}`, all share buttons, benefits, images,
+disclosures, opener editor. Exactly two things differ, both about the token: the opener form posts
+to the static session endpoint, and the records cross-link is omitted (that page is still
+token-only, and minting a token here would put one back on a route whose point is not having one —
+it returns in Phase 2).
+
+**T-064 guarantees preserved, re-homed to session auth:** locked composition (credit link +
+disclosure tail appended server-side by `kit_message`), the same cascade-resolved 300-char cap,
+escaped render, opener text never in the event log (client_id + length + reset only), admin reset
+still works, tenant `referrer_share_opener_enabled=False` removes the editor and 404s the write.
+
+**Login `next`.** The gate moved from `views._referrer_required` into `service.referrer_required`
+(one definition for every session-gated surface) and now 302s to `/login/?next=<path>`; the target
+is remembered in the session (the Google door leaves the site) and re-validated on the way out.
+`service.safe_next` accepts only a single-leading-slash path, so `//evil.example`, an absolute URL
+and `/\evil` are all refused — tested. No `next` = the pre-existing `/my/referrals` landing,
+unchanged.
+
+**New config keys (rail E-6 / §6d):** `hub_unlinked_title` / `_body` / `_cta` + `_hi` twins — the
+copy for a referrer who is signed in but has no `ReferralIdentity` row yet (bound at login, never
+clicked, no Zoho conversion). That state renders `accounts/hub_unlinked.html` pointing at
+`/login/verify-ownership`, and does NOT create an identity (ADR-008: identities are created at
+click time; rendering a page must not create one).
+
+**Gates:** 1149 tests green (`-n 4`, `TEST_DB_NAME=gorefer_test_t075`), ruff clean, `manage.py
+check` clean, architecture gate 0/0, `makemigrations --check` reports no changes (no new model —
+this reuses `ReferrerAccount` / `ReferralIdentity` / `ReferrerShareOpener`). Tailwind rebuild
+produced no diff (the new template uses existing classes). No `apps/integrations/**` change, so no
+vendor contract doc is affected.

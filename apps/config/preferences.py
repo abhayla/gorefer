@@ -378,6 +378,35 @@ HUB_OPENER_RESET_LABEL_DEFAULT = "Use the standard message"
 HUB_OPENER_RESET_LABEL_HI = "hub_opener_reset_label_hi"
 HUB_OPENER_RESET_LABEL_HI_DEFAULT = "सामान्य संदेश इस्तेमाल करें"
 
+# --- Login-gated hub: the "no linked referral record yet" state (T-075) ------------
+# `GET /hub` resolves the referrer from the SESSION, so it can be reached by someone
+# who has proved who they are but has no `ReferralIdentity` row yet (bound at login,
+# never clicked, no Zoho-imported conversion). Identities are created at CLICK time
+# (ADR-008) and rendering a page must not create one — so that visitor gets this
+# explicit "link your account" state instead of a blank or broken hub.
+#
+# Copy is cascade keys, not literals (rail E-6 / §6d), with the T-061 `_hi` twins.
+HUB_UNLINKED_TITLE = "hub_unlinked_title"
+HUB_UNLINKED_TITLE_DEFAULT = "Your referral link isn't ready yet"
+HUB_UNLINKED_TITLE_HI = "hub_unlinked_title_hi"
+HUB_UNLINKED_TITLE_HI_DEFAULT = "आपका रेफ़रल लिंक अभी तैयार नहीं है"
+
+HUB_UNLINKED_BODY = "hub_unlinked_body"
+HUB_UNLINKED_BODY_DEFAULT = (
+    "We could not find a referral record for your account yet. "
+    "Verify your account details and we will set it up for you."
+)
+HUB_UNLINKED_BODY_HI = "hub_unlinked_body_hi"
+HUB_UNLINKED_BODY_HI_DEFAULT = (
+    "आपके खाते के लिए अभी कोई रेफ़रल रिकॉर्ड नहीं मिला। "
+    "अपना विवरण सत्यापित करें, हम इसे सेट कर देंगे।"
+)
+
+HUB_UNLINKED_CTA = "hub_unlinked_cta"
+HUB_UNLINKED_CTA_DEFAULT = "Verify your account"
+HUB_UNLINKED_CTA_HI = "hub_unlinked_cta_hi"
+HUB_UNLINKED_CTA_HI_DEFAULT = "अपना खाता सत्यापित करें"
+
 # --- Language toggle label (T-061) --------------------------------------------------
 LANG_TOGGLE_TO_HI_LABEL = "lang_toggle_to_hi_label"
 LANG_TOGGLE_TO_EN_LABEL = "lang_toggle_to_en_label"
@@ -692,6 +721,13 @@ def central_defaults() -> dict:
         HUB_OPENER_LOCKED_NOTE_HI: HUB_OPENER_LOCKED_NOTE_HI_DEFAULT,
         HUB_OPENER_SAVE_LABEL_HI: HUB_OPENER_SAVE_LABEL_HI_DEFAULT,
         HUB_OPENER_RESET_LABEL_HI: HUB_OPENER_RESET_LABEL_HI_DEFAULT,
+        # Login-gated hub "no linked record yet" state (T-075), EN + HI.
+        HUB_UNLINKED_TITLE: HUB_UNLINKED_TITLE_DEFAULT,
+        HUB_UNLINKED_BODY: HUB_UNLINKED_BODY_DEFAULT,
+        HUB_UNLINKED_CTA: HUB_UNLINKED_CTA_DEFAULT,
+        HUB_UNLINKED_TITLE_HI: HUB_UNLINKED_TITLE_HI_DEFAULT,
+        HUB_UNLINKED_BODY_HI: HUB_UNLINKED_BODY_HI_DEFAULT,
+        HUB_UNLINKED_CTA_HI: HUB_UNLINKED_CTA_HI_DEFAULT,
         # Language toggle label — T-061.
         LANG_TOGGLE_TO_HI_LABEL: LANG_TOGGLE_TO_HI_LABEL_DEFAULT,
         LANG_TOGGLE_TO_EN_LABEL: LANG_TOGGLE_TO_EN_LABEL_DEFAULT,

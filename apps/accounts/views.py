@@ -61,18 +61,26 @@ def _rate_limited(request, bucket: str) -> bool:
     return count > settings.RATELIMIT_LOGIN_MAX
 
 
-def _referrer_required(view):
-    """Gate a view behind an ACTIVE referrer session (redirect to referrer login)."""
+#: The session gate, shared with the login-gated share hub (T-075). One definition of
+#: "logged in as a referrer" for every gated surface — see apps/accounts/service.py.
+_referrer_required = service.referrer_required
 
-    def wrapped(request, *args, **kwargs):
-        account = service.account_for_request(request)
-        if account is None:
-            return redirect("referrer_login")
-        request.referrer_account = account
-        return view(request, *args, **kwargs)
 
-    wrapped.__name__ = view.__name__
-    return wrapped
+def _remember_next(request) -> None:
+    """Stash a safe `?next=` so the login flow can land the visitor back where they
+    were asking to go (T-075: `/login/?next=/hub`). Held in the SESSION because the
+    Google door leaves the site and returns on a callback of its own."""
+    target = service.safe_next(request.GET.get("next", ""))
+    if target:
+        request.session[service.LOGIN_NEXT_SESSION_KEY] = target
+
+
+def _after_login(request):
+    """Where a just-authenticated referrer lands: their remembered destination, or
+    /my/referrals as before. Re-validated on the way out — a session value is not
+    trusted more than a query param."""
+    target = service.safe_next(request.session.pop(service.LOGIN_NEXT_SESSION_KEY, ""))
+    return redirect(target) if target else redirect("my_referrals")
 
 
 def _clean_client_id(raw: str) -> str | None:
@@ -91,8 +99,11 @@ def _mask_recipient(recipient: str) -> str:
 
 @require_GET
 def login_entry(request):
+    _remember_next(request)
     if service.account_for_request(request) is not None:
-        return redirect("my_referrals")
+        # Already signed in: honour the remembered destination immediately, so a
+        # logged-in referrer tapping a gated link never bounces through a login form.
+        return _after_login(request)
     return render(request, "accounts/login.html", {**_doors()})
 
 
@@ -210,7 +221,7 @@ def otp_verify(request):
         mobile=resolve_onfile_recipient(tenant, cid),
     )
     service.login_account(request, account)
-    return redirect("my_referrals")
+    return _after_login(request)
 
 
 # --- Google OAuth door (primary — ADR-027) ----------------------------------------
@@ -246,7 +257,7 @@ def oauth_callback(request):
     ).first()
     if account is not None:
         service.login_account(request, account)
-        return redirect("my_referrals")
+        return _after_login(request)
     # First login: hold the VERIFIED email server-side and ask for the bind details.
     request.session[oauth.SESSION_EMAIL] = claims["email"]
     return redirect("referrer_oauth_bind")
@@ -285,7 +296,7 @@ def oauth_bind(request):
         )
         request.session.pop(oauth.SESSION_EMAIL, None)
         service.login_account(request, account)
-        return redirect("my_referrals")
+        return _after_login(request)
     # ADR-027: mismatch → pending verification, admin queue. Never a silent bind.
     service.submit_oauth_mismatch_request(
         tenant, client_id=cid, google_email=email, mobile_entered=entered_mobile
