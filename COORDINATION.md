@@ -6204,3 +6204,29 @@ tighten future contract wording, not as a defect).
 **Owner items open:** congrats template name (T-058 leg), poster file for the preview-card
 variant + T-063 images, ONE phone tap-test of native share after configuring images,
 Zoho broader-token MFA (TODO-Manual card).
+
+---
+
+### STATUS 2026-08-10 20:00 IST — T-081 deployed (OTP email FROM-address self-serve)
+
+`d238789` (PR #153) LIVE on prod. Cascade key `otp_email_from_address` now editable on the
+Preferences screen; default `""` falls back to `DEFAULT_FROM_EMAIL` (byte-identical to T-078).
+SMTP host/user/**password** remain env-only — the checker's first ruling was secret-safety PASS
+(grep + live render probe: no secret leaks via Preferences). Bad from-address is rejected at save
+AND defended again at send (a garbage value can't break the OTP email — falls back to env). File-copy
+deploy of the 6-file delta, sha256 byte-exact; `seed_program` run (key resolves `''` live); both
+services active; home + `/d/pifs` 200. Checker: 1183 tests, evidence `GetWorkDone/evidence/2026-08-10-T-081/`.
+
+Email OTP end-to-end remains **owner-gated**: `ENABLE_EMAIL_OTP` is off in prod until the owner
+supplies the Gmail SMTP app-password (TODO-Manual `gorefer-email-otp-smtp-cred`). Until then the
+email leg is a clean no-op; WhatsApp OTP is unchanged.
+
+**Invite template:** `gr_brokers_zerodha_referandearn_invite_en_2026_08_10` submitted to Meta —
+PENDING, MARKETING/EN, token dropped (buttons: Refer a Friend → `/r/{{client_id}}`, Share to Refer
+→ static `/hub`, Know More QR). Approval watcher armed.
+
+**Know More flow (SSOT-checked):** entry + happy path work; the defect is a soft dead-end on junk
+typing at the menu — one "sorry, tap above" then the flow terminates (`main_message-kmcatch` has no
+outgoing route) and further input hits silence (tenant fallback slot OFF), with no human handoff.
+Violates conversation-map §0 + F5 "re-show once → handoff". Fix is a **Wati-Project-lane** change
+(SSOT map update + owner copy approval + live-number touch) — awaiting owner go.
