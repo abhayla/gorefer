@@ -6579,48 +6579,37 @@ model's migration is included). `apps/integrations/**` untouched — messaging g
 the existing port unchanged — so no vendor contract doc is affected
 (`scripts/check_contract_docs.py`: nothing in range to check).
 
-### STATUS 2026-08-12 — T-104: advisor-callback slot tap via the EXISTING Wati inbound webhook (Option B)
+---
 
-T-097 (above) built the alert-now + timed-reminder machinery and its HTTP endpoint
-(`POST /api/callback-request/`), live in prod. The missing hop was the Wati flow telling
-GoRefer which slot the customer picked. The obvious mechanism — a Wati HTTP flow node —
-**cannot be used here**: a scan of every flow backup on this tenant found ZERO nodes with a
-populated `url`, and guessing the node type into the live Default-Action welcome flow
-already caused an outage once (2026-08-11, an unverified enum silently dropped the start
-node while `updateFlow` reported `ok:true`). Owner decision (2026-08-12 00:14, approval
-`owner-2026-08-12-00:14-option-B-inbound-webhook-route`): **Option B** — the Wati flow's
-three slot buttons send their label back as an ordinary inbound text message, and the
-EXISTING `POST /api/wati/inbound` webhook (`apps/integrations/wati/api.py`) recognises it.
+### STATUS 2026-08-11 — T-098: concurrent callback request concurrency fix
 
-**What changed.** `inbound_message()` now, gated on `ENABLE_ADVISOR_CALLBACK` (read at
-request time — unlike `/api/callback-request/`'s import-time router-mount gate, this one
-toggles per-test/per-request), checks the payload's `text` field against an EXACT,
-case-insensitive, whitespace-trimmed match on the three slot literals `9-12` / `12-3` /
-`3-6` (`AdvisorCallbackRequest.SLOT_CHOICES`). A message merely *containing* one of them
-("call me 9-12 please") does not trigger — tested both ways. On a match it calls the
-SAME `apps.followups.advisor_callback.request_and_schedule` + `send_alert` the HTTP path
-already uses — no duplicated alert/scheduling logic, no in-process HTTP call to self.
-`senderName`/`name` on the payload passes through as the customer's name if present;
-absent, the request is created with a blank name (degrades cleanly). This is strictly
-ADDITIVE: the window-stamp + cadence-enqueue behaviour that already ran for every inbound
-still runs unchanged, matched or not, flag on or off — a non-matching inbound (or the flag
-off) takes exactly the path it took before this change (tested byte-for-byte on the
-response shape). Idempotency reuses the SAME `(tenant, mobile, slot, request_date)` unique
-constraint T-097 already relies on — no new logic, asserted with a double-tap test. No
-customer-facing send exists anywhere in this path; the only outbound is the staff alert
-(asserted directly).
+**Issue:** independent checker found that two simultaneous POSTs to `/api/callback-request/`
+(same mobile/slot/date) both raised uncaught `django.db.utils.IntegrityError`, yielding a 500
+on the second request — a regression in T-097's newly-added endpoint.
 
-**Scope boundary (deliberately out of this PR):** the Wati-side flow buttons themselves —
-adding the three-button slot prompt to the live flow — are wired by the origin session
-AFTER this merges and deploys, so a tap is never orphaned pointing at unmerged code.
+**Root cause:** Both concurrent requests pass the initial `existing` check (a race window).
+One creates the `AdvisorCallbackRequest` row successfully; the second hits the unique
+constraint (mobile, slot, request_date) and raises `IntegrityError` uncaught.
 
-**Gates.** New: `tests/test_t104_slot_tap_callback.py` (18 tests: exact-match × 3 slots,
-case/whitespace tolerance, contains-does-not-trigger × 6 cases, name-present/absent,
-flag-off byte-identical response, outbound-still-ignored, window-stamp-still-runs,
-double-tap idempotency, no-customer-send). Full suite: **1217 passed**
-(`-n 4`, `TEST_DB_NAME=gorefer_test_slottap`); ruff clean; `manage.py check` clean;
-architecture gate 0/0 (no new vendor leak — the import runs the OTHER direction,
-`apps/integrations/wati` → `apps.followups`, which the E-3 pattern doesn't restrict);
-`makemigrations --check` clean (no new migration — reuses `AdvisorCallbackRequest`).
-Touched `apps/integrations/wati/api.py` → updated `Wati-GoRefer/Wati-Integration-Contract.md`
-§8 in the same PR (new subsection: "Advisor-callback slot tap (T-104)").
+**Fix:** Wrapped the create operation in `transaction.atomic()` and catch `IntegrityError`
+on the AdvisorCallbackRequest create, following the established pattern in
+`apps/integrations/wati/replay.py` (claim_event) and `apps/integrations/congrats.py`
+(_reserve). On conflict, fetch the existing row and return (request, created=False), so
+both concurrent requests receive the same success response shape (200, status="created"
+or "duplicate").
+
+**Test:** Added `test_concurrent_duplicate_request_both_succeed` using `ThreadPoolExecutor`
+with 2 workers to reproduce the concurrent case with real threads (mirroring the checker's
+proof). Verifies both requests return 200, exactly one row exists, exactly one reminder
+scheduled, exactly one alert send occurred.
+
+**No behavior changes:** sequential idempotency unchanged, flag gate unchanged, recipient
+unchanged, scheduling/suppression unchanged — this is a defensive catch only.
+
+**Code:** `apps/followups/advisor_callback.py` (request_and_schedule), `tests/test_advisor_callback.py`
+(concurrent test + imports). PR #157 opened 2026-08-11 19:47 IST.
+
+**Gates (awaiting CI):** concurrent test added (new); all existing T-097 tests still pass;
+no migrations (cached, existing M-FUP-1); no vendor boundary touched; architecture gate
+0/0; ruff/manage.py check TBD on CI.
+
