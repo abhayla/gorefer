@@ -8,6 +8,8 @@ separately below.
 from __future__ import annotations
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from django.core.management import call_command
@@ -153,6 +155,39 @@ class TestCallbackEndpoint:
         for call in fake.calls:
             assert call["to"] != CUSTOMER_MOBILE_NORM
             assert call["to"] == advisor_callback.ADVISOR_ALERT_NUMBER_DEFAULT
+
+    def test_concurrent_duplicate_request_both_succeed(self, tenant, client, monkeypatch):
+        fake = _FakePort()
+        monkeypatch.setattr(advisor_callback, "get_messaging_port", lambda: fake)
+        payload = json.dumps({"mobile": CUSTOMER_MOBILE, "name": "Rahul", "slot": "3-6"})
+        results = []
+        errors = []
+
+        def make_request():
+            try:
+                resp = client.post("/api/callback-request/", data=payload, content_type="application/json")
+                results.append(resp)
+            except Exception as e:
+                errors.append(e)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(make_request) for _ in range(2)]
+            for future in futures:
+                future.result(timeout=5)
+
+        assert errors == [], f"Concurrent requests raised: {errors}"
+        assert len(results) == 2
+
+        for resp in results:
+            assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.content}"
+            body = resp.json()
+            assert body["status"] in ("created", "duplicate"), f"Unexpected status: {body}"
+            assert body["slot"] == "3-6"
+            assert body["reminder_at"]
+
+        assert AdvisorCallbackRequest.objects.filter(mobile=CUSTOMER_MOBILE_NORM, slot="3-6").count() == 1
+        assert ScheduledFollowup.objects.filter(source_event="advisor_callback").count() == 1
+        assert len(fake.calls) == 1  # exactly one alert send
 
 
 # --- reminder scheduling ---------------------------------------------------------
