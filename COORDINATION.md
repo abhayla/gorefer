@@ -6578,3 +6578,38 @@ Full suite: **1199 passed** (`-n 4`, `TEST_DB_NAME=gorefer_test_advisor`); ruff 
 model's migration is included). `apps/integrations/**` untouched — messaging goes through
 the existing port unchanged — so no vendor contract doc is affected
 (`scripts/check_contract_docs.py`: nothing in range to check).
+
+---
+
+### STATUS 2026-08-11 — T-098: concurrent callback request concurrency fix
+
+**Issue:** independent checker found that two simultaneous POSTs to `/api/callback-request/`
+(same mobile/slot/date) both raised uncaught `django.db.utils.IntegrityError`, yielding a 500
+on the second request — a regression in T-097's newly-added endpoint.
+
+**Root cause:** Both concurrent requests pass the initial `existing` check (a race window).
+One creates the `AdvisorCallbackRequest` row successfully; the second hits the unique
+constraint (mobile, slot, request_date) and raises `IntegrityError` uncaught.
+
+**Fix:** Wrapped the create operation in `transaction.atomic()` and catch `IntegrityError`
+on the AdvisorCallbackRequest create, following the established pattern in
+`apps/integrations/wati/replay.py` (claim_event) and `apps/integrations/congrats.py`
+(_reserve). On conflict, fetch the existing row and return (request, created=False), so
+both concurrent requests receive the same success response shape (200, status="created"
+or "duplicate").
+
+**Test:** Added `test_concurrent_duplicate_request_both_succeed` using `ThreadPoolExecutor`
+with 2 workers to reproduce the concurrent case with real threads (mirroring the checker's
+proof). Verifies both requests return 200, exactly one row exists, exactly one reminder
+scheduled, exactly one alert send occurred.
+
+**No behavior changes:** sequential idempotency unchanged, flag gate unchanged, recipient
+unchanged, scheduling/suppression unchanged — this is a defensive catch only.
+
+**Code:** `apps/followups/advisor_callback.py` (request_and_schedule), `tests/test_advisor_callback.py`
+(concurrent test + imports). PR #157 opened 2026-08-11 19:47 IST.
+
+**Gates (awaiting CI):** concurrent test added (new); all existing T-097 tests still pass;
+no migrations (cached, existing M-FUP-1); no vendor boundary touched; architecture gate
+0/0; ruff/manage.py check TBD on CI.
+
