@@ -22,7 +22,11 @@ from ninja import Router, Schema
 from ninja.errors import HttpError
 from pydantic import ValidationError
 
+from apps.common.phone import normalize_phone
+from apps.followups.advisor_callback import request_and_schedule, send_alert
+from apps.followups.models import AdvisorCallbackRequest
 from apps.tenants.resolve import get_current_tenant
+from gorefer.flags import flags
 
 from .replay import claim_event, event_key
 from .webhook import (
@@ -34,6 +38,24 @@ from .webhook import (
 )
 
 router = Router()
+
+# T-104 — the three fixed call-back slots a Wati flow's buttons send back verbatim as
+# ordinary inbound text (Wati has no HTTP flow node here; see COORDINATION.md 2026-08-12).
+# Match EXACTLY these labels, case-insensitively and whitespace-trimmed — a message that
+# merely contains one of them ("call me 9-12 please") must NOT trigger.
+_CALLBACK_SLOTS = {
+    AdvisorCallbackRequest.SLOT_9_12,
+    AdvisorCallbackRequest.SLOT_12_3,
+    AdvisorCallbackRequest.SLOT_3_6,
+}
+
+
+def _match_callback_slot(text) -> str | None:
+    candidate = str(text or "").strip().lower()
+    for slot in _CALLBACK_SLOTS:
+        if candidate == slot.lower():
+            return slot
+    return None
 
 
 class AssistedIn(Schema):
@@ -134,6 +156,23 @@ def inbound_message(request):
         return {"status": "ignored", "reason": "duplicate", "stamped": False, "enqueued": 0}
 
     tenant = get_current_tenant(request)
+
+    # T-104 — advisor-callback slot tap (owner-approved Option B, 2026-08-12): an inbound
+    # whose trimmed text EXACTLY matches one of the three slot labels a Wati flow's
+    # buttons send back reuses the EXISTING advisor-callback service — the same
+    # create-request + immediate-alert path POST /api/callback-request/ calls. Gated on
+    # ENABLE_ADVISOR_CALLBACK; additive only — every existing behaviour below (window
+    # stamp + cadence enqueue) still runs unchanged for every inbound, matched or not.
+    if flags.ENABLE_ADVISOR_CALLBACK:
+        slot = _match_callback_slot(raw.get("text"))
+        if slot is not None:
+            canonical = normalize_phone(str(mobile))
+            if canonical:
+                name = str(raw.get("senderName") or raw.get("name") or "").strip()[:80]
+                req, created = request_and_schedule(tenant, mobile=canonical, name=name, slot=slot)
+                if created:
+                    send_alert(tenant, req)
+
     result = record_inbound(tenant, str(mobile), _parse_ts(raw.get("timestamp")))
     return {"status": "ok", **result}
 

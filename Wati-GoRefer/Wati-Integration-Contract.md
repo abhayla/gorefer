@@ -186,6 +186,24 @@ the key from EITHER `X-Wati-Webhook-Key` or `?token=`, constant-time compared, s
 blank/absent key. (A query-string secret is access-log-visible — acceptable for a rotatable shared
 webhook token; same posture as the existing firekaro webhook.)
 
+**Advisor-callback slot tap (T-104, owner-approved Option B, 2026-08-12).** The same
+`POST /api/wati/inbound` payload's `text` field is ALSO checked, in addition to (never instead of)
+the window-stamp behaviour above, against the three fixed call-back slot labels
+`AdvisorCallbackRequest.SLOT_CHOICES` (`9-12`, `12-3`, `3-6`) — an EXACT match only (trimmed,
+case-insensitive; "call me 9-12 please" does not trigger). This exists because a scan of every flow
+backup on this tenant found ZERO nodes with a populated `url` — Wati has no working HTTP flow node
+here — so a chatbot flow's slot buttons instead send their label back as an ordinary inbound text
+message, and GoRefer's own webhook is the only place left to catch it. On a match, `apps/integrations
+/wati/api.py:inbound_message` calls the EXISTING `apps.followups.advisor_callback.request_and_schedule`
++ `send_alert` — the identical create-request + immediate-staff-alert path `POST /api/callback-request/`
+already uses; no second alert/scheduling implementation. Gated on `ENABLE_ADVISOR_CALLBACK` (checked
+at request time, not import time, so it toggles per-request unlike the `/api/callback-request/`
+router's mount-time gate). `senderName`/`name` on the payload is passed through as the customer's
+name if present; absent, the request is created with a blank name. Idempotency is the SAME
+`(tenant, mobile, slot, request_date)` unique constraint the HTTP path already relies on — a repeat
+tap the same day is a no-op past the first. No message is ever sent to the customer's own number from
+this path — the only outbound is the staff alert.
+
 **Wiring (Wati dashboard → Webhooks, "New Contact Message" event):** add a webhook to
 `https://gorefer.in/api/wati/inbound?token=<WATI_WEBHOOK_KEY>`. The "New Contact Message" event is the
 customer-inbound trigger; its payload carries the sender in `waId` (which `record_inbound`'s number

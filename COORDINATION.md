@@ -6578,3 +6578,49 @@ Full suite: **1199 passed** (`-n 4`, `TEST_DB_NAME=gorefer_test_advisor`); ruff 
 model's migration is included). `apps/integrations/**` untouched — messaging goes through
 the existing port unchanged — so no vendor contract doc is affected
 (`scripts/check_contract_docs.py`: nothing in range to check).
+
+### STATUS 2026-08-12 — T-104: advisor-callback slot tap via the EXISTING Wati inbound webhook (Option B)
+
+T-097 (above) built the alert-now + timed-reminder machinery and its HTTP endpoint
+(`POST /api/callback-request/`), live in prod. The missing hop was the Wati flow telling
+GoRefer which slot the customer picked. The obvious mechanism — a Wati HTTP flow node —
+**cannot be used here**: a scan of every flow backup on this tenant found ZERO nodes with a
+populated `url`, and guessing the node type into the live Default-Action welcome flow
+already caused an outage once (2026-08-11, an unverified enum silently dropped the start
+node while `updateFlow` reported `ok:true`). Owner decision (2026-08-12 00:14, approval
+`owner-2026-08-12-00:14-option-B-inbound-webhook-route`): **Option B** — the Wati flow's
+three slot buttons send their label back as an ordinary inbound text message, and the
+EXISTING `POST /api/wati/inbound` webhook (`apps/integrations/wati/api.py`) recognises it.
+
+**What changed.** `inbound_message()` now, gated on `ENABLE_ADVISOR_CALLBACK` (read at
+request time — unlike `/api/callback-request/`'s import-time router-mount gate, this one
+toggles per-test/per-request), checks the payload's `text` field against an EXACT,
+case-insensitive, whitespace-trimmed match on the three slot literals `9-12` / `12-3` /
+`3-6` (`AdvisorCallbackRequest.SLOT_CHOICES`). A message merely *containing* one of them
+("call me 9-12 please") does not trigger — tested both ways. On a match it calls the
+SAME `apps.followups.advisor_callback.request_and_schedule` + `send_alert` the HTTP path
+already uses — no duplicated alert/scheduling logic, no in-process HTTP call to self.
+`senderName`/`name` on the payload passes through as the customer's name if present;
+absent, the request is created with a blank name (degrades cleanly). This is strictly
+ADDITIVE: the window-stamp + cadence-enqueue behaviour that already ran for every inbound
+still runs unchanged, matched or not, flag on or off — a non-matching inbound (or the flag
+off) takes exactly the path it took before this change (tested byte-for-byte on the
+response shape). Idempotency reuses the SAME `(tenant, mobile, slot, request_date)` unique
+constraint T-097 already relies on — no new logic, asserted with a double-tap test. No
+customer-facing send exists anywhere in this path; the only outbound is the staff alert
+(asserted directly).
+
+**Scope boundary (deliberately out of this PR):** the Wati-side flow buttons themselves —
+adding the three-button slot prompt to the live flow — are wired by the origin session
+AFTER this merges and deploys, so a tap is never orphaned pointing at unmerged code.
+
+**Gates.** New: `tests/test_t104_slot_tap_callback.py` (18 tests: exact-match × 3 slots,
+case/whitespace tolerance, contains-does-not-trigger × 6 cases, name-present/absent,
+flag-off byte-identical response, outbound-still-ignored, window-stamp-still-runs,
+double-tap idempotency, no-customer-send). Full suite: **1217 passed**
+(`-n 4`, `TEST_DB_NAME=gorefer_test_slottap`); ruff clean; `manage.py check` clean;
+architecture gate 0/0 (no new vendor leak — the import runs the OTHER direction,
+`apps/integrations/wati` → `apps.followups`, which the E-3 pattern doesn't restrict);
+`makemigrations --check` clean (no new migration — reuses `AdvisorCallbackRequest`).
+Touched `apps/integrations/wati/api.py` → updated `Wati-GoRefer/Wati-Integration-Contract.md`
+§8 in the same PR (new subsection: "Advisor-callback slot tap (T-104)").
