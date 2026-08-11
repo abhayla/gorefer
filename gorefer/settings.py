@@ -228,6 +228,10 @@ RATELIMIT_RECORDS_MAX = int(os.environ.get("DJANGO_RATELIMIT_RECORDS_MAX", "20")
 # caller batching up to RECORDS_TOKEN_MINT_MAX_IDS ids per call, so a handful of calls
 # per minute covers a full broadcast. Tight because each call issues bearer credentials.
 RATELIMIT_MINT_MAX = int(os.environ.get("DJANGO_RATELIMIT_MINT_MAX", "10"))         # per min per IP
+# T-097 advisor callback (POST /api/callback-request) — a chatbot-driven capture, so
+# volume is bounded by real conversations; generous enough for a human retry, tight
+# enough to blunt spam probing the open endpoint.
+RATELIMIT_CALLBACK_MAX = int(os.environ.get("DJANGO_RATELIMIT_CALLBACK_MAX", "20"))  # per min per IP
 
 # --- Auth ------------------------------------------------------------------
 LOGIN_URL = "dashboard_login"
