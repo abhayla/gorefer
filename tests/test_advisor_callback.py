@@ -74,6 +74,7 @@ def test_endpoint_not_mounted_in_prod_urlconf(db, client):
 # --- endpoint behaviour (flag-on test urlconf) ----------------------------------
 
 @pytest.mark.urls("tests.urls_advisor_callback")
+@pytest.mark.django_db(transaction=True)
 class TestCallbackEndpoint:
     def test_creates_request_and_sends_alert(self, tenant, client, monkeypatch):
         fake = _FakePort()
