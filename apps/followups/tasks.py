@@ -24,7 +24,7 @@ from apps.events import vocab
 from apps.events.models import Event
 from apps.integrations.ports import get_messaging_port as get_wati_adapter
 
-from . import services
+from . import advisor_callback, services
 from .models import FollowupRule, ScheduledFollowup
 
 logger = logging.getLogger("gorefer.followups.tasks")
@@ -110,6 +110,12 @@ def fire_due_followups(limit: int = 200) -> dict:
                 )
                 if sf.status != ScheduledFollowup.STATUS_SCHEDULED:
                     continue  # already handled by a concurrent sweep / cancelled by CRUD
+                if sf.rule.step_key == advisor_callback.STEP_KEY:
+                    # T-097: a staff alert, not a prospect nudge — its own gate (done? /
+                    # quiet-hours / min-gap) and send path; see advisor_callback.py.
+                    decision, reason = advisor_callback.evaluate_gate(sf, now)
+                    advisor_callback.apply(sf, decision, reason, now, counts)
+                    continue
                 decision, reason = services.evaluate_gate(sf, now)
                 _apply(sf, decision, reason, now, counts)
         except Exception:

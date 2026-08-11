@@ -13,6 +13,7 @@ from apps.integrations.router import wati_router, zoho_router
 from gorefer.flags import flags
 
 from .analytics import router as analytics_router
+from .callback_request import router as callback_request_router
 from .click import router as click_router
 from .leads import router as leads_router
 from .records_tokens import router as records_tokens_router
@@ -30,6 +31,9 @@ api.add_router("/zoho", zoho_router)
 api.add_router("/wati", wati_router)
 # Follow-up engine CRUD (M-FUP-1) — staff-only, tenant-scoped (auth on the router itself).
 api.add_router("/followups", followups_router)
+# T-097 advisor callback — mounted only when the flag is on (Constitution §4: no dead route).
+if flags.ENABLE_ADVISOR_CALLBACK:
+    api.add_router("/callback-request", callback_request_router)
 
 
 @api.get("/health")
