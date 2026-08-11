@@ -138,6 +138,12 @@ class FeatureFlags:
     # compliance. When off the ENTIRE route is absent (Constitution §4).
     ENABLE_SHARE_HUB: bool = False
 
+    # T-097 — advisor-callback capture (POST /api/callback-request): a chatbot flow
+    # collects a preferred call-back slot, GoRefer alerts a staff number immediately
+    # and schedules a reminder at the slot's start time via the followups engine. OFF
+    # by default so the endpoint isn't mounted until the flow + templates are live.
+    ENABLE_ADVISOR_CALLBACK: bool = False
+
     @classmethod
     def from_env(cls) -> "FeatureFlags":
         return cls(
@@ -159,6 +165,9 @@ class FeatureFlags:
             ),
             ENABLE_RECORDS_LINK=_bool("ENABLE_RECORDS_LINK", cls.ENABLE_RECORDS_LINK),
             ENABLE_SHARE_HUB=_bool("ENABLE_SHARE_HUB", cls.ENABLE_SHARE_HUB),
+            ENABLE_ADVISOR_CALLBACK=_bool(
+                "ENABLE_ADVISOR_CALLBACK", cls.ENABLE_ADVISOR_CALLBACK
+            ),
         )
 
     def as_dict(self) -> dict:

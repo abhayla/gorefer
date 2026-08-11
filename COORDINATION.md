@@ -6528,3 +6528,53 @@ dead-end on junk typing at the menu — one "sorry, tap above" then the flow ter
 (`main_message-kmcatch` has no outgoing route) and further input hits silence (tenant fallback slot
 OFF), with no human handoff. Violates conversation-map §0 + F5 "re-show once → handoff". Fix
 (SSOT map update + owner copy approval + live-number touch) awaiting owner go.
+
+---
+
+### STATUS 2026-08-11 — T-097: advisor callback (alert-now + timed reminder)
+
+New endpoint `POST /api/callback-request/` (Django Ninja, public, rate-limited via
+`apps.common.ratelimit`, mobile normalised via `apps.common.phone.normalize_phone`),
+gated behind a NEW flag `ENABLE_ADVISOR_CALLBACK` (default False — router mounted only
+when on, `api/router.py`). A chatbot flow POSTs `{mobile, name?, slot}` (slot ∈
+`9-12`/`12-3`/`3-6`); GoRefer sends an approved UTILITY template
+(`gr_pifs_advisor_callback_alert_en_2026_08_11`) to a staff number IMMEDIATELY via the
+existing messaging port (`apps.integrations.ports.get_messaging_port`), then schedules a
+SECOND approved UTILITY template (`gr_pifs_advisor_callback_reminder_en_2026_08_11`) for
+the slot's IST start time (rolls to tomorrow if already past) — reusing the EXISTING
+`apps.followups` engine (`ScheduledFollowup` + the `fire_due_followups` sweep; no second
+scheduler), with its own gate module `apps/followups/advisor_callback.py` that reuses
+`services.in_quiet_hours` / `services.within_min_gap` / `services.compute_defer` (the same
+quiet-hours + anti-burst guards a customer nudge gets) but does NOT reuse
+`services.evaluate_gate` itself — that gate encodes prospect-nudge concepts (24h window,
+engaged-exit-on-reply, per-AP `followups_enabled`) that don't apply to a staff alert.
+
+New model `AdvisorCallbackRequest` (migration `0002_advisorcallbackrequest`), unique on
+`(tenant, mobile, slot, request_date)` — the idempotency anchor: re-posting the same
+(mobile, slot, same IST day) creates nothing new and re-sends nothing (tested: 3× POST →
+1 alert, 1 scheduled reminder). `done=True` on the request suppresses the reminder lazily
+at fire time (checked in the advisor gate, mirroring how `services.evaluate_gate` already
+cancels on `has_converted()` — a lazy check against existing state, not a second status
+enum or a second scheduler).
+
+Cascade config keys (operator-editable, no deploy — rule 6d/6e): `advisor_alert_number`
+(default `917388882020`), `advisor_alert_template_en`, `advisor_reminder_template_en`.
+Both templates are Meta-APPROVED UTILITY as of 2026-08-11 (verified in T-092/T-094).
+
+**Partner isolation** (owner ruling 2026-08-11): no `Zerodha`-named identifier anywhere in
+this feature — model/module/endpoint names are partner-neutral; the staff number and
+template names are config, not literals. A crude source-scan regression test
+(`test_no_partner_named_symbol_leaks_into_this_module`) trips if that ever changes.
+
+**No customer message is ever sent by this path** — the staff number is the only
+recipient at both legs; asserted directly in tests (`test_no_send_ever_reaches_the_
+customer_number` + the recipient assertion in every send-path test).
+
+**Gates.** New: `tests/test_advisor_callback.py` (16 tests) + `tests/urls_advisor_callback.py`
+(test urlconf mirroring the flag-on mount, same trick as `urls_share_intent.py` — the
+`ENABLE_ADVISOR_CALLBACK` gate is read once at import time so it can't flip per-test).
+Full suite: **1199 passed** (`-n 4`, `TEST_DB_NAME=gorefer_test_advisor`); ruff clean;
+`manage.py check` clean; architecture gate 0/0; `makemigrations --check` clean (the new
+model's migration is included). `apps/integrations/**` untouched — messaging goes through
+the existing port unchanged — so no vendor contract doc is affected
+(`scripts/check_contract_docs.py`: nothing in range to check).

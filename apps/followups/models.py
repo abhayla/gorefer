@@ -154,3 +154,56 @@ class ScheduledFollowup(TimestampedModel, TenantScopedModel):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"scheduled_followup<{self.mobile}:{self.rule_id}:{self.status}>"
+
+
+class AdvisorCallbackRequest(TimestampedModel, TenantScopedModel):
+    """T-097 — a "talk to advisor" capture from a chatbot flow (partner-neutral).
+
+    One row per (tenant, mobile, slot, request_date): the natural idempotency key for
+    a customer re-tapping the same day. The immediate staff alert is sent synchronously
+    at creation (see `apps.followups.advisor_callback`); the timed reminder rides the
+    EXISTING `ScheduledFollowup` due-table/sweep via the `reminder` link below.
+    `done` is the suppression signal — set it True before the reminder fires and the
+    sweep cancels the pending row instead of sending, mirroring how
+    `services.evaluate_gate` already cancels on `has_converted()`/opt-out: a lazy check
+    at fire time against existing state, not a second scheduler.
+    """
+
+    SLOT_9_12 = "9-12"
+    SLOT_12_3 = "12-3"
+    SLOT_3_6 = "3-6"
+    SLOT_CHOICES = [
+        (SLOT_9_12, "9 AM - 12 PM"),
+        (SLOT_12_3, "12 PM - 3 PM"),
+        (SLOT_3_6, "3 PM - 6 PM"),
+    ]
+    SLOT_START_HOUR_IST = {SLOT_9_12: 9, SLOT_12_3: 12, SLOT_3_6: 15}
+    SLOT_LABELS = dict(SLOT_CHOICES)
+
+    mobile = models.CharField(max_length=20)
+    name = models.CharField(max_length=80, blank=True, default="")
+    slot = models.CharField(max_length=10, choices=SLOT_CHOICES)
+    # The IST calendar date the request landed — the idempotency anchor, distinct from
+    # the reminder's fire_at (which may roll to the next day if the slot already passed).
+    request_date = models.DateField()
+    done = models.BooleanField(default=False)
+    alert_sent_at = models.DateTimeField(null=True, blank=True)
+    reminder = models.OneToOneField(
+        ScheduledFollowup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="advisor_callback_request",
+    )
+
+    class Meta:
+        db_table = "advisor_callback_requests"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "mobile", "slot", "request_date"],
+                name="uq_advisor_callback_tenant_mobile_slot_date",
+            ),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"advisor_callback_request<{self.mobile}:{self.slot}:{self.request_date}>"
