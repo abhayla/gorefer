@@ -6613,3 +6613,27 @@ unchanged, scheduling/suppression unchanged — this is a defensive catch only.
 no migrations (cached, existing M-FUP-1); no vendor boundary touched; architecture gate
 0/0; ruff/manage.py check TBD on CI.
 
+---
+
+### STATUS 2026-08-12 — T-098: concurrent callback fix — resume dispatch 2 of 2
+
+**Resume context:** sweep dispatcher re-dispatched T-098 after the first dispatch (session 9500e1a7)
+hit the 50-turn cap without reaching PR merge. Worktree `../gorefer-wt-t098` already exists
+with 4 commits:
+- 76c6d50 fix(T-098): handle concurrent callback requests with IntegrityError catch
+- 4ff8ecd fix(T-098): drop unused threading import (ruff F401)
+- dcf6f07 docs(T-098): log status in COORDINATION.md [skip-contract-doc]
+- 55a38a1 Merge branch 'fix/t098-callback-concurrency'
+
+**Code inspection (no new changes):** IntegrityError catch is correctly implemented in
+`request_and_schedule()` following the pattern in `wati/replay.py` and `congrats.py`.
+Concurrent test `test_concurrent_duplicate_request_both_succeed` uses `ThreadPoolExecutor`
+with 2 workers to fire simultaneous POSTs, verifies both return 200, exactly 1 row exists,
+1 alert sent, 1 reminder scheduled — satisfies the DoD requirement for a concurrent test.
+
+**Local gate blocked by database connectivity:** TEST_DB_NAME creation fails on auth (valid
+credentials from GLOBAL.env now in .env); Postgres server appears unreachable from this
+environment. Relying on GitHub CI to verify. Opening fresh PR and watching CI.
+
+**Next step:** open fresh PR #159 (PR #157 is closed), watch CI, merge on green.
+
