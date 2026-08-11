@@ -98,38 +98,38 @@ def request_and_schedule(tenant, *, mobile: str, name: str, slot: str, now=None)
     request_date=today IST) already exists — the caller must not re-send the alert
     or re-schedule the reminder.
     """
+    from django.db import IntegrityError, transaction
+
     now = now or timezone.now()
     request_date = (now.astimezone(dt_timezone.utc) + services.IST_OFFSET).date()
-
-    existing = AdvisorCallbackRequest.objects.for_tenant(tenant).filter(
-        mobile=mobile, slot=slot, request_date=request_date
-    ).first()
-    if existing is not None:
-        return existing, False
 
     rule = _get_or_create_rule(tenant)
     fire_at = compute_fire_at(slot, now)
 
-    req = AdvisorCallbackRequest.objects.create(
-        tenant=tenant, mobile=mobile, name=name, slot=slot, request_date=request_date,
-    )
-    # A duplicate slipping past the pre-check (race) trips the unique constraint here;
-    # let it propagate — the caller treats any IntegrityError-on-create as "already
-    # requested" and re-reads the existing row (see api layer).
-    sf = ScheduledFollowup.objects.create(
-        tenant=tenant,
-        rule=rule,
-        mobile=_advisor_number(tenant.id if tenant else None),
-        pref_lang="en",
-        fire_at=fire_at,
-        window_opened_at=now,
-        status=ScheduledFollowup.STATUS_SCHEDULED,
-        source_event="advisor_callback",
-        dedupe_key=f"advisor_reminder|{tenant.id if tenant else 0}|{req.pk}",
-    )
-    req.reminder = sf
-    req.save(update_fields=["reminder", "updated_at"])
-    return req, True
+    try:
+        with transaction.atomic():
+            req = AdvisorCallbackRequest.objects.create(
+                tenant=tenant, mobile=mobile, name=name, slot=slot, request_date=request_date,
+            )
+            sf = ScheduledFollowup.objects.create(
+                tenant=tenant,
+                rule=rule,
+                mobile=_advisor_number(tenant.id if tenant else None),
+                pref_lang="en",
+                fire_at=fire_at,
+                window_opened_at=now,
+                status=ScheduledFollowup.STATUS_SCHEDULED,
+                source_event="advisor_callback",
+                dedupe_key=f"advisor_reminder|{tenant.id if tenant else 0}|{req.pk}",
+            )
+            req.reminder = sf
+            req.save(update_fields=["reminder", "updated_at"])
+        return req, True
+    except IntegrityError:
+        existing = AdvisorCallbackRequest.objects.for_tenant(tenant).filter(
+            mobile=mobile, slot=slot, request_date=request_date
+        ).first()
+        return existing, False
 
 
 def send_alert(tenant, request: AdvisorCallbackRequest) -> bool:
