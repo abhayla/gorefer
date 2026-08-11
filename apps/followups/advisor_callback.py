@@ -103,12 +103,6 @@ def request_and_schedule(tenant, *, mobile: str, name: str, slot: str, now=None)
     now = now or timezone.now()
     request_date = (now.astimezone(dt_timezone.utc) + services.IST_OFFSET).date()
 
-    existing = AdvisorCallbackRequest.objects.for_tenant(tenant).filter(
-        mobile=mobile, slot=slot, request_date=request_date
-    ).first()
-    if existing is not None:
-        return existing, False
-
     rule = _get_or_create_rule(tenant)
     fire_at = compute_fire_at(slot, now)
 
