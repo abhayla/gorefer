@@ -137,6 +137,37 @@ Rules the signer must honour (GoRefer rejects otherwise):
 Rollout: deploy the signer → set `ZOHO_WEBHOOK_HMAC_SECRET` on both sides → flip
 `ENABLE_ZOHO_WEBHOOK_HMAC=true`. Rollback is flipping the flag back off.
 
+## Deploy runner — `scripts/deploy.sh`
+
+> **Why this exists:** every prior deploy re-typed the same manual pattern by hand — dozens
+> of COORDINATION.md entries read "git-show pipe … blob-hash-verified." `scripts/deploy.sh`
+> mechanizes that exact pattern so a deploy is one command, not a re-derivation each time.
+
+```bash
+scripts/deploy.sh                # deploy local HEAD (refuses a dirty tree)
+scripts/deploy.sh <commit-ish>   # deploy a specific commit/branch/tag
+scripts/deploy.sh --force        # allow a dirty working tree (still deploys HEAD)
+```
+
+What it does: streams the exact committed tree for the target commit into `/var/www/gorefer`
+via `git archive | ssh … tar -x` (never touching the box's runtime state — `.env`, `.venv`,
+`staticfiles/`, `DEPLOYED_SHA`), hash-verifies every file byte-exact against its git blob,
+runs `migrate` + `collectstatic --noinput` + `manage.py check` as `www-data`, restarts
+`gorefer` + `gorefer-qcluster` and waits for both (plus `nginx`) to report `active`, writes
+`DEPLOYED_SHA` on the box, then probes `https://gorefer.in/api/health` and fails the run if it
+doesn't return 200.
+
+Access, by default, is `root@72.61.240.224` with key `~/.ssh/firekaro_v6_vps` — exactly this
+doc's "The target" table above. Override via `DEPLOY_SSH_HOST` / `DEPLOY_SSH_KEY` /
+`DEPLOY_SSH_USER` / `DEPLOY_REMOTE_DIR` / `DEPLOY_HEALTH_URL` env vars if a local setup needs
+something different; the script never assumes an SSH config alias exists.
+
+**Windows git-archive CRLF trap:** a Windows dev box with global `core.autocrlf=true` makes a
+bare `git archive` silently rewrite LF → CRLF in every text file it streams, which then fails
+hash verification against the LF git blobs — the same trap noted elsewhere in this repo's
+history from manual deploys. The script forces `-c core.autocrlf=false` on the archive step so
+this can't recur.
+
 ## Why Hostinger (not the local box)
 
 Abhay's decision: keep GoRefer on the Hostinger multi-site VPS alongside the other production sites, on its proven Linux nginx + certbot pattern. The local Windows box is a dev/other-fleet machine, not GoRefer's production home.
