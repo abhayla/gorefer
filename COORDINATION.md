@@ -6637,3 +6637,48 @@ environment. Relying on GitHub CI to verify. Opening fresh PR and watching CI.
 
 **Next step:** open fresh PR #159 (PR #157 is closed), watch CI, merge on green.
 
+
+
+---
+
+## 2026-08-12 — STATUS: T-068 deploy runner script (`scripts/deploy.sh`), 3rd attempt
+
+**Context:** T-068's first two attempts died (max_turns, then an environmental wrapper
+death) leaving PR #139 open with a stale branch and an unrun deploy. On resume, the branch
+(`docs/deploy-runner-script`) was 8 commits behind `main`; its own COORDINATION.md addition
+from the first attempt **claimed** a completed end-to-end prod deploy + health probe, but the
+dispatcher's own status_log recorded that attempt dying *before* running the deploy or probing
+prod. Cross-checked directly against prod (`ssh … cat /var/www/gorefer/DEPLOYED_SHA`) rather
+than trusting either account: prod was at `5d70adc` (T-097), **not** the `0fdc915` the branch's
+log entry claimed to have deployed — confirming the claim was false and the status_log's
+account was correct. Discarded that stale/inaccurate content instead of merging it forward.
+
+**Also found:** prod had moved 3 commits past what `CURRENT-STATE.md` recorded — T-097
+(`5d70adc`, PR #156), T-104 (`dba64ea`, PR #158), T-098 (`7141c5a`, PR #159) had all merged
+and deployed with no matching CURRENT-STATE/COORDINATION update. Corrected in this PR (see
+CURRENT-STATE.md header + Deployed-SHA row).
+
+**Rebuilt the branch fresh off current `main`** (`7141c5a`) rather than rebasing the stale
+one, then rewrote `scripts/deploy.sh`: the original hardcoded an SSH config alias (`rfp-vps`,
+a co-tenant's local alias) with a different key than DEPLOY-TARGET.md's documented
+`~/.ssh/firekaro_v6_vps`. Changed the default to the documented `root@72.61.240.224` +
+`~/.ssh/firekaro_v6_vps` directly (env-var overridable), so the script is self-contained and
+doesn't depend on a local SSH config that may not exist on a fresh machine. Verified the
+script's `www-data` / `.venv/bin/python` / `/var/www/gorefer` assumptions match the live box
+exactly before running it.
+
+**Ran it for real** against prod, deploying local HEAD (the deploy-runner commit itself, on
+top of `main` tip `7141c5a`): git-archive streamed over SSH, every file hash-verified
+byte-exact against its git blob, `migrate`/`collectstatic`/`check` clean (2 pre-existing SSL
+warnings only — TLS terminates at Cloudflare per DEPLOY-TARGET.md), `gorefer` +
+`gorefer-qcluster` + `nginx` all restarted and report `active`, `DEPLOYED_SHA` written,
+`https://gorefer.in/api/health` probed **200**. Independently re-verified over SSH afterward
+(`DEPLOYED_SHA` reads `8e90edd`) rather than trusting the script's own exit code. Homepage
+`https://gorefer.in/` probed 200 with the NSE AP disclosure block (`AP2516003693`) + market-risk
+warning present. T-061 Hindi parity (`a94560e`) confirmed an ancestor of the deployed commit —
+live continuously since 2026-08-09, unaffected by this deploy (no application code touched).
+
+**No application code changed** — this PR is `scripts/deploy.sh` (new) +
+`docs/deploy/DEPLOY-TARGET.md` (new "Deploy runner" section) + this log + the
+`CURRENT-STATE.md` header/table correction. `[skip-contract-doc]` applies (no
+`apps/integrations/**` touched). — Engineer (T-068, fleet worker)
