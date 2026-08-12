@@ -6682,3 +6682,23 @@ live continuously since 2026-08-09, unaffected by this deploy (no application co
 `docs/deploy/DEPLOY-TARGET.md` (new "Deploy runner" section) + this log + the
 `CURRENT-STATE.md` header/table correction. `[skip-contract-doc]` applies (no
 `apps/integrations/**` touched). — Engineer (T-068, fleet worker)
+
+---
+
+## T-068 — PR #139 merged + final redeploy (2026-08-12, ~09:52-10:00 UTC)
+
+PR #139 checks went green (rebase onto `main` @ `7141c5a` fixed the pre-existing
+`test_t058_conversion_congrats.py` flake unrelated to this diff). Squash-merged
+(`218d48a`, no branch protection on this private repo per documented rule — manual
+merge-on-green). Ran `scripts/deploy.sh` again against the merged tip: git-archive
+streamed + hash-verified byte-exact, migrate/collectstatic/check clean, all 3 services
+(`gorefer`, `gorefer-qcluster`, `nginx`) active, `DEPLOYED_SHA` now `218d48a`,
+`https://gorefer.in/api/health` → 200. This brings prod's on-disk tree in sync with
+`main` (previous deploy at `8e90edd` had identical application code but was missing this
+PR's own COORDINATION/CURRENT-STATE doc commits).
+
+T-061 Hindi parity re-confirmed live post-deploy: `GET /hub/probe-token-xyz?lang=hi` (an
+invalid-token 404, so no PII/real token needed) renders the Hindi market-risk-warning
+line ("प्रतिभूति बाज़ार में निवेश बाज़ार जोखिमों के अधीन है।") via `market_risk_warning_hi`,
+proving the bilingual cascade is live end-to-end on the deployed commit — not just an
+ancestor-commit inference. — Engineer (T-068, fleet worker)

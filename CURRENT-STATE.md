@@ -11,7 +11,17 @@
 > wins; if either disagrees with the live system, **the live system wins** — verify, don't
 > trust (commands at the bottom).
 >
-> **Last updated:** 2026-08-12 15:10 IST (**DEPLOYED: `8e90edd` = main tip (`7141c5a`) +
+> **Last updated:** 2026-08-12 15:22 IST (**DEPLOYED: `218d48a` = main tip, PR #139 merged**
+> — supersedes the `8e90edd` deploy below: `8e90edd` was the same application code deployed
+> ad hoc off the feature branch before PR #139 merged; `218d48a` is the squash-merged tip,
+> which adds this file's own doc corrections (COORDINATION.md + this header) on top. Re-ran
+> `scripts/deploy.sh` against the merged tip: hash-verified byte-exact, migrate/collectstatic/
+> check clean, all 3 services active, `DEPLOYED_SHA` now `218d48a`, `/api/health` 200. T-061
+> Hindi parity re-verified LIVE end-to-end post-deploy (not just ancestor-inferred): `GET
+> /hub/probe-token-xyz?lang=hi` (invalid-token 404, no real token needed) renders the Hindi
+> market-risk-warning line via `market_risk_warning_hi`, proving the bilingual cascade
+> executes on the deployed commit.)
+> — prior 2026-08-12 15:10 IST (**DEPLOYED: `8e90edd` = main tip (`7141c5a`) +
 > deploy-runner script** — **T-068 repeatable deploy runner LIVE**: added
 > `scripts/deploy.sh`, mechanizing the manual git-archive/SSH/hash-verify/migrate/restart
 > pattern that had deployed every prior GoRefer release by hand. No application code changed.
