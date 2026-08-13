@@ -25,6 +25,28 @@ WATI_BUSINESS_NUMBER = "wati_business_number"
 SHARE_CHANNELS_ALLOWLIST = "share_channels_allowlist"
 ENABLE_ASSISTED_REFERRAL = "enable_assisted_referral"
 
+# --- Share/redirect recovery page (T-122) -------------------------------------------
+# GET /share/{channel}/ (missing client_id), GET /r/, GET /r — the soft-landing page
+# for a link that fell out of its client_id (Zoho field-mapping bug sent WhatsApp
+# template URL buttons with a blank {{client_id}}). Copy + the wa.me pre-fill are
+# cascade keys (rail E-6 / §6d) so the owner can reword the recovery message without a
+# deploy; the WATI business NUMBER is not duplicated here — it reuses WATI_BUSINESS_NUMBER
+# above. Defaults are the shipped literals, so an unseeded database renders identically.
+SHARE_RECOVERY_HEADLINE = "share_recovery_headline"
+SHARE_RECOVERY_HEADLINE_DEFAULT = "We couldn't load your personal referral link"
+
+SHARE_RECOVERY_BODY = "share_recovery_body"
+SHARE_RECOVERY_BODY_DEFAULT = (
+    "The link you followed is missing a piece. Message us on WhatsApp and we'll send "
+    "you your referral link right away."
+)
+
+SHARE_RECOVERY_BUTTON_LABEL = "share_recovery_button_label"
+SHARE_RECOVERY_BUTTON_LABEL_DEFAULT = "Message us on WhatsApp"
+
+SHARE_RECOVERY_PREFILL = "share_recovery_prefill_text"
+SHARE_RECOVERY_PREFILL_DEFAULT = "Hi, I need my referral link"
+
 # --- Records magic link (T-051; behind ENABLE_RECORDS_LINK) ------------------------
 # How long a WhatsApp [Referral Records] link stays usable. A cascade key, not a
 # literal (rail E-6 / §6d): shortening the window has to take effect on links ALREADY
@@ -638,6 +660,11 @@ def central_defaults() -> dict:
         WATI_BUSINESS_NUMBER: settings.WATI_BUSINESS_NUMBER,
         SHARE_CHANNELS_ALLOWLIST: DEFAULT_SHARE_CHANNELS,
         ENABLE_ASSISTED_REFERRAL: False,
+        # Share/redirect recovery page (T-122) — see the key block above.
+        SHARE_RECOVERY_HEADLINE: SHARE_RECOVERY_HEADLINE_DEFAULT,
+        SHARE_RECOVERY_BODY: SHARE_RECOVERY_BODY_DEFAULT,
+        SHARE_RECOVERY_BUTTON_LABEL: SHARE_RECOVERY_BUTTON_LABEL_DEFAULT,
+        SHARE_RECOVERY_PREFILL: SHARE_RECOVERY_PREFILL_DEFAULT,
         RECORDS_LINK_TTL_DAYS: RECORDS_LINK_TTL_DAYS_DEFAULT,
         RECORDS_MINT_DATE_FORMAT: RECORDS_MINT_DATE_FORMAT_DEFAULT,
         RECORDS_LINK_TEMPLATE_EN: RECORDS_LINK_TEMPLATE_EN_DEFAULT,

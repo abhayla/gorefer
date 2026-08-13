@@ -12,6 +12,7 @@ code never appear in the rendered landing body (only in the 302 Location).
 from __future__ import annotations
 
 import uuid
+from urllib.parse import quote
 
 from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import render
@@ -19,7 +20,9 @@ from django.views.decorators.http import require_GET
 
 from apps.common.ratelimit import RateLimited, check_rate, client_ip
 from apps.config.cascade import resolve
+from apps.events import vocab
 from apps.events.bots import is_bot_user_agent
+from apps.events.models import Event
 from apps.referrals.og import render_preview
 from apps.tenants.resolve import get_current_tenant
 from gorefer import flags as flagmod
@@ -330,3 +333,78 @@ def partner_direct_redirect(request):
     response = HttpResponseRedirect(destination)
     _set_visitor_cookie(response, visitor_id, is_new)
     return response
+
+
+def _share_recovery_context(tenant_id: int | None) -> dict:
+    """Config-driven copy + wa.me CTA for the soft-landing recovery page (T-122).
+
+    Reuses `WATI_BUSINESS_NUMBER` (already a cascade key) rather than duplicating
+    the business number under a new key. Every other string is its own cascade key
+    (rail E-6 / §6d) so the copy can be reworded without a deploy; defaults equal
+    the shipped literals, so an unseeded database renders identically.
+    """
+    from django.conf import settings
+
+    from apps.config import preferences as prefkeys
+
+    wa_number = resolve(
+        prefkeys.WATI_BUSINESS_NUMBER, tenant_id=tenant_id, default=settings.WATI_BUSINESS_NUMBER
+    )
+    return {
+        "headline": resolve(
+            prefkeys.SHARE_RECOVERY_HEADLINE,
+            tenant_id=tenant_id,
+            default=prefkeys.SHARE_RECOVERY_HEADLINE_DEFAULT,
+        ),
+        "body": resolve(
+            prefkeys.SHARE_RECOVERY_BODY, tenant_id=tenant_id, default=prefkeys.SHARE_RECOVERY_BODY_DEFAULT
+        ),
+        "button_label": resolve(
+            prefkeys.SHARE_RECOVERY_BUTTON_LABEL,
+            tenant_id=tenant_id,
+            default=prefkeys.SHARE_RECOVERY_BUTTON_LABEL_DEFAULT,
+        ),
+        "wa_link": _share_recovery_wa_link(wa_number, tenant_id),
+    }
+
+
+def _share_recovery_wa_link(wa_number: str, tenant_id: int | None) -> str:
+    """The `https://wa.me/{number}?text=...` deep link — the page's ONE primary CTA."""
+    from apps.config import preferences as prefkeys
+
+    prefill = resolve(
+        prefkeys.SHARE_RECOVERY_PREFILL, tenant_id=tenant_id, default=prefkeys.SHARE_RECOVERY_PREFILL_DEFAULT
+    )
+    digits = "".join(ch for ch in (wa_number or "") if ch.isdigit())
+    return f"https://wa.me/{digits}?text={quote(prefill, safe='')}"
+
+
+@require_GET
+def share_recovery_view(request, channel: str | None = None):
+    """GET /share/{channel}/ (or bare), GET /r/, GET /r — the soft-landing recovery
+    page (T-122) for a share/acquisition link whose `client_id` fell out (a Zoho
+    field-mapping bug sent WhatsApp URL buttons with a blank `{{client_id}}`).
+
+    Always HTTP 200 (never a 404) so an already-delivered broken link keeps working
+    for as long as it sits in someone's chat history. NO login, NO form, NO journey/
+    identity created — this is a pure informational page whose ONE action is a
+    `wa.me` deep link back to the WATI business number. Query strings (fbclid etc.)
+    never reach here at all — Django path matching ignores them.
+    """
+    tenant = get_current_tenant(request)
+    tenant_id = tenant.id if tenant is not None else None
+    user_agent = request.META.get("HTTP_USER_AGENT", "")
+    if not is_bot_user_agent(user_agent):
+        Event.objects.create(
+            tenant=tenant,
+            event_type=vocab.SHARE_RECOVERY_VIEWED,
+            source=vocab.SRC_SYSTEM,
+            referral=None,
+            user_type="anonymous",
+            user_agent=user_agent,
+            is_bot=False,
+            person_ref_id=None,
+            metadata={"channel": normalize_share_channel(channel) if channel else ""},
+        )
+    context = _share_recovery_context(tenant_id)
+    return render(request, "share_recovery.html", context, status=200)

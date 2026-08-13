@@ -27,6 +27,7 @@ from apps.referrals.views import (
     referral_continue,
     referral_redirect,
     share_intent_redirect,
+    share_recovery_view,
 )
 from gorefer.converters import ChannelConverter
 
@@ -48,6 +49,11 @@ urlpatterns = [
     # Legacy single-segment form (M2/M3) — unchanged; still honours ?s=.
     path("r/<str:client_id>/continue", referral_continue, name="referral_continue"),
     path("r/<str:client_id>", referral_redirect, name="referral_redirect"),
+    # Bare /r/ and /r (no client_id at all) — T-122 soft-landing recovery, never a
+    # 404. Structurally disjoint from every pattern above: the `str` converter never
+    # matches an empty segment, so these can't shadow (or be shadowed by) them.
+    path("r/", share_recovery_view, name="referral_recovery_slash"),
+    path("r", share_recovery_view, name="referral_recovery_bare"),
     path("api/", api.urls),
 ]
 
@@ -56,6 +62,16 @@ urlpatterns = [
 if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_SHARE_INTENT", False):
     urlpatterns.append(
         path("share/<channel:channel>/<str:client_id>", share_intent_redirect, name="share_intent")
+    )
+    # Missing/empty client_id (T-122) — same flag gate as the route above, since this
+    # is the recovery page for exactly that route's broken links. Both segment shapes
+    # (trailing slash and bare) are disjoint from the pattern above, which requires a
+    # non-empty client_id segment.
+    urlpatterns.append(
+        path("share/<channel:channel>/", share_recovery_view, name="share_recovery_slash")
+    )
+    urlpatterns.append(
+        path("share/<channel:channel>", share_recovery_view, name="share_recovery_bare")
     )
 
 # Tokened read-only "Referral Records" page (T-051). The ENTIRE route exists only when

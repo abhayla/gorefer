@@ -1,0 +1,29 @@
+{% extends "landing_base.html" %}
+{% comment %}
+Soft-landing recovery page (T-122) for a share/acquisition link whose client_id
+fell out (missing/empty). Always HTTP 200, PIFS-branded, ONE primary CTA: a wa.me
+deep link to the WATI business number. No login, no form, no dead UI. The
+compliance disclosure + market-risk warning are still auto-injected by
+landing_base.html's compliance_disclosure partial.
+{% endcomment %}
+{% block title %}We couldn't load your referral link — PIFS{% endblock %}
+{% block body %}
+<section class="px-5 pt-8 pb-2 text-center">
+  <div class="mx-auto h-16 w-16 rounded-full bg-pending/15 flex items-center justify-center mb-4">
+    <svg class="h-8 w-8 text-pending" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.1c.765-1.36 2.72-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.492-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+  </div>
+  <h1 class="text-[22px] leading-snug font-extrabold tracking-tight text-ink-900">
+    {{ headline }}
+  </h1>
+  <p class="mt-2 text-sm text-ink-500 leading-relaxed">
+    {{ body }}
+  </p>
+</section>
+<section class="px-5 pt-5 pb-2 space-y-3">
+  <a href="{{ wa_link }}" target="_blank" rel="noopener"
+    class="w-full rounded-full bg-cobalt-600 hover:bg-cobalt-500 transition-colors text-white text-sm font-bold py-3.5 card flex items-center justify-center gap-2">
+    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 004.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0012.04 2z"/></svg>
+    {{ button_label }}
+  </a>
+</section>
+{% endblock %}
