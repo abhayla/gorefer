@@ -8,9 +8,12 @@ Used via `@pytest.mark.urls("tests.urls_records_link")`.
 from django.urls import path
 
 from apps.accounts.records import records_view
+from apps.referrals.views import share_recovery_view
 from gorefer.urls import urlpatterns as base_urlpatterns
 
 urlpatterns = [
     *base_urlpatterns,
-    path("rr/<str:token>", records_view, name="records_link"),
+    path("rr/", share_recovery_view, name="records_recovery_slash"),
+    path("rr", share_recovery_view, name="records_recovery_bare"),
+    path("rr/<str:value>", records_view, name="records_link"),
 ]

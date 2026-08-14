@@ -285,7 +285,11 @@ def test_recovery_alert_fires_once_per_day(tenant, monkeypatch):
     referral = Referral.objects.create(
         tenant=tenant, referral_identity=identity, program=program, source="referral_link",
     )
-    today = timezone.now().date()
+    # IST calendar day, not the UTC one `timezone.now().date()` would give — the
+    # digest's own day-bounds math (`_ist_day_bounds_utc`) windows by IST day, and
+    # UTC 18:30-23:59 is already the NEXT IST day, so a naive UTC date flakes in
+    # that window even though the event and the "today" arg are both real-time.
+    today = (timezone.now() + IST_OFFSET).date()
     for _ in range(3):
         Event.objects.create(
             tenant=tenant, event_type=vocab.SHARE_RECOVERY_VIEWED, referral=referral, is_bot=False,

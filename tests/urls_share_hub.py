@@ -15,7 +15,7 @@ from gorefer.urls import urlpatterns as base_urlpatterns
 
 urlpatterns = [
     *base_urlpatterns,
-    path("rr/<str:token>", records_view, name="records_link"),
+    path("rr/<str:value>", records_view, name="records_link"),
     path("hub/<str:token>", hub_view, name="share_hub"),
     # T-064 — the opener editor's write endpoint, mounted by the SAME flag.
     path("hub/<str:token>/opener", hub_opener_view, name="share_hub_opener"),

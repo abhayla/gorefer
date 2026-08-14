@@ -419,15 +419,19 @@ def test_rolling_budget_is_per_recipient_across_campaigns(tenant, monkeypatch):
 # --------------------------------------------------------------------- send: fail-closed guards
 
 
-def test_blank_token_candidate_is_skipped_not_sent(tenant, monkeypatch):
-    """The T-073 fail-closed guard: a template needing {{token}} with no usable
-    value is refused BEFORE any network call — never sent with a blank link."""
+def test_unknown_client_id_is_skipped_not_sent(tenant, monkeypatch):
+    """T-129: `send_campaign_message` now builds the "token" param straight from
+    `client_id` (the RECORDS button carries the raw id, not a signed token — Meta
+    silently blanks a URL-button value containing ':'), so the integration can no
+    longer produce a blank-token candidate the way the old minted-token path could.
+    The real remaining fail-BEFORE-send case is an id `resolve_link_details` cannot
+    mint for at all (no matching identity)."""
     _records_link_on(monkeypatch)
     _identity(tenant, CID)
 
     monkeypatch.setattr(
         campaign_send, "resolve_link_details",
-        lambda tenant, client_id: {"token": "", "name": "Riya", "record_date": "1 Jan 2026"},
+        lambda tenant, client_id: {"error": "unknown_client_id"},
     )
 
     result = campaign_send.send_campaign_message(
@@ -436,7 +440,22 @@ def test_blank_token_candidate_is_skipped_not_sent(tenant, monkeypatch):
     )
 
     assert result["outcome"] == "skipped"
-    assert "missing_computed_var:token" in result["reason"]
+    assert result["reason"] == "unknown_client_id"
+
+
+def test_computed_var_guard_still_refuses_a_blank_client_id(tenant, monkeypatch):
+    """The `assert_computed_vars_filled` fail-closed contract (T-073) still holds for
+    the "token" param even though its source moved from a minted token to the raw
+    client_id — proven directly against `_campaign_params`, since the integration
+    path itself can no longer construct a blank one (identity lookup guards it
+    upstream, in `resolve_link_details`)."""
+    from apps.integrations.computed_vars import MissingComputedVar, assert_computed_vars_filled
+
+    params = campaign_send._campaign_params(
+        "", {"name": "Riya", "record_date": "1 Jan 2026"}
+    )
+    with pytest.raises(MissingComputedVar):
+        assert_computed_vars_filled("gr_platform_gorefer_refrecord_en_2026_08_07", params)
 
 
 def test_send_refused_when_records_link_flag_off(tenant, monkeypatch):

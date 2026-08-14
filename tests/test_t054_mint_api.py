@@ -133,7 +133,9 @@ def test_mint_returns_everything_a_send_needs(client, seeded, keyed, monkeypatch
     # The token names THIS identity — the whole point of the endpoint.
     assert verify_records_token(item["token"]) == identity
     base = settings.PUBLIC_BASE_URL.rstrip("/")
-    assert item["rr_url"] == f"{base}/rr/{item['token']}"
+    # T-129: the records button carries the raw client_id, not the token — Meta
+    # silently blanks a URL-button value containing ':', which every token has.
+    assert item["rr_url"] == f"{base}/rr/{CID}"
     assert item["hub_url"] == f"{base}/hub/{item['token']}"
 
 

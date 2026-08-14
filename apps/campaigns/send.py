@@ -14,7 +14,8 @@ a send through `get_messaging_port()`, and the PORT FACTORY is what swaps in the
 LogOnly adapter when `ENABLE_WATI_SEND` is off — so demo mode logs an intended send
 rather than silently skipping every row (CLAUDE.md §7 "demo mode still works
 end-to-end"). What this DOES still gate on, unconditionally, is
-`ENABLE_RECORDS_LINK`: the seeded campaign template points at `/rr/{token}` — the
+`ENABLE_RECORDS_LINK`: the seeded campaign template points at `/rr/{client_id}` (T-129
+— the button carries the client id, not a signed token, so Meta cannot blank it) — the
 same surface `RECORDS_FAMILY` gates on — and sending a link to an unmounted page is
 a dead link in a recipient's chat regardless of vendor delivery mode (Constitution §4).
 """
@@ -47,10 +48,13 @@ logger = logging.getLogger("gorefer.campaigns.send")
 
 
 def _campaign_params(client_id: str, details: dict) -> list:
+    # T-129: same fix as `records_link_send._records_params` — the "token" param is
+    # the URL-button variable, and it now carries the raw client_id (colon-free by
+    # construction) rather than the signed token, which Meta silently blanks.
     return [
         {"name": "name", "value": details.get("name") or "there"},
         {"name": "record_date", "value": details.get("record_date", "")},
-        {"name": "token", "value": details.get("token") or ""},
+        {"name": "token", "value": client_id},
     ]
 
 

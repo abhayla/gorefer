@@ -354,14 +354,18 @@ def test_route_is_present_when_the_flag_is_on(client, seeded):
     assert client.get(f"/rr/{mint_records_token(identity)}").status_code == 200
 
 
-def test_the_flag_mounts_exactly_one_new_get_route():
-    """Read-only, proven structurally: the gated urlconf adds ONE pattern over base."""
+def test_the_flag_mounts_exactly_three_new_get_routes():
+    """Read-only, proven structurally: the gated urlconf adds THREE patterns over
+    base (T-129) — the value-shape-dispatched `/rr/{value}` plus the bare `/rr/`
+    and `/rr` T-122-style recovery pair, mirroring the `/r/` family exactly."""
     from gorefer.urls import urlpatterns as base
     from tests import urls_records_link
 
     added = urls_records_link.urlpatterns[len(base):]
-    assert len(added) == 1
-    assert added[0].name == "records_link"
+    assert len(added) == 3
+    assert {p.name for p in added} == {
+        "records_recovery_slash", "records_recovery_bare", "records_link",
+    }
 
 
 def test_the_token_salt_is_namespaced():

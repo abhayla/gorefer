@@ -115,10 +115,15 @@ class SendFamily:
 
 
 def _records_params(client_id: str, details: dict) -> list:
+    # T-129: the "token" param is the RECORDS URL-button variable. It now carries the
+    # raw client_id, not the signed token — a colon (always present in a signed
+    # token) makes Meta silently blank a URL-button value (proven live 2026-08-14).
+    # The param name stays "token" so the computed_vars registry (which keys on this
+    # exact name) needs no change — only the value source moved.
     return [
         {"name": "name", "value": details.get("name") or "there"},
         {"name": "record_date", "value": details.get("record_date", "")},
-        {"name": "token", "value": details.get("token") or ""},
+        {"name": "token", "value": client_id},
     ]
 
 

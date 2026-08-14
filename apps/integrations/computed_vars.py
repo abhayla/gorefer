@@ -2,12 +2,19 @@
 
 The failure this exists to prevent, stated plainly: a WhatsApp template can be
 created, approved and sent while one of its variables is something **only GoRefer
-can compute** — today `{{token}}`, the signed `django.core.signing` value behind
-`/rr/{token}` and `/hub/{token}`. Nothing at Meta, at Wati, or in a dashboard
+can compute** — today `{{token}}`. Nothing at Meta, at Wati, or in a dashboard
 broadcast knows that. A Wati broadcast fills an unknown variable from a contact
 attribute that does not exist, the value comes out BLANK, and every recipient gets
-`https://gorefer.in/hub/` — a dead link — with a green "delivered" tick. The send
-looks perfect from every angle except the recipient's.
+a dead link with a green "delivered" tick. The send looks perfect from every angle
+except the recipient's.
+
+The PARAM NAME `token` is now a historical label, not a promise of shape: the
+records-link family (`refrecord`) fills it with the raw client_id behind
+`/rr/{client_id}` (T-129 — Meta silently blanks a URL-button value containing ':',
+and a signed `django.core.signing` value always contains one); the invite/hub
+family (`referandearn_invite`) still fills it with the signed value behind
+`/hub/{token}`. Either way the contract this module enforces is unchanged: the
+named param must be present and non-blank before a send is allowed.
 
 So the rule here is the inverse of the usual one: **a template whose computed
 variables the sender cannot fill must not be sent at all.** Not sent with a blank.

@@ -74,14 +74,22 @@ if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_SHARE_INTENT", False):
         path("share/<channel:channel>", share_recovery_view, name="share_recovery_bare")
     )
 
-# Tokened read-only "Referral Records" page (T-051). The ENTIRE route exists only when
-# ENABLE_RECORDS_LINK is on — and it is a single GET; there is deliberately no POST
-# sibling, because a link that arrives by forwarded WhatsApp message must not be able
-# to change anything.
+# Read-only "Referral Records" page (T-051; client-id shape T-129). The ENTIRE route
+# exists only when ENABLE_RECORDS_LINK is on — and it is a single GET; there is
+# deliberately no POST sibling, because a link that arrives by forwarded WhatsApp
+# message must not be able to change anything.
+#
+# Bare /rr/ and /rr (no value at all) are the T-122-style soft-landing recovery page
+# — reusing `share_recovery_view` verbatim, the same as the /r/ and /r pair above, so
+# a stripped-blank URL-button tap (the T-129 root cause) never 404s. Listed BEFORE
+# `rr/<str:value>` for the same structural reason as `/r/`: the `str` converter never
+# matches an empty segment, so these can't shadow (or be shadowed by) it.
 if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_RECORDS_LINK", False):
     from apps.accounts.records import records_view
 
-    urlpatterns.append(path("rr/<str:token>", records_view, name="records_link"))
+    urlpatterns.append(path("rr/", share_recovery_view, name="records_recovery_slash"))
+    urlpatterns.append(path("rr", share_recovery_view, name="records_recovery_bare"))
+    urlpatterns.append(path("rr/<str:value>", records_view, name="records_link"))
 
 # Tokened referral SHARE HUB (T-053) — the destination of a [Refer Link] button. Its own
 # flag, separate from ENABLE_RECORDS_LINK: the two tokened pages ship independently, and

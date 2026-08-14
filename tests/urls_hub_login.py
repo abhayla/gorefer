@@ -22,7 +22,7 @@ urlpatterns = [
     # The still-live token routes (Phase 3 deletes them).
     path("hub/<str:token>", hub_view, name="share_hub"),
     path("hub/<str:token>/opener", hub_opener_view, name="share_hub_opener"),
-    path("rr/<str:token>", records_view, name="records_link"),
+    path("rr/<str:value>", records_view, name="records_link"),
     # The M13 login surface the gate redirects to.
     path("", include("apps.accounts.urls")),
 ]

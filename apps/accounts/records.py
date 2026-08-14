@@ -1,4 +1,4 @@
-"""The tokened, read-only "Referral Records" page — `GET /rr/{token}` (T-051).
+"""The read-only "Referral Records" page — `GET /rr/{value}` (T-051, client-id T-129).
 
 Reached by tapping a [Referral Records] button in a WhatsApp message, with no login.
 That convenience is only safe because WhatsApp messages get FORWARDED, so this page is
@@ -11,8 +11,18 @@ built to be harmless in a stranger's hands:
     edit must not be able to re-expose what was masked);
   * **step-up** — full, unmasked detail lives behind the real `/login/`, linked here.
 
-Failure is uniform: bad / expired / rotated tokens all render ONE page with a 404 and
-zero referral data, so the endpoint can never be used to probe which client ids exist.
+`value` is shape-dispatched (T-129 — WhatsApp/Meta silently replaces a URL-button
+variable value containing ':' with EMPTY, proven by a controlled tap 2026-08-14; a
+`django.core.signing` token is always colon-separated, so a token-carrying button
+arrives blank on every tap). A client-id-shaped value opens the SAME masked view
+directly, by lookup — no token needed, and none minted. This is owner-accepted
+(2026-08-14): Zerodha client ids are already public in Zerodha's own `r=` links, so
+a guessable `/rr/{client_id}` leaks nothing a `/r/{client_id}` link didn't already.
+Anything else is tried as a legacy signed token, so already-sent links keep working.
+
+Failure is uniform: an unknown client id and a bad / expired / rotated / undecodable
+token all render ONE page with a 404 and zero referral data, so the endpoint can
+never be used to probe which client ids exist or which tokens are live.
 
 Guardrail 3: this is a client-facing surface, so nothing here may carry the partner
 code or a raw Zerodha URL. It renders neither — GoRefer's own counts and masked names
@@ -33,7 +43,9 @@ from apps.common.ratelimit import RateLimited, check_rate, client_ip
 from apps.config import preferences as prefs
 from apps.config.i18n import LANG_EN, bi_text, market_risk_warning_hi, resolve_lang, with_lang
 from apps.events.models import Event
-from apps.referrals.models import Lead, Referral
+from apps.referrals.models import Lead, Referral, ReferralIdentity
+from apps.referrals.validators import InvalidClientId, validate_client_id_for
+from apps.tenants.resolve import get_current_tenant
 from gorefer.flags import flags
 
 from .records_link import verify_records_token
@@ -259,12 +271,38 @@ def _log_view(tenant, identity) -> None:
     )
 
 
+def _client_id_identity(request, value: str) -> ReferralIdentity | None:
+    """`value` shaped like an active client id for THIS request's tenant/partner ->
+    the identity it names, else `None`. Never raises: an unrecognized shape or an
+    unknown id both simply fall through to the legacy token path below, so a garbage
+    value gets exactly one uniform failure page, not two different ones.
+
+    Scoped from the REQUEST's resolved tenant (ADR-023) — there is no token payload
+    to carry the tenant here, so this is the same resolution `/r/{client_id}` itself
+    uses, not the identity-carries-its-own-tenant trick the token path relies on.
+    """
+    tenant = get_current_tenant(request)
+    try:
+        client_id = validate_client_id_for(tenant, value)
+    except InvalidClientId:
+        return None
+    return (
+        ReferralIdentity.objects.for_tenant(tenant)
+        .filter(client_id=client_id, status="active", deleted_at__isnull=True)
+        .first()
+    )
+
+
 @require_GET
-def records_view(request, token: str):
-    """`GET /rr/{token}` — the whole surface. Mounted only when ENABLE_RECORDS_LINK."""
+def records_view(request, value: str):
+    """`GET /rr/{value}` — the whole surface. Mounted only when ENABLE_RECORDS_LINK.
+
+    `value` is shape-dispatched (T-129): client-id-shaped -> direct lookup, no
+    token; otherwise -> the legacy signed-token path, unchanged.
+    """
     lang = resolve_lang(request)
-    # No tenant known yet on the failure paths (token unverified) — the central-tier
-    # default (tenant_id=None) is the correct, identical-for-everyone fallback config.
+    # No tenant known yet on the failure paths (nothing verified yet) — the central-
+    # tier default (tenant_id=None) is the correct, identical-for-everyone fallback.
     fail_config = records_config(lang, None)
     fail_ctx = {
         "config": fail_config,
@@ -280,7 +318,7 @@ def records_view(request, token: str):
             window=settings.RATELIMIT_API_WINDOW,
         )
     except RateLimited as exc:
-        # Returned for valid and invalid tokens alike, so throttling reveals nothing.
+        # Returned for valid and invalid values alike, so throttling reveals nothing.
         return render(
             request,
             "accounts/records_unavailable.html",
@@ -288,9 +326,19 @@ def records_view(request, token: str):
             status=429,
         )
 
-    identity = verify_records_token(token)
+    client_id_identity = _client_id_identity(request, value)
+    if client_id_identity is not None:
+        tenant = client_id_identity.tenant
+        # No token: nothing was minted for this open, so the hub cross-link (which
+        # rides the same token) simply stays hidden — never a dead link.
+        ctx = records_ctx(tenant, client_id_identity, "", lang)
+        _log_view(tenant, client_id_identity)
+        return render(request, "accounts/records.html", ctx)
+
+    identity = verify_records_token(value)
     if identity is None:
-        # ONE response for tampered / expired / rotated / unknown — no oracle.
+        # ONE response for an unrecognized client id and a tampered / expired /
+        # rotated / undecodable token alike — no oracle.
         return render(
             request,
             "accounts/records_unavailable.html",
@@ -302,6 +350,6 @@ def records_view(request, token: str):
     # the signature proves it, so a link opened on another tenant's domain can never
     # read across the ADR-023 boundary.
     tenant = identity.tenant
-    ctx = records_ctx(tenant, identity, token, lang)
+    ctx = records_ctx(tenant, identity, value, lang)
     _log_view(tenant, identity)
     return render(request, "accounts/records.html", ctx)

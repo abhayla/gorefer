@@ -209,8 +209,15 @@ def _mint_one(tenant, raw_client_id: str, *, base: str, fmt: str) -> dict:
     return {
         "client_id": client_id,
         "token": token,
-        # Blank when the surface is not mounted — no dead buttons (Constitution §4).
-        "rr_url": f"{base}/rr/{token}" if flags.ENABLE_RECORDS_LINK else "",
+        # T-129: the RECORDS button carries the raw client_id, not the token — Meta
+        # silently blanks a URL-button variable containing ':', and a signed token
+        # always contains one (proven live 2026-08-14). `/rr/{client_id}` opens the
+        # SAME masked view by direct lookup (apps/accounts/records.py). `hub_url` is
+        # OUT of scope for this fix — the live, approved records template needed it;
+        # the hub/invite template is still an unapproved DRAFT (records_link_send.py)
+        # so it fires no live send today. Blank when the surface is not mounted — no
+        # dead buttons (Constitution §4).
+        "rr_url": f"{base}/rr/{client_id}" if flags.ENABLE_RECORDS_LINK else "",
         "hub_url": f"{base}/hub/{token}" if flags.ENABLE_SHARE_HUB else "",
         "name": _local_name(tenant, client_id),
         "record_date": _format_date(_record_moment(tenant, identity), fmt),
