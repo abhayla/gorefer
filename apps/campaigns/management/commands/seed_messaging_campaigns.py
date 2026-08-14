@@ -89,7 +89,8 @@ class Command(BaseCommand):
             f"{step_skipped} already existed)."
         ))
         self.stdout.write(
-            "This did NOT enable sending — no engine reads these rows yet (W2). "
-            "The campaign is DISABLED; flip it on from /admin-panel/campaigns when the "
-            "sending engine ships."
+            "This did NOT enable sending — the campaign is seeded DISABLED. The "
+            "messaging engine (apps.campaigns.tasks.run_campaign_engine) is live and "
+            "will enqueue + send off this campaign as soon as it is flipped on from "
+            "/admin-panel/campaigns."
         )

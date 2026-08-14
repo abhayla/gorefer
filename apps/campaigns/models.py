@@ -2,12 +2,13 @@
 engine plan; owner design context: decisions 7/13/15 in
 `~/.claude/plans/i-moved-you-to-silly-sonnet.md`).
 
-This module is CONFIGURATION ONLY. It defines the shape of a "campaign" — a single
-message stream (e.g. "referrer recurring nudge") with an on/off switch, a step
-ladder, eligibility, per-recipient send budgets, send-days/hour, and a per-language
-template map — and nothing that reads or acts on these rows yet. There is no
-sending/scheduling/enqueueing logic here (that is a future W2 slice) and nothing
-here imports `apps/integrations/**`.
+`MessagingCampaign`/`MessagingCampaignStep` are CONFIGURATION — the shape of a
+"campaign" (a single message stream, e.g. "referrer recurring nudge") with an on/off
+switch, a step ladder, eligibility, per-recipient send budgets, send-days/hour, and
+a per-language template map. `SyncedReferrer`/`ScheduledCampaignMessage` (T-125 W2)
+are the engine's audience source and due-table that read these rows. Nothing in
+THIS module imports `apps/integrations/**` — the send path lives in
+`apps.campaigns.send` / `apps.campaigns.tasks`.
 
 Mirrors `apps.followups.models` conventions: `TimestampedModel` + `TenantScopedModel`,
 tenant-scoped uniqueness constraints, choices as class attributes, docstring style.
@@ -21,6 +22,7 @@ from __future__ import annotations
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 from apps.common.models import TenantScopedModel, TimestampedModel
 
@@ -54,9 +56,9 @@ def days_from_mask(mask: int) -> list[int]:
 class MessagingCampaign(TimestampedModel, TenantScopedModel):
     """One message stream's full configuration — decision ⑦ (one campaign per stream).
 
-    A row here does not send anything by itself: it is read by a future W2 sending
-    engine. `enabled=False` is the safe default, so a freshly-seeded campaign never
-    fires until an operator (or a later mission) explicitly turns it on.
+    Read by the T-125 messaging engine (`apps.campaigns.tasks.run_campaign_engine`).
+    `enabled=False` is the safe default, so a freshly-seeded campaign never fires
+    until an operator explicitly turns it on from /admin-panel/campaigns.
     """
 
     slug = models.SlugField(max_length=60)
@@ -166,3 +168,104 @@ class MessagingCampaignStep(TenantScopedModel, TimestampedModel):
     def resolved_template_name(self) -> str:
         """This step's template: its own override, else the campaign's map for its language."""
         return self.template_name or self.campaign.template_for(self.language)
+
+
+class SyncedReferrer(TimestampedModel, TenantScopedModel):
+    """The engine's audience source (decision ⑫) — one row per referrer GoRefer knows
+    how to message, tenant-scoped like every other table (ADR-023).
+
+    W3 (a future slice) populates this from a READ-ONLY Zoho sync; nothing here
+    writes back to Zoho or infers conversion state (CLAUDE.md §4 — Zoho stays the
+    only source of account status). Until W3 lands, tests and any operator tooling
+    fill it directly — the engine below never cares where a row came from, only
+    that `active=True` and its fields are current as of `synced_at`.
+
+    `record_created_at` is the drip anchor (decision ⑪ — an event-anchored ladder)
+    AND the value a template's `{{record_date}}`-shaped copy describes, mirroring
+    how `api.records_tokens._record_moment` treats a referral's creation instant.
+    """
+
+    client_id = models.CharField(max_length=64)
+    mobile = models.CharField(max_length=20)
+    name = models.CharField(max_length=120, blank=True, default="")
+    language = models.CharField(max_length=5, default="en")
+    record_created_at = models.DateTimeField(
+        help_text="The referral record's creation instant — the drip's anchor event."
+    )
+    source = models.CharField(max_length=20, default="zoho")
+    synced_at = models.DateTimeField(default=timezone.now)
+    # False = the sync stopped seeing this referrer (or an operator disabled the row).
+    # An enqueue never considers an inactive row eligible, regardless of other config.
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "synced_referrers"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "client_id"], name="uq_synced_referrer_tenant_client_id"
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["active"]),
+            models.Index(fields=["mobile"]),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"synced_referrer<{self.client_id}:{self.mobile}>"
+
+
+class ScheduledCampaignMessage(TimestampedModel, TenantScopedModel):
+    """One recipient's scheduled step for one campaign (the engine's due-table row).
+
+    Mirrors `apps.followups.models.ScheduledFollowup` exactly — same due-table +
+    sweep idiom (doc precedent this engine is built on): `dedupe_key` is unique per
+    (tenant, campaign, mobile, step, anchor), so re-running enqueue for the SAME
+    anchor creates nothing new. The sweep locks each row (select_for_update) before
+    gating, so a concurrent CRUD edit can never race a send. Immutable once SENT.
+    """
+
+    STATUS_SCHEDULED = "scheduled"
+    STATUS_SENT = "sent"
+    STATUS_CANCELLED = "cancelled"
+    STATUS_SKIPPED = "skipped"
+    STATUS_FAILED = "failed"
+    STATUS_CHOICES = [
+        (STATUS_SCHEDULED, "scheduled"),
+        (STATUS_SENT, "sent"),
+        (STATUS_CANCELLED, "cancelled"),  # gate cancelled it (opt-out / converted / on-reply / disabled)
+        (STATUS_SKIPPED, "skipped"),      # nothing sendable (no template, unfillable token, no mobile)
+        (STATUS_FAILED, "failed"),        # send attempted, not accepted
+    ]
+
+    campaign = models.ForeignKey(
+        MessagingCampaign, on_delete=models.CASCADE, related_name="scheduled_messages"
+    )
+    step = models.ForeignKey(
+        MessagingCampaignStep, on_delete=models.PROTECT, related_name="scheduled_messages"
+    )
+    referrer = models.ForeignKey(
+        SyncedReferrer, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="scheduled_messages",
+    )
+    client_id = models.CharField(max_length=64)
+    mobile = models.CharField(max_length=20)
+    language = models.CharField(max_length=5, default="en")
+    # The referrer's `record_created_at` AT ENQUEUE TIME — the ladder's anchor.
+    anchor_at = models.DateTimeField()
+    fire_at = models.DateTimeField()
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=STATUS_SCHEDULED)
+    dedupe_key = models.CharField(max_length=220, unique=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    reason = models.CharField(max_length=160, blank=True, default="")
+
+    class Meta:
+        db_table = "scheduled_campaign_messages"
+        indexes = [
+            # The sweep scans (status, fire_at) due-first — keep it cheap at volume.
+            models.Index(fields=["status", "fire_at"]),
+            models.Index(fields=["mobile"]),
+            models.Index(fields=["campaign", "mobile"]),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"scheduled_campaign_message<{self.mobile}:{self.campaign_id}:#{self.step_id}:{self.status}>"

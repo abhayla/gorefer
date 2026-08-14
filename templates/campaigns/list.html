@@ -3,9 +3,10 @@
 {% block content %}
 
 {% comment %}
-Messaging campaigns list (T-124 W1). This page configures campaign rows only — there
-is no sending engine reading them yet (see the notice below). Nothing here is
-disabled/greyed-out dead UI: every control on this page and its edit screen works.
+Messaging campaigns list (T-124 W1 config + T-125 W2 engine). Flipping "enabled" here
+is a REAL switch: the engine (apps.campaigns.tasks.run_campaign_engine) enqueues and
+sends off these rows every 10 minutes. Nothing here is disabled/greyed-out dead UI —
+every control on this page and its edit screen works.
 {% endcomment %}
 
 <div class="max-w-[900px] mx-auto space-y-4">
@@ -13,8 +14,8 @@ disabled/greyed-out dead UI: every control on this page and its edit screen work
     <h1 class="text-[20px] font-extrabold tracking-tight">Campaigns</h1>
     <p class="text-[12.5px] text-ink-500 mt-0.5">
       Configure recurring WhatsApp message streams — cadence, eligibility, budgets and
-      templates. This configures the campaign; the sending engine that reads these rows
-      ships in a later release.
+      templates. The switch below is live: an enabled campaign is enqueued and sent by
+      the messaging engine on its configured cadence.
     </p>
   </div>
 

@@ -79,10 +79,11 @@ def test_campaigns_list_renders(admin_client, campaign):
     assert "Referrer recurring nudge" in html
 
 
-def test_campaigns_list_shows_no_engine_ships_later_notice(admin_client, campaign):
+def test_campaigns_list_shows_engine_live_copy(admin_client, campaign):
     resp = admin_client.get("/admin-panel/campaigns/")
     html = resp.content.decode()
-    assert "sending engine" in html.lower()
+    assert "messaging engine" in html.lower()
+    assert "next release" not in html.lower()
 
 
 def test_campaign_edit_renders(admin_client, campaign):

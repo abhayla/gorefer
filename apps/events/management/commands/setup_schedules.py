@@ -46,6 +46,12 @@ SCHEDULES = {
     # 24h windows / start cadences — the reliable window-feed (Wati's inbound webhook is
     # chatbot-suppressed). Bounded to known/watch-listed mobiles; inert until followups_enabled.
     "followup_inbound_poll": ("apps.followups.tasks.poll_inbound_windows", 5),
+    # Every 10 min (T-125 W2): the messaging-campaign engine — enqueue due ladder
+    # steps for every ENABLED campaign, then sweep + gate + send due rows. Mirrors
+    # the followup sweep's "poll often, gate on config" idiom (here: per-campaign
+    # `enabled` + send-days/hour + budgets, not tenant-level config) — runs INERT
+    # when no campaign is enabled (nothing to enqueue, nothing due to fire).
+    "messaging_campaign_engine": ("apps.campaigns.tasks.run_campaign_engine", 10),
 }
 
 
