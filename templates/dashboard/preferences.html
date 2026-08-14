@@ -350,6 +350,34 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
       {% endfor %}
     </div>
 
+    {% comment %}
+    Messaging engine (T-124 W1) — digest/alert knobs. Campaign CONFIG itself
+    lives on its own page at /admin-panel/campaigns (decision 13).
+    {% endcomment %}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Messaging engine</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">
+      <div class="text-[11.5px] text-ink-500 mb-1">
+        Digest send time/recipients and alert thresholds for the messaging engine. Campaign
+        cadence, eligibility and templates are configured on the
+        <a href="{% url 'campaigns_list' %}" class="text-cobalt-600 font-semibold">Campaigns</a> page.
+      </div>
+      {% for f in messaging_engine_fields %}
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 py-1.5 {% if not forloop.first %}border-t border-line{% endif %}">
+        <label for="{{ f.form_key }}" class="text-[13px] font-semibold flex-1">{{ f.label }}</label>
+        {% if f.kind == "bool" %}
+          <input type="checkbox" id="{{ f.form_key }}" name="{{ f.form_key }}" value="on" {% if f.value %}checked{% endif %} class="h-4 w-4">
+        {% elif f.kind == "int" %}
+          <input type="number" id="{{ f.form_key }}" name="{{ f.form_key }}" value="{{ f.value }}"
+                 {% if f.bounds %}min="{{ f.bounds.0 }}" max="{{ f.bounds.1 }}"{% endif %}
+                 class="w-full sm:w-32 rounded-lg border border-line text-[13px] px-3 py-2 bg-white">
+        {% else %}
+          <input type="text" id="{{ f.form_key }}" name="{{ f.form_key }}" value="{{ f.value }}"
+                 class="w-full sm:w-auto sm:min-w-[220px] rounded-lg border border-line text-[13px] px-3 py-2 bg-white">
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
     {# ---- Login OTP channel (Q-M-OTP) — config-over-code channel switch ---- #}
     <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Login OTP</div>
     <div class="rounded-2xl bg-white border border-line card p-5 space-y-4">

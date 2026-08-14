@@ -1,0 +1,59 @@
+{% extends "dashboard/base.html" %}
+{% block title %}GoRefer Admin — Campaigns{% endblock %}
+{% block content %}
+
+{% comment %}
+Messaging campaigns list (T-124 W1). This page configures campaign rows only — there
+is no sending engine reading them yet (see the notice below). Nothing here is
+disabled/greyed-out dead UI: every control on this page and its edit screen works.
+{% endcomment %}
+
+<div class="max-w-[900px] mx-auto space-y-4">
+  <div>
+    <h1 class="text-[20px] font-extrabold tracking-tight">Campaigns</h1>
+    <p class="text-[12.5px] text-ink-500 mt-0.5">
+      Configure recurring WhatsApp message streams — cadence, eligibility, budgets and
+      templates. This configures the campaign; the sending engine that reads these rows
+      ships in a later release.
+    </p>
+  </div>
+
+  <div class="rounded-2xl bg-white border border-line card overflow-hidden">
+    <table class="w-full text-[13px]">
+      <thead>
+        <tr class="text-left text-[10.5px] uppercase tracking-wide text-ink-300 border-b border-line">
+          <th class="px-4 py-2.5 font-bold">Slug</th>
+          <th class="px-4 py-2.5 font-bold">Name</th>
+          <th class="px-4 py-2.5 font-bold">Status</th>
+          <th class="px-4 py-2.5 font-bold">Steps</th>
+          <th class="px-4 py-2.5 font-bold"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-line">
+        {% for row in rows %}
+        <tr>
+          <td class="px-4 py-2.5 font-mono text-[12px] text-ink-500">{{ row.campaign.slug }}</td>
+          <td class="px-4 py-2.5 font-semibold">{{ row.campaign.name }}</td>
+          <td class="px-4 py-2.5">
+            {% if row.campaign.enabled %}
+              <span class="text-[10px] font-bold text-positive bg-positive/10 rounded-full px-2 py-0.5">on</span>
+            {% else %}
+              <span class="text-[10px] font-bold text-ink-300 bg-bg rounded-full px-2 py-0.5">off</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-2.5">{{ row.step_count }}</td>
+          <td class="px-4 py-2.5 text-right">
+            <a href="{% url 'campaigns_edit' row.campaign.id %}"
+               class="text-[12.5px] font-semibold text-cobalt-600 hover:text-cobalt-500">Edit</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="px-4 py-6 text-center text-[12.5px] text-ink-300">
+          No campaigns yet — run <code class="font-mono">python manage.py seed_messaging_campaigns</code>.
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

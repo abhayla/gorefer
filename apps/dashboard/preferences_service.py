@@ -91,6 +91,9 @@ def current_view(tenant) -> dict:
         # Meta-approved template each role/language uses with NO deploy. One editable
         # field per (role, language) — the swappable-names rule (Abhay 2026-07-17).
         "notify_template_fields": prefkeys.notify_template_fields_view(tenant_id),
+        # Messaging engine (T-124 W1) — digest send hour/recipients + alert thresholds.
+        # Campaign CONFIG itself lives on its own page at /admin-panel/campaigns.
+        "messaging_engine_fields": prefkeys.messaging_engine_fields_view(tenant_id),
     }
 
 
@@ -380,6 +383,42 @@ def save_preferences(tenant, data, *, user=None) -> list[str]:
     # language sends with NO deploy (config-over-code). Persisted at the tenant tier the
     # notify service reads, so a change takes effect on the next send.
     notices.extend(_save_notify_templates(tenant_id, data, user=user))
+
+    # --- Messaging engine (T-124 W1) — digest/alert knobs ------------------------
+    notices.extend(_save_messaging_engine(tenant_id, data, user=user))
+    return notices
+
+
+def _save_messaging_engine(tenant_id, data, *, user=None) -> list[str]:
+    """Persist the messaging-engine digest/alert knobs (validated). Returns notices.
+
+    Mirrors `_save_notify_templates`'s per-field shape, generalized across the three
+    widget kinds (int/text/bool) `MESSAGING_ENGINE_FIELDS` declares. An invalid int is
+    rejected with a notice and left unchanged — never silently clamped or dropped.
+    """
+    notices: list[str] = []
+    for key, label, kind, bounds in prefkeys.MESSAGING_ENGINE_FIELDS:
+        if kind == "bool":
+            # Checkboxes only submit when checked — always "present" for this purpose.
+            set_tenant(key, _checkbox(data, key), tenant_id=tenant_id, user=user)
+            continue
+        if key not in data:
+            continue  # field not submitted -> leave as-is
+        if kind == "int":
+            raw = str(data.get(key) or "").strip()
+            try:
+                val = int(raw)
+            except ValueError:
+                notices.append(f"“{label}” must be a whole number — kept the previous value.")
+                continue
+            if bounds is not None:
+                lo, hi = bounds
+                if not (lo <= val <= hi):
+                    notices.append(f"“{label}” must be between {lo} and {hi} — kept the previous value.")
+                    continue
+            set_tenant(key, val, tenant_id=tenant_id, user=user)
+        else:  # text
+            set_tenant(key, (data.get(key) or "").strip(), tenant_id=tenant_id, user=user)
     return notices
 
 

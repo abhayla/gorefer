@@ -1,0 +1,163 @@
+{% extends "dashboard/base.html" %}
+{% block title %}GoRefer Admin — {{ campaign.name }}{% endblock %}
+{% block content %}
+
+<div class="max-w-[760px] mx-auto space-y-4">
+
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <a href="{% url 'campaigns_list' %}" class="text-[11.5px] text-ink-500 hover:text-cobalt-600">&larr; Campaigns</a>
+      <h1 class="text-[20px] font-extrabold tracking-tight mt-1">{{ campaign.name }}</h1>
+      <p class="text-[12.5px] text-ink-500 mt-0.5 font-mono">{{ campaign.slug }}</p>
+    </div>
+    <button type="submit" form="campaign_form"
+            class="flex-none rounded-xl bg-cobalt-600 text-white px-5 py-2.5 text-[13.5px] font-semibold card">
+      Save campaign
+    </button>
+  </div>
+
+  <div class="rounded-xl bg-cobalt-50 border border-cobalt-200 px-3 py-2.5 text-[11.5px] text-ink-700">
+    This configures the campaign — its switch, cadence, eligibility, budgets and
+    templates. The sending engine that reads these rows and actually delivers messages
+    ships in a later release; nothing below sends anything today.
+  </div>
+
+  {% if saved %}
+    <div class="rounded-xl bg-positive/10 border border-positive/40 px-3 py-2.5 text-[12px] text-ink-700">
+      ✓ Campaign saved.
+    </div>
+  {% endif %}
+  {% for n in notices %}
+    <div class="rounded-xl bg-danger/10 border border-danger/40 px-3 py-2.5 text-[12px] text-danger">{{ n }}</div>
+  {% endfor %}
+
+  <form id="campaign_form" method="post" action="{% url 'campaigns_edit' campaign.id %}" class="space-y-4">
+    {% csrf_token %}
+
+    {# ---- Switch + name --------------------------------------------------- #}
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-3">
+      <label class="flex items-center justify-between gap-4">
+        <span class="text-[13.5px] font-semibold">Enabled</span>
+        <input type="checkbox" name="enabled" value="on" {% if campaign.enabled %}checked{% endif %}
+               class="h-4 w-4">
+      </label>
+      <label class="block">
+        <span class="text-[11.5px] text-ink-500">Name</span>
+        <input type="text" name="name" value="{{ campaign.name }}"
+               class="mt-0.5 block w-full rounded-lg border border-line px-3 py-2 text-[13px]">
+      </label>
+    </div>
+
+    {# ---- Eligibility ------------------------------------------------------ #}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Eligibility</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-3">
+      <label class="block">
+        <span class="text-[11.5px] text-ink-500">Minimum referral records</span>
+        <input type="number" min="0" name="min_records" value="{{ campaign.min_records }}"
+               class="mt-0.5 block w-32 rounded-lg border border-line px-3 py-2 text-[13px]">
+      </label>
+      <label class="block">
+        <span class="text-[11.5px] text-ink-500">Activity window (days, blank = no limit)</span>
+        <input type="number" min="0" name="activity_window_days" value="{{ campaign.activity_window_days|default_if_none:'' }}"
+               class="mt-0.5 block w-32 rounded-lg border border-line px-3 py-2 text-[13px]">
+      </label>
+      <label class="flex items-center justify-between gap-4">
+        <span class="text-[13px] font-semibold">Exclude already-converted recipients</span>
+        <input type="checkbox" name="exclude_converted" value="on" {% if campaign.exclude_converted %}checked{% endif %}
+               class="h-4 w-4">
+      </label>
+      <label class="block">
+        <span class="text-[11.5px] text-ink-500">Always include (one mobile per line)</span>
+        <textarea name="manual_include_mobiles" rows="2"
+                  class="mt-0.5 block w-full rounded-lg border border-line px-3 py-2 text-[12.5px] font-mono">{{ manual_include_text }}</textarea>
+      </label>
+      <label class="block">
+        <span class="text-[11.5px] text-ink-500">Always exclude (one mobile per line)</span>
+        <textarea name="manual_exclude_mobiles" rows="2"
+                  class="mt-0.5 block w-full rounded-lg border border-line px-3 py-2 text-[12.5px] font-mono">{{ manual_exclude_text }}</textarea>
+      </label>
+    </div>
+
+    {# ---- Budgets ------------------------------------------------------------ #}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Per-recipient send budgets</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 grid grid-cols-3 gap-3">
+      <label class="block">
+        <span class="text-[11.5px] text-ink-500">Max / 24h</span>
+        <input type="number" min="0" name="max_msgs_per_24h" value="{{ campaign.max_msgs_per_24h }}"
+               class="mt-0.5 block w-full rounded-lg border border-line px-3 py-2 text-[13px]">
+      </label>
+      <label class="block">
+        <span class="text-[11.5px] text-ink-500">Max / 72h</span>
+        <input type="number" min="0" name="max_msgs_per_72h" value="{{ campaign.max_msgs_per_72h }}"
+               class="mt-0.5 block w-full rounded-lg border border-line px-3 py-2 text-[13px]">
+      </label>
+      <label class="block">
+        <span class="text-[11.5px] text-ink-500">Max / 7d</span>
+        <input type="number" min="0" name="max_msgs_per_7d" value="{{ campaign.max_msgs_per_7d }}"
+               class="mt-0.5 block w-full rounded-lg border border-line px-3 py-2 text-[13px]">
+      </label>
+    </div>
+
+    {# ---- Send window -------------------------------------------------------- #}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Send window</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-3">
+      <div>
+        <span class="text-[11.5px] text-ink-500">Send days</span>
+        <div class="mt-1 flex flex-wrap gap-3">
+          {% for bit, label in weekday_labels %}
+          <label class="flex items-center gap-1.5 text-[12.5px]">
+            <input type="checkbox" name="send_days" value="{{ forloop.counter }}"
+                   {% if forloop.counter in selected_days %}checked{% endif %}>
+            {{ label }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      <label class="block">
+        <span class="text-[11.5px] text-ink-500">Send hour (IST, 0-23)</span>
+        <input type="number" min="0" max="23" name="send_hour_ist" value="{{ campaign.send_hour_ist }}"
+               class="mt-0.5 block w-24 rounded-lg border border-line px-3 py-2 text-[13px]">
+      </label>
+    </div>
+
+    {# ---- Anchor + template map ------------------------------------------------ #}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Drip anchor &amp; templates</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-3">
+      <label class="block">
+        <span class="text-[11.5px] text-ink-500">Anchor event key</span>
+        <input type="text" name="anchor_event_key" value="{{ campaign.anchor_event_key }}"
+               class="mt-0.5 block w-full rounded-lg border border-line px-3 py-2 text-[13px] font-mono"
+               placeholder="record_created">
+      </label>
+      <div>
+        <span class="text-[11.5px] text-ink-500">Language → template map (blank/missing language falls back to English)</span>
+        <div class="mt-1 space-y-2">
+          {% for lang, tmpl in language_map_rows %}
+          <div class="flex gap-2">
+            <input type="text" name="lang_code" value="{{ lang }}" maxlength="5"
+                   class="w-16 rounded-lg border border-line px-2 py-1.5 text-[12.5px] font-mono">
+            <input type="text" name="lang_template" value="{{ tmpl }}"
+                   class="flex-1 rounded-lg border border-line px-2 py-1.5 text-[12.5px] font-mono">
+          </div>
+          {% endfor %}
+          {# One blank row so a new language can be added without JS. #}
+          <div class="flex gap-2">
+            <input type="text" name="lang_code" value="" maxlength="5" placeholder="hi"
+                   class="w-16 rounded-lg border border-line px-2 py-1.5 text-[12.5px] font-mono">
+            <input type="text" name="lang_template" value="" placeholder="template name"
+                   class="flex-1 rounded-lg border border-line px-2 py-1.5 text-[12.5px] font-mono">
+          </div>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  {# ---- Step ladder — its own HTMX partial, outside the campaign form so a step ---- #}
+  {# edit never accidentally submits the campaign-level form.                      #}
+  <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Cadence steps</div>
+  <div class="rounded-2xl bg-white border border-line card p-5">
+    {% include "campaigns/partials/steps.html" %}
+  </div>
+
+</div>
+{% endblock %}

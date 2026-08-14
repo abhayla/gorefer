@@ -1,0 +1,71 @@
+{% comment %}
+The step ladder for one campaign — HTMX partial, swapped back in after any
+add/remove/move/update action so the ladder always reflects the stored state
+(T-124 W1). Wrapped in #steps so every action's hx-target is stable.
+{% endcomment %}
+<div id="steps" hx-target="this" hx-swap="outerHTML">
+  {% if step_error %}
+    <div class="mb-2 rounded-lg bg-danger/10 border border-danger/40 px-3 py-2 text-[11.5px] text-danger">
+      {{ step_error }}
+    </div>
+  {% endif %}
+
+  <div class="divide-y divide-line">
+    {% for step in steps %}
+    <form class="flex flex-wrap items-center gap-2 py-2.5 text-[12.5px]"
+          hx-post="{% url 'campaigns_step_update' campaign.id step.id %}"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+      <span class="w-6 text-center font-bold text-ink-300">#{{ step.order }}</span>
+
+      <label class="flex items-center gap-1">
+        <span class="text-ink-500">+</span>
+        <input type="number" min="0" name="gap_days_from_previous" value="{{ step.gap_days_from_previous }}"
+               class="w-16 rounded-lg border border-line px-2 py-1 text-[12.5px]">
+        <span class="text-ink-500">days</span>
+      </label>
+
+      <input type="text" name="language" value="{{ step.language }}" maxlength="5"
+             class="w-14 rounded-lg border border-line px-2 py-1 text-[12.5px]" placeholder="en">
+
+      <input type="text" name="template_role" value="{{ step.template_role }}"
+             class="w-40 rounded-lg border border-line px-2 py-1 text-[12.5px]" placeholder="template role">
+
+      <input type="text" name="template_name" value="{{ step.template_name }}"
+             class="w-56 rounded-lg border border-line px-2 py-1 text-[12.5px]"
+             placeholder="overrides campaign template map">
+
+      <label class="flex items-center gap-1.5 text-ink-500">
+        <input type="checkbox" name="enabled" value="on" {% if step.enabled %}checked{% endif %}>
+        enabled
+      </label>
+
+      <button type="submit" class="text-cobalt-600 font-semibold hover:text-cobalt-500">Save</button>
+
+      <span class="ml-auto flex items-center gap-1">
+        <button type="button" title="Move up"
+                hx-post="{% url 'campaigns_step_move' campaign.id step.id 'up' %}"
+                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                class="px-1.5 py-0.5 rounded text-ink-500 hover:bg-cobalt-50">↑</button>
+        <button type="button" title="Move down"
+                hx-post="{% url 'campaigns_step_move' campaign.id step.id 'down' %}"
+                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                class="px-1.5 py-0.5 rounded text-ink-500 hover:bg-cobalt-50">↓</button>
+        <button type="button" title="Remove step"
+                hx-post="{% url 'campaigns_step_remove' campaign.id step.id %}"
+                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                hx-confirm="Remove step #{{ step.order }}?"
+                class="px-1.5 py-0.5 rounded text-danger hover:bg-danger/10">✕</button>
+      </span>
+    </form>
+    {% empty %}
+    <div class="py-3 text-[12px] text-ink-300">No steps yet — add one below.</div>
+    {% endfor %}
+  </div>
+
+  <button type="button"
+          class="mt-3 rounded-lg border border-dashed border-cobalt-200 text-cobalt-600 px-3 py-1.5 text-[12.5px] font-semibold"
+          hx-post="{% url 'campaigns_step_add' campaign.id %}"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+    + Add step
+  </button>
+</div>

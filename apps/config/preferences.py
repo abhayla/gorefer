@@ -602,6 +602,70 @@ def notify_template_fields_view(tenant_id: int | None = None) -> list[dict]:
 # per-referrer `direct` can never bypass it — it is re-checked on resolve.
 REFERRER_LANDING_INHERIT = ""
 
+# --- Messaging engine (T-124 W1) — digest/alert knobs on the Preferences screen ----
+# Campaign CONFIG itself (MessagingCampaign/MessagingCampaignStep) lives on its own
+# CRUD page at /admin-panel/campaigns (decision ⑬) — these five are the single-value
+# knobs that decision put on the EXISTING Preferences screen instead: when/where the
+# operator's own status digest goes, and the alert thresholds around it. No sending/
+# scheduling engine reads these yet (W2) — this is configuration only (rail E-6/§6d).
+MESSAGING_DIGEST_SEND_HOUR_IST = "messaging_digest_send_hour_ist"
+MESSAGING_DIGEST_SEND_HOUR_IST_DEFAULT = 9
+
+MESSAGING_DIGEST_RECIPIENTS = "messaging_digest_recipients"
+MESSAGING_DIGEST_RECIPIENTS_DEFAULT = "917388882020"
+
+MESSAGING_DIGEST_ALERTS_ENABLED = "messaging_digest_alerts_enabled"
+MESSAGING_DIGEST_ALERTS_ENABLED_DEFAULT = False
+
+MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT = "messaging_digest_alert_failure_ratio_pct"
+MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT_DEFAULT = 30
+
+MESSAGING_DIGEST_ALERT_RECOVERY_HITS = "messaging_digest_alert_recovery_hits"
+MESSAGING_DIGEST_ALERT_RECOVERY_HITS_DEFAULT = 10
+
+# The rows the Preferences screen's "Messaging engine" section renders + persists, in
+# display order — the same data-driven shape as NOTIFY_TEMPLATE_FIELDS, so a future
+# knob is a row here, not a new template block. `kind` picks the input widget the
+# template renders (int / text / bool); `bounds` is (lo, hi) for int fields.
+MESSAGING_ENGINE_FIELDS = [
+    (MESSAGING_DIGEST_SEND_HOUR_IST, "Digest send hour (IST)", "int", (0, 23)),
+    (MESSAGING_DIGEST_RECIPIENTS, "Digest recipients (comma-separated numbers)", "text", None),
+    (MESSAGING_DIGEST_ALERTS_ENABLED, "Alerts enabled", "bool", None),
+    (MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT, "Alert failure ratio (%)", "int", (0, 100)),
+    (MESSAGING_DIGEST_ALERT_RECOVERY_HITS, "Alert recovery hits", "int", (0, 1000)),
+]
+
+_MESSAGING_ENGINE_DEFAULTS = {
+    MESSAGING_DIGEST_SEND_HOUR_IST: MESSAGING_DIGEST_SEND_HOUR_IST_DEFAULT,
+    MESSAGING_DIGEST_RECIPIENTS: MESSAGING_DIGEST_RECIPIENTS_DEFAULT,
+    MESSAGING_DIGEST_ALERTS_ENABLED: MESSAGING_DIGEST_ALERTS_ENABLED_DEFAULT,
+    MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT: MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT_DEFAULT,
+    MESSAGING_DIGEST_ALERT_RECOVERY_HITS: MESSAGING_DIGEST_ALERT_RECOVERY_HITS_DEFAULT,
+}
+
+
+def messaging_engine_fields_view(tenant_id: int | None = None) -> list[dict]:
+    """Rows for the Preferences 'Messaging engine' section: form key, label, widget
+    kind, bounds (for int fields), and the currently-resolved value."""
+    rows = []
+    for key, label, kind, bounds in MESSAGING_ENGINE_FIELDS:
+        default = _MESSAGING_ENGINE_DEFAULTS[key]
+        value = resolve(key, tenant_id=tenant_id, default=default)
+        if kind == "bool":
+            value = _as_bool(value)
+        elif kind == "int":
+            value = _as_int(value, default)
+        rows.append({
+            "form_key": key,
+            "label": label,
+            "kind": kind,
+            "bounds": bounds,
+            "value": value,
+            "default": default,
+        })
+    return rows
+
+
 # --- OTP login keys (Q-M-OTP) — per-tenant, cascade-resolved, edited on the screen.
 # The "very easily configurable for admin" requirement: swap the OTP channel/order/
 # template/limits through Preferences with NO deploy (config-over-code). The master
@@ -814,6 +878,13 @@ def central_defaults() -> dict:
         # T-081 — empty by default (no override); the adapter falls back to
         # settings.DEFAULT_FROM_EMAIL, exactly what T-078 already sends.
         OTP_EMAIL_FROM_ADDRESS: OTP_EMAIL_FROM_ADDRESS_DEFAULT,
+        # Messaging engine (T-124 W1) — digest/alert knobs. No sending engine reads
+        # these yet; configuration only.
+        MESSAGING_DIGEST_SEND_HOUR_IST: MESSAGING_DIGEST_SEND_HOUR_IST_DEFAULT,
+        MESSAGING_DIGEST_RECIPIENTS: MESSAGING_DIGEST_RECIPIENTS_DEFAULT,
+        MESSAGING_DIGEST_ALERTS_ENABLED: MESSAGING_DIGEST_ALERTS_ENABLED_DEFAULT,
+        MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT: MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT_DEFAULT,
+        MESSAGING_DIGEST_ALERT_RECOVERY_HITS: MESSAGING_DIGEST_ALERT_RECOVERY_HITS_DEFAULT,
     }
 
 
@@ -1014,5 +1085,40 @@ def get_preferences(tenant_id: int | None) -> dict:
         # blank).
         OTP_EMAIL_FROM_ADDRESS: resolve(
             OTP_EMAIL_FROM_ADDRESS, tenant_id=tenant_id, default=defaults[OTP_EMAIL_FROM_ADDRESS]
+        ),
+        # Messaging engine (T-124 W1) digest/alert knobs.
+        MESSAGING_DIGEST_SEND_HOUR_IST: _as_int(
+            resolve(
+                MESSAGING_DIGEST_SEND_HOUR_IST,
+                tenant_id=tenant_id,
+                default=defaults[MESSAGING_DIGEST_SEND_HOUR_IST],
+            ),
+            defaults[MESSAGING_DIGEST_SEND_HOUR_IST],
+        ),
+        MESSAGING_DIGEST_RECIPIENTS: resolve(
+            MESSAGING_DIGEST_RECIPIENTS, tenant_id=tenant_id, default=defaults[MESSAGING_DIGEST_RECIPIENTS]
+        ),
+        MESSAGING_DIGEST_ALERTS_ENABLED: _as_bool(
+            resolve(
+                MESSAGING_DIGEST_ALERTS_ENABLED,
+                tenant_id=tenant_id,
+                default=defaults[MESSAGING_DIGEST_ALERTS_ENABLED],
+            )
+        ),
+        MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT: _as_int(
+            resolve(
+                MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT,
+                tenant_id=tenant_id,
+                default=defaults[MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT],
+            ),
+            defaults[MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT],
+        ),
+        MESSAGING_DIGEST_ALERT_RECOVERY_HITS: _as_int(
+            resolve(
+                MESSAGING_DIGEST_ALERT_RECOVERY_HITS,
+                tenant_id=tenant_id,
+                default=defaults[MESSAGING_DIGEST_ALERT_RECOVERY_HITS],
+            ),
+            defaults[MESSAGING_DIGEST_ALERT_RECOVERY_HITS],
         ),
     }

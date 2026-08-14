@@ -26,6 +26,8 @@ screens; the menu is position-absolute so it never widens the page).
          class="flex-none whitespace-nowrap px-3 py-1.5 rounded-full {% if nav_active == 'explorer' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Explorer</a>
       <a href="{% url 'dashboard_referrer_search' %}"
          class="flex-none whitespace-nowrap px-3 py-1.5 rounded-full {% if nav_active == 'referrer' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Referral Profile</a>
+      <a href="{% url 'campaigns_list' %}"
+         class="flex-none whitespace-nowrap px-3 py-1.5 rounded-full {% if nav_active == 'campaigns' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Campaigns</a>
       {% if FEATURE_FLAGS.ENABLE_CUSTOMER_LOGIN %}
       <a href="{% url 'dashboard_verifications' %}"
          class="flex-none whitespace-nowrap px-3 py-1.5 rounded-full {% if nav_active == 'verifications' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Verifications</a>

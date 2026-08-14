@@ -119,6 +119,9 @@ if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_SHARE_HUB", False):
 if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_ADMIN_DASHBOARD", True):
     urlpatterns.append(path("django-admin/", admin.site.urls))
     urlpatterns.append(path("admin-panel/", include("apps.dashboard.urls")))
+    # Messaging-campaign config CRUD (T-124 W1) — same gate, own sub-app so the
+    # dashboard app doesn't have to know about apps.campaigns' models.
+    urlpatterns.append(path("admin-panel/campaigns/", include("apps.campaigns.urls")))
 
 # Referrer self-service login + My Referrals (M13). The ENTIRE surface exists only
 # when ENABLE_CUSTOMER_LOGIN is on (Constitution §4 — no dead UI when off).
