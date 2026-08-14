@@ -42,4 +42,11 @@ INTEGRATION_SCHEDULES = {
     # would target has closed — so purging it cannot re-enable a replay; it just stops
     # the table growing forever. Same reasoning as the Zoho nonce purge above.
     "wati_purge_webhook_receipts": ("apps.integrations.wati.replay.purge_expired_receipts", 60),
+    # Hourly poll, config-gated fire (T-126 W3, decision ⑫): fills/updates
+    # `apps.campaigns.models.SyncedReferrer` from the Zoho `Referrers` module —
+    # the messaging-campaign engine's read-only audience source. Same "poll often,
+    # gate on config" idiom as wa_engagement_report_daily: the ACTUAL cadence is
+    # `zoho_audience_sync_frequency_hours` (default 24h), so an operator can change
+    # it with no deploy. Inert (logged no-op) whenever ENABLE_ZOHO_READ is off.
+    "zoho_sync_referrer_audience": ("apps.integrations.zoho.tasks.sync_referrer_audience", 60),
 }

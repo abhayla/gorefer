@@ -20,7 +20,14 @@ from apps.integrations.zoho.adapter import (
     LeadWriteResult,
     ReferrerHistory,
 )
-from apps.integrations.zoho.read import ReferredPeople, ZohoContact, ZohoReferredPerson
+from apps.integrations.zoho.read import (
+    ReferredPeople,
+    ReferrerAudience,
+    SendQueueCounts,
+    ZohoContact,
+    ZohoReferredPerson,
+    ZohoReferrerRow,
+)
 
 __all__ = [
     "SendResult",
@@ -33,6 +40,9 @@ __all__ = [
     "ZohoContact",
     "ZohoReferredPerson",
     "ReferredPeople",
+    "ZohoReferrerRow",
+    "ReferrerAudience",
+    "SendQueueCounts",
     "MessagingPort",
     "CrmPort",
     "CrmReadPort",
@@ -127,6 +137,10 @@ class CrmReadPort(Protocol):
     def fetch_contact_by_client_id(self, *, client_id: str) -> ZohoContact: ...
 
     def fetch_referred_people(self, *, referrer_client_id: str) -> ReferredPeople: ...
+
+    def fetch_referrer_audience(self) -> ReferrerAudience: ...
+
+    def fetch_send_queue_counts(self, *, date_ist) -> SendQueueCounts: ...
 
 
 def get_messaging_port() -> MessagingPort:

@@ -20,11 +20,44 @@ config "— not on file —" marker.
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from dataclasses import dataclass, field
+from datetime import date, datetime
 
+from apps.config.cascade import resolve
 from apps.integrations.zoho.client import ZohoHttpClient
 
 logger = logging.getLogger("gorefer.zoho.read")
+
+# --- T-126 (W3): audience sync + send-queue counts config keys -------------------
+# Cascade keys, resolved with an in-code default (CLAUDE.md §6d/§6e — behaviour is
+# config, not a literal), same lightweight pattern as `zoho.reconcile`'s cascade
+# keys: no seed_program row required, `resolve(key, default=...)` covers a fresh DB.
+
+# Grouping rule for `fetch_send_queue_counts` (decision ⑭): any WA_Send_Queue
+# `Template_Name` starting with one of these prefixes counts as the "referral"
+# (Zerodha/GoRefer) stream; everything else (legacy other-broker broadcasts like
+# `angel_one_*`, `stay_connected_*`) is "other" — still counted, never dropped,
+# because every stream burns the same WhatsApp number's quality rating.
+SEND_QUEUE_REFERRAL_TEMPLATE_PREFIXES_KEY = "zoho_send_queue_referral_template_prefixes"
+SEND_QUEUE_REFERRAL_TEMPLATE_PREFIXES_DEFAULT = ["gr_", "gorefer_"]
+
+# Pagination safety caps (mirrors `zoho.reconcile.fetch_opened_contacts`'s 20-page
+# hard stop): processing only the first page would look like success while quietly
+# dropping rows.
+_REFERRERS_PAGE_SIZE = 200
+_REFERRERS_MAX_PAGES = 100  # 20,000 referrers — far beyond any real audience
+_SEND_QUEUE_PAGE_SIZE = 200
+_SEND_QUEUE_MAX_PAGES = 20  # 4,000 rows/day — far beyond any real daily send volume
+
+_UNKNOWN_STATUS_BUCKET = "OTHER"
+
+# Known WA_Send_Queue statuses observed live (T-126 intake, 2026-08-13/14). Any
+# Queue_Status outside this set rolls into `_UNKNOWN_STATUS_BUCKET` — never kept
+# as its own raw key, never dropped.
+_KNOWN_QUEUE_STATUSES = frozenset({
+    "SENT", "FAILED", "PENDING", "SUPPRESSED_CAPPED", "SUPPRESSED_INVALID",
+})
 
 # The Zoho Contact fields pulled for the Referral Profile top band (DA M9 Part A).
 # Kept as data (not scattered literals) so adding a field is config, not code surgery.
@@ -119,6 +152,46 @@ class ReferredPeople:
     people: list = field(default_factory=list)  # list[ZohoReferredPerson]
 
 
+@dataclass
+class ZohoReferrerRow:
+    """One row of the audience-sync source (decision ⑫) — one Zoho `Referrers`
+    record, normalized. `SyncedReferrer` (apps.campaigns.models) is filled from
+    these by the T-126 sync task; this dataclass carries no GoRefer-side state.
+
+    `language` is always "" today: the live `Referrers` module (Zoho module API
+    name `Referrers`, `CustomModule3`) carries no language field (verified via
+    Zoho CRM `getFields` at build time) — decision ⑮'s "Zoho language field, EN
+    fallback" therefore always falls back to English until Zoho adds one. Blank
+    stays blank here; the EN fallback itself lives in the campaign layer
+    (`MessagingCampaign.template_for`), not in this adapter.
+    """
+
+    client_id: str
+    mobile: str  # raw as returned by Zoho — normalize at the call site
+    name: str = ""
+    language: str = ""
+    record_created_at: datetime | None = None
+
+
+@dataclass
+class ReferrerAudience:
+    rows: list = field(default_factory=list)  # list[ZohoReferrerRow]
+    truncated: bool = False  # hit the pagination cap — caller must not infer "complete"
+
+
+@dataclass
+class SendQueueCounts:
+    """Per-status counts for one IST business date, grouped referral-vs-other
+    (decision ⑭). Every status Zoho returns is counted somewhere — an unrecognized
+    status rolls into the `OTHER` bucket within its group, never dropped.
+    """
+
+    date_ist: str
+    referral: dict = field(default_factory=dict)  # status -> count
+    other: dict = field(default_factory=dict)  # status -> count
+    truncated: bool = False
+
+
 def _norm_contact(client_id: str, raw: dict) -> ZohoContact:
     """Map a raw Zoho record (Contacts/Referrers) to a normalized ZohoContact.
 
@@ -205,6 +278,34 @@ class LogOnlyZohoReadAdapter:
         )
         return ReferredPeople(referrer_client_id=referrer_client_id, people=people)
 
+    def fetch_referrer_audience(self) -> ReferrerAudience:
+        rows = [ZohoReferrerRow(**r) for r in _DEMO_REFERRER_AUDIENCE]
+        logger.info("[demo] Zoho read: %d fixture referrer audience row(s)", len(rows))
+        return ReferrerAudience(rows=rows, truncated=False)
+
+    def fetch_send_queue_counts(self, *, date_ist: date) -> SendQueueCounts:
+        prefixes = tuple(_referral_template_prefixes())
+        referral, other = Counter(), Counter()
+        for row in _DEMO_SEND_QUEUE_ROWS:
+            bucket = referral if row["Template_Name"].startswith(prefixes) else other
+            bucket[row["Queue_Status"]] += 1
+        logger.info(
+            "[demo] Zoho read: fixture send-queue counts for %s: referral=%s other=%s",
+            date_ist, dict(referral), dict(other),
+        )
+        return SendQueueCounts(
+            date_ist=date_ist.isoformat(), referral=dict(referral), other=dict(other),
+        )
+
+
+def _referral_template_prefixes() -> list:
+    return list(
+        resolve(
+            SEND_QUEUE_REFERRAL_TEMPLATE_PREFIXES_KEY,
+            default=SEND_QUEUE_REFERRAL_TEMPLATE_PREFIXES_DEFAULT,
+        )
+    )
+
 
 class LiveZohoReadAdapter:
     """Live read adapter. Refuses without ZOHO_* read config.
@@ -280,6 +381,136 @@ class LiveZohoReadAdapter:
         )
         return ReferredPeople(referrer_client_id=referrer_client_id, people=people)
 
+    def fetch_referrer_audience(self) -> ReferrerAudience:
+        """The full referrer audience — decision ⑫'s Zoho-synced referrer list.
+
+        Sourced from the `Referrers` custom module (Zoho module API name `Referrers`,
+        internal id `CustomModule3`) via the plain record-LIST endpoint (no `criteria`
+        — a `/search` call requires one, and the sync wants every row, not a filtered
+        subset). Same reasoning as `zoho.reconcile.fetch_opened_contacts`: NOT COQL —
+        the live refresh token has no COQL scope (`/crm/v8/coql` returns
+        `OAUTH_SCOPE_MISMATCH`); the list/search endpoints need no new permission.
+
+        Field map -> `ZohoReferrerRow`: `Client_Id`, `Mobile`, `Name` (the module's
+        primary field), `Created_Time` (the drip anchor, decision ⑪). No `language`
+        field exists on this module (verified via `getFields`) — every row comes back
+        with `language=""`, so decision ⑮'s mapping always falls back to English until
+        Zoho adds one.
+
+        Paginated with a hard stop (`_REFERRERS_MAX_PAGES`); hitting the cap sets
+        `truncated=True` so the sync task can refuse to deactivate "missing" rows off
+        a partial picture.
+        """
+        rows: list[ZohoReferrerRow] = []
+        page = 1
+        truncated = False
+        while page <= _REFERRERS_MAX_PAGES:
+            resp = self.http.get(
+                "/crm/v8/Referrers",
+                params={
+                    "fields": "Client_Id,Mobile,Name,Created_Time",
+                    "per_page": _REFERRERS_PAGE_SIZE,
+                    "page": page,
+                    "sort_by": "Created_Time",
+                    "sort_order": "asc",
+                },
+            )
+            batch = (resp or {}).get("data") or []
+            for raw in batch:
+                client_id = (raw.get("Client_Id") or "").strip()
+                if not client_id:
+                    continue  # a referrer row with no id cannot be messaged or matched
+                created = raw.get("Created_Time")
+                rows.append(
+                    ZohoReferrerRow(
+                        client_id=client_id,
+                        mobile=(raw.get("Mobile") or "").strip(),
+                        name=(raw.get("Name") or "").strip(),
+                        language="",  # no Language field on this module today
+                        record_created_at=_parse_zoho_datetime(created),
+                    )
+                )
+            info = (resp or {}).get("info") or {}
+            if not batch or not info.get("more_records"):
+                break
+            page += 1
+        else:
+            truncated = True
+            logger.warning(
+                "Zoho read: fetch_referrer_audience hit the %d-page cap — result is PARTIAL",
+                _REFERRERS_MAX_PAGES,
+            )
+        logger.info(
+            "Zoho read: %d referrer audience row(s) fetched (truncated=%s)", len(rows), truncated
+        )
+        return ReferrerAudience(rows=rows, truncated=truncated)
+
+    def fetch_send_queue_counts(self, *, date_ist: date) -> SendQueueCounts:
+        """Per-status WA_Send_Queue counts for one IST business date, grouped
+        referral-vs-other (decision ⑭) — the digest's future messaging block (W4).
+
+        Sourced from the `WA_Send_Queue` custom module (`CustomModule5`) via
+        `/search` on `Business_Date` (a plain date field). Same NOT-COQL reasoning
+        as `fetch_referrer_audience`. Every row is counted: the grouping-rule config
+        key `SEND_QUEUE_REFERRAL_TEMPLATE_PREFIXES_KEY` decides which `Template_Name`
+        prefixes count as "referral"; anything else (e.g. `angel_one_*`,
+        `stay_connected_*` legacy other-broker broadcasts) is "other" — never
+        dropped, since every stream burns the same phone number's quality rating.
+        An unrecognized `Queue_Status` value rolls into the `OTHER` status bucket
+        within its group.
+        """
+        prefixes = tuple(_referral_template_prefixes())
+        referral, other = Counter(), Counter()
+        page = 1
+        truncated = False
+        while page <= _SEND_QUEUE_MAX_PAGES:
+            resp = self.http.get(
+                "/crm/v8/WA_Send_Queue/search",
+                params={
+                    "criteria": f"(Business_Date:equals:{date_ist.isoformat()})",
+                    "fields": "Queue_Status,Template_Name",
+                    "per_page": _SEND_QUEUE_PAGE_SIZE,
+                    "page": page,
+                },
+            )
+            batch = (resp or {}).get("data") or []
+            for raw in batch:
+                status = (raw.get("Queue_Status") or "").strip()
+                if status not in _KNOWN_QUEUE_STATUSES:
+                    status = _UNKNOWN_STATUS_BUCKET
+                template = (raw.get("Template_Name") or "").strip()
+                bucket = referral if template.startswith(prefixes) else other
+                bucket[status] += 1
+            info = (resp or {}).get("info") or {}
+            if not batch or not info.get("more_records"):
+                break
+            page += 1
+        else:
+            truncated = True
+            logger.warning(
+                "Zoho read: fetch_send_queue_counts(%s) hit the %d-page cap — counts are PARTIAL",
+                date_ist, _SEND_QUEUE_MAX_PAGES,
+            )
+        logger.info(
+            "Zoho read: send-queue counts for %s: referral=%s other=%s (truncated=%s)",
+            date_ist, dict(referral), dict(other), truncated,
+        )
+        return SendQueueCounts(
+            date_ist=date_ist.isoformat(), referral=dict(referral), other=dict(other),
+            truncated=truncated,
+        )
+
+
+def _parse_zoho_datetime(raw: str | None):
+    """Parse a Zoho ISO-8601 datetime (`2026-07-26T20:55:16+05:30`) or return None."""
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        logger.warning("Zoho read: unparseable Created_Time %r", raw)
+        return None
+
 
 def get_zoho_read_adapter():
     """Select the read adapter from the EFFECTIVE flag (admin override -> env default).
@@ -345,3 +576,40 @@ _DEMO_REFERRED = {
          "account_status": "Lead captured", "opened_on": None, "reward": None},
     ],
 }
+
+# T-126 (W3) fixtures — mirror the LIVE Referrers/WA_Send_Queue shapes captured at
+# intake (2026-08-13/14): Client_Id like RJ4521/CS4475/OX8218, no language field, a
+# nullable Mobile; queue rows show real statuses (SENT/FAILED/PENDING/
+# SUPPRESSED_CAPPED/SUPPRESSED_INVALID) plus one deliberately unrecognized value to
+# exercise the OTHER bucket, and both a "gr_"-prefixed referral template and a
+# legacy other-broker template to exercise the referral/other split.
+_DEMO_REFERRER_AUDIENCE = [
+    {
+        "client_id": "RJ4521", "mobile": "9876504321", "name": "Rajesh Joshi",
+        "language": "", "record_created_at": datetime(2026, 3, 12, 10, 0, 0),
+    },
+    {
+        "client_id": "DA1707", "mobile": "9876504322", "name": "Amit Deshpande",
+        "language": "", "record_created_at": datetime(2026, 6, 1, 9, 30, 0),
+    },
+    {
+        # A real-shape edge case: Mobile blank on the Zoho side (seen live on
+        # FWW808/XJ9068) — the sync must still upsert the row, just unmessageable.
+        "client_id": "FWW808", "mobile": "", "name": "FWW808",
+        "language": "", "record_created_at": datetime(2026, 7, 26, 20, 55, 16),
+    },
+]
+
+_DEMO_SEND_QUEUE_ROWS = [
+    {"Template_Name": "gr_platform_gorefer_refrecord_en_2026_07_31", "Queue_Status": "SENT"},
+    {"Template_Name": "gr_platform_gorefer_refrecord_en_2026_07_31", "Queue_Status": "SENT"},
+    {"Template_Name": "gr_platform_gorefer_refrecord_en_2026_07_31", "Queue_Status": "FAILED"},
+    {"Template_Name": "gr_platform_gorefer_refrecord_en_2026_07_31", "Queue_Status": "PENDING"},
+    {"Template_Name": "gorefer_referrer_prospect_pending_en_2026_07_26_v5",
+     "Queue_Status": "SUPPRESSED_CAPPED"},
+    {"Template_Name": "gr_platform_gorefer_login_otp_en_2026_07_21", "Queue_Status": "SUPPRESSED_INVALID"},
+    {"Template_Name": "gr_platform_gorefer_refrecord_en_2026_07_31", "Queue_Status": "QUEUED_UNKNOWN"},
+    {"Template_Name": "angel_one_referral_broadcast_en", "Queue_Status": "SENT"},
+    {"Template_Name": "angel_one_referral_broadcast_en", "Queue_Status": "FAILED"},
+    {"Template_Name": "stay_connected_monthly_update_en", "Queue_Status": "SENT"},
+]

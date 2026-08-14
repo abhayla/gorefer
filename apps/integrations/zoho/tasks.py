@@ -29,7 +29,9 @@ that comes only from the Zoho inbound webhook.
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
+from django.db.models import Max
 from django.utils import timezone
 from django_q.tasks import async_task
 
@@ -199,4 +201,126 @@ def sync_referrer_names() -> dict:
         synced += 1
     result = {"synced": synced, "unmatched": unmatched, "errors": errors}
     logger.info("name-sync done: %s", result)
+    return result
+
+
+# --- T-126 (W3): read-only referrer-audience sync ---------------------------------
+# Cascade key (CLAUDE.md §6d/§6e): how often the audience actually re-syncs. The
+# django-q SCHEDULE polls hourly (see apps.integrations.schedules) — same "poll
+# often, gate on config" idiom as wa_engagement_report_daily — so an operator can
+# change the cadence from the admin without touching a Schedule row or redeploying.
+AUDIENCE_SYNC_FREQUENCY_HOURS_KEY = "zoho_audience_sync_frequency_hours"
+AUDIENCE_SYNC_FREQUENCY_HOURS_DEFAULT = 24.0
+
+
+def sync_referrer_audience(*, tenant=None) -> dict:
+    """Fill/update `apps.campaigns.models.SyncedReferrer` from the Zoho `Referrers`
+    module — decision ⑫'s READ-ONLY audience source for the messaging-campaign
+    engine (T-124/T-125). Zoho stays data-in only: this task NEVER writes to Zoho
+    and never touches account/conversion status (guardrail #2) — it only calls the
+    read port's `fetch_referrer_audience()`.
+
+    Behavior, in order:
+      1. Inert no-op (logged, no port call at all) when `ENABLE_ZOHO_READ` is off —
+         deliberately stricter than `get_crm_read_port()`'s usual live/LogOnly swap,
+         because writing LogOnly's DEMO fixtures into the real audience table would
+         silently corrupt who the engine messages.
+      2. Inert no-op when the configured frequency window has not elapsed since the
+         last successful sync (tracked via `max(SyncedReferrer.synced_at)` for the
+         tenant — no extra state table needed).
+      3. Upsert by (tenant, client_id): mobile normalized via `apps.common.phone`,
+         `record_created_at` is the drip anchor (decision ⑪).
+      4. Any currently-`active` row NOT present in this fetch is marked
+         `active=False` (never deleted) — UNLESS the fetch hit its pagination cap
+         (`ReferrerAudience.truncated`), in which case deactivation is skipped
+         entirely this run (a partial fetch must never look like "referrer gone").
+      5. Parity check (plan's verification section): synced-active count vs fetched
+         count logged loudly on any mismatch — a silent audience shrink must never
+         look like a clean sync.
+    """
+    from apps.common.phone import normalize_phone
+    from apps.config.cascade import resolve
+    from apps.config.integration_flags import ENABLE_ZOHO_READ, resolve_flag
+    from apps.integrations.ports import get_crm_read_port
+    from apps.tenants.resolve import get_bootstrap_tenant
+
+    tenant = tenant or get_bootstrap_tenant()
+    tid = getattr(tenant, "id", None)
+
+    if not resolve_flag(ENABLE_ZOHO_READ):
+        logger.info("audience-sync: ENABLE_ZOHO_READ off — inert no-op")
+        return {"skipped": "ENABLE_ZOHO_READ off"}
+
+    from apps.campaigns.models import SyncedReferrer
+
+    frequency_hours = float(
+        resolve(
+            AUDIENCE_SYNC_FREQUENCY_HOURS_KEY, tenant_id=tid,
+            default=AUDIENCE_SYNC_FREQUENCY_HOURS_DEFAULT,
+        )
+    )
+    now = timezone.now()
+    last_synced_at = SyncedReferrer.objects.for_tenant(tenant).aggregate(
+        last=Max("synced_at")
+    )["last"]
+    if last_synced_at is not None and (now - last_synced_at) < timedelta(hours=frequency_hours):
+        logger.info(
+            "audience-sync: last run %s ago (< %sh window) — skipping",
+            now - last_synced_at, frequency_hours,
+        )
+        return {"skipped": "frequency window not elapsed", "last_synced_at": last_synced_at.isoformat()}
+
+    audience = get_crm_read_port().fetch_referrer_audience()
+
+    fetched_client_ids: set[str] = set()
+    created_n = updated_n = skipped_no_anchor = 0
+    for row in audience.rows:
+        if row.record_created_at is None:
+            # No anchor means the drip ladder has nothing to compute offsets from —
+            # skip rather than fabricate a "now" anchor that would misrepresent when
+            # the referral record actually happened.
+            skipped_no_anchor += 1
+            continue
+        fetched_client_ids.add(row.client_id)
+        _, created = SyncedReferrer.objects.update_or_create(
+            tenant=tenant, client_id=row.client_id,
+            defaults=dict(
+                mobile=normalize_phone(row.mobile), name=row.name, language=row.language,
+                record_created_at=row.record_created_at, source="zoho",
+                synced_at=now, active=True,
+            ),
+        )
+        created_n += int(created)
+        updated_n += int(not created)
+
+    deactivated = 0
+    if audience.truncated:
+        logger.warning(
+            "audience-sync: fetch hit the pagination cap (PARTIAL) — skipping the "
+            "deactivation sweep this run so no referrer is wrongly marked gone"
+        )
+    else:
+        deactivated = (
+            SyncedReferrer.objects.for_tenant(tenant).filter(active=True)
+            .exclude(client_id__in=fetched_client_ids)
+            .update(active=False, synced_at=now)
+        )
+
+    fetched_count = len(fetched_client_ids)
+    active_count = SyncedReferrer.objects.for_tenant(tenant).filter(active=True).count()
+    parity_ok = audience.truncated or active_count == fetched_count
+    if not parity_ok:
+        logger.warning(
+            "audience-sync PARITY MISMATCH: synced-active=%d fetched=%d (tenant=%s) — "
+            "the audience should never silently shrink relative to what Zoho just returned",
+            active_count, fetched_count, tid,
+        )
+
+    result = {
+        "fetched": fetched_count, "created": created_n, "updated": updated_n,
+        "deactivated": deactivated, "skipped_no_anchor": skipped_no_anchor,
+        "truncated": audience.truncated, "synced_active_count": active_count,
+        "parity_ok": parity_ok,
+    }
+    logger.info("audience-sync done: %s", result)
     return result

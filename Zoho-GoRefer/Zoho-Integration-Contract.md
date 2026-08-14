@@ -4,7 +4,7 @@
 > back, and the webhook contract Zoho must satisfy. The Zoho-side artifacts that *execute inside
 > Zoho* (Deluge, workflow rules, the Send Queue) live in `C:\Abhay\5Wealths\Zoho-Project\`.
 >
-> **Owner:** Abhay / PIFS. Zoho org `passiveincomesolutions` (`60019670093`). Last updated 2026-07-19.
+> **Owner:** Abhay / PIFS. Zoho org `passiveincomesolutions` (`60019670093`). Last updated 2026-08-14.
 
 ---
 
@@ -68,6 +68,66 @@ on the profile page — they stay on the erasable-PII side of the boundary.
 `expires_in`** (`apps/integrations/zoho/client.py`). Before that fix every API call re-minted a
 token — two round trips per call, and Zoho throttles refresh-token grants per window, which
 surfaced as spurious sync failures. `force_refresh=True` re-mints on a 401.
+
+### 3.1 Audience sync + send-queue counts (T-126, W3 — decisions ⑫/⑭ of the messaging-engine plan)
+
+Two more `CrmReadPort` methods, both gated by the SAME `ENABLE_ZOHO_READ` flag and issuing GETs
+only (guardrail #2: neither writes to Zoho or touches conversion/account status).
+
+**`fetch_referrer_audience()`** — decision ⑫'s READ-ONLY audience source for the T-124/T-125
+messaging-campaign engine. Sourced from the Zoho **`Referrers`** custom module (module API name
+`Referrers`, internal id `CustomModule3`), via the plain **record-LIST endpoint**
+`GET /crm/v8/Referrers` (fields `Client_Id,Mobile,Name,Created_Time`) — **not** `/search` (a full
+audience needs no criteria) and **not COQL** (same reasoning as §"Conversion reconciler" below: the
+live refresh token has no COQL scope, `/crm/v8/coql` returns `OAUTH_SCOPE_MISMATCH`). Paginated,
+200/page, hard stop at 100 pages (20,000 referrers); hitting the cap sets `truncated=True` on the
+result and the consuming sync task refuses to treat a partial fetch as a complete audience snapshot
+(see below).
+
+**Field map** (`Referrers` → `ZohoReferrerRow`):
+
+| GoRefer field | Zoho `Referrers` field |
+|---|---|
+| `client_id` | `Client_Id` |
+| `mobile` | `Mobile` (nullable live — seen blank on real rows, e.g. `FWW808`/`XJ9068`) |
+| `name` | `Name` (the module's primary field) |
+| `record_created_at` | `Created_Time` — the drip anchor (decision ⑪) |
+| `language` | **always `""`** — the live module (verified via `getFields`) carries no Language
+  field. Decision ⑮'s "Zoho language field, EN fallback" therefore always falls back to English
+  today; the fallback itself lives in `apps.campaigns.models.MessagingCampaign.template_for`, not
+  in this adapter. |
+
+**Consumer:** `apps.integrations.zoho.tasks.sync_referrer_audience` (scheduled hourly as
+`zoho_sync_referrer_audience`, same "poll often, gate on config" idiom as
+`wa_engagement_report_daily`). The actual cadence is the cascade key
+`zoho_audience_sync_frequency_hours` (default 24h) — tracked via `max(SyncedReferrer.synced_at)`
+for the tenant, no extra state table. Inert (logged, **no port call at all**) whenever
+`ENABLE_ZOHO_READ` is off — deliberately stricter than the usual live/LogOnly swap, because writing
+`LogOnlyZohoReadAdapter`'s demo fixtures into the real `SyncedReferrer` table would silently corrupt
+who the engine messages. Upserts by `(tenant, client_id)`; mobile normalized via
+`apps/common/phone.normalize_phone`. Any currently-`active` `SyncedReferrer` row **not** present in
+a **complete** fetch is marked `active=False` (never deleted) — a **truncated** fetch skips the
+deactivation sweep entirely so a partial page can never look like "referrer gone". A parity check
+(synced-active count vs fetched count) logs a `PARITY MISMATCH` warning loudly on any divergence —
+the audience must never silently shrink relative to what Zoho just returned.
+
+**`fetch_send_queue_counts(date_ist)`** — per-`Queue_Status` counts for one IST business date,
+grouped **referral-vs-other** (decision ⑭): the future W4 digest's messaging block. Sourced from the
+Zoho **`WA_Send_Queue`** custom module (`CustomModule5`) via `/crm/v8/WA_Send_Queue/search`,
+criteria `(Business_Date:equals:{date})`, fields `Queue_Status,Template_Name` — again NOT COQL.
+Paginated, 200/page, hard stop at 20 pages (4,000 rows/day). Live statuses observed at intake:
+`SENT`, `FAILED`, `PENDING`, `SUPPRESSED_CAPPED`, `SUPPRESSED_INVALID`; any status not recognized
+rolls into an `OTHER` bucket **within its group** rather than being dropped.
+
+**Grouping rule is config, not a literal** (CLAUDE.md §6d/§6e): the cascade key
+`zoho_send_queue_referral_template_prefixes` (default `["gr_", "gorefer_"]`) decides which
+`Template_Name` prefixes count as "referral" (the GoRefer/Zerodha stream); everything else — e.g.
+the legacy other-broker broadcasts (`angel_one_*`, `stay_connected_*`) — counts as "other". Nothing
+is ever dropped: every stream burns the same WhatsApp number's quality rating, so the digest must
+account for all of it even while keeping the referral funnel readable.
+
+**Not consumed yet.** `fetch_send_queue_counts` has no caller in this PR — the W4 digest task is a
+separate, future slice. This PR ships the read method + contract only.
 
 ---
 
