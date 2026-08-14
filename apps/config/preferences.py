@@ -623,6 +623,12 @@ MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT_DEFAULT = 30
 MESSAGING_DIGEST_ALERT_RECOVERY_HITS = "messaging_digest_alert_recovery_hits"
 MESSAGING_DIGEST_ALERT_RECOVERY_HITS_DEFAULT = 10
 
+# T-127 W4 — the approved template the daily digest sends. A cascade key (rail E-6 /
+# §6d), same reasoning as RECORDS_LINK_TEMPLATE_EN: a re-cut name swaps in with no
+# deploy. Default is the name verified live at T-127 intake (2026-08-14).
+MESSAGING_DIGEST_TEMPLATE_EN = "messaging_digest_template_en"
+MESSAGING_DIGEST_TEMPLATE_EN_DEFAULT = "gr_platform_gorefer_funnel_report_en_2026_07_21"
+
 # The rows the Preferences screen's "Messaging engine" section renders + persists, in
 # display order — the same data-driven shape as NOTIFY_TEMPLATE_FIELDS, so a future
 # knob is a row here, not a new template block. `kind` picks the input widget the
@@ -633,6 +639,7 @@ MESSAGING_ENGINE_FIELDS = [
     (MESSAGING_DIGEST_ALERTS_ENABLED, "Alerts enabled", "bool", None),
     (MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT, "Alert failure ratio (%)", "int", (0, 100)),
     (MESSAGING_DIGEST_ALERT_RECOVERY_HITS, "Alert recovery hits", "int", (0, 1000)),
+    (MESSAGING_DIGEST_TEMPLATE_EN, "Digest template name (EN)", "text", None),
 ]
 
 _MESSAGING_ENGINE_DEFAULTS = {
@@ -641,6 +648,7 @@ _MESSAGING_ENGINE_DEFAULTS = {
     MESSAGING_DIGEST_ALERTS_ENABLED: MESSAGING_DIGEST_ALERTS_ENABLED_DEFAULT,
     MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT: MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT_DEFAULT,
     MESSAGING_DIGEST_ALERT_RECOVERY_HITS: MESSAGING_DIGEST_ALERT_RECOVERY_HITS_DEFAULT,
+    MESSAGING_DIGEST_TEMPLATE_EN: MESSAGING_DIGEST_TEMPLATE_EN_DEFAULT,
 }
 
 
@@ -885,6 +893,7 @@ def central_defaults() -> dict:
         MESSAGING_DIGEST_ALERTS_ENABLED: MESSAGING_DIGEST_ALERTS_ENABLED_DEFAULT,
         MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT: MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT_DEFAULT,
         MESSAGING_DIGEST_ALERT_RECOVERY_HITS: MESSAGING_DIGEST_ALERT_RECOVERY_HITS_DEFAULT,
+        MESSAGING_DIGEST_TEMPLATE_EN: MESSAGING_DIGEST_TEMPLATE_EN_DEFAULT,
     }
 
 
@@ -1121,4 +1130,9 @@ def get_preferences(tenant_id: int | None) -> dict:
             ),
             defaults[MESSAGING_DIGEST_ALERT_RECOVERY_HITS],
         ),
+        MESSAGING_DIGEST_TEMPLATE_EN: resolve(
+            MESSAGING_DIGEST_TEMPLATE_EN,
+            tenant_id=tenant_id,
+            default=defaults[MESSAGING_DIGEST_TEMPLATE_EN],
+        ) or defaults[MESSAGING_DIGEST_TEMPLATE_EN],
     }

@@ -52,6 +52,16 @@ SCHEDULES = {
     # `enabled` + send-days/hour + budgets, not tenant-level config) — runs INERT
     # when no campaign is enabled (nothing to enqueue, nothing due to fire).
     "messaging_campaign_engine": ("apps.campaigns.tasks.run_campaign_engine", 10),
+    # Hourly (T-127 W4): the combined funnel digest — fires hourly but only sends
+    # during a tenant's configured `messaging_digest_send_hour_ist`, same "poll
+    # often, gate on config hour" idiom as wa_engagement_report_daily above. Inert
+    # (no-op, nothing sent) whenever `messaging_digest_recipients` is empty.
+    "funnel_digest_daily": ("apps.campaigns.digest.run_daily_digest", 60),
+    # Every 15 min (T-127 W4): the day-so-far threshold-alert check. Deduped per
+    # rule per IST day (an Event row checked before sending), so re-evaluating this
+    # often can only fire a breach once, never spam. Inert unless
+    # `messaging_digest_alerts_enabled` is on for the tenant.
+    "funnel_digest_alerts": ("apps.campaigns.digest.run_instant_alerts", 15),
 }
 
 
