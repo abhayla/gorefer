@@ -7,6 +7,17 @@ the funnel shows them as 0 / "pending Zoho". Idempotent-ish: safe to re-run (use
 distinct demo client_ids; events are append-only so counts grow on re-run).
 
 Requires `seed_program` first (tenant + program). Demo-only — never for production.
+
+T-130 note: `DEMO_REFERRERS`/`DEMO_CUSTOMERS` ids (RJ4521, DA1707, ...) are
+deliberately real-Zerodha-shaped (`validators.ZERODHA_CLIENT_ID_PATTERN`, 6 chars)
+and are shared BY DESIGN with the LogOnly read-adapter fixtures inside the Zoho
+integration boundary (~15 tests assert the Customer row seeded here and the
+fixture Contact returned for the same id agree). Renaming them to a
+non-colliding shape would ripple through that test surface for no isolation
+benefit, since the real hazard is this command ever running against a database
+that also serves live traffic — already forbidden above. Detection instead lives
+in the integration boundary's `sweep_customer_name_drift` task, which flags any
+of these ids it finds carrying a name that disagrees with Zoho (`demo_seed_shadow`).
 """
 from __future__ import annotations
 

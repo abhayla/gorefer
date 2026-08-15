@@ -455,7 +455,10 @@ def test_name_sync_fills_matched_and_skips_unmatched(demo, monkeypatch):
     assert not Customer.objects.filter(client_id="NM2002").exists()
 
 
-def test_name_sync_never_overwrites_existing_name(demo, monkeypatch):
+def test_name_sync_corrects_drifted_existing_name(demo, monkeypatch):
+    """T-130 regression: a stale/wrong local name (e.g. a demo-seed leftover, as
+    happened live for client_id DA1707/"Amit Deshpande") must be CORRECTED to
+    match Zoho, not preserved forever just because it happens to be non-empty."""
     from apps.integrations.zoho import tasks
     from apps.referrals.models import Customer, ReferralProgram
 
@@ -463,12 +466,34 @@ def test_name_sync_never_overwrites_existing_name(demo, monkeypatch):
     program = ReferralProgram.objects.get()
     Customer.objects.create(
         tenant=program.tenant, program=program, partner=program.partner,
-        client_id="NM3003", first_name="Login", last_name="Name",
+        client_id="NM3003", first_name="Stale", last_name="Demo",
     )
     monkeypatch.setattr(
         "apps.integrations.zoho.read.get_zoho_read_adapter",
-        lambda: _FakeReadAdapter({"NM3003": "Zoho Other"}),
+        lambda: _FakeReadAdapter({"NM3003": "Zoho Truth"}),
+    )
+    result = tasks.sync_referrer_names()
+    cust = Customer.objects.get(client_id="NM3003")
+    assert (cust.first_name, cust.last_name) == ("Zoho", "Truth")
+    assert result["corrected"] == 1
+
+
+def test_name_sync_leaves_name_alone_when_zoho_unmatched(demo, monkeypatch):
+    """Zoho stays the ONLY truth-source: with no Zoho match, GoRefer's existing
+    name is left as-is rather than being blanked or guessed."""
+    from apps.integrations.zoho import tasks
+    from apps.referrals.models import Customer, ReferralProgram
+
+    _identity("NM4004")
+    program = ReferralProgram.objects.get()
+    Customer.objects.create(
+        tenant=program.tenant, program=program, partner=program.partner,
+        client_id="NM4004", first_name="Login", last_name="Name",
+    )
+    monkeypatch.setattr(
+        "apps.integrations.zoho.read.get_zoho_read_adapter",
+        lambda: _FakeReadAdapter({}),
     )
     tasks.sync_referrer_names()
-    cust = Customer.objects.get(client_id="NM3003")
+    cust = Customer.objects.get(client_id="NM4004")
     assert (cust.first_name, cust.last_name) == ("Login", "Name")

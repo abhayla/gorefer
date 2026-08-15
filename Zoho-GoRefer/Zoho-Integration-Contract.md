@@ -278,11 +278,21 @@ no-ops. A static load-order guard test now enforces this.
 
 `apps.integrations.zoho.tasks.sync_referrer_names` (django-q schedule
 `zoho_sync_referrer_names`, daily) walks every live `ReferralIdentity`, calls the READ
-adapter's `fetch_contact_by_client_id`, and fills the local `Customer` name (the
-Explorer/leaderboard name source) for MATCHED contacts with a `Full_Name`:
+adapter's `fetch_contact_by_client_id`, and fills/corrects the local `Customer` name
+(the Explorer/leaderboard name source) for MATCHED contacts with a `Full_Name`:
 
 - Zoho remains the name truth-source; an unmatched ClientId stays "name not on file".
-- Existing non-empty Customer names are NEVER overwritten (referrer-login names win).
+- **T-130 (2026-08-15):** an existing non-empty Customer name IS now overwritten when
+  it disagrees with Zoho — the prior "never overwritten" rule let a stale local name
+  (e.g. a `seed_demo` leftover) permanently outrank Zoho once set, which is exactly how
+  a real client_id (DA1707) kept showing a demo name in production despite this job
+  running daily. GoRefer still never writes to Zoho; Zoho's `Full_Name` always wins on
+  a MATCH.
+- A companion read-only sweep, `apps.integrations.zoho.tasks.sweep_customer_name_drift`
+  (`python manage.py sweep_name_drift`), reports every `Customer` row whose name
+  disagrees with the already-synced `Referrers`-module name (`SyncedReferrer`, §3.1
+  above) without calling Zoho again, flagging known `seed_demo` client_ids separately
+  as `demo_seed_shadow` candidates.
 - READ-only against Zoho (Contacts fetch); guardrail #2 unaffected — this path never
   touches account/conversion status.
 - Gated by the same `ENABLE_ZOHO_READ` resolution as all read-back enrichment

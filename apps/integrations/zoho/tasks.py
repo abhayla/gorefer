@@ -157,15 +157,25 @@ def _referrer_client_id(referral) -> str:
 
 
 def sync_referrer_names() -> dict:
-    """READ-leg name sync: fill Customer names from Zoho Contacts (scheduled daily).
+    """READ-leg name sync: correct Customer names from Zoho Contacts (scheduled daily).
 
     The Explorer/leaderboard render names from the Customer table, but before this
     task nothing populated it except referrer login and demo seed — so referrers who
     never logged in showed "— name not on file —" even when Zoho knows them (live
     finding 2026-07-22: 10 of 12 identities nameless while the profile page fetched
     the same names live). Zoho stays the name truth-source: only MATCHED contacts
-    with a Full_Name are written, existing non-empty names are never overwritten,
-    and an unmatched ClientId stays honestly nameless.
+    with a Full_Name are written, and an unmatched ClientId stays honestly nameless.
+
+    T-130 fix: an EXISTING non-empty Customer name is now CORRECTED when it
+    disagrees with Zoho, not left alone. The old "existing non-empty names are
+    never overwritten" rule was the exact reason this job silently skipped
+    Customer id=2 (client_id DA1707) for its whole life: `seed_demo` had already
+    written a non-empty demo name ("Amit Deshpande") into that row, so
+    `not customer.first_name` was always False and the row was never touched even
+    though live Zoho held the true name (Abhay Kumar) for that ClientId every run.
+    Zoho is still the only writer here — GoRefer never fabricates or writes back —
+    this just stops GoRefer's OWN stale local value from permanently winning over
+    Zoho once it happens to be non-empty.
 
     Guardrail #2 untouched: reads Contacts only — never writes status/conversions.
     """
@@ -173,7 +183,7 @@ def sync_referrer_names() -> dict:
     from apps.referrals.models import Customer, ReferralIdentity
 
     adapter = get_zoho_read_adapter()
-    synced, unmatched, errors = 0, 0, 0
+    synced, corrected, unmatched, errors = 0, 0, 0, 0
     identities = (
         ReferralIdentity.objects.filter(deleted_at__isnull=True)
         .select_related("partner", "program", "tenant")
@@ -195,12 +205,69 @@ def sync_referrer_names() -> dict:
             client_id=identity.client_id,
             defaults={"partner": identity.partner, "first_name": first, "last_name": last},
         )
-        if not created and not customer.first_name:
+        if not created and (customer.first_name, customer.last_name) != (first, last):
+            logger.info(
+                "name-sync: correcting drifted name for %s: %r %r -> %r %r",
+                identity.client_id, customer.first_name, customer.last_name, first, last,
+            )
             customer.first_name, customer.last_name = first, last
             customer.save(update_fields=["first_name", "last_name"])
+            corrected += 1
         synced += 1
-    result = {"synced": synced, "unmatched": unmatched, "errors": errors}
+    result = {"synced": synced, "corrected": corrected, "unmatched": unmatched, "errors": errors}
     logger.info("name-sync done: %s", result)
+    return result
+
+
+def sweep_customer_name_drift(*, tenant=None) -> dict:
+    """SWEEP (T-130): read-only report of every Customer row whose GoRefer name
+    disagrees with Zoho's `Referrers` module for the same client_id.
+
+    Cross-references the already-synced `apps.campaigns.models.SyncedReferrer`
+    table (T-126's hourly `zoho_audience_sync`, sourced from Zoho `Referrers`) —
+    no extra Zoho call, so this is cheap enough to run ad hoc or as the first
+    thing an operator does after a name-integrity incident. Read-only: it never
+    writes. Correction for a flagged row lands on the next
+    `zoho_sync_referrer_names` run (fixed under T-130 to overwrite drift).
+
+    Also flags known `seed_demo` client_ids among the mismatches as
+    `demo_seed_shadow` — those are the rows most likely to be a demo fixture that
+    happens to share a real Zerodha client_id's 6-character shape (the DA1707
+    incident this task exists for), so an operator can triage them first.
+    """
+    from apps.campaigns.models import SyncedReferrer
+    from apps.referrals.management.commands.seed_demo import DEMO_CUSTOMERS, DEMO_REFERRERS
+    from apps.referrals.models import Customer
+    from apps.tenants.resolve import get_bootstrap_tenant
+
+    tenant = tenant or get_bootstrap_tenant()
+    demo_ids = {client_id for client_id, *_ in DEMO_REFERRERS} | set(DEMO_CUSTOMERS)
+
+    zoho_names = {
+        row.client_id: row.name.strip()
+        for row in SyncedReferrer.objects.for_tenant(tenant).filter(active=True)
+        if row.name.strip()
+    }
+
+    checked = 0
+    rows = []
+    for customer in Customer.objects.for_tenant(tenant).filter(deleted_at__isnull=True):
+        checked += 1
+        zoho_name = zoho_names.get(customer.client_id)
+        if zoho_name is None:
+            continue
+        local_name = f"{customer.first_name} {customer.last_name}".strip()
+        if local_name.lower() != zoho_name.lower():
+            rows.append({
+                "client_id": customer.client_id,
+                "local_name": local_name,
+                "zoho_name": zoho_name,
+                "demo_seed_shadow": customer.client_id in demo_ids,
+            })
+    result = {"checked": checked, "mismatched": len(rows), "rows": rows}
+    logger.info(
+        "name-drift sweep: checked=%s mismatched=%s", result["checked"], result["mismatched"]
+    )
     return result
 
 
