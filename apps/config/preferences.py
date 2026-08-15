@@ -629,6 +629,13 @@ MESSAGING_DIGEST_ALERT_RECOVERY_HITS_DEFAULT = 10
 MESSAGING_DIGEST_TEMPLATE_EN = "messaging_digest_template_en"
 MESSAGING_DIGEST_TEMPLATE_EN_DEFAULT = "gr_platform_gorefer_funnel_report_en_2026_07_21"
 
+# T-132 — the {{2}} greeting-name slot on the daily digest. A cascade key (rail E-6 /
+# §6d): who the digest greets is operator-facing behaviour, not a literal — the first
+# live send (2026-08-15) hardcoded "GoRefer" (the tenant name) and read "Hi GoRefer",
+# which the operator does not want. Default is the owner's own name.
+MESSAGING_DIGEST_GREETING_NAME = "messaging_digest_greeting_name"
+MESSAGING_DIGEST_GREETING_NAME_DEFAULT = "Abhay"
+
 # The rows the Preferences screen's "Messaging engine" section renders + persists, in
 # display order — the same data-driven shape as NOTIFY_TEMPLATE_FIELDS, so a future
 # knob is a row here, not a new template block. `kind` picks the input widget the
@@ -640,6 +647,7 @@ MESSAGING_ENGINE_FIELDS = [
     (MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT, "Alert failure ratio (%)", "int", (0, 100)),
     (MESSAGING_DIGEST_ALERT_RECOVERY_HITS, "Alert recovery hits", "int", (0, 1000)),
     (MESSAGING_DIGEST_TEMPLATE_EN, "Digest template name (EN)", "text", None),
+    (MESSAGING_DIGEST_GREETING_NAME, "Digest greeting name", "text", None),
 ]
 
 _MESSAGING_ENGINE_DEFAULTS = {
@@ -649,6 +657,7 @@ _MESSAGING_ENGINE_DEFAULTS = {
     MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT: MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT_DEFAULT,
     MESSAGING_DIGEST_ALERT_RECOVERY_HITS: MESSAGING_DIGEST_ALERT_RECOVERY_HITS_DEFAULT,
     MESSAGING_DIGEST_TEMPLATE_EN: MESSAGING_DIGEST_TEMPLATE_EN_DEFAULT,
+    MESSAGING_DIGEST_GREETING_NAME: MESSAGING_DIGEST_GREETING_NAME_DEFAULT,
 }
 
 
@@ -894,6 +903,7 @@ def central_defaults() -> dict:
         MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT: MESSAGING_DIGEST_ALERT_FAILURE_RATIO_PCT_DEFAULT,
         MESSAGING_DIGEST_ALERT_RECOVERY_HITS: MESSAGING_DIGEST_ALERT_RECOVERY_HITS_DEFAULT,
         MESSAGING_DIGEST_TEMPLATE_EN: MESSAGING_DIGEST_TEMPLATE_EN_DEFAULT,
+        MESSAGING_DIGEST_GREETING_NAME: MESSAGING_DIGEST_GREETING_NAME_DEFAULT,
     }
 
 
@@ -1135,4 +1145,9 @@ def get_preferences(tenant_id: int | None) -> dict:
             tenant_id=tenant_id,
             default=defaults[MESSAGING_DIGEST_TEMPLATE_EN],
         ) or defaults[MESSAGING_DIGEST_TEMPLATE_EN],
+        MESSAGING_DIGEST_GREETING_NAME: resolve(
+            MESSAGING_DIGEST_GREETING_NAME,
+            tenant_id=tenant_id,
+            default=defaults[MESSAGING_DIGEST_GREETING_NAME],
+        ) or defaults[MESSAGING_DIGEST_GREETING_NAME],
     }

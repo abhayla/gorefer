@@ -156,31 +156,109 @@ def test_zoho_queue_summary_maps_sent_delivered_rate(tenant, monkeypatch):
     assert summary["rate_pct"] == 70.0
     assert summary["capped"] == 1
     assert summary["invalid"] == 1
+    assert summary["failed"] == 1
+    assert summary["pending"] == 0
     assert summary["other_total"] == 4
     assert fake_crm.calls == [date(2026, 8, 10)]
+
+
+def test_zoho_queue_summary_maps_pending(tenant, monkeypatch):
+    counts = SendQueueCounts(
+        date_ist="2026-08-10",
+        referral={"SENT": 5, "FAILED": 2, "PENDING": 3},
+        other={},
+    )
+    fake_crm = _FakeCrmRead(counts)
+    monkeypatch.setattr(digest, "get_crm_read_port", lambda: fake_crm)
+
+    summary = digest.zoho_queue_summary(tenant, date(2026, 8, 10))
+    assert summary["failed"] == 2
+    assert summary["pending"] == 3
 
 
 def test_build_slots_fifteen_values_in_order():
     zoho = {
         "referral_total": 10, "delivered": 7, "not_delivered": 3, "rate_pct": 70.0,
-        "capped": 1, "invalid": 1, "other_total": 4, "other_breakdown": {"SENT": 3, "FAILED": 1},
+        "capped": 1, "invalid": 1, "failed": 2, "pending": 0,
+        "other_total": 4, "other_breakdown": {"SENT": 3, "FAILED": 1},
     }
     goref = {
         "human_clicks": 5, "landing_views": 4, "leads": 2, "accounts": 1,
         "recovery_saves": 2, "top_referrer": "RJ4521", "top_referrer_count": 3,
     }
-    slots = digest.build_slots(date(2026, 8, 10), zoho, goref)
+    slots = digest.build_slots(date(2026, 8, 10), zoho, goref, "Abhay")
     assert len(slots) == 15
     assert slots[0] == "2026-08-10"
+    assert slots[1] == "Abhay"
     assert slots[2] == "10"
     assert slots[3] == "7"
     assert slots[4] == "3"
     assert slots[5] == "70%"
+    assert slots[6] == "Failed: 2"
+    assert slots[7] == "Capped: 1, Invalid/blocked: 1"
     assert slots[10] == "5"
     assert slots[11] == "4"
     assert slots[12] == "2"
     assert slots[13] == "1"
     assert "RJ4521" in slots[14]
+
+
+def test_build_slots_failed_bullet_leads_with_the_largest_not_delivered_bucket():
+    """T-132 DoD: the FAILED count renders explicitly, not folded into {{5}}."""
+    zoho = {
+        "referral_total": 10, "delivered": 3, "not_delivered": 7, "rate_pct": 30.0,
+        "capped": 0, "invalid": 0, "failed": 7, "pending": 0,
+        "other_total": 0, "other_breakdown": {},
+    }
+    goref = {
+        "human_clicks": 0, "landing_views": 0, "leads": 0, "accounts": 0,
+        "recovery_saves": 0, "top_referrer": None, "top_referrer_count": 0,
+    }
+    slots = digest.build_slots(date(2026, 8, 15), zoho, goref, "Abhay")
+    assert slots[6] == "Failed: 7"
+
+
+def test_build_slots_pending_bucket_present_when_queue_holds_pending_rows():
+    zoho = {
+        "referral_total": 20, "delivered": 3, "not_delivered": 17, "rate_pct": 15.0,
+        "capped": 0, "invalid": 0, "failed": 0, "pending": 17,
+        "other_total": 0, "other_breakdown": {},
+    }
+    goref = {
+        "human_clicks": 0, "landing_views": 0, "leads": 0, "accounts": 0,
+        "recovery_saves": 0, "top_referrer": None, "top_referrer_count": 0,
+    }
+    slots = digest.build_slots(date(2026, 8, 15), zoho, goref, "Abhay")
+    assert slots[6] == "Failed: 0, Pending: 17"
+
+
+def test_build_slots_pending_bucket_absent_when_queue_holds_no_pending_rows():
+    zoho = {
+        "referral_total": 10, "delivered": 10, "not_delivered": 0, "rate_pct": 100.0,
+        "capped": 0, "invalid": 0, "failed": 0, "pending": 0,
+        "other_total": 0, "other_breakdown": {},
+    }
+    goref = {
+        "human_clicks": 0, "landing_views": 0, "leads": 0, "accounts": 0,
+        "recovery_saves": 0, "top_referrer": None, "top_referrer_count": 0,
+    }
+    slots = digest.build_slots(date(2026, 8, 15), zoho, goref, "Abhay")
+    assert slots[6] == "Failed: 0"
+    assert "Pending" not in slots[6]
+
+
+def test_build_slots_defaults_greeting_name_when_not_passed():
+    zoho = {
+        "referral_total": 0, "delivered": 0, "not_delivered": 0, "rate_pct": None,
+        "capped": 0, "invalid": 0, "failed": 0, "pending": 0,
+        "other_total": 0, "other_breakdown": {},
+    }
+    goref = {
+        "human_clicks": 0, "landing_views": 0, "leads": 0, "accounts": 0,
+        "recovery_saves": 0, "top_referrer": None, "top_referrer_count": 0,
+    }
+    slots = digest.build_slots(date(2026, 8, 15), zoho, goref)
+    assert slots[1] == digest.MESSAGING_DIGEST_GREETING_NAME_DEFAULT
 
 
 # --------------------------------------------------------------------------- digest send
@@ -208,6 +286,40 @@ def test_run_digest_for_tenant_sends_to_every_recipient(tenant, monkeypatch):
     assert Event.objects.for_tenant(tenant).filter(
         event_type=vocab.NOTIFICATION, metadata__kind=digest.EVENT_KIND_DIGEST,
     ).count() == 2
+
+
+def test_run_digest_for_tenant_greeting_name_resolves_from_config(tenant, monkeypatch):
+    """T-132 DoD: {{2}} comes from the MESSAGING_DIGEST_GREETING_NAME cascade key, not
+    a hardcoded literal (the first live digest read 'Hi GoRefer'). Overridden to a
+    value distinct from the default so the assertion proves the cascade override
+    actually takes effect, not just that the default happens to match."""
+    _set_config(tenant, **{
+        MESSAGING_DIGEST_RECIPIENTS: "919876543210",
+        digest.MESSAGING_DIGEST_GREETING_NAME: "Ashok",
+    })
+    fake_crm = _FakeCrmRead(SendQueueCounts(date_ist="x", referral={}, other={}))
+    fake_messaging = _FakeMessaging()
+    monkeypatch.setattr(digest, "get_crm_read_port", lambda: fake_crm)
+    monkeypatch.setattr(digest, "get_messaging_port", lambda: fake_messaging)
+
+    digest.run_digest_for_tenant(tenant, day=date(2026, 8, 10))
+
+    slot_2 = fake_messaging.template_sends[0]["params"]["template_params"][1]["value"]
+    assert slot_2 == "Ashok"
+
+
+def test_run_digest_for_tenant_greeting_name_default_is_not_the_tenant_name(tenant, monkeypatch):
+    _set_config(tenant, **{MESSAGING_DIGEST_RECIPIENTS: "919876543210"})
+    fake_crm = _FakeCrmRead(SendQueueCounts(date_ist="x", referral={}, other={}))
+    fake_messaging = _FakeMessaging()
+    monkeypatch.setattr(digest, "get_crm_read_port", lambda: fake_crm)
+    monkeypatch.setattr(digest, "get_messaging_port", lambda: fake_messaging)
+
+    digest.run_digest_for_tenant(tenant, day=date(2026, 8, 10))
+
+    slot_2 = fake_messaging.template_sends[0]["params"]["template_params"][1]["value"]
+    assert slot_2 == digest.MESSAGING_DIGEST_GREETING_NAME_DEFAULT
+    assert slot_2 != "GoRefer"
 
 
 def test_run_digest_for_tenant_records_failed_terminal_status(tenant, monkeypatch):

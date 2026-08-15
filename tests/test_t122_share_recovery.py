@@ -121,6 +121,14 @@ def test_recovery_page_renders_compliance_disclosure(seeded, client):
     assert "AP2516003693" in body  # NSE AP reg. no., part of the disclosure block
 
 
+def test_recovery_page_renders_market_risk_warning(seeded, client, settings):
+    """T-122 checker finding (T-132 follow-up): the AP reg. no. assertion above proves
+    the disclosure BLOCK rendered, but not the separate market-risk warning string —
+    assert it independently so a template change that drops just this line is caught."""
+    body = client.get("/r/", **HUMAN).content.decode()
+    assert settings.MARKET_RISK_WARNING in body
+
+
 def test_recovery_page_has_no_partner_code_or_raw_zerodha_url(seeded, client):
     body = client.get("/r/", **HUMAN).content.decode()
     assert "ZMPHZC" not in body

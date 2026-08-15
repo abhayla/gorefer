@@ -57,6 +57,8 @@ from apps.config.preferences import (
     MESSAGING_DIGEST_ALERT_RECOVERY_HITS_DEFAULT,
     MESSAGING_DIGEST_ALERTS_ENABLED,
     MESSAGING_DIGEST_ALERTS_ENABLED_DEFAULT,
+    MESSAGING_DIGEST_GREETING_NAME,
+    MESSAGING_DIGEST_GREETING_NAME_DEFAULT,
     MESSAGING_DIGEST_RECIPIENTS,
     MESSAGING_DIGEST_RECIPIENTS_DEFAULT,
     MESSAGING_DIGEST_SEND_HOUR_IST,
@@ -92,6 +94,8 @@ RULE_RECOVERY_HITS = "recovery_hits"
 _QUEUE_STATUS_SENT = "SENT"
 _QUEUE_STATUS_CAPPED = "SUPPRESSED_CAPPED"
 _QUEUE_STATUS_INVALID = "SUPPRESSED_INVALID"
+_QUEUE_STATUS_FAILED_ROW = "FAILED"
+_QUEUE_STATUS_PENDING_ROW = "PENDING"
 
 
 # --------------------------------------------------------------------------- config
@@ -146,6 +150,14 @@ def _alert_recovery_hits(tenant_id: int | None) -> int:
         )
     except (TypeError, ValueError):
         return MESSAGING_DIGEST_ALERT_RECOVERY_HITS_DEFAULT
+
+
+def _digest_greeting_name(tenant_id: int | None) -> str:
+    value = str(
+        resolve(MESSAGING_DIGEST_GREETING_NAME, tenant_id=tenant_id,
+                default=MESSAGING_DIGEST_GREETING_NAME_DEFAULT)
+    ).strip()
+    return value or MESSAGING_DIGEST_GREETING_NAME_DEFAULT
 
 
 def _digest_template(tenant_id: int | None) -> str:
@@ -215,6 +227,8 @@ def zoho_queue_summary(tenant, day: date) -> dict:
     rate = (delivered / referral_total * 100) if referral_total else None
     capped = counts.referral.get(_QUEUE_STATUS_CAPPED, 0)
     invalid = counts.referral.get(_QUEUE_STATUS_INVALID, 0)
+    failed = counts.referral.get(_QUEUE_STATUS_FAILED_ROW, 0)
+    pending = counts.referral.get(_QUEUE_STATUS_PENDING_ROW, 0)
     other_total = sum(counts.other.values())
 
     return {
@@ -224,14 +238,27 @@ def zoho_queue_summary(tenant, day: date) -> dict:
         "rate_pct": rate,
         "capped": capped,
         "invalid": invalid,
+        "failed": failed,
+        "pending": pending,
         "other_total": other_total,
         "other_breakdown": dict(counts.other),
         "truncated": counts.truncated,
     }
 
 
-def build_slots(day: date, zoho: dict, goref: dict) -> list[str]:
-    """The 15 positional slot VALUES, in template order (T-127 verified slot map)."""
+def build_slots(
+    day: date, zoho: dict, goref: dict, greeting_name: str = MESSAGING_DIGEST_GREETING_NAME_DEFAULT,
+) -> list[str]:
+    """The 15 positional slot VALUES, in template order (T-127 verified slot map).
+
+    Bullets {{7}}-{{10}} are the four free-text slots (kept at four, T-132: reallocate
+    content, never invent a slot). FAILED leads {{7}} because it is the largest
+    not-delivered bucket (T-132: the first live digest left it implicit, hidden inside
+    the {{5}} not-delivered total); a PENDING count joins the same line only when the
+    queue actually holds pending rows, so a stuck day is visible without adding noise
+    to a clean one. {{8}} keeps capped + invalid together (both suppression, not
+    failure); {{9}}/{{10}} are unchanged (other-stream summary, recovery saves).
+    """
     rate_str = f"{zoho['rate_pct']:.0f}%" if zoho["rate_pct"] is not None else "n/a"
     other_str = (
         f"{zoho['other_total']} ({', '.join(f'{k}={v}' for k, v in sorted(zoho['other_breakdown'].items()))})"
@@ -240,15 +267,19 @@ def build_slots(day: date, zoho: dict, goref: dict) -> list[str]:
     top_str = (
         f"{goref['top_referrer']} ({goref['top_referrer_count']})" if goref["top_referrer"] else "none"
     )
+    pending = zoho.get("pending", 0)
+    failed_str = f"Failed: {zoho.get('failed', 0)}"
+    if pending:
+        failed_str += f", Pending: {pending}"
     return [
         day.isoformat(),                                    # {{1}} date
-        "GoRefer",                                          # {{2}} name
+        greeting_name,                                       # {{2}} name
         str(zoho["referral_total"]),                        # {{3}} sent
         str(zoho["delivered"]),                              # {{4}} delivered
         str(zoho["not_delivered"]),                          # {{5}} not delivered
         rate_str,                                             # {{6}} rate
-        f"Capped: {zoho['capped']}",                         # {{7}}
-        f"Invalid/blocked: {zoho['invalid']}",               # {{8}}
+        failed_str,                                           # {{7}} failed (+ pending, when present)
+        f"Capped: {zoho['capped']}, Invalid/blocked: {zoho['invalid']}",  # {{8}}
         f"Other streams: {other_str}",                       # {{9}}
         f"Recovery saves: {goref['recovery_saves']}",        # {{10}}
         str(goref["human_clicks"]),                          # {{11}} human clicks
@@ -346,9 +377,10 @@ def run_digest_for_tenant(tenant, *, day: date | None = None) -> dict:
         return {"skipped": True, "reason": "no digest recipients configured"}
 
     template = _digest_template(tenant_id)
+    greeting_name = _digest_greeting_name(tenant_id)
     zoho = zoho_queue_summary(tenant, target_day)
     goref = goref_counts(tenant, target_day)
-    slots = build_slots(target_day, zoho, goref)
+    slots = build_slots(target_day, zoho, goref, greeting_name)
 
     results = []
     for mobile in recipients:

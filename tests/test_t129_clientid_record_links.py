@@ -200,6 +200,15 @@ def test_recovery_page_reuses_the_share_recovery_config_keys(client, seeded, set
     assert prefkeys.SHARE_RECOVERY_BUTTON_LABEL_DEFAULT in body
 
 
+@RECORDS_URLS
+def test_rr_recovery_page_renders_market_risk_warning(client, seeded, settings):
+    """T-122 checker finding (T-132 follow-up), same-shape check for the /rr/ variant
+    of the T-122 recovery page: the market-risk warning must render independently of
+    the AP disclosure block, not just be implied by it."""
+    body = client.get("/rr/").content.decode()
+    assert settings.MARKET_RISK_WARNING in body
+
+
 # --------------------------------------------------------------------- garbage -> invalid page
 
 
