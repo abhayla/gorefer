@@ -31,8 +31,8 @@ FORBIDDEN_ORIGINS = (
     "cdn.tailwindcss.com",
 )
 
-# The pages the DA must be able to drive: public landing, disclosure, admin login.
-PUBLIC_PATHS = ("/", "/r/RJ4521", "/d/pifs", "/admin-panel/login/")
+# The pages the DA must be able to drive: public landing, disclosure, privacy, admin login.
+PUBLIC_PATHS = ("/", "/r/RJ4521", "/d/pifs", "/privacy", "/admin-panel/login/")
 
 
 @pytest.fixture

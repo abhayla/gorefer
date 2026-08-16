@@ -1,0 +1,99 @@
+{% extends "landing_base.html" %}
+{% comment %}
+Public, no-login DPDP privacy policy (T-148). Extends landing_base.html so the AP
+disclosure block + market-risk warning auto-inject like every other customer-facing
+page. Plain-English, short sections. Every claim here must match what the code
+actually does — see apps/common/privacy.py (erase/purge), VisitorPII (the separate
+erasable IP/city record), and the PII-free immutable event log. Hindi version is
+out of scope for this task.
+{% endcomment %}
+{% block title %}Privacy Policy — Passive Income Financial Solutions{% endblock %}
+{% block body %}
+<section class="px-5 pt-6 pb-2">
+  <h1 class="text-[22px] leading-snug font-extrabold tracking-tight text-ink-900">
+    Privacy Policy
+  </h1>
+  <p class="mt-2 text-sm text-ink-500 leading-relaxed">
+    This page explains, in plain language, what we collect when you use a GoRefer
+    referral link or fill in our form, why we collect it, who we share it with, how
+    long we keep it, and how you can ask us to erase it.
+  </p>
+</section>
+
+<section class="px-5 pt-4 pb-1 space-y-5">
+
+  <div>
+    <h2 class="text-sm font-bold text-ink-900 mb-1.5">Who collects your information</h2>
+    <p class="text-xs text-ink-500 leading-relaxed">
+      Passive Income Financial Solutions Private Limited ("PIFS", "we", "us") — a
+      Zerodha Authorised Person (NSE AP reg. no. {{ NSE_AP_NO }}) — collects and
+      processes your information through this website (GoRefer) when you click a
+      referral link or submit the account-opening form.
+    </p>
+  </div>
+
+  <div>
+    <h2 class="text-sm font-bold text-ink-900 mb-1.5">What we collect</h2>
+    <ul class="text-xs text-ink-500 leading-relaxed list-disc pl-4 space-y-1">
+      <li>Your name, mobile number and email address, if you enter them in the form.</li>
+      <li>Your IP address and approximate city, stored as a separate, erasable record — never mixed into your click/visit history.</li>
+      <li>Click and page-visit events (e.g. link opened, landing page viewed, "Continue to Zerodha" tapped). These events never contain your name, phone number or email — they are kept as an anonymous activity trail.</li>
+      <li>A first-party cookie (<code class="text-[10.5px]">visitor_id</code>) set in your browser so we recognise the same visit — no third-party tracking cookie is used.</li>
+    </ul>
+  </div>
+
+  <div>
+    <h2 class="text-sm font-bold text-ink-900 mb-1.5">Why we collect it (purpose limitation)</h2>
+    <p class="text-xs text-ink-500 leading-relaxed">
+      Only to manage the referral and to help you open a Zerodha demat &amp; trading
+      account. We do not use your information for anything else — no unrelated
+      marketing, no sale of your data.
+    </p>
+  </div>
+
+  <div>
+    <h2 class="text-sm font-bold text-ink-900 mb-1.5">Who we share it with</h2>
+    <ul class="text-xs text-ink-500 leading-relaxed list-disc pl-4 space-y-1">
+      <li><span class="font-semibold text-ink-700">Zoho CRM</span> — our CRM, used to track your lead and your Zerodha account-opening status. Zoho processes your data on our behalf; it does not sell it.</li>
+      <li><span class="font-semibold text-ink-700">Wati (on Meta's WhatsApp Business Platform)</span> — used only to deliver WhatsApp messages about your referral or account opening, if you contact us or opt in on WhatsApp.</li>
+      <li>We never sell your information to anyone, and we never share it for a purpose unrelated to your referral or your Zerodha account.</li>
+    </ul>
+  </div>
+
+  <div>
+    <h2 class="text-sm font-bold text-ink-900 mb-1.5">How long we keep it</h2>
+    <p class="text-xs text-ink-500 leading-relaxed">
+      If you do not go on to open a Zerodha account, we automatically anonymise or
+      erase your prospect information (name, email, city, IP address) after
+      <span class="font-semibold text-ink-700">12 months</span>. Your mobile number is
+      replaced with a non-reversible code, not left in plain form. If you do open an
+      account through us, we keep the business record of that account as required by
+      law and by our regulator — this is not marketing data.
+    </p>
+  </div>
+
+  <div>
+    <h2 class="text-sm font-bold text-ink-900 mb-1.5">Your consent</h2>
+    <p class="text-xs text-ink-500 leading-relaxed">
+      By ticking the consent box on our form, you agree to us contacting you about
+      opening a Zerodha account and to us processing your details as described on
+      this page. You may withdraw consent at any time using the erasure request
+      option below — this does not affect anything already done with your consent
+      before you withdraw it.
+    </p>
+  </div>
+
+  <div>
+    <h2 class="text-sm font-bold text-ink-900 mb-1.5">Ask us to erase your data</h2>
+    <p class="text-xs text-ink-500 leading-relaxed">
+      You can ask us to erase your information at any time. Message our WhatsApp
+      Business number
+      <a href="https://wa.me/{{ wati_business_number_digits }}" class="text-cobalt-600 font-semibold underline underline-offset-2">{{ wati_business_number_display }}</a>
+      with your registered mobile number, and we will erase your name, email, city
+      and IP address (a converted Zerodha account record is a regulatory record and
+      is handled separately, on request).
+    </p>
+  </div>
+
+</section>
+{% endblock %}

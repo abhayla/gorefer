@@ -143,7 +143,7 @@ def _landing_context(request, tenant, client_id: str, nonce: str | None):
         # (Preferences screen wins over the settings default). tel: form strips spaces.
         "SUPPORT_HELPLINE_PHONE": prefs[prefkeys.SUPPORT_HELPLINE_PHONE],
         "SUPPORT_HELPLINE_TEL": (prefs[prefkeys.SUPPORT_HELPLINE_PHONE] or "").replace(" ", ""),
-        "privacy_policy_url": resolve("privacy_policy_url", tenant_id=tenant_id, default="#"),
+        "privacy_policy_url": resolve("privacy_policy_url", tenant_id=tenant_id, default="/privacy"),
         "REFERRAL_INCENTIVE_CLAIM": reward_claim if show_reward else "",
         "show_incentive": show_reward,  # tenant may hide the referral-benefit panel
     }
@@ -408,3 +408,32 @@ def share_recovery_view(request, channel: str | None = None):
         )
     context = _share_recovery_context(tenant_id)
     return render(request, "share_recovery.html", context, status=200)
+
+
+@require_GET
+def privacy_policy_view(request):
+    """GET /privacy — public, no-login DPDP privacy policy (T-148).
+
+    The landing form's consent checkbox links here (`privacy_policy_url`, a
+    cascade-resolved config key — rail E-6). Extends `landing_base.html` so the
+    AP disclosure block + market-risk warning auto-inject like every other
+    customer-facing page. Every claim on the page is grounded in code that
+    actually runs: `apps/common/privacy.py` (erase/purge), `VisitorPII` as the
+    separate erasable IP/city record, and the PII-free immutable event log.
+    """
+    from django.conf import settings
+
+    from apps.config import preferences as prefkeys
+
+    tenant = get_current_tenant(request)
+    tenant_id = tenant.id if tenant is not None else None
+    wa_number = resolve(
+        prefkeys.WATI_BUSINESS_NUMBER, tenant_id=tenant_id, default=settings.WATI_BUSINESS_NUMBER
+    )
+    digits = "".join(ch for ch in (wa_number or "") if ch.isdigit())
+    wa_display = f"+91 {digits[-10:-5]} {digits[-5:]}" if len(digits) >= 10 else wa_number
+    context = {
+        "wati_business_number_display": wa_display,
+        "wati_business_number_digits": digits,
+    }
+    return render(request, "privacy_policy.html", context)

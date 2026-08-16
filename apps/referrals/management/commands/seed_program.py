@@ -70,7 +70,11 @@ class Command(BaseCommand):
             # WhatsApp share target = WATI BUSINESS number (NOT Ashok's personal),
             # config-driven via the cascade (ADR-022). Digits only for wa.me.
             "wati_business_number": settings.WATI_BUSINESS_NUMBER,
-            "privacy_policy_url": "https://gorefer.in/privacy",
+            # Relative path so it resolves against whatever host serves the app
+            # (prod gorefer.in, a preview domain, or localhost in dev) — the /privacy
+            # route is served by this same app (T-148), so an absolute prod-only URL
+            # would 404 in every other environment.
+            "privacy_policy_url": "/privacy",
             # Per-partner client-id format (owner decision 2026-07-27). The key is composed
             # from the PARTNER'S OWN CODE, so onboarding a partner with different id rules
             # is data, not code — nothing here is named after a partner.

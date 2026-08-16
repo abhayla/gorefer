@@ -24,6 +24,7 @@ from api.router import api
 from apps.referrals.views import (
     disclosure_page,
     partner_direct_redirect,
+    privacy_policy_view,
     referral_continue,
     referral_redirect,
     share_intent_redirect,
@@ -42,6 +43,9 @@ urlpatterns = [
     path("open", partner_direct_redirect, name="partner_direct"),
     # Per-sub-broker disclosure page (B2 / ADR-031) — the canonical §4.4 host.
     path("d/<slug:slug>", disclosure_page, name="disclosure_page"),
+    # Public, no-login DPDP privacy policy (T-148) — the landing form's consent
+    # checkbox links here via the cascade-resolved `privacy_policy_url` config key.
+    path("privacy", privacy_policy_view, name="privacy_policy"),
     # Channel-path form (B1): /r/{channel}/{client_id}[/continue]. Listed first; the
     # narrow {channel} converter keeps these from ever matching a legacy single id.
     path("r/<channel:channel>/<str:client_id>/continue", referral_continue, name="referral_continue_channel"),
