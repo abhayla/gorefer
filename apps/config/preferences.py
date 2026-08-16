@@ -116,6 +116,70 @@ REFERRER_CONVERSION_CONGRATS_BODY_EN_DEFAULT = (
     "Thank you for referring — view your records anytime from your GoRefer link."
 )
 
+# --- Verification-outcome notifications (T-158) -------------------------------------
+# `apps.accounts.service.approve_verification`/`reject_verification` decide a pending
+# ADR-027/ADR-035 verification, but until now told nobody: an approved referrer only
+# found out by re-trying login, and a rejected one heard nothing at all. Two legs, both
+# config (rail E-6 / §6d):
+#   * EMAIL — always attempted (channel ships now via the T-078 mail infra); skipped
+#     cleanly when the request carries no on-file email.
+#   * WHATSAPP — an ADDITION, gated behind its own enabled flag (default OFF) AND a
+#     cascade-resolved template name. No template exists at Meta yet — T-159 owns the
+#     map card + submission — so this leg must stay INERT until both the flag is
+#     flipped and a real approved name is configured. Defaults below are T-159's
+#     PENDING (not yet approved) names, wired now so flipping the flag later needs no
+#     code change — only a config edit once Meta approves.
+VERIFICATION_OUTCOME_APPROVED_EMAIL_SUBJECT = "verification_outcome_approved_email_subject"
+VERIFICATION_OUTCOME_APPROVED_EMAIL_SUBJECT_DEFAULT = "You're verified — sign in to GoRefer"
+
+VERIFICATION_OUTCOME_APPROVED_EMAIL_BODY = "verification_outcome_approved_email_body"
+VERIFICATION_OUTCOME_APPROVED_EMAIL_BODY_DEFAULT = (
+    "Hi{name_suffix},\n\n"
+    "Your referrer account is verified and ready to use. Sign in here: {login_url}\n\n"
+    "— GoRefer"
+)
+
+VERIFICATION_OUTCOME_REJECTED_EMAIL_SUBJECT = "verification_outcome_rejected_email_subject"
+VERIFICATION_OUTCOME_REJECTED_EMAIL_SUBJECT_DEFAULT = "Update on your GoRefer verification request"
+
+VERIFICATION_OUTCOME_REJECTED_EMAIL_BODY = "verification_outcome_rejected_email_body"
+VERIFICATION_OUTCOME_REJECTED_EMAIL_BODY_DEFAULT = (
+    "Hi{name_suffix},\n\n"
+    "We weren't able to verify your referrer account this time.\n"
+    "Reason: {reason}\n\n"
+    "You're welcome to try again any time — sign in and re-submit your details: "
+    "{login_url}\n\n"
+    "— GoRefer"
+)
+
+VERIFICATION_OUTCOME_WHATSAPP_ENABLED = "verification_outcome_whatsapp_enabled"
+VERIFICATION_OUTCOME_WHATSAPP_ENABLED_DEFAULT = False
+
+VERIFICATION_OUTCOME_APPROVED_TEMPLATE_EN = "verification_outcome_approved_template_en"
+VERIFICATION_OUTCOME_APPROVED_TEMPLATE_EN_DEFAULT = "gr_platform_gorefer_verify_approved_en_2026_08_16"
+
+VERIFICATION_OUTCOME_NEEDSREVIEW_TEMPLATE_EN = "verification_outcome_needsreview_template_en"
+VERIFICATION_OUTCOME_NEEDSREVIEW_TEMPLATE_EN_DEFAULT = (
+    "gr_platform_gorefer_verify_needsreview_en_2026_08_16"
+)
+
+# HI twins (T-158 checker fix) — same "config, not code" reasoning as the lead-time
+# NOTIFY_TEMPLATE_DEFAULTS pair below: a separate key per (outcome, lang), not a
+# bi_text-style copy fallback, because a template NAME is not translatable text — an
+# HI referrer must get the actual HI-approved template, never the EN one silently.
+# Selection follows the EXISTING `referrer_language` cascade key (doc 15 §8, resolved
+# via `apps.config.i18n.resolve_stored_referrer_language`), falling back to EN when
+# unset/unknown — same convention as every other referrer-facing template send.
+VERIFICATION_OUTCOME_APPROVED_TEMPLATE_HI = "verification_outcome_approved_template_hi"
+VERIFICATION_OUTCOME_APPROVED_TEMPLATE_HI_DEFAULT = (
+    "gr_platform_gorefer_verify_approved_hi_2026_08_16_v2"
+)
+
+VERIFICATION_OUTCOME_NEEDSREVIEW_TEMPLATE_HI = "verification_outcome_needsreview_template_hi"
+VERIFICATION_OUTCOME_NEEDSREVIEW_TEMPLATE_HI_DEFAULT = (
+    "gr_platform_gorefer_verify_needsreview_hi_2026_08_16"
+)
+
 # --- Referral share hub (T-053; behind ENABLE_SHARE_HUB) ---------------------------
 # Every word this page says, and the brand image its link preview uses, is a cascade
 # key rather than a template literal (rail E-6 / §6d). Two reasons, both concrete:

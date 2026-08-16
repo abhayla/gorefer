@@ -171,6 +171,28 @@ def referrer_required(view):
 
 # --- Verification queue (ADR-027 mismatch + ADR-035 Path B) -----------------------
 
+def _assert_decodes_as_image(evidence_bytes: bytes, content_type: str) -> None:
+    """Reject bytes that merely CLAIM to be an image (T-158 pt 37).
+
+    The content-type/extension checks above trust what the browser SAID; this opens
+    the actual bytes with Pillow and verifies they decode as a real image — a forged
+    Content-Type on a non-image payload (a script, an executable, plain junk) is
+    caught here instead of being stored and served back to an admin's browser.
+    """
+    import io
+
+    from PIL import Image, UnidentifiedImageError
+
+    try:
+        with Image.open(io.BytesIO(evidence_bytes)) as img:
+            img.verify()
+    except (UnidentifiedImageError, OSError, ValueError):
+        raise VerificationError(
+            "That file doesn't look like a valid image. Please upload a JPEG, PNG, or "
+            "WebP screenshot."
+        ) from None
+
+
 def submit_evidence_request(
     tenant, *, client_id: str, registered_name: str, mobile_entered: str,
     evidence_bytes: bytes, content_type: str,
@@ -182,6 +204,8 @@ def submit_evidence_request(
         raise VerificationError("Screenshot too large (max 5 MB).")
     if content_type not in EVIDENCE_CONTENT_TYPES:
         raise VerificationError("Screenshot must be a JPEG, PNG, or WebP image.")
+    _assert_decodes_as_image(evidence_bytes, content_type)
+    onfile_status = _onfile_status(tenant, client_id)
     # One open request per (tenant, client_id, kind): a re-submit replaces the
     # pending evidence rather than queueing duplicates for Ashok to reconcile.
     existing = VerificationRequest.objects.for_tenant(tenant).filter(
@@ -195,6 +219,7 @@ def submit_evidence_request(
         existing.evidence_content_type = content_type
         existing.evidence_size = len(evidence_bytes)
         existing.evidence_purged_at = None
+        existing.onfile_status = onfile_status
         existing.save()
         return existing
     return VerificationRequest.objects.create(
@@ -206,6 +231,7 @@ def submit_evidence_request(
         evidence=evidence_bytes,
         evidence_content_type=content_type,
         evidence_size=len(evidence_bytes),
+        onfile_status=onfile_status,
     )
 
 
@@ -213,6 +239,7 @@ def submit_oauth_mismatch_request(
     tenant, *, client_id: str, google_email: str, mobile_entered: str,
 ) -> VerificationRequest:
     """ADR-027: neither email nor mobile matched — queue for admin review."""
+    onfile_status = _onfile_status(tenant, client_id)
     existing = VerificationRequest.objects.for_tenant(tenant).filter(
         client_id=client_id,
         kind=VerificationRequest.KIND_OAUTH_MISMATCH, status=VerificationRequest.STATUS_PENDING,
@@ -220,7 +247,8 @@ def submit_oauth_mismatch_request(
     if existing is not None:
         existing.google_email = google_email.strip().lower()
         existing.mobile_entered = normalize_phone(mobile_entered) if mobile_entered else ""
-        existing.save(update_fields=["google_email", "mobile_entered", "updated_at"])
+        existing.onfile_status = onfile_status
+        existing.save(update_fields=["google_email", "mobile_entered", "onfile_status", "updated_at"])
         return existing
     return VerificationRequest.objects.create(
         tenant=tenant,
@@ -228,6 +256,20 @@ def submit_oauth_mismatch_request(
         client_id=client_id,
         google_email=google_email.strip().lower(),
         mobile_entered=normalize_phone(mobile_entered) if mobile_entered else "",
+        onfile_status=onfile_status,
+    )
+
+
+def _onfile_status(tenant, client_id: str) -> str:
+    """T-158 pt 29: "unknown to the system" vs "found, details mismatched" — every
+    request reaching this queue is BY DEFINITION a details-mismatch when the
+    client_id IS on file (ADR-027/ADR-035 only route here on a failed match), so
+    on-file-ness alone is enough to tell the two admin-facing cases apart."""
+    from .onfile import resolve_onfile
+
+    return (
+        VerificationRequest.ONFILE_MISMATCH if resolve_onfile(tenant, client_id).known
+        else VerificationRequest.ONFILE_UNKNOWN
     )
 
 
@@ -264,6 +306,9 @@ def approve_verification(request_obj: VerificationRequest, *, admin_user) -> Ref
         "Verification approved: %s client_id=%s by admin=%s (evidence purged)",
         request_obj.kind, request_obj.client_id, request_obj.decided_by,
     )
+    from . import notifications
+
+    notifications.queue_verification_approved(request_id=request_obj.pk, account_id=account.pk)
     return account
 
 
@@ -281,6 +326,9 @@ def reject_verification(request_obj: VerificationRequest, *, admin_user, note: s
         "Verification rejected: %s client_id=%s by admin=%s (evidence purged)",
         request_obj.kind, request_obj.client_id, request_obj.decided_by,
     )
+    from . import notifications
+
+    notifications.queue_verification_rejected(request_id=request_obj.pk)
 
 
 def _put_on_file(tenant, request_obj: VerificationRequest, mobile: str) -> None:

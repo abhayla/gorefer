@@ -29,7 +29,21 @@ from apps.tenants.models import Tenant
 CID = "RJ4521"
 ONFILE_MOBILE = "919876543210"
 HUMAN = {"HTTP_USER_AGENT": "Mozilla/5.0 (Android)", "REMOTE_ADDR": "203.0.113.7"}
-PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64  # enough bytes to be a plausible tiny upload
+
+
+def _tiny_png() -> bytes:
+    """A genuinely decodable 2x2 PNG (T-158 pt 37: uploads now go through Pillow's
+    real decode, not just a magic-bytes sniff, so a fixture must actually decode)."""
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (2, 2), color=(200, 30, 30)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+PNG = _tiny_png()
 
 
 # --------------------------------------------------------------------------- fixtures
@@ -317,9 +331,11 @@ def test_pathb_upload_and_admin_approve_binds_and_purges(
     req = VerificationRequest.objects.get()
     assert req.evidence is not None and req.evidence_size == len(PNG)
 
-    # Staff can view the evidence while pending; it is never publicly routed.
+    # Staff can view the evidence while pending; it is never publicly routed. Served
+    # as a forced download (T-158 pt 37) — never a renderable content-type.
     ev = admin_client.get(f"/admin-panel/verifications/{req.id}/evidence")
-    assert ev.status_code == 200 and ev["Content-Type"] == "image/png"
+    assert ev.status_code == 200 and ev["Content-Type"] == "application/octet-stream"
+    assert "attachment" in ev["Content-Disposition"]
 
     resp = admin_client.post(
         f"/admin-panel/verifications/{req.id}/decide", {"action": "approve"}

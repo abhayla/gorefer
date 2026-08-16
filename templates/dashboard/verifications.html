@@ -22,6 +22,11 @@
             <span class="text-[10px] font-bold rounded-full px-2 py-0.5 {% if req.kind == 'evidence' %}bg-amber-100 text-amber-700{% else %}bg-cobalt-50 text-cobalt-600{% endif %}">
               {% if req.kind == 'evidence' %}Path B — screenshot{% else %}OAuth — no match{% endif %}
             </span>
+            {% if req.onfile_status == 'mismatch' %}
+              <span class="text-[10px] font-bold rounded-full px-2 py-0.5 bg-orange-100 text-orange-700" title="Client ID is on file, but the submitted details didn't match it">Details mismatched</span>
+            {% elif req.onfile_status == 'unknown' %}
+              <span class="text-[10px] font-bold rounded-full px-2 py-0.5 bg-red-100 text-red-700" title="Client ID isn't on file at all">Client ID unknown</span>
+            {% endif %}
             <span class="text-[11px] text-ink-300">{{ req.created_at|date:"d M Y H:i" }}</span>
           </div>
           <div class="mt-1 text-[12px] text-ink-500">

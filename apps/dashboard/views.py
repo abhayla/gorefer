@@ -19,6 +19,10 @@ from apps.tenants.resolve import get_current_tenant
 
 from . import preferences_service, profile, queries
 
+# T-158 pt 37 — evidence is always served as a download; the extension is cosmetic
+# (naming the saved file), never trusted as the actual content-type.
+_EVIDENCE_EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+
 
 def _staff_required(view):
     """Gate a view behind login + is_staff (admin-only, Sprint 1)."""
@@ -357,7 +361,16 @@ def verification_evidence(request, request_id: int):
     req = VerificationRequest.objects.for_tenant(tenant).filter(id=request_id).first()
     if req is None or req.evidence is None:
         raise Http404("no evidence")
-    return HttpResponse(bytes(req.evidence), content_type=req.evidence_content_type or "image/png")
+    # T-158 pt 37: served as a forced download, never a renderable content-type — a
+    # staff-only screenshot must not be able to execute/render inline in the admin
+    # browser regardless of what content-type the original upload claimed.
+    ext = _EVIDENCE_EXTENSIONS.get(req.evidence_content_type, "bin")
+    response = HttpResponse(bytes(req.evidence), content_type="application/octet-stream")
+    response["Content-Disposition"] = (
+        f'attachment; filename="verification-{req.client_id}-{req.id}.{ext}"'
+    )
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @_staff_required

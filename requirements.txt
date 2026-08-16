@@ -5,6 +5,7 @@ django-ninja>=1.6,<2.0
 django-q2>=1.7              # background queue (ORM broker — no Redis)
 psycopg2-binary>=2.9        # PostgreSQL driver (the sole supported engine — M10)
 python-dotenv>=1.0
+Pillow>=10.0                 # T-158: real image-decode check on Path-B evidence uploads
 
 # Dev / CI
 pytest>=8.0

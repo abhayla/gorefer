@@ -154,12 +154,25 @@ class VerificationRequest(TimestampedModel, TenantScopedModel):
         (STATUS_REJECTED, "rejected"),
     ]
 
+    # Admin-queue badge (T-158 pt 29): whether the client_id was ALREADY on file
+    # (Customer/Zoho) at submission time — distinguishes "we know this person and
+    # their submitted details didn't match" from "we've never heard of this
+    # client_id at all". Computed once at submission (onfile.resolve_onfile), not
+    # re-resolved at render time, so the admin queue never triggers a live Zoho call.
+    ONFILE_UNKNOWN = "unknown"    # client_id not found in Customer/Zoho at all
+    ONFILE_MISMATCH = "mismatch"  # client_id found, but submitted details didn't match
+    ONFILE_STATUS_CHOICES = [
+        (ONFILE_UNKNOWN, "unknown to the system"),
+        (ONFILE_MISMATCH, "found, details mismatched"),
+    ]
+
     kind = models.CharField(max_length=20, choices=KIND_CHOICES)
     client_id = models.CharField(max_length=64)
     # What the requester supplied (their CLAIM — verified by a human, never trusted):
     registered_name = models.CharField(max_length=160, blank=True, default="")
     mobile_entered = models.CharField(max_length=20, blank=True, default="")
     google_email = models.EmailField(blank=True, default="")
+    onfile_status = models.CharField(max_length=20, blank=True, default="")
     # Path-B evidence: the Zerodha-console screenshot, held erasably; purged on decision.
     evidence = models.BinaryField(null=True, blank=True, editable=False)
     evidence_content_type = models.CharField(max_length=60, blank=True, default="")
