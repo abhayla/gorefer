@@ -104,6 +104,35 @@ class FollowupWindow(TimestampedModel, TenantScopedModel):
         return f"followup_window<{self.mobile}:{self.last_inbound_at}>"
 
 
+class WhatsAppOptOut(TimestampedModel, TenantScopedModel):
+    """Persistent, tenant-scoped WhatsApp opt-out registry, keyed by (tenant, mobile).
+
+    T-149: `FollowupWindow.opted_out` alone was never enough — nothing sets it from a
+    real inbound signal, and the field disappears if the window row is ever pruned. This
+    table is the durable opt-out record, independent of window/Prospect lifecycle (a
+    mobile can opt out before it is ever a Prospect, and outlives an erased/pseudonymised
+    one — `apps.common.privacy.erase_subject` rewrites `Prospect.mobile` but this table
+    is keyed on whatever mobile the opt-out arrived from, exactly like `FollowupWindow`).
+    `is_opted_out()` (apps.followups.services) reads BOTH this table and the window flag;
+    setting one always sets the other (see `record_opt_out`).
+    """
+
+    mobile = models.CharField(max_length=20)
+    # What triggered it — a keyword match ("STOP") vs a manual admin action, for audit.
+    source = models.CharField(max_length=40, blank=True, default="keyword")
+
+    class Meta:
+        db_table = "whatsapp_opt_outs"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "mobile"], name="uq_whatsapp_optout_tenant_mobile"
+            ),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"whatsapp_opt_out<{self.mobile}>"
+
+
 class ScheduledFollowup(TimestampedModel, TenantScopedModel):
     """One contact's scheduled follow-up for one rule step (the due-table row).
 

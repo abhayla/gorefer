@@ -219,10 +219,13 @@ def poll_inbound_windows(limit: int = 50) -> dict:
     prospect whose mobile we already know, the candidate set is bounded and knowable:
       - a per-AP config watch-list (`followup_poll_watch_mobiles`, comma-separated), plus
       - recent Prospect mobiles (last 3 days).
-    For each, read the newest customer-inbound time (adapter.get_latest_inbound_at, the
-    confirmed real-time getMessages endpoint); if it's newer than what we've recorded, call
-    record_inbound → stamp the window + (on a fresh 24h open) enqueue the cadence. Runs on the
-    `followup_inbound_poll` schedule. Inert unless `followups_enabled` (record_inbound re-checks).
+    For each, read the newest customer-inbound (adapter.get_latest_inbound, the confirmed
+    real-time getMessages endpoint — T-149 added the message TEXT alongside the timestamp);
+    if it's newer than what we've recorded, call record_inbound → stamp the window + (on a
+    fresh 24h open) enqueue the cadence, OR — if the text is an opt-out keyword — record the
+    opt-out instead (record_inbound's own short-circuit; see the wati webhook module).
+    Runs on the `followup_inbound_poll` schedule. Inert unless `followups_enabled`
+    (record_inbound re-checks).
     """
     from datetime import timedelta
 
@@ -260,16 +263,19 @@ def poll_inbound_windows(limit: int = 50) -> dict:
         for mobile in list(mobiles)[:limit]:
             counts["checked"] += 1
             try:
-                latest = adapter.get_latest_inbound_at(mobile)
+                found = adapter.get_latest_inbound(mobile)
             except Exception:
-                logger.warning("poll: get_latest_inbound_at failed", exc_info=True)
+                logger.warning("poll: get_latest_inbound failed", exc_info=True)
                 continue
-            if latest is None:
+            if found is None:
                 continue
+            latest, text = found
             win = FollowupWindow.objects.for_tenant(tenant).filter(mobile=mobile).first()
             if win is not None and win.last_inbound_at is not None and latest <= win.last_inbound_at:
                 continue  # already recorded this inbound — nothing new
-            res = record_inbound(tenant, mobile, latest)
+            res = record_inbound(tenant, mobile, latest, text=text)
+            if res.get("opted_out"):
+                counts["opted_out"] = counts.get("opted_out", 0) + 1
             if res.get("opened_fresh"):
                 counts["opened"] += 1
             counts["enqueued"] += res.get("enqueued", 0)

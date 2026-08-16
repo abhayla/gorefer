@@ -47,3 +47,24 @@ def health(request):
         "service": "gorefer",
         "demo_mode": flags.ENABLE_DEMO_MODE,
     }
+
+
+@api.get("/health/worker")
+def health_worker(request):
+    """Background-worker (qcluster) liveness, for EXTERNAL monitoring (T-149).
+
+    Deliberately public/no-auth — cheap enough for 5-minute polling from outside the
+    app (the Notifier probe, T-151) and carries no PII/business data to protect: just
+    `worker_health()`'s state + last-success timestamp, the same signal already shown
+    (staff-only) in the admin topbar via `apps.dashboard.health.worker_health`. Reuses
+    that function verbatim rather than re-deriving worker liveness a second way.
+    """
+    from apps.dashboard.health import worker_health
+
+    h = worker_health()
+    return {
+        "status": "ok",
+        "service": "gorefer",
+        "state": h["state"],
+        "last_success_at": h["last_run"].isoformat() if h["last_run"] else None,
+    }

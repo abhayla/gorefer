@@ -173,7 +173,9 @@ def inbound_message(request):
                 if created:
                     send_alert(tenant, req)
 
-    result = record_inbound(tenant, str(mobile), _parse_ts(raw.get("timestamp")))
+    result = record_inbound(
+        tenant, str(mobile), _parse_ts(raw.get("timestamp")), text=raw.get("text")
+    )
     return {"status": "ok", **result}
 
 

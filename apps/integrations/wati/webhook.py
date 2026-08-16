@@ -166,11 +166,18 @@ def process_assisted_capture(request, payload: dict) -> dict:
 
 
 def record_inbound(tenant, mobile: str, at=None, *, prospect_id: int | None = None,
-                   source_event: str = "wati_inbound", pref_lang: str = "en") -> dict:
+                   source_event: str = "wati_inbound", pref_lang: str = "en",
+                   text: str | None = None) -> dict:
     """Stamp the window for one inbound; start the cadence on a fresh open.
 
     Pure of any HTTP concern so it is unit-testable and reusable (endpoint, backfill,
     or a live getMessages fallback). Returns a small result dict.
+
+    T-149: opt-out detection runs FIRST, before `stamp_inbound` can open a window or
+    `enqueue_followups` can start a cadence. A prospect replying "STOP" after >24h of
+    silence must never look like a fresh "yes interested" re-engagement — so a matched
+    opt-out short-circuits here: the opt-out is recorded (which also cancels every
+    pending ScheduledFollowup for this contact) and NOTHING is stamped/enqueued.
     """
     from apps.common.phone import normalize_phone
     from apps.followups import services, tasks
@@ -178,6 +185,13 @@ def record_inbound(tenant, mobile: str, at=None, *, prospect_id: int | None = No
     canonical = normalize_phone(mobile)
     if not canonical:
         return {"stamped": False, "reason": "no mobile"}
+
+    if services.is_optout_text(text, tenant_id=getattr(tenant, "id", None)):
+        services.record_opt_out(tenant, canonical, source="keyword")
+        return {
+            "stamped": False, "mobile": canonical, "opened_fresh": False,
+            "enqueued": 0, "opted_out": True, "reason": "opt-out keyword matched",
+        }
 
     window, opened_fresh = services.stamp_inbound(tenant, canonical, at)
     result = {"stamped": True, "mobile": canonical, "opened_fresh": opened_fresh, "enqueued": 0}

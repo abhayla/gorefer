@@ -16,7 +16,7 @@ from django.utils import timezone
 
 from apps.config.cascade import resolve
 
-from .models import FollowupRule, FollowupWindow, ScheduledFollowup
+from .models import FollowupRule, FollowupWindow, ScheduledFollowup, WhatsAppOptOut
 
 logger = logging.getLogger("gorefer.followups.services")
 # Cascade key (lowercase, matching the domain-config convention: landing_mode,
@@ -77,26 +77,97 @@ def get_window(tenant, mobile: str) -> FollowupWindow | None:
 
 
 def is_opted_out(tenant, mobile: str) -> bool:
-    """Per-AP per-contact opt-out (doc-13 G-4).
+    """Per-AP per-contact opt-out (doc-13 G-4; persistent registry added T-149).
 
-    Primary store is the window row's `opted_out` flag (keyed by tenant+mobile, exactly
-    the AP-per-contact scope). Also honours a future `whatsapp_opt_out` on a matching
-    Prospect (the hook wati/notify already reads), so a later field suppresses cleanly.
+    Reads BOTH real, tenant-scoped opt-out records for (tenant, mobile):
+      - `FollowupWindow.opted_out` — the window-row flag, kept for back-compat with
+        rows/tests that set it directly.
+      - `WhatsAppOptOut` — the durable registry (T-149), which survives independently
+        of the window row's own lifecycle and is what `record_opt_out` below writes.
+    Either being True is enough — an opt-out must never require BOTH rows to exist.
     """
     win = get_window(tenant, mobile)
     if win is not None and win.opted_out:
         return True
-    from apps.referrals.models import Prospect
-
-    return Prospect.objects.for_tenant(tenant).filter(
-        mobile=mobile, deleted_at__isnull=True, whatsapp_opt_out=True
-    ).exists() if _prospect_has_optout_field() else False
+    return WhatsAppOptOut.objects.for_tenant(tenant).filter(mobile=mobile).exists()
 
 
-def _prospect_has_optout_field() -> bool:
-    from apps.referrals.models import Prospect
+def record_opt_out(tenant, mobile: str, *, source: str = "keyword") -> None:
+    """Persist an opt-out for (tenant, mobile): registry row + window flag + cancel
+    every pending ScheduledFollowup for this contact (T-149).
 
-    return any(f.name == "whatsapp_opt_out" for f in Prospect._meta.get_fields())
+    Idempotent — a repeat opt-out (e.g. "STOP" sent twice) is a no-op past the first
+    registry row and leaves no duplicate cancellations (already-terminal rows are
+    excluded from the update).
+    """
+    WhatsAppOptOut.objects.for_tenant(tenant).get_or_create(
+        tenant=tenant, mobile=mobile, defaults={"source": source}
+    )
+    win = get_window(tenant, mobile)
+    if win is not None:
+        if not win.opted_out:
+            win.opted_out = True
+            win.save(update_fields=["opted_out", "updated_at"])
+    else:
+        FollowupWindow.objects.for_tenant(tenant).create(
+            tenant=tenant, mobile=mobile, opted_out=True
+        )
+    (
+        ScheduledFollowup.objects.for_tenant(tenant)
+        .filter(mobile=mobile, status=ScheduledFollowup.STATUS_SCHEDULED)
+        .update(status=ScheduledFollowup.STATUS_CANCELLED, reason="opted out", updated_at=timezone.now())
+    )
+
+
+# --- Opt-out keyword detection (T-149) ----------------------------------------------
+# Config-resolved (rail E-6) — see apps.config.preferences.FOLLOWUP_OPTOUT_KEYWORDS_EN/_HI.
+# Detection is a WHOLE-TOKEN match (never a bare substring): "STOP" must match "stop" or
+# "please stop" but never "nonstop" or "stopwatch". Checked BEFORE stamp_inbound can open
+# a window / start a cadence — see apps.integrations.services.record_inbound.
+
+
+def _optout_keywords(tenant_id: int | None) -> list[str]:
+    from apps.config.preferences import (
+        FOLLOWUP_OPTOUT_KEYWORDS_EN,
+        FOLLOWUP_OPTOUT_KEYWORDS_EN_DEFAULT,
+        FOLLOWUP_OPTOUT_KEYWORDS_HI,
+        FOLLOWUP_OPTOUT_KEYWORDS_HI_DEFAULT,
+    )
+
+    words: list[str] = []
+    for key, default in (
+        (FOLLOWUP_OPTOUT_KEYWORDS_EN, FOLLOWUP_OPTOUT_KEYWORDS_EN_DEFAULT),
+        (FOLLOWUP_OPTOUT_KEYWORDS_HI, FOLLOWUP_OPTOUT_KEYWORDS_HI_DEFAULT),
+    ):
+        try:
+            raw = resolve(key, tenant_id=tenant_id, default=default)
+        except Exception:
+            raw = default
+        if isinstance(raw, list):
+            words.extend(str(w) for w in raw)
+        elif isinstance(raw, str) and raw.strip():
+            words.append(raw)
+    return [w.strip().lower() for w in words if str(w).strip()]
+
+
+def is_optout_text(text: str | None, tenant_id: int | None = None) -> bool:
+    """True when `text` (a raw inbound message body) is a WhatsApp opt-out keyword.
+
+    Case-insensitive, whole-token match against the tenant's configured keyword list
+    (EN + HI). An empty/None text never matches. Punctuation-trimmed on each token so
+    "STOP." or "Stop!" still match.
+    """
+    if not text or not str(text).strip():
+        return False
+    keywords = set(_optout_keywords(tenant_id))
+    if not keywords:
+        return False
+    import re
+
+    tokens = [t.strip(".,!?।-").lower() for t in re.split(r"\s+", str(text).strip())]
+    tokens = [t for t in tokens if t]
+    normalized_whole = " ".join(tokens)
+    return any(t in keywords for t in tokens) or normalized_whole in keywords
 
 
 def stamp_inbound(tenant, mobile: str, at=None) -> tuple[FollowupWindow, bool]:

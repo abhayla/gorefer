@@ -67,6 +67,8 @@ class MessagingPort(Protocol):
 
     def get_latest_inbound_at(self, mobile: str): ...
 
+    def get_latest_inbound(self, mobile: str): ...
+
     def get_template_status(self, *, template: str) -> TemplateStatus: ...
 
 
@@ -109,6 +111,9 @@ class GuardedMessagingPort:
 
     def get_latest_inbound_at(self, mobile: str):
         return self._inner.get_latest_inbound_at(mobile)
+
+    def get_latest_inbound(self, mobile: str):
+        return self._inner.get_latest_inbound(mobile)
 
     def get_template_status(self, *, template: str) -> TemplateStatus:
         return self._inner.get_template_status(template=template)

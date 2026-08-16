@@ -74,7 +74,7 @@ def test_no_partner_code_in_client_facing_response_bodies():
     c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.7")
     # Include the Track-B client-facing surfaces: the channel-path landing (B1) and
     # the disclosure page (B2) — the code/URL must never appear in any rendered body.
-    for path in ("/", "/api/health", "/r/RJ4521", "/r/wa/RJ4521", "/open", "/d/pifs"):
+    for path in ("/", "/api/health", "/api/health/worker", "/r/RJ4521", "/r/wa/RJ4521", "/open", "/d/pifs"):
         resp = c.get(path, HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.7")
         body = resp.content.decode()
         assert "ZMPHZC" not in body, f"partner code leaked in body of {path}"

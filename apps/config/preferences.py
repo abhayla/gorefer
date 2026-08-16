@@ -636,6 +636,19 @@ MESSAGING_DIGEST_TEMPLATE_EN_DEFAULT = "gr_platform_gorefer_funnel_report_en_202
 MESSAGING_DIGEST_GREETING_NAME = "messaging_digest_greeting_name"
 MESSAGING_DIGEST_GREETING_NAME_DEFAULT = "Abhay"
 
+# --- WhatsApp opt-out keywords (T-149) ----------------------------------------------
+# The inbound-text words that withdraw WhatsApp consent, per language. A cascade key
+# (rail E-6/§6d), not a literal: final wording is T-150's SSOT conversation-map card —
+# this task only wires DETECTION, so the words must be changeable without a deploy once
+# that card lands. Matched case-insensitively against the normalized (trimmed) inbound
+# text; a message EQUALS or CONTAINS a keyword as a whole token (see
+# apps.followups.services.is_optout_text). JSON list values, mirroring SHARE_HUB_BENEFITS.
+FOLLOWUP_OPTOUT_KEYWORDS_EN = "followup_optout_keywords_en"
+FOLLOWUP_OPTOUT_KEYWORDS_EN_DEFAULT = ["STOP", "UNSUBSCRIBE"]
+
+FOLLOWUP_OPTOUT_KEYWORDS_HI = "followup_optout_keywords_hi"
+FOLLOWUP_OPTOUT_KEYWORDS_HI_DEFAULT = ["बंद", "बंद करें"]
+
 # The rows the Preferences screen's "Messaging engine" section renders + persists, in
 # display order — the same data-driven shape as NOTIFY_TEMPLATE_FIELDS, so a future
 # knob is a row here, not a new template block. `kind` picks the input widget the
@@ -904,6 +917,9 @@ def central_defaults() -> dict:
         MESSAGING_DIGEST_ALERT_RECOVERY_HITS: MESSAGING_DIGEST_ALERT_RECOVERY_HITS_DEFAULT,
         MESSAGING_DIGEST_TEMPLATE_EN: MESSAGING_DIGEST_TEMPLATE_EN_DEFAULT,
         MESSAGING_DIGEST_GREETING_NAME: MESSAGING_DIGEST_GREETING_NAME_DEFAULT,
+        # WhatsApp opt-out keywords (T-149) — see the key block above.
+        FOLLOWUP_OPTOUT_KEYWORDS_EN: FOLLOWUP_OPTOUT_KEYWORDS_EN_DEFAULT,
+        FOLLOWUP_OPTOUT_KEYWORDS_HI: FOLLOWUP_OPTOUT_KEYWORDS_HI_DEFAULT,
     }
 
 

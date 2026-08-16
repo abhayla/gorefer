@@ -322,6 +322,96 @@ def test_record_inbound_refresh_does_not_reenqueue(enabled):
     assert ScheduledFollowup.objects.filter(mobile=MOBILE).count() == 1
 
 
+# --- opt-out keyword detection (T-149) ----------------------------------------
+
+def test_stop_after_long_silence_starts_no_cadence_and_cancels_pending(enabled):
+    """(a) DoD 5: STOP received after >24h silence must not look like re-engagement.
+
+    A pending step already scheduled from an earlier (now-stale) window must be
+    cancelled, and the STOP reply itself must open NO fresh window / enqueue NO cadence
+    — the opt-out short-circuit in wati.webhook.record_inbound runs before stamp_inbound.
+    """
+    from apps.followups.models import WhatsAppOptOut
+    from apps.integrations.wati.webhook import record_inbound
+
+    rule = _rule(enabled, step_key="s1")
+    win = _open_window(enabled, ago_hours=30)  # window closed >24h ago
+    sf = _scheduled(enabled, rule, window=win)  # still pending
+
+    out = record_inbound(enabled, MOBILE, text="STOP")
+
+    assert out["opted_out"] is True
+    assert out["stamped"] is False
+    assert out["opened_fresh"] is False
+    assert out["enqueued"] == 0
+    assert WhatsAppOptOut.objects.filter(tenant=enabled, mobile=MOBILE).exists()
+    win.refresh_from_db()
+    assert win.opted_out is True
+    sf.refresh_from_db()
+    assert sf.status == ScheduledFollowup.STATUS_CANCELLED
+    assert "opted out" in sf.reason
+    # No cadence was (re)started off this inbound.
+    assert not ScheduledFollowup.objects.filter(
+        mobile=MOBILE, status=ScheduledFollowup.STATUS_SCHEDULED
+    ).exists()
+
+
+def test_non_optout_reply_still_opens_window_as_today(enabled):
+    """(b) DoD 5: an ordinary reply after >24h silence still opens a fresh window."""
+    from apps.integrations.wati.webhook import record_inbound
+
+    _rule(enabled, step_key="s1")
+    out = record_inbound(enabled, MOBILE, text="yes I'm interested")
+
+    assert out.get("opted_out", False) is False
+    assert out["opened_fresh"] is True
+    assert out["enqueued"] == 1
+    assert FollowupWindow.objects.get(mobile=MOBILE).opted_out is False
+
+
+def test_optout_keyword_detection_case_insensitive_and_hindi(tenant):
+    assert services.is_optout_text("stop", tenant_id=tenant.id) is True
+    assert services.is_optout_text("Stop.", tenant_id=tenant.id) is True
+    assert services.is_optout_text("please STOP now", tenant_id=tenant.id) is True
+    assert services.is_optout_text("unsubscribe", tenant_id=tenant.id) is True
+    assert services.is_optout_text("बंद", tenant_id=tenant.id) is True
+    # Whole-token only — must not false-positive on a substring.
+    assert services.is_optout_text("nonstop fun", tenant_id=tenant.id) is False
+    assert services.is_optout_text("stopwatch", tenant_id=tenant.id) is False
+    assert services.is_optout_text("yes interested", tenant_id=tenant.id) is False
+    assert services.is_optout_text(None, tenant_id=tenant.id) is False
+    assert services.is_optout_text("", tenant_id=tenant.id) is False
+
+
+def test_record_opt_out_is_idempotent(enabled):
+    from apps.followups.models import WhatsAppOptOut
+
+    services.record_opt_out(enabled, MOBILE, source="keyword")
+    services.record_opt_out(enabled, MOBILE, source="keyword")
+
+    assert WhatsAppOptOut.objects.filter(tenant=enabled, mobile=MOBILE).count() == 1
+
+
+def test_poll_inbound_records_opt_out_from_text(enabled, monkeypatch):
+    """The poll_inbound_windows backstop must run the same opt-out check as the webhook."""
+    _rule(enabled, step_key="s1")
+    win = _open_window(enabled, ago_hours=30)
+    set_tenant("followup_poll_watch_mobiles", MOBILE, tenant_id=enabled.id)
+    adapter = _FakeAdapter(
+        {MOBILE: win.last_inbound_at + timedelta(hours=1)},
+        text_by_mobile={MOBILE: "STOP"},
+    )
+    monkeypatch.setattr(tasks, "get_wati_adapter", lambda: adapter)
+
+    out = tasks.poll_inbound_windows()
+
+    assert out.get("opted_out", 0) == 1
+    win.refresh_from_db()
+    assert win.opted_out is True
+    # No cadence started off the STOP-triggering inbound.
+    assert not ScheduledFollowup.objects.filter(mobile=MOBILE).exists()
+
+
 def test_inbound_endpoint_accepts_query_token(enabled, settings):
     # Wati's native webhook delivers the secret as ?token=<key> (not a header).
     settings.WATI_WEBHOOK_KEY = "testkey123"
@@ -621,11 +711,18 @@ def test_seed_cadence_gives_each_step_distinct_copy(tenant):
 # --- inbound poll (window-feed) ----------------------------------------------
 
 class _FakeAdapter:
-    def __init__(self, ts_by_mobile):
+    def __init__(self, ts_by_mobile, text_by_mobile=None):
         self._ts = ts_by_mobile
+        self._text = text_by_mobile or {}
 
     def get_latest_inbound_at(self, mobile):
         return self._ts.get(mobile)
+
+    def get_latest_inbound(self, mobile):
+        ts = self._ts.get(mobile)
+        if ts is None:
+            return None
+        return ts, self._text.get(mobile, "")
 
 
 def test_poll_opens_window_and_enqueues_from_watchlist(enabled, monkeypatch):

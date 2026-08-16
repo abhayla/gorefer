@@ -37,13 +37,19 @@ def enqueue_lead_upsert(lead_id: int) -> None:
 
 
 def record_inbound(tenant, mobile: str, at=None, *, prospect_id: int | None = None,
-                   source_event: str = "wati_inbound", pref_lang: str = "en") -> dict:
-    """Stamp a WATI inbound-window event. See `wati.webhook.record_inbound`."""
+                   source_event: str = "wati_inbound", pref_lang: str = "en",
+                   text: str | None = None) -> dict:
+    """Stamp a WATI inbound-window event. See `wati.webhook.record_inbound`.
+
+    `text` (T-149) is the inbound message body — checked for an opt-out keyword BEFORE
+    the window is stamped/cadence enqueued. Optional so every existing caller (which
+    doesn't have the text) keeps working unchanged.
+    """
     from apps.integrations.wati.webhook import record_inbound as _impl
 
     return _impl(
         tenant, mobile, at,
-        prospect_id=prospect_id, source_event=source_event, pref_lang=pref_lang,
+        prospect_id=prospect_id, source_event=source_event, pref_lang=pref_lang, text=text,
     )
 
 

@@ -20,7 +20,7 @@ protects them while leaving every cookie-less caller untouched:
   /api/click/*                 public beacon (no auth)     no
   /api/wati/webhook, /inbound  static key + IP allowlist   no (server-to-server)
   /api/zoho/status-webhook     HMAC seal / static key      no (server-to-server)
-  /api/health                  public                      no
+  /api/health, /health/worker  public                      no
 
 Both halves are asserted below. A blanket `csrf=True` on the NinjaAPI would 403 the
 webhooks and break the live conversion pipe — the tests at the bottom are the tripwire

@@ -244,6 +244,28 @@ def test_opt_out_cancels(tenant, monkeypatch):
     assert "opted out" in scm.reason
 
 
+def test_optout_registry_cancels_campaign_send(tenant, monkeypatch):
+    """(c) DoD 5/T-149: a keyword-detected opt-out (the persistent registry, not just
+    the window flag) must suppress a scheduled campaign send too — the campaigns gate
+    reuses `apps.followups.services.is_opted_out` verbatim, so this proves the fix in
+    that shared function actually reaches the campaigns engine.
+    """
+    from apps.followups.services import record_opt_out
+
+    _always_in_window(monkeypatch)
+    campaign = _campaign(tenant)
+    step = _step(campaign, tenant)
+    ref = _referrer(tenant)
+    scm = _due(campaign, step, ref, tenant=tenant)
+    record_opt_out(tenant, MOBILE, source="keyword")  # registry row, no window pre-created
+
+    tasks.fire_due_campaign_messages()
+
+    scm.refresh_from_db()
+    assert scm.status == ScheduledCampaignMessage.STATUS_CANCELLED
+    assert "opted out" in scm.reason
+
+
 def test_converted_suppression_cancels(tenant, monkeypatch):
     from apps.referrals.models import Lead, Prospect, Referral
     from apps.referrals.models import ReferralProgram as RP

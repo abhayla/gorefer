@@ -22,6 +22,24 @@ def test_health_endpoint_leaks_no_partner_code(db):
     assert "ZMPHZC" not in resp.content.decode()
 
 
+def test_worker_health_endpoint_ok(db, settings):
+    # T-149: public, no-auth probe for external monitoring (the Notifier probe, T-151).
+    settings.Q_CLUSTER = {**settings.Q_CLUSTER, "sync": True}
+    resp = Client().get("/api/health/worker")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["service"] == "gorefer"
+    assert body["state"] in ("healthy", "stale", "unknown")
+    assert "last_success_at" in body
+
+
+def test_worker_health_endpoint_requires_no_auth(db):
+    # A monitoring probe that needed a session/API key couldn't be polled externally.
+    resp = Client().get("/api/health/worker")
+    assert resp.status_code == 200
+
+
 def test_home_page_renders_compliance_footer(db):
     resp = Client().get("/")
     assert resp.status_code == 200

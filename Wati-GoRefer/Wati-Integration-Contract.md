@@ -215,6 +215,43 @@ closed → template if the step has one (and it isn't session-only), else skip. 
 on the `ScheduledFollowup` row (SENT/FAILED/SKIPPED/CANCELLED) and a PII-free `notification` funnel
 event is emitted (no mobile, per #16).
 
+**Real opt-out detection — inbound TEXT is now plumbed, not just the timestamp (T-149,
+2026-08-16).** Before this task, `record_inbound` only ever received a timestamp: neither the
+webhook path (`POST /api/wati/inbound`) nor the poll backstop (`poll_inbound_windows`) extracted
+the message body, so a customer replying "STOP" after the 24h window had already closed was
+indistinguishable from an ordinary re-engagement — both opened a fresh window and started a new
+7-step cadence. Fixed end-to-end, vendor boundary preserved (E-3: no vendor import escapes
+`apps/integrations`):
+
+- `LiveWatiAdapter.get_latest_inbound(mobile)` (new; `get_latest_inbound_at` kept as a thin
+  timestamp-only wrapper over it for any caller that doesn't need the body) returns
+  `(timestamp, text)` from the same `getMessages/{number}` item the timestamp already came from.
+- `POST /api/wati/inbound` now passes `raw.get("text")` through to `record_inbound`.
+- `apps.integrations.services.record_inbound` (the vendor-neutral facade) gained an optional
+  `text` kwarg, forwarded to `wati.webhook.record_inbound` — every existing caller that omits it
+  is unaffected (defaults to `None`, never treated as an opt-out).
+- `wati.webhook.record_inbound` checks `apps.followups.services.is_optout_text(text, tenant_id=…)`
+  **BEFORE** `stamp_inbound` can open a window or `enqueue_followups` can start a cadence. A match
+  short-circuits: `apps.followups.services.record_opt_out` runs instead (persistent opt-out row +
+  `FollowupWindow.opted_out=True` + cancel every pending `ScheduledFollowup` for that mobile), and
+  the function returns `{"stamped": false, "opted_out": true, ...}` — nothing is stamped or
+  enqueued.
+- Keyword list is a cascade config key (rail E-6), not a literal — `followup_optout_keywords_en`
+  (default `["STOP", "UNSUBSCRIBE"]`) and `followup_optout_keywords_hi` (default `["बंद", "बंद
+  करें"]`), resolved per-tenant. Matching is case-insensitive, whole-token (never a bare substring
+  — "STOP" matches "please stop" but not "nonstop" or "stopwatch"). Final wording/keyword set is
+  T-150's SSOT conversation-map card to refine — this task only wires detection so it can change
+  without a deploy once that card lands. **No confirmation reply is sent by this change** — that
+  copy also belongs to T-150; if a reply is ever wired here it will sit behind its own
+  default-OFF config flag.
+- The persistent registry (`apps.followups.models.WhatsAppOptOut`, table `whatsapp_opt_outs`,
+  unique on `(tenant, mobile)`) is new because `FollowupWindow.opted_out` alone is not durable —
+  it disappears if the window row is ever pruned, and nothing previously set it from a real
+  inbound signal at all. `apps.followups.services.is_opted_out` now reads BOTH the window flag and
+  this registry (either being true suppresses); the campaigns engine (`apps.campaigns.services`)
+  imports `is_opted_out` verbatim, so campaign sends are suppressed by the same fix with no
+  separate code path.
+
 **Window feed — POLLING is the reliable trigger (the inbound webhook is chatbot-suppressed).**
 Verified on the live tenant: Wati's "New Contact Message" webhook does NOT fire for an inbound the
 account chatbot auto-replies to (the "Welcome" flow swallows it), and no "Message Received" (fire-on-

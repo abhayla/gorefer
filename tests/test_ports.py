@@ -98,11 +98,11 @@ def test_record_inbound_delegates():
         target.return_value = {"ok": True}
         result = services.record_inbound(
             "tenant", "919876543210", "at",
-            prospect_id=7, source_event="wati_inbound", pref_lang="en",
+            prospect_id=7, source_event="wati_inbound", pref_lang="en", text="hi",
         )
     target.assert_called_once_with(
         "tenant", "919876543210", "at",
-        prospect_id=7, source_event="wati_inbound", pref_lang="en",
+        prospect_id=7, source_event="wati_inbound", pref_lang="en", text="hi",
     )
     assert result == {"ok": True}
 

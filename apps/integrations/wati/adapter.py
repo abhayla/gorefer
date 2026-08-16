@@ -125,6 +125,10 @@ class LogOnlyWatiAdapter:
         # Demo/dev: no real inbound to read (no network) — the poll finds nothing to do.
         return None
 
+    def get_latest_inbound(self, mobile: str):
+        # Demo/dev: no real inbound to read (no network) — the poll finds nothing to do.
+        return None
+
     def get_template_status(self, *, template: str) -> TemplateStatus:
         # Demo/dev made NO network call, so this is a SIMULATED approval, flagged as
         # such — demo mode must still run end-to-end (CLAUDE.md §7) without ever
@@ -398,13 +402,26 @@ class LiveWatiAdapter:
     def get_latest_inbound_at(self, mobile: str):
         """Return the newest CUSTOMER-inbound timestamp for a number (aware UTC), or None.
 
+        Thin wrapper over `get_latest_inbound` (T-149 added the text-carrying sibling);
+        kept so any existing caller that only needs the timestamp is unaffected.
+        """
+        found = self.get_latest_inbound(mobile)
+        return found[0] if found else None
+
+    def get_latest_inbound(self, mobile: str):
+        """Return (timestamp, text) for the newest CUSTOMER-inbound message, or None.
+
         The window-feed poll (apps.followups.tasks.poll_inbound_windows) uses this to
         detect when a known prospect has messaged the business (opening/refreshing their
         24h window) — the reliable trigger given Wati's inbound webhook is chatbot-
         suppressed. Reads getMessages/{number} (the SAME real-time endpoint get_message_status
         uses) and returns the newest item that is a customer message (owner is False; Wati
-        marks business-sent items owner=True and broadcasts owner=None). Returns None on any
-        error/absence — the poll then simply skips that contact this round.
+        marks business-sent items owner=True and broadcasts owner=None). T-149: the message
+        TEXT is now returned alongside the timestamp so the poll path can run the SAME
+        opt-out keyword check the inbound webhook runs — previously only the timestamp
+        flowed, so a "STOP" reply picked up by the poll was indistinguishable from any
+        other inbound. Returns None on any error/absence — the poll then simply skips that
+        contact this round.
         """
         from datetime import datetime
         from datetime import timezone as _tz
@@ -428,10 +445,12 @@ class LiveWatiAdapter:
                 try:
                     # Wati 'created' is ISO-8601 Z; 'timestamp' may be epoch seconds.
                     if isinstance(raw, str) and "T" in raw:
-                        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
-                    return datetime.fromtimestamp(int(raw), tz=_tz.utc)
+                        at = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                    else:
+                        at = datetime.fromtimestamp(int(raw), tz=_tz.utc)
                 except (ValueError, TypeError, OSError):
                     return None
+                return at, (it.get("text") or "")
         return None
 
 
