@@ -1,0 +1,41 @@
+# GoRefer web app (gunicorn) — RELEASE-DIRECTORY layout (T-162).
+#
+# The only change from the unit that has been on the box since go-live is the path:
+# everything now runs through /var/www/gorefer/current, the symlink scripts/deploy.sh
+# flips atomically at the end of a deploy. systemd resolves the symlink when it execs,
+# so `systemctl restart gorefer` after a flip starts the NEW release, and
+# `scripts/rollback.sh` (flip back + restart) puts the old one back in seconds.
+#
+# Apply on <PROD-VPS> — DISPATCHER-OWNED at landing, not run by the authoring worker:
+#   sudo cp docs/deploy/systemd/gorefer.service /etc/systemd/system/gorefer.service
+#   sudo systemctl daemon-reload && sudo systemctl restart gorefer
+#   systemctl show gorefer -p WorkingDirectory -p ExecStart
+#
+# Check the CURRENT unit on the box before overwriting — if it carries a local edit
+# (worker count, timeout, extra env), carry that edit into this file first:
+#   systemctl cat gorefer
+
+[Unit]
+Description=GoRefer (Django/gunicorn)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=notify
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/gorefer/current
+EnvironmentFile=/var/www/gorefer/shared/.env
+ExecStart=/var/www/gorefer/.venv/bin/gunicorn gorefer.wsgi:application \
+    --bind 127.0.0.1:8000 \
+    --workers 3 \
+    --timeout 60 \
+    --access-logfile - \
+    --error-logfile -
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=always
+RestartSec=5
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target

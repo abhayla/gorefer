@@ -75,11 +75,13 @@ class DashboardLoginView(LoginView):
         return f"login-fail:{client_ip(self.request)}"
 
     def _is_locked(self) -> bool:
-        from django.core.cache import cache
+        from apps.common.ratelimit import counter_value
 
         if not getattr(settings, "RATELIMIT_ENABLED", False):
             return False
-        return (cache.get(self._lock_key()) or 0) >= settings.RATELIMIT_LOGIN_MAX
+        # counter_value degrades to 0 (unlocked) if the DB cache table is missing —
+        # the same "never 500 over a missing anti-spam counter" rule as ratelimit.hit.
+        return counter_value(self._lock_key()) >= settings.RATELIMIT_LOGIN_MAX
 
     def post(self, request, *args, **kwargs):
         from django.shortcuts import render
@@ -91,21 +93,16 @@ class DashboardLoginView(LoginView):
         return super().post(request, *args, **kwargs)
 
     def form_valid(self, form):
-        from django.core.cache import cache
+        from apps.common.ratelimit import clear_counter
 
-        cache.delete(self._lock_key())  # reset on success
+        clear_counter(self._lock_key())  # reset on success
         return super().form_valid(form)
 
     def form_invalid(self, form):
-        from django.core.cache import cache
+        from apps.common.ratelimit import bump_counter
 
         if getattr(settings, "RATELIMIT_ENABLED", False):
-            key = self._lock_key()
-            try:
-                if cache.add(key, 1, timeout=settings.RATELIMIT_LOGIN_WINDOW) is False:
-                    cache.incr(key)
-            except ValueError:
-                cache.add(key, 1, timeout=settings.RATELIMIT_LOGIN_WINDOW)
+            bump_counter(self._lock_key(), window=settings.RATELIMIT_LOGIN_WINDOW)
         return super().form_invalid(form)
 
 

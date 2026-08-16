@@ -279,9 +279,27 @@ Any NEW literal that governs **what a message says, where a link points, when so
 suppressed, how long/often something runs, or what a page shows** must, in the SAME PR, either
 become a cascade-resolved config key (with its old value as the default — zero behavior change)
 or be explicitly justified as structural. This generalizes §6d from messages to every behavior
-(doc 16 §3.2, owner-ratified 2026-07-27). The hard stops are the CI rails (`tests/
-test_architecture_rails.py`, `scripts/check_architecture.py`); this section is the
-authoring-time rule that keeps the rails from firing.
+(doc 16 §3.2, owner-ratified 2026-07-27).
+
+**How E-6 is actually enforced — read this before trusting it (corrected 2026-08-17, T-162).**
+E-6 is an **authoring-time convention, checked in review and by per-mission spot tests. There is
+NO generic CI rail that scans a diff for new behavior literals** — such a check does not exist
+and no test can currently tell a behavior literal from any other constant. The mechanical rails
+that DO fail a build are different rules: `tests/test_architecture_rails.py` covers **E-1**
+(every compliance-locked key is seeded centrally) and **E-2** (rendered compliance text tracks
+the locked resolver), and `scripts/check_architecture.py` covers **E-3** (no vendor imports
+outside `apps/integrations`). The three E-6 spot tests in the suite each pin ONE mission's keys,
+and only those:
+
+| Spot test | What it pins |
+|---|---|
+| `tests/test_t053_share_hub.py::test_every_copy_block_is_a_cascade_key` | share-hub headline/benefits/guidance copy resolves from the cascade |
+| `tests/test_t054_mint_api.py::test_record_date_format_comes_from_config` | the date pattern that shapes what the message says is a cascade key |
+| `tests/test_t078_email_otp.py` (module invariant 6) | OTP email subject + body resolve from the cascade |
+
+So: a new hard-coded behavior literal in a NEW area **will pass CI**. Catching it depends on the
+author following this section and the reviewer checking it — which is exactly why it is written
+here. When you add a behavior key, add its spot test in the same PR; that is how this list grows.
 
 ## 6f. WhatsApp category strategy — marketing-primary, utility-everywhere-else (owner rules, 2026-07-27)
 

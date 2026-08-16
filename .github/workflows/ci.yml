@@ -88,16 +88,21 @@ jobs:
       - name: Migrate (Postgres)
         run: python manage.py migrate --noinput
 
-      - name: Tests (pytest + coverage report)
-        # Coverage is REPORT-ONLY: no --cov-fail-under, no threshold, so this can never
-        # fail the build on its own. It exists to make the number visible in the log.
+      - name: Tests (pytest + coverage floor)
+        # T-162 (owner-approved point 26): coverage is now a FLOOR, not just a report.
+        # Measured on main at 06cf2bc: 91% (8822/9730 statements covered, 1448 tests).
+        # The floor is set to 86 — five points below the measured number — so no existing
+        # PR can trip it, while a real drop (deleting tests, merging a large untested
+        # module) fails the build instead of quietly eroding the suite.
+        # Raise the floor when the measured number rises; never lower it to make a PR pass.
         # `python -m pytest -q` locally still runs exactly as before (no cov flags).
         run: |
           python -m pytest -q \
             --cov=apps --cov=api --cov=gorefer \
-            --cov-report=term --cov-report=term-missing:skip-covered
+            --cov-report=term --cov-report=term-missing:skip-covered \
+            --cov-fail-under=86
 
       - name: Coverage summary
         if: always()
         run: |
-          echo "Coverage is report-only — no threshold gates this build."
+          echo "Coverage floor: 86% (measured 91% on main at 06cf2bc, T-162)."

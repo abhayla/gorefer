@@ -1,4 +1,13 @@
-# GoRefer nginx — origin lockdown (Cloudflare-only)
+# GoRefer nginx — origin lockdown (Cloudflare-only) + release-layout paths
+
+## `gorefer-paths.conf` (T-162)
+
+The `location` blocks for the release-directory layout: `/static/` is served from
+`/var/www/gorefer/shared/staticfiles/` (the shared path every release symlinks in), and
+`/` proxies to gunicorn on `127.0.0.1:8000`. Because nginx touches neither the release
+directories nor the `current` symlink, **a deploy or a rollback needs no nginx reload** —
+the pointer flip plus a service restart is the whole cutover. Applied at first cutover;
+see `docs/deploy/DEPLOY-TARGET.md`.
 
 ## `cloudflare-allow.conf`
 

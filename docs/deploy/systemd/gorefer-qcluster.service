@@ -1,0 +1,32 @@
+# GoRefer background worker (django-q qcluster) — RELEASE-DIRECTORY layout (T-162).
+#
+# Runs every scheduled job: Zoho retry/backfill/reconcile/name-sync, rollup recompute,
+# WATI delivery reconcile + terminal-status polling, PII retention purge, nonce purges,
+# follow-up sweep + inbound poll. If this is dead, all of that silently stops — hence
+# Restart=always (T-149) and the resource fence drop-in (T-162, see
+# gorefer-qcluster-resources.conf).
+#
+# Apply on <PROD-VPS> — DISPATCHER-OWNED at landing:
+#   sudo cp docs/deploy/systemd/gorefer-qcluster.service /etc/systemd/system/gorefer-qcluster.service
+#   sudo systemctl daemon-reload && sudo systemctl restart gorefer-qcluster
+#   systemctl cat gorefer-qcluster   # check for local edits BEFORE overwriting
+
+[Unit]
+Description=GoRefer background worker (django-q qcluster)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/gorefer/current
+EnvironmentFile=/var/www/gorefer/shared/.env
+ExecStart=/var/www/gorefer/.venv/bin/python manage.py qcluster
+# T-149: a crashed/OOM-killed worker must come back by itself, not wait for a human.
+Restart=always
+RestartSec=10
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target
