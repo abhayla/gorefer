@@ -143,7 +143,37 @@ a role turned off is recorded `skipped` with a reason, never silently dropped.
 | `WATI_ALLOW_ALL_RECIPIENTS` | the fail-closed recipient gate (§3) |
 | `WATI_TEST_RECIPIENTS` | the allowlist when allow-all is off |
 | `WATI_WEBHOOK_KEY` / `_IP_ALLOWLIST` | inbound assisted-capture **and** inbound-message webhook auth (fail-closed on a blank key) |
+| `WATI_WEBHOOK_KEY_PREVIOUS` | grace key honored ALONGSIDE `WATI_WEBHOOK_KEY` during a rotation window (§7a). Blank (default) = no grace key |
 | `followups_enabled` | the follow-up engine (§8). **Cascade key**, tenant-tier, default OFF — gates enqueue AND the send gate |
+
+### 7a. Rotating `WATI_WEBHOOK_KEY` with zero webhook loss (T-163 pt 18, 2026-08-17)
+
+`authenticate()` (`apps/integrations/wati/webhook.py`) accepts a key matching **either**
+`WATI_WEBHOOK_KEY` (current) or `WATI_WEBHOOK_KEY_PREVIOUS` (grace), both constant-time compared —
+this is what makes a quarterly rotation a zero-downtime operator task instead of a race between
+"update env" and "update Wati's dashboard config" (they can never be updated in the same instant,
+and the assisted-capture + inbound-message webhooks both use this one key).
+
+**Rotation runbook:**
+
+1. Set `WATI_WEBHOOK_KEY_PREVIOUS` = the CURRENT (soon-to-be-old) value of `WATI_WEBHOOK_KEY`.
+2. Set `WATI_WEBHOOK_KEY` = a new, freshly generated secret. Deploy/restart so both take effect.
+   For a short window, both the old and the new key authenticate — no webhook fails during this step.
+3. Update the key in the Wati dashboard's webhook config (both the assisted-capture webhook and the
+   `POST /api/wati/inbound?token=<key>` "New Contact Message" webhook — §8's wiring note) to the NEW
+   value. Wati's outbound webhook sender re-reads this on its own schedule; there is no GoRefer-side
+   way to force it to update instantly, which is exactly why step 2's grace window exists.
+4. Once confirmed (watch for successful `/api/wati/webhook` and `/api/wati/inbound` calls using the
+   new key — e.g. via access logs or a manual test POST), clear `WATI_WEBHOOK_KEY_PREVIOUS` back to
+   blank and redeploy. Leaving the old key live indefinitely defeats the point of rotating it.
+
+**Operator TODO — not attempted in T-163:** whether the Wati dashboard's webhook config can carry the
+secret as a custom header (`X-Wati-Webhook-Key`) instead of the `?token=` query param it uses today
+(§8's "Auth accepts the key as a header OR a `?token=` query param" note explains why the query form
+exists at all — Wati's sender was verified unable to attach a custom header for the inbound-message
+webhook specifically). If a header option exists for either webhook, moving to it removes the
+query-string-secret-in-access-logs trade-off; this needs checking directly in the Wati dashboard by an
+operator, not from the GoRefer codebase.
 
 ## 8. `send_session_text` + the 24h-window follow-up engine (M-FUP-1)
 

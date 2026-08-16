@@ -122,3 +122,36 @@ def test_preferences_post_rejects_out_of_range_int_and_keeps_previous(admin_clie
     assert "must be between" in html
     prefs = prefkeys.get_preferences(tenant.id)
     assert prefs[prefkeys.MESSAGING_DIGEST_SEND_HOUR_IST] == 9  # unchanged
+
+
+# --- digest recipients: per-entry mobile-number validation at SAVE time (T-163 pt 31) ---
+
+
+def test_digest_recipients_rejects_a_bad_entry_and_names_it(admin_client, tenant):
+    set_tenant(
+        prefkeys.MESSAGING_DIGEST_RECIPIENTS, "919999999999", tenant_id=tenant.id
+    )
+    resp = admin_client.post("/admin-panel/preferences", {
+        prefkeys.MESSAGING_DIGEST_RECIPIENTS: "917000000000, not-a-number",
+        "landing_mode": "page",
+    })
+    assert resp.status_code == 200
+    html = resp.content.decode()
+    assert "Recipient 2" in html
+    assert "does not look like a valid mobile number" in html
+
+    # Left unchanged — the whole submitted list is rejected, not partially saved.
+    prefs = prefkeys.get_preferences(tenant.id)
+    assert prefs[prefkeys.MESSAGING_DIGEST_RECIPIENTS] == "919999999999"
+
+
+def test_digest_recipients_saves_a_good_comma_separated_list(admin_client, tenant):
+    resp = admin_client.post("/admin-panel/preferences", {
+        prefkeys.MESSAGING_DIGEST_RECIPIENTS: "917000000000, 9888888888",
+        "landing_mode": "page",
+    })
+    assert resp.status_code == 200
+    assert b"Preferences saved" in resp.content
+
+    prefs = prefkeys.get_preferences(tenant.id)
+    assert prefs[prefkeys.MESSAGING_DIGEST_RECIPIENTS] == "917000000000, 9888888888"

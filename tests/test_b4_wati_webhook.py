@@ -85,6 +85,37 @@ def test_correct_key_valid_body_accepted(seeded, client):
     assert Lead.objects.count() == 1
 
 
+# --- key rotation grace window (T-163 pt 18) --------------------------------
+
+def test_current_key_still_accepted_during_rotation_window(seeded, client, settings):
+    # A grace key configured alongside the current one must not disturb requests
+    # still using the current key.
+    settings.WATI_WEBHOOK_KEY_PREVIOUS = "oldkey"
+    r = _post(client, ASSIST, **KEY_HEADER)
+    assert r.status_code == 200
+
+
+def test_previous_key_accepted_during_rotation_grace(seeded, client, settings):
+    # An operator rotates WATI_WEBHOOK_KEY to a new value but keeps the old one live
+    # in WATI_WEBHOOK_KEY_PREVIOUS for the grace window — Wati's own dashboard config
+    # still posts the OLD key until the operator updates it there too, and that must
+    # keep working (zero webhook loss during rotation).
+    settings.WATI_WEBHOOK_KEY_PREVIOUS = "testkey"  # the "old" key
+    settings.WATI_WEBHOOK_KEY = "newkey"  # rotated to a new current key
+    r = _post(client, ASSIST, HTTP_X_WATI_WEBHOOK_KEY="testkey")
+    assert r.status_code == 200
+    assert Lead.objects.count() == 1
+
+
+def test_wrong_key_still_rejected_with_a_previous_key_configured(seeded, client, settings):
+    # A grace key does not widen acceptance beyond "current OR previous" — a key
+    # matching neither is still rejected.
+    settings.WATI_WEBHOOK_KEY_PREVIOUS = "oldkey"
+    r = _post(client, ASSIST, HTTP_X_WATI_WEBHOOK_KEY="totally-wrong")
+    assert r.status_code == 401
+    assert Lead.objects.count() == 0
+
+
 # --- one Zoho lead, attributed to the referrer, with consent ---------------
 
 def test_assisted_capture_creates_one_lead(seeded, client):

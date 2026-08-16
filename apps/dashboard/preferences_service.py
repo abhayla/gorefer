@@ -24,6 +24,7 @@ from django.core.validators import validate_email
 from django.db import transaction
 from django.utils.text import slugify
 
+from apps.common.phone import normalize_phone
 from apps.config import preferences as prefkeys
 from apps.config.cascade import set_tenant
 from apps.config.integration_flags import (
@@ -389,12 +390,23 @@ def save_preferences(tenant, data, *, user=None) -> list[str]:
     return notices
 
 
+
+# A validated recipient must normalize to a bare 91-prefixed 10-digit Indian mobile
+# (the canonical `normalize_phone` shape) — anything else (too short, too long, not
+# numeric) is rejected here rather than silently dropped at send time by
+# `apps.campaigns.digest._digest_recipients`, which today swallows unparseable
+# entries with zero operator feedback.
+_MOBILE_RE = re.compile(r"^91\d{10}$")
+
+
 def _save_messaging_engine(tenant_id, data, *, user=None) -> list[str]:
     """Persist the messaging-engine digest/alert knobs (validated). Returns notices.
 
     Mirrors `_save_notify_templates`'s per-field shape, generalized across the three
     widget kinds (int/text/bool) `MESSAGING_ENGINE_FIELDS` declares. An invalid int is
     rejected with a notice and left unchanged — never silently clamped or dropped.
+    `MESSAGING_DIGEST_RECIPIENTS` gets its own per-entry mobile-number validation
+    (below) rather than the generic "text" pass-through.
     """
     notices: list[str] = []
     for key, label, kind, bounds in prefkeys.MESSAGING_ENGINE_FIELDS:
@@ -417,6 +429,27 @@ def _save_messaging_engine(tenant_id, data, *, user=None) -> list[str]:
                     notices.append(f"“{label}” must be between {lo} and {hi} — kept the previous value.")
                     continue
             set_tenant(key, val, tenant_id=tenant_id, user=user)
+        elif key == prefkeys.MESSAGING_DIGEST_RECIPIENTS:
+            raw = str(data.get(key) or "").strip()
+            entries = [e.strip() for e in raw.split(",") if e.strip()]
+            if not entries:
+                notices.append(f"“{label}” was not saved — at least one recipient is required.")
+                continue
+            bad_index, bad_entry = next(
+                (
+                    (i, entry)
+                    for i, entry in enumerate(entries, start=1)
+                    if not _MOBILE_RE.match(normalize_phone(entry))
+                ),
+                (None, None),
+            )
+            if bad_index is not None:
+                notices.append(
+                    f"“{label}” was not saved — Recipient {bad_index} (“{bad_entry}”) "
+                    "does not look like a valid mobile number. Kept the previous value."
+                )
+                continue
+            set_tenant(key, raw, tenant_id=tenant_id, user=user)
         else:  # text
             set_tenant(key, (data.get(key) or "").strip(), tenant_id=tenant_id, user=user)
     return notices

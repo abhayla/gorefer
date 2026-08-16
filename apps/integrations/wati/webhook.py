@@ -63,18 +63,36 @@ def authenticate(request) -> bool:
     inbound-message webhook usable without relaxing the check. (Trade-off: a query-string
     secret is visible in access logs — acceptable for a rotatable shared webhook token,
     and the same posture the pre-existing firekaro webhook already uses.)
+
+    Key rotation (T-163 pt 18): `WATI_WEBHOOK_KEY_PREVIOUS`, when set, is ALSO accepted
+    for the grace window an operator keeps it populated — a provided key matching
+    EITHER the current or the previous key passes. This is what makes rotating
+    `WATI_WEBHOOK_KEY` a zero-webhook-loss operation: without it, the instant the env
+    key changes, every in-flight webhook using the old key (already configured at
+    Wati, updated on its own schedule) starts failing until the dashboard-side value
+    is updated too. See the rotation runbook in
+    `Wati-GoRefer/Wati-Integration-Contract.md`.
     """
     expected = (getattr(settings, "WATI_WEBHOOK_KEY", "") or "").strip()
     if not expected:
         # Fail closed: no key configured => reject all (do not process the webhook).
         logger.warning("WATI webhook rejected: WATI_WEBHOOK_KEY not configured (fail-closed)")
         return False
+    previous = (getattr(settings, "WATI_WEBHOOK_KEY_PREVIOUS", "") or "").strip()
     provided = (
         request.headers.get("X-Wati-Webhook-Key", "")
         or request.GET.get("token", "")
         or ""
     ).strip()
-    if not hmac.compare_digest(provided, expected):
+    matches_current = hmac.compare_digest(provided, expected)
+    # The compare against `previous` always runs — even when no grace key is
+    # configured (previous == "") — so the code path's timing never reveals
+    # whether a grace key is set. An empty `previous` is then explicitly
+    # disqualified from matching (compare_digest("", "") would otherwise be True
+    # for an empty `provided`, which must never authenticate).
+    previous_digest_matches = hmac.compare_digest(provided, previous)
+    matches_previous = bool(previous) and previous_digest_matches
+    if not (matches_current or matches_previous):
         return False
     allowlist = [ip for ip in getattr(settings, "WATI_WEBHOOK_IP_ALLOWLIST", "").split(",") if ip]
     if not allowlist:

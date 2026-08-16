@@ -355,6 +355,10 @@ RECORDS_TOKEN_MINT_MAX_IDS = int(os.environ.get("RECORDS_TOKEN_MINT_MAX_IDS", "1
 # The Wati assisted-referral flow posts here. Same interim model as Zoho (static
 # key + IP allowlist; HMAC wax-seal deferred DF-2). Key is a SECRET (env only).
 WATI_WEBHOOK_KEY = os.environ.get("WATI_WEBHOOK_KEY", "")
+# T-163 pt 18: the PREVIOUS key, honored alongside WATI_WEBHOOK_KEY during a rotation
+# grace window so rotating the live key never drops a webhook. Blank (default) = no
+# grace key accepted, same as before this existed.
+WATI_WEBHOOK_KEY_PREVIOUS = os.environ.get("WATI_WEBHOOK_KEY_PREVIOUS", "")
 WATI_WEBHOOK_IP_ALLOWLIST = os.environ.get("WATI_WEBHOOK_IP_ALLOWLIST", "")  # csv; empty = any (dev)
 
 # --- OTP login (Q-M-OTP, behind ENABLE_OTP_LOGIN) --------------------------
