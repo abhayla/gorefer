@@ -249,3 +249,22 @@ def test_sync_never_calls_a_zoho_write_method(tenant):
     # spec=[...] means any write-shaped call (upsert_lead, upsert_referrer_contact,
     # etc.) would raise AttributeError — the mock only exposes the read method used.
     assert fake_port.method_calls == [mock.call.fetch_referrer_audience()]
+
+
+# --- 8. transport blip degrades instead of crashing the scheduled job ------------------
+
+def test_fetch_failure_degrades_instead_of_crashing(tenant, caplog):
+    """M7 pt 16: the ONE scheduled call with no try/except used to propagate a Zoho
+    transport error (now a RuntimeError per client.py's URLError/OSError handling)
+    straight out of the task and crash the whole scheduled job."""
+    fake_port = mock.MagicMock(spec=["fetch_referrer_audience"])
+    fake_port.fetch_referrer_audience.side_effect = RuntimeError("Zoho transport error: URLError: timed out")
+
+    with mock.patch("apps.config.integration_flags.resolve_flag", return_value=True), \
+            mock.patch("apps.integrations.ports.get_crm_read_port", return_value=fake_port), \
+            caplog.at_level("WARNING", logger="gorefer.zoho.tasks"):
+        result = zoho_tasks.sync_referrer_audience(tenant=tenant)
+
+    assert result == {"error": "zoho fetch failed"}
+    assert SyncedReferrer.objects.for_tenant(tenant).count() == 0
+    assert any("fetch failed" in r.getMessage() for r in caplog.records)

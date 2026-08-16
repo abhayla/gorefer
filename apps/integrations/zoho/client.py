@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -37,6 +38,19 @@ HTTP_TIMEOUT_SECONDS = 15
 # grants from once-per-call to roughly once-per-hour-per-worker, which is what avoids
 # the refresh throttle. Cleared implicitly on process restart.
 _TOKEN_CACHE: dict[str, tuple[str, float]] = {}
+
+# One lock per refresh token, so two concurrent cache-miss callers (e.g. two gunicorn
+# threads both hitting a cold/expired cache at once) mint exactly ONE grant instead of
+# both racing Zoho's refresh-token endpoint — which throttles grants per window (M9's
+# whole reason for caching in the first place). `_TOKEN_LOCKS_GUARD` only protects
+# creating a new per-key Lock, never the mint itself.
+_TOKEN_LOCKS: dict[str, threading.Lock] = {}
+_TOKEN_LOCKS_GUARD = threading.Lock()
+
+
+def _lock_for(key: str) -> threading.Lock:
+    with _TOKEN_LOCKS_GUARD:
+        return _TOKEN_LOCKS.setdefault(key, threading.Lock())
 
 
 @dataclass
@@ -75,7 +89,9 @@ class ZohoHttpClient:
 
     # --- transport ---------------------------------------------------------------
 
-    def _request(self, url: str, *, data: bytes | None, headers: dict, method: str) -> dict:
+    def _request(
+        self, url: str, *, data: bytes | None, headers: dict, method: str, _retried: bool = False
+    ) -> dict:
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
             with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SECONDS) as resp:
@@ -84,7 +100,30 @@ class ZohoHttpClient:
             # Surface Zoho's own error body — "HTTP 400" alone is undiagnosable, and
             # this text is what lands in Lead.zoho_last_error for operator triage.
             detail = exc.read().decode("utf-8", errors="replace")
+            if exc.code == 401 and not _retried and "Authorization" in headers:
+                # Self-heal (M7 pt 7): a revoked/stale cached token 401s once — mint a
+                # fresh one (bypassing the process cache, invalidating it for every
+                # other caller too) and retry the SAME request exactly once before
+                # giving up. Without this a revoked token bricks all Zoho sync for up
+                # to an hour (the cache's own TTL) even though `force_refresh` existed
+                # for exactly this — no call site ever used it until now. Guarded by
+                # `"Authorization" in headers` so the OAuth token exchange itself
+                # (which carries no Authorization header) can never recurse into this.
+                logger.warning("Zoho HTTP 401 — retrying once with a force-refreshed token")
+                fresh_token = self.access_token(force_refresh=True)
+                retried_headers = {**headers, "Authorization": f"Zoho-oauthtoken {fresh_token}"}
+                return self._request(
+                    url, data=data, headers=retried_headers, method=method, _retried=True
+                )
             raise RuntimeError(f"Zoho HTTP {exc.code}: {detail}") from exc
+        except (urllib.error.URLError, OSError) as exc:
+            # Connection refused / DNS / timeout — a transport failure, not a crash.
+            # Mirrors wati/adapter.py's URLError/OSError handling, but Zoho callers
+            # expect `_request` to raise (unlike Wati's synthetic-599-return shape),
+            # so this raises the same clean RuntimeError shape as the HTTPError branch
+            # above rather than returning a sentinel.
+            logger.warning("Zoho transport error: %s", exc.__class__.__name__)
+            raise RuntimeError(f"Zoho transport error: {exc.__class__.__name__}: {exc}") from exc
         return json.loads(body) if body else {}
 
     # --- auth --------------------------------------------------------------------
@@ -107,30 +146,40 @@ class ZohoHttpClient:
             if cached and cached[1] > now:
                 return cached[0]
 
-        payload = urllib.parse.urlencode({
-            "refresh_token": self.creds.refresh_token,
-            "client_id": self.creds.client_id,
-            "client_secret": self.creds.client_secret,
-            "grant_type": "refresh_token",
-        }).encode()
-        data = self._request(
-            self.creds.token_url,
-            data=payload,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-            method="POST",
-        )
-        token = data.get("access_token")
-        if not token:
-            # Zoho returns 200 + {"error": "invalid_code"} on a dead refresh token, so
-            # a missing access_token is a real failure even on a 200.
-            raise RuntimeError(f"Zoho token refresh returned no access_token: {data}")
-        # Cache until 60s before expiry (default 3600s if Zoho omits expires_in).
-        try:
-            ttl = int(data.get("expires_in", 3600))
-        except (TypeError, ValueError):
-            ttl = 3600
-        _TOKEN_CACHE[key] = (token, now + max(0, ttl - 60))
-        return token
+        # Guard the whole check-then-refresh-then-cache sequence per refresh-token so
+        # concurrent cache-miss callers (M7 pt 33) mint exactly ONE grant — the second
+        # caller blocks here, then re-checks the cache the first caller just filled
+        # instead of racing it to Zoho's (throttled) refresh endpoint.
+        with _lock_for(key):
+            if not force_refresh:
+                cached = _TOKEN_CACHE.get(key)
+                if cached and cached[1] > now:
+                    return cached[0]
+
+            payload = urllib.parse.urlencode({
+                "refresh_token": self.creds.refresh_token,
+                "client_id": self.creds.client_id,
+                "client_secret": self.creds.client_secret,
+                "grant_type": "refresh_token",
+            }).encode()
+            data = self._request(
+                self.creds.token_url,
+                data=payload,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                method="POST",
+            )
+            token = data.get("access_token")
+            if not token:
+                # Zoho returns 200 + {"error": "invalid_code"} on a dead refresh token, so
+                # a missing access_token is a real failure even on a 200.
+                raise RuntimeError(f"Zoho token refresh returned no access_token: {data}")
+            # Cache until 60s before expiry (default 3600s if Zoho omits expires_in).
+            try:
+                ttl = int(data.get("expires_in", 3600))
+            except (TypeError, ValueError):
+                ttl = 3600
+            _TOKEN_CACHE[key] = (token, now + max(0, ttl - 60))
+            return token
 
     def _auth_headers(self, extra: dict | None = None) -> dict:
         headers = {"Authorization": f"Zoho-oauthtoken {self.access_token()}"}

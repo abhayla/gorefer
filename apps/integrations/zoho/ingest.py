@@ -46,11 +46,16 @@ class DuplicateDelivery(Exception):
 def _dedupe_key(payload: dict) -> str:
     if payload.get("event_id"):
         return f"evt:{payload['event_id']}"
-    # composite fallback: account + referrer + date
-    return "cmp:{}:{}:{}".format(
+    # Composite fallback: account + referrer + date + reversed-flag. The reversed
+    # flag MUST be part of the key — without it a forward conversion and its later
+    # reversal (same account/referrer/date, both missing event_id) collide onto the
+    # same idempotency row, and the reversal is silently dropped as a
+    # DuplicateDelivery of the forward event it is supposed to undo (M7 pt 14).
+    return "cmp:{}:{}:{}:{}".format(
         payload.get("opener_zerodha_account_id", ""),
         payload.get("referrer_client_id", ""),
         payload.get("account_opened_at", ""),
+        "rev" if payload.get("reversed") else "fwd",
     )
 
 

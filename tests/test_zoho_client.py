@@ -128,6 +128,133 @@ def test_get_sends_the_bearer_token_and_encodes_params(creds):
     assert "criteria=%28ClientId%3Aequals%3ARJ4521%29" in seen["url"]
 
 
+def test_401_self_heals_with_one_retry_then_succeeds(creds):
+    """A 401 (revoked/stale cached token) mints exactly one fresh token and retries
+    the SAME request once, rather than bricking every Zoho call for up to an hour."""
+    client = ZohoHttpClient()
+    err_401 = urllib.error.HTTPError(
+        url="https://www.zohoapis.in/crm/v8/Contacts/search", code=401, msg="Unauthorized",
+        hdrs=None, fp=io.BytesIO(b'{"code":"INVALID_TOKEN"}'),
+    )
+    calls = {"urlopen": 0}
+
+    def fake_urlopen(req, timeout=None):
+        calls["urlopen"] += 1
+        if calls["urlopen"] == 1:
+            raise err_401
+        resp = mock.MagicMock()
+        resp.read.return_value = b'{"data": []}'
+        resp.__enter__.return_value = resp
+        return resp
+
+    refreshes = {"n": 0}
+
+    def fake_access_token(*, force_refresh=False):
+        if force_refresh:
+            refreshes["n"] += 1
+        return "tok-after-refresh" if force_refresh else "tok-stale"
+
+    with mock.patch.object(client, "access_token", side_effect=fake_access_token), \
+            mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        result = client.get("/crm/v8/Contacts/search")
+
+    assert result == {"data": []}
+    assert refreshes["n"] == 1, "exactly one force-refresh, not a retry loop"
+    assert calls["urlopen"] == 2, "one failed attempt + one retry, not more"
+
+
+def test_401_then_401_raises_after_the_single_retry(creds):
+    """A second 401 after the force-refreshed retry must raise, not loop forever."""
+    client = ZohoHttpClient()
+
+    def make_401():
+        return urllib.error.HTTPError(
+            url="https://www.zohoapis.in/crm/v8/Contacts/search", code=401, msg="Unauthorized",
+            hdrs=None, fp=io.BytesIO(b'{"code":"INVALID_TOKEN"}'),
+        )
+
+    calls = {"urlopen": 0}
+
+    def fake_urlopen(req, timeout=None):
+        calls["urlopen"] += 1
+        raise make_401()
+
+    with mock.patch.object(client, "access_token", return_value="tok"), \
+            mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        with pytest.raises(RuntimeError, match="Zoho HTTP 401"):
+            client.get("/crm/v8/Contacts/search")
+
+    assert calls["urlopen"] == 2, "exactly one retry — must not loop"
+
+
+def test_token_endpoint_401_does_not_recurse(creds):
+    """The OAuth token exchange itself carries no Authorization header, so a 401
+    there must NOT trigger the self-heal retry (which would recurse into
+    access_token() and could loop) — it must raise immediately like any other error."""
+    client = ZohoHttpClient()
+    err_401 = urllib.error.HTTPError(
+        url=client.creds.token_url, code=401, msg="Unauthorized",
+        hdrs=None, fp=io.BytesIO(b'{"error":"invalid_client"}'),
+    )
+    with mock.patch("urllib.request.urlopen", side_effect=err_401):
+        with pytest.raises(RuntimeError, match="Zoho HTTP 401"):
+            client.access_token()
+
+
+def test_concurrent_cache_miss_callers_mint_one_grant(creds):
+    """Token-fetch lock (M7 pt 33): two threads racing a cold cache must produce
+    exactly one refresh call — the second reuses what the first just cached."""
+    import threading
+    import time as time_mod
+
+    client = ZohoHttpClient()
+    calls = {"n": 0}
+    lock = threading.Lock()
+
+    def fake_request(*a, **k):
+        with lock:
+            calls["n"] += 1
+        # Give the second thread a real chance to arrive at the token lock while
+        # the first is "in flight" minting — proves the lock, not luck, is why
+        # only one grant happens.
+        time_mod.sleep(0.05)
+        return {"access_token": "tok-shared", "expires_in": 3600}
+
+    results = []
+
+    def worker():
+        results.append(client.access_token())
+
+    with mock.patch.object(client, "_request", side_effect=fake_request):
+        threads = [threading.Thread(target=worker) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+    assert calls["n"] == 1, "concurrent cache-miss callers must mint exactly one grant"
+    assert results == ["tok-shared", "tok-shared"]
+
+
+def test_transport_error_raises_clean_runtimeerror(creds):
+    """URLError/OSError (DNS, connection refused, timeout) must raise the same clean
+    RuntimeError shape as an HTTPError — mirrors wati/adapter.py's transport handling,
+    but Zoho callers expect `_request` to raise rather than return a sentinel."""
+    client = ZohoHttpClient()
+    with mock.patch.object(client, "access_token", return_value="tok"), \
+            mock.patch("urllib.request.urlopen", side_effect=urllib.error.URLError("timed out")):
+        with pytest.raises(RuntimeError, match="Zoho transport error"):
+            client.get("/crm/v8/Contacts/search")
+
+
+def test_transport_oserror_also_raises_clean_runtimeerror(creds):
+    client = ZohoHttpClient()
+    with mock.patch.object(client, "access_token", return_value="tok"), \
+            mock.patch("urllib.request.urlopen", side_effect=OSError("connection refused")):
+        with pytest.raises(RuntimeError, match="Zoho transport error"):
+            client.get("/crm/v8/Contacts/search")
+
+
 def test_empty_body_is_a_no_match_not_a_crash(creds):
     """Zoho returns 204/empty for 'search matched nothing' — must map to {}."""
     client = ZohoHttpClient()

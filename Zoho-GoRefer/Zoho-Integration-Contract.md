@@ -67,7 +67,25 @@ on the profile page — they stay on the erasable-PII side of the boundary.
 **Token handling:** the OAuth access token is cached **process-wide until ~60s before
 `expires_in`** (`apps/integrations/zoho/client.py`). Before that fix every API call re-minted a
 token — two round trips per call, and Zoho throttles refresh-token grants per window, which
-surfaced as spurious sync failures. `force_refresh=True` re-mints on a 401.
+surfaced as spurious sync failures.
+
+**401 self-heal (M7 pt 7, wired 2026-08-17):** `ZohoHttpClient._request` now retries a `401`
+exactly **once**, force-refreshing the cached token first — `force_refresh=True` existed since M9
+but no call site ever used it, so a revoked/stale token used to brick every Zoho call (write and
+read) for up to the cache's own TTL (~1h) instead of self-healing on the very next call. A second
+consecutive `401` (fresh token still rejected) raises, same as any other non-401 HTTP error.
+
+**Token-fetch lock (M7 pt 33):** `access_token()`'s check-then-refresh-then-cache sequence is now
+guarded by a per-refresh-token `threading.Lock` — two concurrent cache-miss callers (e.g. two
+gunicorn threads both hitting a cold cache) mint exactly ONE grant; the second blocks, then reuses
+the cache the first just filled, instead of both racing Zoho's throttled refresh endpoint.
+
+**Transport errors (M7 pt 16):** `_request` now also catches `URLError`/`OSError` (DNS failure,
+connection refused, timeout) and raises the same `RuntimeError` shape as an `HTTPError`, mirroring
+`apps/integrations/wati/adapter.py`'s transport-error handling. `sync_referrer_audience`'s single
+`fetch_referrer_audience()` call is wrapped in a per-run try/except-and-log (matching its sibling
+read tasks in `zoho/tasks.py`), so a Zoho blip degrades that scheduled run to a no-op instead of
+crashing the job.
 
 ### 3.1 Audience sync + send-queue counts (T-126, W3 — decisions ⑫/⑭ of the messaging-engine plan)
 
@@ -159,9 +177,38 @@ worth revisiting.
 (`account_opened_at`), distinct from the sync/import date (ADR-017). All conversion analytics run
 off the true date so bulk/off-platform imports land in their real period with no fake day-1 spike.
 
-**Idempotency:** deduped on the Zoho `event_id` (composite fallback = account + referrer + date).
-A repeat delivery is a no-op returning `{"status":"duplicate"}`. Reversals (`reversed: true`)
-tombstone the conversion (`is_reversed=True`) rather than deleting it.
+**Idempotency:** deduped on the Zoho `event_id` (composite fallback = account + referrer + date +
+forward/reversed). A repeat delivery is a no-op returning `{"status":"duplicate"}`. Reversals
+(`reversed: true`) tombstone the conversion (`is_reversed=True`) rather than deleting it.
+
+**Verified signer behavior (M7 pt 14, checked 2026-08-17 against
+`Wati-Project/Zoho-Project/deluge/gorefer_webhook_signer_contacts.dg:39-43`, the live Contacts
+signer):** `event_id` is **ALWAYS** present in every fire — it's built unconditionally as
+`"contact:" + contact.id + ":" + Account_Opened_On`, never omitted. It is **deliberately STABLE**
+(not distinct) across a re-fire of the same contact with the same `Account_Opened_On` — that's what
+lets a duplicate webhook delivery for the same opening dedupe as a no-op. Neither this signer nor
+`apps/integrations/zoho/reconcile.py` (which mints its own stable `reconcile:<id>:<openedOn>`
+`event_id`) currently ever sends `reversed: true` — no live path emits a reversal payload today.
+
+Because the signer always sends `event_id`, `ingest._dedupe_key()`'s composite (`cmp:...`) branch
+is unreached by live traffic today — it only activates for a hand-built or future payload that
+omits `event_id`. It was still missing the `reversed` flag from its key: a forward conversion and
+a later reversal for the same account/referrer/date (both missing `event_id`) would have collided
+onto the same idempotency row, and the reversal would have been silently dropped as a
+`DuplicateDelivery` of the forward event it exists to undo. Fixed 2026-08-17 by folding
+`forward`/`reversed` into the composite key (`ingest.py:_dedupe_key`) — latent-bug hardening, not a
+response to a currently-reachable production path.
+
+**Separately surfaced, NOT fixed (out of this task's scope):** the signer's `event_id` formula is
+stable per (contact, `Account_Opened_On`) but does **not** vary with `Referrer_Client_Id`. A
+referrer correction/de-mapping on the same contact, same opening date, that re-fires the workflow
+rule would carry the SAME `event_id` as the original — and would be dropped as a
+`DuplicateDelivery`, silently discarding the correction, via the `evt:` branch (not the composite
+fallback this task fixed). No live path is known to re-fire the Contacts workflow on a
+referrer-only edit today, so this is a latent risk, not a demonstrated live gap — flagged here for
+the Design Authority to decide whether the signer's `event_id` should incorporate
+`Referrer_Client_Id`, or whether `ingest.py`'s `evt:` branch should treat a referrer-changed replay
+as a legitimate re-ingest rather than a duplicate.
 
 ### 4.1 Referrer conversion-congrats side-effect (T-058, P-01/Gap 5, 2026-08-09)
 

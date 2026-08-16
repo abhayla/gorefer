@@ -212,6 +212,57 @@ def test_reversal_does_NOT_uncredit_while_another_live_conversion_remains(settin
     assert ref.credited_referrer == "RJ4521"
 
 
+# --- composite dedupe fallback carries the reversed flag (M7 pt 14) --------
+
+@pytest.mark.django_db(transaction=True)
+def test_composite_dedupe_forward_then_reversal_both_apply(settings):
+    """No `event_id` on either payload -> composite fallback. Before the fix, a
+    forward event and its reversal shared the SAME composite key (account + referrer
+    + date) and the reversal was silently dropped as a DuplicateDelivery of the
+    forward event it was supposed to undo."""
+    settings.ZOHO_WEBHOOK_KEY = "testkey"
+    call_command("seed_program")
+    c = Client()
+    forward = {"opener_zerodha_account_id": "ZA900", "referrer_client_id": "RJ4521",
+               "status": "Account Opened", "account_opened_at": "2026-05-12T09:00:00"}
+    r1 = _post(c, forward, **KEY_HEADER)
+    assert r1.json()["applied"] is True
+
+    reversal = {**forward, "reversed": True}
+    r2 = _post(c, reversal, **KEY_HEADER)
+    assert r2.json()["applied"] is True, "the reversal must apply, not be dropped as a duplicate"
+    conv = Conversion.objects.get(opener_zerodha_account_id="ZA900")
+    assert conv.is_reversed is True
+
+
+@pytest.mark.django_db(transaction=True)
+def test_composite_dedupe_forward_replay_still_dedupes(settings):
+    """The reversed-flag fold must not break the existing no-`event_id` replay
+    guard — a REPEAT of the exact same forward payload is still a no-op."""
+    settings.ZOHO_WEBHOOK_KEY = "testkey"
+    call_command("seed_program")
+    c = Client()
+    forward = {"opener_zerodha_account_id": "ZA901", "referrer_client_id": "RJ4521",
+               "status": "Account Opened", "account_opened_at": "2026-05-12T09:00:00"}
+    assert _post(c, forward, **KEY_HEADER).json()["applied"] is True
+    r2 = _post(c, forward, **KEY_HEADER)
+    assert r2.json()["status"] == "duplicate"
+    assert Conversion.objects.filter(opener_zerodha_account_id="ZA901").count() == 1
+
+
+def test_dedupe_key_composite_includes_reversed_flag():
+    """Unit-level pin on the key shape itself, independent of the webhook path."""
+    from apps.integrations.zoho.ingest import _dedupe_key
+
+    base = {"opener_zerodha_account_id": "ZA1", "referrer_client_id": "RJ1",
+            "account_opened_at": "2026-01-01"}
+    fwd_key = _dedupe_key(base)
+    rev_key = _dedupe_key({**base, "reversed": True})
+    assert fwd_key != rev_key
+    # Stable/deterministic, and the event_id branch is untouched by this fix.
+    assert _dedupe_key({"event_id": "abc"}) == "evt:abc"
+
+
 # --- sync-freshness lights up ---------------------------------------------
 
 @pytest.mark.django_db(transaction=True)

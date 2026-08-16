@@ -337,7 +337,16 @@ def sync_referrer_audience(*, tenant=None) -> dict:
         )
         return {"skipped": "frequency window not elapsed", "last_synced_at": last_synced_at.isoformat()}
 
-    audience = get_crm_read_port().fetch_referrer_audience()
+    try:
+        audience = get_crm_read_port().fetch_referrer_audience()
+    except Exception:
+        # Per-run try/except-and-log, matching the sibling read tasks in this module
+        # (`sync_referrer_names` catches per-item; this is the whole-call equivalent
+        # since there's only one fetch). Without this a Zoho transport blip (now a
+        # raised RuntimeError per client.py's URLError/OSError handling) would crash
+        # the whole scheduled job instead of degrading to "nothing synced this run".
+        logger.warning("audience-sync: Zoho fetch failed", exc_info=True)
+        return {"error": "zoho fetch failed"}
 
     fetched_client_ids: set[str] = set()
     created_n = updated_n = skipped_no_anchor = 0
