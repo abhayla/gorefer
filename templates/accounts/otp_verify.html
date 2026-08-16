@@ -27,5 +27,19 @@
     {% if verify_failed_reason == "expired" or verify_failed_reason == "exhausted" or verify_failed_reason == "no_code" %}
       <a href="{% url 'referrer_login' %}" class="mt-3 block text-center text-[12px] font-semibold text-cobalt-600 hover:underline">Request a new code →</a>
     {% endif %}
+    {% comment %}
+       Always-visible resend affordance — a code that simply never arrives (no
+       verify_failed_reason yet, since nothing was submitted) must not be a dead end.
+       Re-POSTs client_id only (ADR-035: recipient is resolved on-file, never typed);
+       the OTP service enforces OTP_RESEND_COOLDOWN_SECONDS server-side and bounces a
+       too-soon resend back to the login screen with otp_error set.
+    {% endcomment %}
+    <form method="post" action="{% url 'referrer_otp_request' %}" class="mt-3">
+      {% csrf_token %}
+      <input type="hidden" name="client_id" value="{{ client_id }}">
+      <button type="submit" class="block w-full text-center text-[12px] font-semibold text-cobalt-600 hover:underline">
+        Didn't get a code? Resend
+      </button>
+    </form>
   </section>
 {% endblock %}

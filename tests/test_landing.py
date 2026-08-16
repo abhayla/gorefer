@@ -6,7 +6,9 @@ from django.test import Client
 from apps.common.phone import normalize_phone
 from apps.events import vocab
 from apps.events.models import ClickNonce, Event
-from apps.referrals.models import Lead, Prospect
+from apps.referrals import redirect_service
+from apps.referrals.models import Customer, Lead, Prospect
+from apps.tenants.resolve import get_bootstrap_tenant
 
 
 @pytest.fixture
@@ -63,6 +65,23 @@ def test_whatsapp_share_message_built_from_form_in_js():
     assert "Name: " in js and "Phone Number: " in js and "Email: " in js
     assert "https://wa.me/" in js and "GR.watiNumber" in js
     assert "encodeURIComponent" in js
+
+
+def test_mobile_input_maxlength_does_not_truncate_pasted_plus91_number(seeded, client):
+    """A pasted '+91 98765 43210' (15 chars) must survive the HTML maxlength so
+    landing.js's digit-strip-then-enforce-10 logic sees the whole paste (pt 11)."""
+    resp = client.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0")
+    html = resp.content.decode()
+    assert 'id="mobileInput"' in html
+    assert 'maxlength="10"' not in html
+    assert 'maxlength="15"' in html
+    pasted = "+91 98765 43210"
+    assert len(pasted) <= 15
+    # JS still strips non-digits then enforces exactly-10 (pattern unchanged by this fix).
+    from pathlib import Path
+    js = (Path(__file__).resolve().parent.parent / "static" / "js" / "landing.js").read_text(encoding="utf-8")
+    assert 'replace(/\\D/g, "")' in js
+    assert "^[6-9]\\d{9}$" in js
 
 
 def test_landing_does_not_clone_zerodha(seeded, client):
@@ -132,13 +151,34 @@ def test_name_reveal_requires_valid_nonce(seeded, client):
     client.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0")
     # no nonce -> 401
     assert client.get("/api/click/referrer/RJ4521", HTTP_USER_AGENT="Mozilla/5.0").status_code == 401
-    # valid nonce -> 200 (has_referrer true, name null in M3 — never fabricated)
+
+
+def test_name_reveal_returns_first_name_when_customer_on_file(seeded, client):
+    tenant = get_bootstrap_tenant()
+    program = redirect_service.get_active_program(tenant)
+    Customer.objects.create(
+        tenant=tenant, program=program, partner=program.partner,
+        client_id="RJ4521", first_name="Rahul", last_name="Sharma",
+    )
+    client.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0")
     nonce = ClickNonce.objects.get()
     resp = client.get(f"/api/click/referrer/RJ4521?nonce={nonce.nonce}", HTTP_USER_AGENT="Mozilla/5.0")
     assert resp.status_code == 200
     data = resp.json()
     assert data["has_referrer"] is True
-    assert data["first_name"] is None  # no Zoho name source yet (M6)
+    assert data["first_name"] == "Rahul"
+    # Surname is never leaked, in any form.
+    assert "Sharma" not in resp.content.decode()
+
+
+def test_name_reveal_returns_null_when_no_customer_on_file(seeded, client):
+    client.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0")
+    nonce = ClickNonce.objects.get()
+    resp = client.get(f"/api/click/referrer/RJ4521?nonce={nonce.nonce}", HTTP_USER_AGENT="Mozilla/5.0")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["has_referrer"] is True
+    assert data["first_name"] is None
 
 
 def test_name_reveal_blocks_bots(seeded, client):

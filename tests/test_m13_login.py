@@ -169,6 +169,19 @@ def test_otp_door_404_when_otp_flag_off(client, seeded, onfile_customer):
     assert client.post("/login/otp/request", {"client_id": CID}, **HUMAN).status_code == 404
 
 
+@pytest.mark.urls("tests.urls_m13")
+def test_otp_verify_page_always_shows_resend_affordance(client, seeded, onfile_customer, otp_on):
+    """A code that never arrives (no verify_failed_reason yet — nothing submitted)
+    must not be a dead end: the resend link/button renders on a FRESH verify page,
+    not only after a failed verify attempt (pt 12)."""
+    resp = client.post("/login/otp/request", {"client_id": CID}, **HUMAN)
+    assert resp.status_code == 200
+    html = resp.content.decode()
+    assert "Resend" in html
+    assert 'action="/login/otp/request"' in html
+    assert f'value="{CID}"' in html
+
+
 # ------------------------------------------------- Q-M-OTP-2: Zoho on-file resolution
 
 

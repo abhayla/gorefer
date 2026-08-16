@@ -72,7 +72,14 @@ Variant C skin — no behaviour change (skin ≠ content).
         <label class="block text-[11px] font-semibold text-ink-700 mb-1">Mobile number</label>
         <div id="mobileWrap" class="flex rounded-lg border border-line bg-white overflow-hidden focus-within:ring-2 focus-within:ring-cobalt-500/30 focus-within:border-cobalt-500 transition-colors">
           <span class="flex items-center px-3.5 text-sm font-semibold text-ink-700 bg-cobalt-50 border-r border-line">+91</span>
-          <input id="mobileInput" type="tel" inputmode="numeric" maxlength="10" placeholder="98765 43210"
+          {% comment %}
+             maxlength=15 (not 10): a pasted "+91 98765 43210" is longer than 10 raw
+             chars before landing.js's `evaluate()` strips non-digits down to the 10-digit
+             number on the `input` event — a maxlength=10 here would truncate the paste
+             first and silently drop trailing digits. JS still enforces exactly-10 after
+             stripping.
+          {% endcomment %}
+          <input id="mobileInput" type="tel" inputmode="numeric" maxlength="15" placeholder="98765 43210"
             aria-describedby="mobileMsg" class="flex-1 px-3.5 py-3 text-sm focus:outline-none bg-transparent" />
         </div>
         <p id="mobileMsg" class="mt-1 text-[11px] font-medium min-h-[15px]"></p>

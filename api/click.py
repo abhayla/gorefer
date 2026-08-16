@@ -7,14 +7,16 @@
   enumeration hole (ADR-021). Rate-limited (per-IP, apps.common.ratelimit) +
   bot-filtered + nonce-gated at the edge of this view.
 
-M3 note: GoRefer has NO referrer *name* source yet (names arrive from Zoho in M6),
-so `first_name` is returned empty/null with `has_referrer=true`. We never fabricate
-a name — the endpoint + nonce gate are what M3 delivers; the value fills in at M6.
+The referrer's first name is resolved from `Customer` (kept current by the daily
+`sync_referrer_names` job, apps/integrations/zoho/tasks.py) by `client_id`, same
+lookup pattern as the referrer-nudge copy in apps/followups/tasks.py. Only the
+FIRST name is ever returned — never the surname — and null when no Customer is on
+file. Owner-approved: anyone holding a public client_id can see the referrer's
+first name (eight-lens review pt 5, 2026-08-16).
 """
 from __future__ import annotations
 
 from django.conf import settings
-from django.utils import timezone
 from ninja import Router, Schema
 from ninja.errors import HttpError
 
@@ -23,6 +25,7 @@ from apps.events import vocab
 from apps.events.bots import is_bot_user_agent
 from apps.events.models import Event
 from apps.events.nonces import consume_nonce, peek_nonce
+from apps.referrals.models import Customer
 from apps.referrals.validators import InvalidClientId, validate_client_id
 
 router = Router()
@@ -95,6 +98,11 @@ def reveal_referrer(request, client_id: str, nonce: str = ""):
     if row is None:
         raise HttpError(401, "unauthenticated")
 
-    # M3: no referrer-name source yet (fills at M6 from Zoho). Never fabricate.
-    _ = timezone.now()
-    return {"has_referrer": True, "first_name": None}
+    cust = (
+        Customer.objects.for_tenant(row.tenant)
+        .filter(client_id=client_id, deleted_at__isnull=True)
+        .exclude(first_name="")
+        .first()
+    )
+    first_name = cust.first_name if cust else None
+    return {"has_referrer": True, "first_name": first_name}
