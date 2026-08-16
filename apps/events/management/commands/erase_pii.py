@@ -34,13 +34,17 @@ class Command(BaseCommand):
             # Report WITHOUT writing: erasure is irreversible by design, so an operator
             # must be able to see the blast radius before committing to it.
             from apps.common.phone import normalize_phone
+            from apps.common.privacy import dry_run_pii_counts
             from apps.events.models import VisitorPII
             from apps.referrals.models import Prospect
 
-            n_p = (
-                Prospect.objects.for_tenant(tenant).filter(mobile=normalize_phone(opts["mobile"])).count()
-                if opts["mobile"] else 0
-            )
+            table_counts = {}
+            if opts["mobile"]:
+                canonical = normalize_phone(opts["mobile"])
+                n_p = Prospect.objects.for_tenant(tenant).filter(mobile=canonical).count()
+                table_counts = dry_run_pii_counts(tenant, canonical)
+            else:
+                n_p = 0
             n_v = (
                 VisitorPII.objects.for_tenant(tenant).filter(
                     visitor_id=opts["visitor_id"], erased_at__isnull=True
@@ -48,6 +52,8 @@ class Command(BaseCommand):
                 if opts["visitor_id"] else 0
             )
             self.stdout.write(f"  DRY RUN — would erase prospects={n_p} visitor_pii={n_v}")
+            for key, value in table_counts.items():
+                self.stdout.write(f"  DRY RUN — would erase {key}={value}")
             return
 
         counts = erase_subject(

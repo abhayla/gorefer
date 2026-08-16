@@ -5,18 +5,33 @@ pre-existing `test_i3_visitor_pii_is_erasable` performed the erasure ITSELF insi
 test — it proved the model could hold an erased state, not that any code could produce
 one. These tests call the REAL service, which is the difference that matters.
 """
+from datetime import timedelta
+
 import pytest
 from django.core.management import call_command
 from django.test import Client
 from django.utils import timezone
 
+from apps.campaigns.models import (
+    DEFAULT_SEND_DAYS_MASK,
+    MessagingCampaign,
+    MessagingCampaignStep,
+    ScheduledCampaignMessage,
+    SyncedReferrer,
+)
+from apps.common.phone import normalize_phone
 from apps.common.privacy import ERASED_NAME, erase_subject, purge_expired_pii
 from apps.events.models import Event, VisitorPII
-from apps.referrals.models import Lead, Prospect, Referral
+from apps.followups.models import AdvisorCallbackRequest, FollowupRule, FollowupWindow, ScheduledFollowup
+from apps.integrations.models import Notification
+from apps.otp.models import OtpChallenge
+from apps.referrals.models import Customer, Lead, Prospect, Referral, ReferralProgram
 from apps.tenants.models import Tenant
 
 HUMAN = {"HTTP_USER_AGENT": "Mozilla/5.0 (Android)", "REMOTE_ADDR": "203.0.113.5"}
 MOBILE = "9876543210"
+CANON_MOBILE = normalize_phone(MOBILE)  # "919876543210" — every non-Prospect table below
+# already stores/keys on the canonical form, never the raw entered one.
 
 
 @pytest.fixture
@@ -110,6 +125,148 @@ def test_erasure_does_not_delete_the_lead_or_break_the_referral(seeded):
     erase_subject(seeded, mobile=MOBILE)
     assert Lead.objects.count() == 1
     assert Referral.objects.filter(pk=referral.pk).exists()
+
+
+# --- T-157: end-to-end coverage across every table erase_subject now reaches -------
+
+NAME = "Rahul Sharma"
+EMAIL = "rahul@example.com"
+
+
+def _seed_every_covered_table(tenant):
+    """One person's PII, planted in every table `COVERED_PII_FIELDS` (privacy.py)
+    claims erase_subject reaches — the fixture the completeness test below erases."""
+    _capture(tenant, mobile=MOBILE, name=NAME)
+
+    program = ReferralProgram.objects.get(tenant=tenant)
+    Customer.objects.create(
+        tenant=tenant, program=program, partner=program.partner, client_id="RJ4521",
+        mobile=CANON_MOBILE, email=EMAIL, first_name="Rahul", last_name="Sharma",
+    )
+
+    Notification.objects.create(
+        tenant=tenant, recipient_role="referrer", recipient_mobile=CANON_MOBILE,
+        template="gr_platform_gorefer_refrecord_en_2026_08_07",
+        template_params=[
+            {"name": "referrer_name", "value": NAME},
+            {"name": "referrer_mobile", "value": CANON_MOBILE},
+        ],
+        status="queued", idempotency_key="t157-e2e-notif",
+    )
+
+    FollowupWindow.objects.create(
+        tenant=tenant, mobile=CANON_MOBILE, last_inbound_at=timezone.now(),
+    )
+    rule = FollowupRule.objects.create(
+        tenant=tenant, step_key="nudge_15m", offset_minutes=15, body_en="Hi!",
+    )
+    ScheduledFollowup.objects.create(
+        tenant=tenant, rule=rule, mobile=CANON_MOBILE, fire_at=timezone.now(),
+        window_opened_at=timezone.now(), dedupe_key="t157-e2e-sf",
+    )
+    AdvisorCallbackRequest.objects.create(
+        tenant=tenant, mobile=CANON_MOBILE, name=NAME, slot="9-12",
+        request_date=timezone.now().date(),
+    )
+
+    referrer = SyncedReferrer.objects.create(
+        tenant=tenant, client_id="RJ4521", mobile=CANON_MOBILE, name=NAME,
+        record_created_at=timezone.now(),
+    )
+    campaign = MessagingCampaign.objects.create(
+        tenant=tenant, slug="t157-e2e", name="T-157 e2e", enabled=True,
+        send_days_mask=DEFAULT_SEND_DAYS_MASK,
+        language_template_map={"en": "gr_platform_gorefer_refrecord_en_2026_08_07"},
+    )
+    step = MessagingCampaignStep.objects.create(tenant=tenant, campaign=campaign, order=1)
+    ScheduledCampaignMessage.objects.create(
+        tenant=tenant, campaign=campaign, step=step, referrer=referrer,
+        client_id="RJ4521", mobile=CANON_MOBILE, anchor_at=timezone.now(),
+        fire_at=timezone.now(), dedupe_key="t157-e2e-scm",
+    )
+
+    OtpChallenge.objects.create(
+        tenant=tenant, identity="RJ4521", recipient=CANON_MOBILE,
+        code_hash="t157-e2e-hash", salt="t157-e2e-salt",
+        expires_at=timezone.now() + timedelta(minutes=5),
+    )
+
+
+def _assert_no_plaintext_pii_remains(tenant):
+    assert MOBILE not in Prospect.objects.get(tenant=tenant).mobile
+    assert CANON_MOBILE not in Customer.objects.get(tenant=tenant).mobile
+    assert Customer.objects.get(tenant=tenant).email == ""
+
+    notif = Notification.objects.get(tenant=tenant)
+    assert CANON_MOBILE not in notif.recipient_mobile
+    params_blob = str(notif.template_params)
+    assert CANON_MOBILE not in params_blob and NAME not in params_blob
+
+    assert CANON_MOBILE not in FollowupWindow.objects.get(tenant=tenant).mobile
+    assert CANON_MOBILE not in ScheduledFollowup.objects.get(tenant=tenant).mobile
+
+    acr = AdvisorCallbackRequest.objects.get(tenant=tenant)
+    assert CANON_MOBILE not in acr.mobile and acr.name == ERASED_NAME
+
+    ref = SyncedReferrer.objects.get(tenant=tenant)
+    assert CANON_MOBILE not in ref.mobile and ref.name == ERASED_NAME
+
+    assert CANON_MOBILE not in ScheduledCampaignMessage.objects.get(tenant=tenant).mobile
+
+    assert CANON_MOBILE not in OtpChallenge.objects.get(tenant=tenant).recipient
+
+
+def test_e2e_erase_subject_reaches_every_covered_table(seeded):
+    _seed_every_covered_table(seeded)
+    counts = erase_subject(seeded, mobile=MOBILE)
+
+    for key in (
+        "prospects", "customers", "notifications", "followup_windows",
+        "scheduled_followups", "advisor_callback_requests", "synced_referrers",
+        "scheduled_campaign_messages", "otp_challenges",
+    ):
+        assert counts[key] == 1, f"{key} count: {counts}"
+
+    _assert_no_plaintext_pii_remains(seeded)
+
+
+def test_e2e_purge_reaches_every_covered_table(seeded):
+    _seed_every_covered_table(seeded)
+    Prospect.objects.filter(tenant=seeded).update(
+        created_at=timezone.now() - timedelta(days=400)
+    )
+
+    totals = purge_expired_pii(seeded)
+
+    assert totals["prospects"] == 1
+    for key in (
+        "customers", "notifications", "followup_windows", "scheduled_followups",
+        "advisor_callback_requests", "synced_referrers", "scheduled_campaign_messages",
+        "otp_challenges",
+    ):
+        assert totals[key] == 1, f"{key} totals: {totals}"
+
+    _assert_no_plaintext_pii_remains(seeded)
+
+
+def test_e2e_purge_dry_run_tallies_every_covered_table_without_writing(seeded):
+    _seed_every_covered_table(seeded)
+    Prospect.objects.filter(tenant=seeded).update(
+        created_at=timezone.now() - timedelta(days=400)
+    )
+
+    totals = purge_expired_pii(seeded, dry_run=True)
+
+    assert totals["dry_run"] is True
+    for key in (
+        "customers", "notifications", "followup_windows", "scheduled_followups",
+        "advisor_callback_requests", "synced_referrers", "scheduled_campaign_messages",
+        "otp_challenges",
+    ):
+        assert totals[key] == 1, f"{key} totals: {totals}"
+    # Nothing was actually written.
+    assert Customer.objects.get(tenant=seeded).mobile == CANON_MOBILE
+    assert SyncedReferrer.objects.get(tenant=seeded).name == NAME
 
 
 # --- retention purge --------------------------------------------------------
