@@ -376,28 +376,79 @@ def per_link_cards(tenant, client_id: str) -> list[dict]:
     return list(by_program.values())
 
 
-def clicks_rows(tenant, client_id: str) -> list[dict]:
-    """One row per click event (human + bot) with geo/device/outcome enrichment.
+def clicks_page_size(tenant) -> int:
+    """Cascade-resolved clicks-tab page size (T-161 pt 22, rail E-6 — pattern of
+    `explorer_page_size`). Default 500 comfortably covers every seeded/demo referrer
+    (well under 500 clicks), so this is a zero-behaviour-change default."""
+    from apps.config.cascade import resolve
 
-    Geo/device come from GoRefer's OWN captured signals: country/state on the Event,
-    city + raw IP on the linked VisitorPII, device/OS from the user-agent. Bot rows
-    are included but flagged (the template dims them + excludes from totals).
+    tid = getattr(tenant, "id", None)
+    return int(resolve("dashboard_clicks_page_size", tenant_id=tid, default=500))
+
+
+def clicks_row_count(tenant, client_id: str) -> int:
+    """Total click events for this referrer — drives the Clicks-tab pagination."""
+    referral_ids = list(_referrer_referrals(tenant, client_id).values_list("id", flat=True))
+    return Event.objects.filter(referral_id__in=referral_ids, event_type="click").count()
+
+
+def clicks_rows(tenant, client_id: str, *, page: int = 1) -> list[dict]:
+    """One PAGE of click events (human + bot), newest first, with geo/device/outcome
+    enrichment. Geo/device come from GoRefer's OWN captured signals: country/state on
+    the Event, city + raw IP on the linked VisitorPII, device/OS from the user-agent.
+    Bot rows are included but flagged (the template dims them + excludes from totals).
+
+    Paginated server-side (`dashboard_clicks_page_size`, T-161 pt 22 — pattern of
+    `explorer_rows`): the outcome-window scan below is bounded to the page's own time
+    span (plus the ONE click immediately newer than the page, needed to close the
+    newest row's window correctly) rather than the referrer's entire click history —
+    so a 1000-click referrer costs the SAME query shape as a 5-click one.
     """
     referrals = {r.id: r for r in _referrer_referrals(tenant, client_id)}
-    events = (
-        Event.objects.filter(referral_id__in=list(referrals), event_type="click")
-        .order_by("-timestamp")
+    referral_ids = list(referrals)
+    page_size = clicks_page_size(tenant)
+    offset = max(page, 1) - 1
+    offset *= page_size
+
+    events = list(
+        Event.objects.filter(referral_id__in=referral_ids, event_type="click")
+        .order_by("-timestamp")[offset: offset + page_size]
     )
+    if not events:
+        return []
+    newest_ts = events[0].timestamp
+    oldest_ts = events[-1].timestamp
+
+    # The closest click strictly NEWER than this page — its timestamp is the upper
+    # bound the window scan needs (to correctly close the page's own newest row's
+    # outcome window). Page 1's top row has no such click: its own window is
+    # open-ended (same as before pagination existed), so the scan stays UNBOUNDED
+    # above rather than clipped at the page's own newest click — clipping there would
+    # cut off outcome events (e.g. lead_captured) that land after the click but
+    # before any next click.
+    scan_upper = (
+        Event.objects.filter(referral_id__in=referral_ids, event_type="click", timestamp__gt=newest_ts)
+        .order_by("timestamp").values_list("timestamp", flat=True).first()
+    )
+
     # Per-journey stage events (non-bot, non-click, non-synthetic) + human click
-    # times, for the per-click outcome windows (this click → the next human click).
+    # times, for the per-click outcome windows (this click → the next human click) —
+    # lower-bounded to oldest_ts and upper-bounded to scan_upper (when a newer click
+    # exists), not the referrer's whole lifetime.
     from apps.events.bots import is_synthetic_user_agent
     from apps.referrals.models import Lead
+
+    stage_qs = Event.objects.filter(
+        referral_id__in=referral_ids, is_bot=False, timestamp__gte=oldest_ts,
+    )
+    if scan_upper is not None:
+        stage_qs = stage_qs.filter(timestamp__lte=scan_upper)
 
     stage_events: dict[int, list] = {}
     click_times: dict[int, list] = {}
     lead_prospect_ids: set = set()
     for ev in (
-        Event.objects.filter(referral_id__in=list(referrals), is_bot=False)
+        stage_qs
         .order_by("timestamp")
         .values_list("referral_id", "event_type", "timestamp", "person_ref_id", "user_agent")
     ):
@@ -413,10 +464,13 @@ def clicks_rows(tenant, client_id: str) -> list[dict]:
             if et == "lead_captured" and pid is not None:
                 lead_prospect_ids.add(pid)
     # Prospects that still have a LIVE Lead row per journey — the current-truth
-    # side of the "Lead captured (since removed)" resolution.
+    # side of the "Lead captured (since removed)" resolution. Membership is checked
+    # only against pids already found inside the (time-bounded) stage_events window
+    # above, so this query needs no separate time bound — it already scales with the
+    # referrer's own lead count, not with click-history size.
     live_lead_prospects: dict[int, set] = {}
     for rid, pid in Lead.objects.filter(
-        referral_id__in=list(referrals), deleted_at__isnull=True
+        referral_id__in=referral_ids, deleted_at__isnull=True
     ).values_list("referral_id", "prospect_id"):
         live_lead_prospects.setdefault(rid, set()).add(pid)
     # Self-click tag (P-06/DF-11, DISPLAY-ONLY — no analytics/rollup/count mutation):

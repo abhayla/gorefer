@@ -11,10 +11,16 @@ modules; only the factory calls (which pick live vs log-only) are deferred.
 """
 from __future__ import annotations
 
+import time
 from typing import Protocol, runtime_checkable
 
 from apps.integrations.computed_vars import assert_computed_vars_filled
-from apps.integrations.wati.adapter import DeliveryResult, SendResult, TemplateStatus
+from apps.integrations.wati.adapter import (
+    TEMPLATE_STATUS_UNKNOWN,
+    DeliveryResult,
+    SendResult,
+    TemplateStatus,
+)
 from apps.integrations.zoho.adapter import (
     ContactWriteResult,
     LeadWriteResult,
@@ -34,6 +40,7 @@ __all__ = [
     "DeliveryResult",
     "TemplateStatus",
     "GuardedMessagingPort",
+    "SendRefused",
     "LeadWriteResult",
     "ReferrerHistory",
     "ContactWriteResult",
@@ -50,6 +57,28 @@ __all__ = [
     "get_crm_port",
     "get_crm_read_port",
 ]
+
+
+class SendRefused(RuntimeError):
+    """Raised when a send is refused by a RUN/PORT-LEVEL gate — never a per-recipient
+    skip (those are recorded, not raised). Today: the resolved template is not
+    APPROVED at the vendor, or the vendor cannot be asked at all.
+    """
+
+
+#: Approval-probe cache: template name -> (expires_at_monotonic, TemplateStatus).
+#: Process-wide (not per-port-instance) because `get_messaging_port()` builds a FRESH
+#: wrapped adapter on every call (T-073's factory), so instance-level caching would
+#: cache nothing across the very sequence of many-recipients-in-one-sweep sends this
+#: exists to protect Wati from. Short TTL bounds how stale an approval flip can be.
+_APPROVAL_CACHE_TTL_SECONDS = 300
+_approval_cache: dict[str, tuple[float, TemplateStatus]] = {}
+
+
+def _clear_approval_cache() -> None:
+    """Test-only: the process-wide cache must not leak approval state across tests
+    that reuse the same template name with a different fake adapter."""
+    _approval_cache.clear()
 
 
 @runtime_checkable
@@ -94,7 +123,57 @@ class GuardedMessagingPort:
 
     def send_template(self, *, to: str, template: str, params: dict) -> SendResult:
         assert_computed_vars_filled(template, params)
+        self.assert_template_approved(template)
         return self._inner.send_template(to=to, template=template, params=params)
+
+    def assert_template_approved(self, template: str) -> None:
+        """Refuse the send unless the vendor itself says this template is APPROVED.
+
+        Public so a caller that wants to fail a whole BATCH fast — before any
+        per-recipient work — can probe once up front (see
+        `records_link_send._run`); `send_template` above still calls this itself,
+        so a caller that skips the up-front probe is still covered.
+
+        Fails CLOSED in three directions: an adapter with no way to ask, a vendor
+        call that errors, and a name the vendor has never heard of all refuse.
+        Precedent for why this is not paranoia: prod's `otp_whatsapp_template` was a
+        name Meta had never seen, and every WhatsApp OTP 400-ed silently while the
+        flag read ON (CLAUDE.md §6c).
+
+        Fitted at the PORT (T-161 pt 15) rather than in one sender's good manners, so
+        EVERY send path (lead notifications, followups, congrats, campaigns, records
+        link, invite) inherits it — not only the callers that remembered to ask. The
+        log-only/demo adapter needs no special-case exemption: its own
+        `get_template_status` already simulates an always-APPROVED answer (see
+        `LogOnlyWatiAdapter.get_template_status`), so demo mode keeps working
+        end-to-end without a network call, exactly as it did before this moved.
+        """
+        now = time.monotonic()
+        cached = _approval_cache.get(template)
+        if cached is not None and cached[0] > now:
+            state = cached[1]
+        else:
+            probe = getattr(self._inner, "get_template_status", None)
+            if probe is None:
+                raise SendRefused(
+                    f"refused: cannot verify that {template!r} is approved "
+                    "(messaging port exposes no template-status check)"
+                )
+            try:
+                state = probe(template=template)
+            except Exception as exc:  # a vendor/transport error is UNKNOWN, never approval
+                raise SendRefused(
+                    f"refused: template-status check for {template!r} failed "
+                    f"({exc.__class__.__name__})"
+                ) from exc
+            # Only a SUCCESSFUL probe is cached — an error above is never memoized, so
+            # a transient vendor blip costs one refused send, not five minutes of them.
+            _approval_cache[template] = (now + _APPROVAL_CACHE_TTL_SECONDS, state)
+        if not getattr(state, "approved", False):
+            raise SendRefused(
+                f"refused: template {template!r} is not APPROVED at the vendor "
+                f"(status={getattr(state, 'status', TEMPLATE_STATUS_UNKNOWN)})"
+            )
 
     def send_session_text(self, *, to: str, message: str) -> SendResult:
         # A session message carries no template, so there is nothing to guard.

@@ -156,6 +156,10 @@ def test_otp_adapter_builds_ordered_template_params_and_reconciles(monkeypatch):
             from apps.integrations.wati import status as st
             return WatiDelivery(status=st.STATUS_DELIVERED, meta_error_code=None, classification=None)
 
+        def get_template_status(self, *, template):
+            from apps.integrations.wati.adapter import TemplateStatus
+            return TemplateStatus(name=template, status="APPROVED", category="AUTHENTICATION")
+
     import apps.integrations.wati.adapter as wati_adapter_mod
     monkeypatch.setattr(wati_adapter_mod, "get_wati_adapter", lambda: _FakeWati())
     adapter = otp_adapters.WatiWhatsAppOtpAdapter()
@@ -448,6 +452,12 @@ def _stub_wati_otp_adapter(monkeypatch, *, delivery_status, meta_error_code=None
             return wati_adapter.DeliveryResult(
                 status=delivery_status, meta_error_code=meta_error_code, classification=None
             )
+
+        def get_template_status(self, *, template):
+            # T-161 pt 15: GuardedMessagingPort now probes approval before every
+            # send — the OTP template IS approved in production, so the stub
+            # reports it as such (same convention as records_link_send's fakes).
+            return wati_adapter.TemplateStatus(name=template, status="APPROVED", category="AUTHENTICATION")
 
     monkeypatch.setattr(wati_adapter, "get_wati_adapter", lambda: _Stub())
     return sent

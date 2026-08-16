@@ -81,6 +81,61 @@ def test_no_partner_code_in_client_facing_response_bodies():
         assert "signup.zerodha.com" not in body, f"raw Zerodha URL leaked in body of {path}"
 
 
+@pytest.mark.django_db
+@pytest.mark.urls("tests.urls_t161_guardrail3")
+def test_no_partner_code_on_the_newer_client_facing_surfaces():
+    """Guardrail-3, expanded (T-161 pt 17): the Sprint-1 sweep above only ever walked
+    the Sprint-1 surfaces. Every client-facing page Sprint 2 added since — the tokened
+    share hub, the records page, the logged-in referrer's own view, the one-tap share
+    endpoint, and the soft-landing recovery page — must hold the SAME invariant, or a
+    future page silently falls outside the guardrail's reach. None of these views gate
+    on a feature flag internally (only the URL MOUNTING does, in gorefer/urls.py — the
+    "no dead UI when off" convention), so a dedicated test URLConf that always mounts
+    them (tests/urls_t161_guardrail3.py) is sufficient without flipping any flag.
+    """
+    from apps.accounts.models import ReferrerAccount
+    from apps.accounts.records_link import mint_records_token
+    from apps.referrals.models import ReferralIdentity, ReferralProgram
+    from apps.tenants.models import Tenant
+
+    call_command("seed_program")
+    tenant = Tenant.objects.get(slug="pifs")
+    program = ReferralProgram.objects.get(tenant=tenant)
+    identity = ReferralIdentity.objects.create(
+        tenant=tenant, program=program, partner=program.partner, client_id="RJ4521"
+    )
+    token = mint_records_token(identity)
+
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+    user = User.objects.create(username="grd3-referrer", is_staff=False, is_active=True)
+    ReferrerAccount.objects.create(
+        tenant=tenant, user=user, client_id="RJ4521", bound_via=ReferrerAccount.BOUND_VIA_OTP,
+    )
+
+    anon = Client()
+    paths = [
+        f"/hub/{token}",
+        "/rr/RJ4521",
+        "/share/wa/RJ4521",
+        "/share/wa/",   # the recovery page for a share link that lost its client_id
+        "/r/",          # the acquisition-side twin (T-122)
+    ]
+    for path in paths:
+        resp = anon.get(path, HTTP_USER_AGENT="Mozilla/5.0", REMOTE_ADDR="203.0.113.7")
+        body = resp.content.decode()
+        assert "ZMPHZC" not in body, f"partner code leaked in body of {path}"
+        assert "signup.zerodha.com" not in body, f"raw Zerodha URL leaked in body of {path}"
+
+    authed = Client()
+    authed.force_login(user)
+    resp = authed.get("/my/referrals")
+    body = resp.content.decode()
+    assert "ZMPHZC" not in body, "partner code leaked in body of /my/referrals"
+    assert "signup.zerodha.com" not in body, "raw Zerodha URL leaked in body of /my/referrals"
+
+
 # --- Guardrail #2 (ACTIVE, M6): account/conversion status ONLY from Zoho -----
 
 # Guardrail-#2 truth fields — the columns only zoho/ingest.py may write.

@@ -20,6 +20,14 @@
   <div class="ring-card card"><div data-ring data-display="{{ kpis.conversion_rate }}%" data-frac="{{ kpis.conversion_frac }}" data-label="CONV" data-color="#16a34a"></div><div class="mt-1 text-[9.5px] uppercase tracking-wide text-ink-300">leads → accounts</div></div>
 </section>
 
+{% if stats_catching_up %}
+{# T-161 pt 21: the per-page-load rollup recompute is bounded — a backlog bigger than #}
+{# the bound stays dirty and shows here rather than silently rendering stale numbers. #}
+<section class="rounded-2xl bg-amber-50 border border-amber-200 px-4 py-2.5 text-[11.5px] font-medium text-amber-800">
+  Statistics catching up — some recent days are still updating.
+</section>
+{% endif %}
+
 <section class="grid grid-cols-1 lg:grid-cols-5 gap-4">
   {# Funnel — from the SAME rollup snapshot as the KPIs (OBS-1) #}
   <div class="lg:col-span-3 rounded-2xl bg-white border border-line card p-5">

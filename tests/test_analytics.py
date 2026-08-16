@@ -8,13 +8,17 @@ from apps.events import vocab
 from apps.events.analytics import build_journey_timeline, funnel_counts
 from apps.events.models import DailyMetric, DirtyPeriod, Event, MonthlyMetric
 from apps.events.rollups import recompute_dirty
-from apps.referrals.models import Referral
+from apps.referrals.models import Referral, ReferralProgram
 
 
 @pytest.fixture
 def demo(db):
     call_command("seed_program")
     call_command("seed_demo")
+
+
+def _tenant():
+    return ReferralProgram.objects.first().tenant
 
 
 # --- journey timeline ------------------------------------------------------
@@ -35,7 +39,7 @@ def test_journey_timeline_is_ordered_with_source_tags(demo):
 # --- funnel ----------------------------------------------------------------
 
 def test_funnel_counts_from_events_account_opened_source_only(demo):
-    stages = {s["stage"]: s for s in funnel_counts()}
+    stages = {s["stage"]: s for s in funnel_counts(tenant=_tenant())}
     assert stages["click"]["count"] > 0
     assert stages["landing_viewed"]["count"] > 0
     # account_opened is source-only: it reflects ONLY Zoho-sourced account_opened
@@ -45,14 +49,20 @@ def test_funnel_counts_from_events_account_opened_source_only(demo):
     assert stages["account_opened"]["count"] == zoho_opened
 
 
+def test_funnel_counts_requires_a_tenant():
+    """T-161 pt 8: a forgotten tenant is a TypeError, not a silent all-tenants read."""
+    with pytest.raises(TypeError):
+        funnel_counts()
+
+
 def test_funnel_excludes_bots(demo):
     referral = Referral.objects.filter(source="referral_link").first()
-    before = {s["stage"]: s["count"] for s in funnel_counts()}
+    before = {s["stage"]: s["count"] for s in funnel_counts(tenant=_tenant())}
     Event.objects.create(
         tenant=referral.tenant, event_type=vocab.CLICK, source=vocab.SRC_CLICK,
         referral=referral, is_bot=True, metadata={},
     )
-    after = {s["stage"]: s["count"] for s in funnel_counts()}
+    after = {s["stage"]: s["count"] for s in funnel_counts(tenant=_tenant())}
     assert after["click"] == before["click"]  # bot click not counted
 
 

@@ -128,7 +128,11 @@ class _NoTemplateCheckAdapter(_FakeAdapter):
 
 
 def _use(monkeypatch, fake):
-    monkeypatch.setattr(rls, "get_messaging_port", lambda: fake)
+    """Wrap `fake` in the SAME `GuardedMessagingPort` `get_messaging_port()` fits in
+    production (T-161 pt 15 moved the approval gate there), so these tests exercise
+    the real send path rather than a bypass. `fake.sent` / `fake.status_probes`
+    still see every call — the wrapper delegates, it doesn't intercept transparently."""
+    monkeypatch.setattr(rls, "get_messaging_port", lambda: ports.GuardedMessagingPort(fake))
     return fake
 
 

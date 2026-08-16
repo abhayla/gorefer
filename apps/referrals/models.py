@@ -61,13 +61,19 @@ class Partner(AuditedModel, SoftDeleteModel, TenantScopedModel):
     """
 
     name = models.CharField(max_length=200)
-    code = models.CharField(max_length=50, unique=True)
+    code = models.CharField(max_length=50)
     credentials = models.JSONField(default=dict, blank=True)
     website = models.URLField(blank=True, default="")
     status = models.CharField(max_length=20, default="active")
 
     class Meta:
         db_table = "partners"
+        constraints = [
+            # (T-161 pt 28) was a bare `unique=True` — global uniqueness broke the
+            # file's own tenant-scoped-uniqueness convention (see Customer above) and
+            # would have blocked a second tenant from ever seeding its own ZMPHZC row.
+            models.UniqueConstraint(fields=["tenant", "code"], name="uq_partner_tenant_code"),
+        ]
         indexes = [models.Index(fields=["status"])]
 
     def __str__(self) -> str:  # pragma: no cover - trivial

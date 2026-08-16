@@ -1,10 +1,11 @@
 """Messaging campaign sending (T-125, W2) — a new `SendFamily` instance in the
 `apps.integrations.records_link_send` pattern, reusing that module's fail-closed
-guards VERBATIM rather than re-implementing them: `_assert_template_approved`,
-`assert_computed_vars_filled` (blank token → SKIPPED before any network call), and
-`_send_and_record` (accepted → terminal-status recording, doc-08 A3). One send
-path, so a campaign send can never disagree with a records-link send about what
-"fail closed" means.
+guards: `GuardedMessagingPort.assert_template_approved` (T-161 pt 15 moved the
+approval probe from this module onto the port itself, so every send path shares
+one implementation), `assert_computed_vars_filled` (blank token → SKIPPED before
+any network call), and `_send_and_record` (accepted → terminal-status recording,
+doc-08 A3). One send path, so a campaign send can never disagree with a
+records-link send about what "fail closed" means.
 
 The flags gate here is deliberately NOT `records_link_send._assert_flags_on` (which
 also demands `ENABLE_WATI_SEND` and refuses outright when it's off — correct for a
@@ -39,7 +40,6 @@ from apps.integrations.records_link_send import (
     OUTCOME_SKIPPED,
     SendFamily,
     SendRefused,
-    _assert_template_approved,
     _item,
     _send_and_record,
 )
@@ -95,7 +95,7 @@ def send_campaign_message(*, tenant, client_id: str, mobile: str, template: str)
 
     messaging = get_messaging_port()
     try:
-        _assert_template_approved(messaging, template)
+        messaging.assert_template_approved(template)
     except SendRefused as exc:
         return _item(client_id, mobile=mask_mobile(mobile) if mobile else "", template=template,
                      outcome=OUTCOME_SKIPPED, reason=str(exc))

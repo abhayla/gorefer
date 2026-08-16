@@ -138,7 +138,10 @@ def _sync_health(tenant):
 def dashboard(request):
     tenant = get_current_tenant(request)
     # Recompute dirty rollups on view so KPI + funnel + leaderboard read one
-    # consistent, fresh snapshot (OBS-1); expose its "counts as of" timestamp.
+    # consistent, fresh snapshot (OBS-1); expose its "counts as of" timestamp. The
+    # recompute is BOUNDED per page-load (T-161 pt 21) — a backlog bigger than that
+    # bound stays dirty and shows the catching-up note below rather than blocking
+    # the request or rendering stale numbers with no signal.
     counts_as_of = queries.refresh_and_freshness(tenant)
     ctx = {
         "kpis": queries.kpis(tenant),
@@ -148,6 +151,7 @@ def dashboard(request):
         "sync_health": _sync_health(tenant),
         "confirmed_clicks": queries.confirmed_clicks(tenant),
         "counts_as_of": counts_as_of,
+        "stats_catching_up": queries.dirty_backlog_remains(tenant),
         "nav_active": "dashboard",
     }
     return render(request, "dashboard/dashboard.html", ctx)
@@ -276,13 +280,27 @@ def referrer_profile(request, client_id: str):
     if not profile.profile_exists(tenant, cid):
         raise Http404("no referral profile for this client id")
 
+    try:
+        clicks_page = max(1, int(request.GET.get("clicks_page", 1)))
+    except ValueError:
+        clicks_page = 1
+    clicks_total = profile.clicks_row_count(tenant, cid)
+    clicks_page_size = profile.clicks_page_size(tenant)
+    clicks_total_pages = max(1, -(-clicks_total // clicks_page_size)) if clicks_page_size else 1
+    clicks_page = min(clicks_page, clicks_total_pages)
+
     band = profile.top_band(tenant, cid)
     ctx = {
         "client_id": cid,
         "band": band,
         "ring_fractions": profile.ring_fractions(band["aggregates"]),
         "cards": profile.per_link_cards(tenant, cid),
-        "clicks": profile.clicks_rows(tenant, cid),
+        "clicks": profile.clicks_rows(tenant, cid, page=clicks_page),
+        "clicks_page": clicks_page,
+        "clicks_total_pages": clicks_total_pages,
+        "clicks_total_rows": clicks_total,
+        "clicks_has_prev": clicks_page > 1,
+        "clicks_has_next": clicks_page < clicks_total_pages,
         "people": profile.referred_people(tenant, cid),
         "config": profile.PROFILE_CONFIG,
         "sync_health": _sync_health(tenant),

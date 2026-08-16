@@ -22,6 +22,7 @@ from apps.config.cascade import set_tenant
 from apps.config.preferences import RECORDS_LINK_SEND_MAX_PER_RUN, RECORDS_LINK_SEND_MIN_GAP_DAYS
 from apps.events.models import Event
 from apps.followups.models import FollowupWindow
+from apps.integrations import ports
 from apps.integrations import records_link_send as rls
 from apps.integrations.models import Notification
 from apps.integrations.wati import status as wati_status
@@ -105,7 +106,7 @@ class _FakeAdapter:
 def test_dry_run_is_the_default_and_sends_nothing(seeded, monkeypatch):
     _identity(seeded, CID)
     fake = _FakeAdapter()
-    monkeypatch.setattr(rls, "get_messaging_port", lambda: fake)
+    monkeypatch.setattr(rls, "get_messaging_port", lambda: ports.GuardedMessagingPort(fake))
 
     result = rls.send_records_links([CID])  # dry_run defaults True
 
@@ -152,7 +153,7 @@ def test_send_records_delivery_and_event(seeded, monkeypatch):
     _identity(seeded, CID)
     _sending_enabled(monkeypatch)
     fake = _FakeAdapter(terminal_status=wati_status.STATUS_DELIVERED)
-    monkeypatch.setattr(rls, "get_messaging_port", lambda: fake)
+    monkeypatch.setattr(rls, "get_messaging_port", lambda: ports.GuardedMessagingPort(fake))
 
     result = rls.send_records_links([CID], dry_run=False)
 
@@ -186,7 +187,7 @@ def test_send_not_accepted_is_recorded_failed(seeded, monkeypatch):
     _identity(seeded, CID)
     _sending_enabled(monkeypatch)
     fake = _FakeAdapter(accepted=False)
-    monkeypatch.setattr(rls, "get_messaging_port", lambda: fake)
+    monkeypatch.setattr(rls, "get_messaging_port", lambda: ports.GuardedMessagingPort(fake))
 
     result = rls.send_records_links([CID], dry_run=False)
 
@@ -201,7 +202,7 @@ def test_send_not_accepted_is_recorded_failed(seeded, monkeypatch):
 def test_unknown_client_id_is_skipped_never_fabricated(seeded, monkeypatch):
     _sending_enabled(monkeypatch)
     fake = _FakeAdapter()
-    monkeypatch.setattr(rls, "get_messaging_port", lambda: fake)
+    monkeypatch.setattr(rls, "get_messaging_port", lambda: ports.GuardedMessagingPort(fake))
 
     result = rls.send_records_links([UNKNOWN_CID], dry_run=False)
 
@@ -217,7 +218,7 @@ def test_no_mobile_on_file_is_skipped(seeded, monkeypatch):
     _identity(seeded, NO_MOBILE_CID)
     _sending_enabled(monkeypatch)
     fake = _FakeAdapter()
-    monkeypatch.setattr(rls, "get_messaging_port", lambda: fake)
+    monkeypatch.setattr(rls, "get_messaging_port", lambda: ports.GuardedMessagingPort(fake))
 
     result = rls.send_records_links([NO_MOBILE_CID], dry_run=False)
 
@@ -253,7 +254,7 @@ def test_min_gap_dedupe_skips_recent_send(seeded, monkeypatch):
     _identity(seeded, CID)
     _sending_enabled(monkeypatch)
     fake = _FakeAdapter()
-    monkeypatch.setattr(rls, "get_messaging_port", lambda: fake)
+    monkeypatch.setattr(rls, "get_messaging_port", lambda: ports.GuardedMessagingPort(fake))
 
     from apps.events import vocab
 
@@ -274,7 +275,7 @@ def test_min_gap_zero_allows_resend(seeded, monkeypatch):
     _sending_enabled(monkeypatch)
     set_tenant(RECORDS_LINK_SEND_MIN_GAP_DAYS, 0, tenant_id=seeded.id)
     fake = _FakeAdapter()
-    monkeypatch.setattr(rls, "get_messaging_port", lambda: fake)
+    monkeypatch.setattr(rls, "get_messaging_port", lambda: ports.GuardedMessagingPort(fake))
 
     from apps.events import vocab
 
@@ -292,7 +293,7 @@ def test_opted_out_recipient_is_skipped(seeded, monkeypatch):
     _sending_enabled(monkeypatch)
     FollowupWindow.objects.create(tenant=seeded, mobile="919876504321", opted_out=True)
     fake = _FakeAdapter()
-    monkeypatch.setattr(rls, "get_messaging_port", lambda: fake)
+    monkeypatch.setattr(rls, "get_messaging_port", lambda: ports.GuardedMessagingPort(fake))
 
     result = rls.send_records_links([CID], dry_run=False)
 
@@ -311,7 +312,7 @@ def test_blocked_by_allowlist_is_skipped_not_failed(seeded, monkeypatch):
             return SendResult(accepted=False, provider_message_id=None, raw_status=wati_status.STATUS_BLOCKED)
 
     fake = _BlockedAdapter()
-    monkeypatch.setattr(rls, "get_messaging_port", lambda: fake)
+    monkeypatch.setattr(rls, "get_messaging_port", lambda: ports.GuardedMessagingPort(fake))
 
     result = rls.send_records_links([CID], dry_run=False)
 

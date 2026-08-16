@@ -104,7 +104,7 @@ def test_invite_send_refused_when_share_hub_off_even_with_records_link_on(seeded
     _identity(seeded, CID)
     _set_flags(monkeypatch, ENABLE_SHARE_HUB=False, ENABLE_RECORDS_LINK=True, ENABLE_WATI_SEND=True)
     fake = _FakeAdapter()
-    monkeypatch.setattr(rls, "get_messaging_port", lambda: fake)
+    monkeypatch.setattr(rls, "get_messaging_port", lambda: ports.GuardedMessagingPort(fake))
 
     with pytest.raises(rls.SendRefused) as exc:
         rls.send_invite_links([CID], dry_run=False)
@@ -118,7 +118,7 @@ def test_invite_send_allowed_when_share_hub_on_and_records_link_off(seeded, monk
     _identity(seeded, CID)
     _set_flags(monkeypatch, ENABLE_SHARE_HUB=True, ENABLE_RECORDS_LINK=False, ENABLE_WATI_SEND=True)
     fake = _FakeAdapter()
-    monkeypatch.setattr(rls, "get_messaging_port", lambda: fake)
+    monkeypatch.setattr(rls, "get_messaging_port", lambda: ports.GuardedMessagingPort(fake))
 
     result = rls.send_invite_links([CID], dry_run=False)
 
@@ -132,7 +132,7 @@ def test_records_send_still_gated_on_records_link_not_share_hub(seeded, monkeypa
     _identity(seeded, CID)
     _set_flags(monkeypatch, ENABLE_SHARE_HUB=True, ENABLE_RECORDS_LINK=False, ENABLE_WATI_SEND=True)
     fake = _FakeAdapter()
-    monkeypatch.setattr(rls, "get_messaging_port", lambda: fake)
+    monkeypatch.setattr(rls, "get_messaging_port", lambda: ports.GuardedMessagingPort(fake))
 
     with pytest.raises(rls.SendRefused) as exc:
         rls.send_records_links([CID], dry_run=False)

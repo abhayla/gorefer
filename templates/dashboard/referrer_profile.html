@@ -111,7 +111,7 @@ Admin chrome, never the referrer self view.
 {# Tabs: Clicks · Referred People #}
 <section class="bg-white border border-line rounded-2xl card overflow-hidden">
   <div class="flex items-center gap-2 p-3 border-b border-line">
-    <button onclick="grTab('c')" id="tc" class="px-4 py-2 rounded-full text-[12.5px] font-semibold bg-cobalt-600 text-white">Clicks · {{ clicks|length }}</button>
+    <button onclick="grTab('c')" id="tc" class="px-4 py-2 rounded-full text-[12.5px] font-semibold bg-cobalt-600 text-white">Clicks · {{ clicks_total_rows }}</button>
     <button onclick="grTab('p')" id="tp" class="px-4 py-2 rounded-full text-[12.5px] font-semibold text-ink-500 hover:bg-cobalt-50">Referred People · {{ people|length }}</button>
     {% if role != "referrer" %}<span class="ml-auto text-[10px] text-ink-300 pr-1 hidden sm:inline">Admin view — full detail · customer view masks IP &amp; phone</span>{% endif %}
   </div>
@@ -134,6 +134,21 @@ Admin chrome, never the referrer self view.
     <div id="clicksEmpty" class="hidden px-5 py-10 text-center text-[12px] text-ink-500">No clicks match these filters.</div>
     <div class="flex items-center justify-between px-4 py-2.5 text-[11px] text-ink-300 border-t border-line">
       <span>* {{ config.unique_note }}</span>
+      {% if clicks_total_pages > 1 %}
+      <div class="flex items-center gap-2">
+        <span>Page {{ clicks_page }} of {{ clicks_total_pages }} &middot; {{ clicks_total_rows }} click{{ clicks_total_rows|pluralize }}</span>
+        {% if clicks_has_prev %}
+          <a href="?clicks_page={{ clicks_page|add:"-1" }}" class="px-2.5 py-1 rounded-full border border-line hover:bg-cobalt-50">&larr; Prev</a>
+        {% else %}
+          <span class="px-2.5 py-1 rounded-full border border-line opacity-40">&larr; Prev</span>
+        {% endif %}
+        {% if clicks_has_next %}
+          <a href="?clicks_page={{ clicks_page|add:"1" }}" class="px-2.5 py-1 rounded-full border border-line hover:bg-cobalt-50">Next &rarr;</a>
+        {% else %}
+          <span class="px-2.5 py-1 rounded-full border border-line opacity-40">Next &rarr;</span>
+        {% endif %}
+      </div>
+      {% endif %}
     </div>
   </div>
 

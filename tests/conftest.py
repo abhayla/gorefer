@@ -55,3 +55,16 @@ def _clear_ratelimit_cache(request):
     yield
     with django_db_blocker.unblock():
         cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def _clear_wati_approval_cache():
+    """Reset the process-wide template-approval cache (T-161 pt 15) between every
+    test. It is keyed by template NAME only (deliberately — see `apps.integrations.
+    ports`), so without a reset a fake adapter's approval state in one test would
+    leak into the next test reusing the same template name."""
+    from apps.integrations.ports import _clear_approval_cache
+
+    _clear_approval_cache()
+    yield
+    _clear_approval_cache()

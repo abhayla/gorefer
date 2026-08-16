@@ -26,9 +26,17 @@ from apps.events.analytics import (
     confirmed_human_clicks,
 )
 from apps.events.bots import synthetic_ua_q
-from apps.events.models import DailyMetric
+from apps.events.models import DailyMetric, DirtyPeriod
 from apps.integrations.models import Conversion
 from apps.referrals.models import Customer, Lead, Referral
+
+#: Per-request bound on how many dirty rollup periods a single dashboard page-load
+#: recomputes (T-161 pt 21). Structural, not a cascade key (rail E-6): it caps the
+#: cost of ONE request, not a customer-facing behavior — an operator who wants faster
+#: catch-up runs `recompute_dirty()` unbounded from a shell/cron, same as always.
+#: 200 comfortably covers every seeded/demo backlog (well under 200 dirty periods),
+#: so this is a zero-behaviour-change default for the sizes seen in practice.
+DASHBOARD_RECOMPUTE_LIMIT = 200
 
 
 def _rollup_totals(tenant):
@@ -44,19 +52,35 @@ def _rollup_totals(tenant):
 
 
 def refresh_and_freshness(tenant=None):
-    """Recompute any dirty rollups so the dashboard is never stale (OBS-1), and
-    return a single 'counts as of' timestamp for the whole page. KPI, funnel, and
-    leaderboard all read the SAME rollup snapshot at this freshness."""
+    """Recompute dirty rollups (bounded to DASHBOARD_RECOMPUTE_LIMIT per page-load —
+    T-161 pt 21) so the dashboard is never stale (OBS-1), and return a single
+    'counts as of' timestamp for the whole page. KPI, funnel, and leaderboard all
+    read the SAME rollup snapshot at this freshness.
+
+    A backlog larger than the limit is left dirty and picked up by the NEXT
+    page-load (or the scheduled `recompute_rollups` job) — see `dirty_backlog_remains`
+    for the flag that drives the "statistics catching up" banner.
+    """
     from django.utils import timezone
 
     from apps.events.rollups import recompute_dirty
 
-    recompute_dirty()
+    recompute_dirty(limit=DASHBOARD_RECOMPUTE_LIMIT)
     qs = DailyMetric.objects.all()
     if tenant is not None:
         qs = qs.for_tenant(tenant)
     last = qs.order_by("-recomputed_at").values_list("recomputed_at", flat=True).first()
     return last or timezone.now()
+
+
+def dirty_backlog_remains(tenant=None) -> bool:
+    """True when unprocessed dirty rollup periods remain AFTER a bounded recompute
+    (T-161 pt 21) — the dashboard renders a visible catching-up note instead of
+    either blocking the request or silently showing stale numbers with no signal."""
+    qs = DirtyPeriod.objects.filter(processed_at__isnull=True)
+    if tenant is not None:
+        qs = qs.for_tenant(tenant)
+    return qs.exists()
 
 
 def kpis(tenant=None) -> dict:

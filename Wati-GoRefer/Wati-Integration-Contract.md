@@ -493,6 +493,10 @@ all** — not with a blank, not with a placeholder. Refused, with a reason.
   fires `__getattr__`); `kind` and vendor extras still delegate dynamically.
 - Senders that prefer a clean row over an exception (`records_link_send`) call the same check ahead
   of the write and record the recipient as `skipped` with that reason. One check, two call sites.
+- **T-161 pt 15 (2026-08-17): the template-APPROVAL check moved here too** — see §12a below.
+  `GuardedMessagingPort.send_template` now asserts approval on every call (short-TTL cache — see
+  §12a), so a sender that never learned to call `_assert_template_approved` (lead notifications,
+  followups, congrats, campaigns) is guarded exactly the same as `records_link_send` always was.
 - **`apps/integrations/wati/tasks.py:send_notification`** (the M5 role-template path — office /
   prospect / referrer alerts) now calls `get_messaging_port()` too, not `wati.adapter.get_wati_adapter()`
   directly (T-074, 2026-08-10 — fixes a T-073 checker finding: the guard was fitted at the port
@@ -514,11 +518,28 @@ can mint has no safe dashboard-broadcast path — the sender is the only way to 
   from the inventory all return `UNKNOWN`, never a hopeful `APPROVED`.
 - **Log-only:** returns `APPROVED` with **`simulated=True`**, so demo mode runs end-to-end while a
   caller can still tell a simulated approval from a vendor-confirmed one (same honesty rule as
-  `simulated_delivered`, §5).
-- `records_link_send._assert_template_approved` refuses a whole run (`SendRefused`) when the
-  resolved template is not APPROVED, when the check errors, or when the port cannot be asked at
-  all. Precedent for why this exists: prod's `otp_whatsapp_template` was a name Meta had **never
-  seen**, and every WhatsApp login OTP 400-ed silently while the flag read ON (CLAUDE.md §6c).
+  `simulated_delivered`, §5). Because the simulated answer is always `APPROVED`, the log-only/demo
+  adapter needs **no special-case exemption** in the guard below — it passes the same check every
+  live adapter does, just without a network call.
+- **T-161 pt 15 (2026-08-17): the check now lives at `GuardedMessagingPort.assert_template_approved`
+  / `send_template`, not in `records_link_send`.** `GuardedMessagingPort.send_template` raises
+  `SendRefused` (`apps.integrations.ports.SendRefused` — `records_link_send` re-exports the same
+  class for callers that still import it from there) when the resolved template is not APPROVED,
+  when the vendor check errors, or when the adapter exposes no `get_template_status` at all. This
+  runs on **every** send through the port — lead notifications, followups, congrats, campaigns,
+  records link, invite — not only the one sender that used to remember to call it.
+  `records_link_send._run` ALSO probes once up front (via the same
+  `assert_template_approved` method) so a whole batch still fails fast before any per-recipient
+  work, exactly as it did before the move; that up-front probe warms the cache the per-recipient
+  `send_template` calls then hit.
+  - **Short-TTL cache (5 minutes, process-wide, keyed by template name):** a SUCCESSFUL probe is
+    memoized so a sweep sending to many recipients (or many independent callers within the window)
+    costs the vendor ONE `getMessageTemplates` call, not one per send — Wati is never hammered. A
+    vendor ERROR is deliberately **not** cached, so a transient blip costs one refused send and
+    self-heals on the very next call rather than blocking the whole TTL window.
+  - Precedent for why this exists at all: prod's `otp_whatsapp_template` was a name Meta had
+    **never seen**, and every WhatsApp login OTP 400-ed silently while the flag read ON
+    (CLAUDE.md §6c).
 
 ### 12b. Per-recipient token-carrying senders
 

@@ -61,9 +61,8 @@ from apps.events.models import Event
 from apps.integrations import delivery_status as ds
 from apps.integrations.computed_vars import MissingComputedVar, assert_computed_vars_filled
 from apps.integrations.models import Notification
-from apps.integrations.ports import get_crm_read_port, get_messaging_port
+from apps.integrations.ports import SendRefused, get_crm_read_port, get_messaging_port
 from apps.integrations.wati import status as wati_status
-from apps.integrations.wati.adapter import TEMPLATE_STATUS_UNKNOWN
 from apps.referrals.validators import InvalidClientId, validate_client_id
 from apps.tenants.resolve import get_current_tenant
 
@@ -80,13 +79,12 @@ OUTCOME_SKIPPED = "skipped"
 OUTCOME_FAILED = "failed"
 
 
-class SendRefused(RuntimeError):
-    """Raised when `--send` is requested but a RUN-LEVEL gate says no.
-
-    Two causes today: the gating flags are not both on, or the resolved template is
-    not APPROVED at the vendor. Both are all-or-nothing for the whole run — refusing
-    per-recipient would leave a half-sent batch behind.
-    """
+#: Re-exported so existing callers importing `SendRefused` from this module keep
+#: working — the exception itself now lives at `apps.integrations.ports` (T-161 pt
+#: 15), because the template-approval gate that used to raise it here moved into
+#: `GuardedMessagingPort`, the ONE place every send path (not just this module's)
+#: now inherits it from. `_assert_flags_on` below still raises the SAME exception
+#: for the (unrelated) flags-off gate.
 
 
 # --------------------------------------------------------------------------- families
@@ -245,35 +243,6 @@ def _item(client_id: str, *, mobile: str = "", template: str, record_date: str =
 # --------------------------------------------------------------------------- run gates
 
 
-def _assert_template_approved(messaging, template: str) -> None:
-    """Refuse the run unless the vendor itself says this template is APPROVED.
-
-    Fails CLOSED in three directions: an adapter with no way to ask, a vendor call
-    that errors, and a name the vendor has never heard of all refuse. Precedent for
-    why this is not paranoia: prod's `otp_whatsapp_template` was a name Meta had
-    never seen, and every WhatsApp OTP 400-ed silently while the flag read ON
-    (CLAUDE.md §6c). The invite template is a DRAFT today — this gate is what makes
-    landing the invite sender safe.
-    """
-    probe = getattr(messaging, "get_template_status", None)
-    if probe is None:
-        raise SendRefused(
-            f"refused: cannot verify that {template!r} is approved "
-            "(messaging port exposes no template-status check)"
-        )
-    try:
-        state = probe(template=template)
-    except Exception as exc:  # a vendor/transport error is UNKNOWN, never approval
-        raise SendRefused(
-            f"refused: template-status check for {template!r} failed ({exc.__class__.__name__})"
-        ) from exc
-    if not getattr(state, "approved", False):
-        raise SendRefused(
-            f"refused: template {template!r} is not APPROVED at the vendor "
-            f"(status={getattr(state, 'status', TEMPLATE_STATUS_UNKNOWN)})"
-        )
-
-
 def _assert_flags_on(family: SendFamily, tenant_id: int | None) -> None:
     # Local imports (not top-of-module) so tests can monkeypatch the resolver / the
     # frozen flags snapshot in place — the same convention `wati/adapter.py` and
@@ -430,7 +399,11 @@ def _run(family: SendFamily, client_ids: list[str], *, dry_run: bool) -> dict:
     if not dry_run:
         _assert_flags_on(family, tenant_id)
         messaging = get_messaging_port()
-        _assert_template_approved(messaging, template)
+        # Probe approval ONCE up front so a mid-run flip can never leave a half-sent
+        # batch. `GuardedMessagingPort.send_template` (T-161 pt 15) re-asserts this on
+        # every per-recipient send too, but that hits the short-TTL cache this call
+        # just warmed — so this costs one vendor round trip, not N.
+        messaging.assert_template_approved(template)
 
     crm_read = get_crm_read_port()
 
