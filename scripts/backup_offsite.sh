@@ -25,8 +25,13 @@
 #   # rclone mode (recommended: any S3/B2/Drive/Dropbox remote configured with
 #   # `rclone config` as root; credentials live in /root/.config/rclone/rclone.conf):
 #   BACKUP_OFFSITE_REMOTE=gorefer-backups:gorefer/postgres
-#   # scp mode (a second machine you control — a different provider, not this VPS):
+#   # scp mode (a second machine you control — a different provider, not this VPS).
+#   # The destination can be Linux OR Windows (OpenSSH server, e.g. a Hostinger
+#   # Windows VPS) — the remote-size verification tries `stat` first, falls back
+#   # to sftp's `ls -l` (works against either OS's sftp-server), then a
+#   # PowerShell one-liner, so no destination-OS assumption is required here:
 #   BACKUP_OFFSITE_SSH=user@backup-host:/srv/backups/gorefer
+#   # Windows example: BACKUP_OFFSITE_SSH=Administrator@203.0.113.9:C:/Abhay/Backups/gorefer-postgres
 #   BACKUP_OFFSITE_SSH_KEY=/root/.ssh/gorefer_backup
 #   # optional, for the failure alert:
 #   NOTIFIER_URL=... ; NOTIFIER_KEY=...
@@ -55,8 +60,58 @@ notify() {  # $1 severity, $2 title, $3 body, $4 dedupeKey
 
 fail() {  # $1 = message
   echo "ERROR: $1" >&2
-  notify "warning" "GoRefer: off-site backup FAILED" "$1" "gorefer-offsite-fail-$(date -u +%Y-%m-%d)"
+  notify "P1" "GoRefer: off-site backup FAILED" "$1" "gorefer-offsite-fail-$(date -u +%Y-%m-%d)"
   exit 1
+}
+
+# Reads the size (bytes) of a remote file over the SAME ssh key/opts already in
+# use, without assuming the remote shell is POSIX. Windows OpenSSH servers default
+# the login shell to cmd.exe/PowerShell, so `ssh host stat ...` fails there even
+# though the copy itself (scp, which speaks the sftp/scp wire protocol, not the
+# remote shell) succeeded. Try three probes, in order, and use the first that
+# returns a plain integer:
+#   1. `stat -c %s` over ssh   — works for Linux/macOS/WSL remotes.
+#   2. `sftp -b - ls -l`       — the sftp wire protocol's directory listing is
+#                                 unix-`ls -l`-shaped on every sftp-server
+#                                 implementation (incl. Windows OpenSSH's), so
+#                                 this is the platform-neutral case.
+#   3. a PowerShell one-liner  — last resort for a Windows remote whose sftp
+#                                 subsystem is disabled but whose login shell is
+#                                 PowerShell/cmd.
+remote_file_size() {  # $1 = ssh target (user@host), $2 = remote path, remaining = ssh opts
+  local target="$1" path="$2"; shift 2
+  local opts=("$@")
+  local size
+
+  size="$(ssh "${opts[@]}" "$target" "stat -c %s '$path'" 2>/dev/null)"
+  if [ -n "$size" ] && [ "$size" -eq "$size" ] 2>/dev/null; then
+    printf '%s' "$size"
+    return 0
+  fi
+
+  # Windows OpenSSH's sftp-server roots drive-letter paths (`C:/...`) under the
+  # login home directory unless given a leading slash (`/C:/...`); a Linux path
+  # is already slash-rooted, so only add the extra slash for the drive-letter form.
+  local sftp_path="$path"
+  case "$path" in
+    [A-Za-z]:*) sftp_path="/$path" ;;
+  esac
+  size="$(sftp -b - "${opts[@]}" "$target" <<EOF 2>/dev/null | grep -oE '[0-9]+ [A-Za-z]{3} +[0-9]+ ' | awk '{print $1}' | head -1
+ls -l "$sftp_path"
+EOF
+  )"
+  if [ -n "$size" ] && [ "$size" -eq "$size" ] 2>/dev/null; then
+    printf '%s' "$size"
+    return 0
+  fi
+
+  size="$(ssh "${opts[@]}" "$target" "powershell -NoProfile -NonInteractive -Command \"(Get-Item -LiteralPath '$path').Length\"" 2>/dev/null | tr -d '\r')"
+  if [ -n "$size" ] && [ "$size" -eq "$size" ] 2>/dev/null; then
+    printf '%s' "$size"
+    return 0
+  fi
+
+  return 1
 }
 
 [ -n "$MODE" ] || fail "off-site backups are NOT configured ($CONFIG_FILE missing or has no BACKUP_OFFSITE_MODE). The nightly dump is still local-only."
@@ -91,7 +146,7 @@ case "$MODE" in
       || fail "scp of $NEWEST to $BACKUP_OFFSITE_SSH failed."
     SSH_TARGET="${BACKUP_OFFSITE_SSH%%:*}"
     SSH_PATH="${BACKUP_OFFSITE_SSH#*:}"
-    REMOTE_SIZE="$(ssh "${SCP_OPTS[@]}" "$SSH_TARGET" "stat -c %s '$SSH_PATH/$(basename "$NEWEST")'" 2>/dev/null)"
+    REMOTE_SIZE="$(remote_file_size "$SSH_TARGET" "$SSH_PATH/$(basename "$NEWEST")" "${SCP_OPTS[@]}")"
     ;;
   *)
     fail "unknown BACKUP_OFFSITE_MODE='$MODE' (expected 'rclone' or 'scp')."
@@ -102,7 +157,7 @@ esac
 # upload is the classic backup that only fails on the day you need it.
 if [ -z "${REMOTE_SIZE:-}" ]; then
   echo "WARN: could not read the size of the copy at the destination — treating as unverified." >&2
-  notify "warning" "GoRefer: off-site backup unverified" \
+  notify "P2" "GoRefer: off-site backup unverified" \
     "$(basename "$NEWEST") was uploaded but its size at the destination could not be read." \
     "gorefer-offsite-unverified-$(date -u +%Y-%m-%d)"
   exit 0
