@@ -467,3 +467,15 @@ status itself and never infers a conversion Zoho does not assert.
 **Idempotent** on `event_id` (`reconcile:<contactId>:<openedOn>`) via `ZohoSyncIdempotency`, so the
 15-minute sweep is safe forever. Verified live: a second run re-processed the same 6 rows and the
 conversion count did not change.
+
+
+## event_id derivation (Zoho-side signer) — verified live 2026-08-17 (T-170)
+
+The Deluge signer builds `event_id` as `contact:<contact.id>:<Account_Opened_On>:ref:<Referrer_Client_Id>`
+(leads path analogous). A referrer CORRECTION therefore mints a NEW event_id and flows through
+GoRefer's dedupe as a fresh event; unchanged re-deliveries keep a stable id and dedupe as
+duplicates. Timestamp in the wax-seal is TRUE UTC epoch (Deluge `zoho.currenttime.toLong()`) —
+the prior IST-text-parsed-as-GMT skew (19800s) that silently 401'd every webhook is fixed.
+Three-shot live test-fire evidence: wati-project PR #45 (accepted / duplicate / referrer-change
+accepted). Historical note: before this fix the webhook path was effectively dead behind the
+15-minute reconcile backstop.
