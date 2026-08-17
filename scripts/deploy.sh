@@ -171,7 +171,7 @@ fi
 # minutes and hid which file drifted behind a wall of output.
 echo "==> Hash-verifying the release byte-exact against the git blobs"
 LOCAL_EXTRACT="$(mktemp -d)"
-trap 'rm -rf "$LOCAL_EXTRACT" "$LOCAL_EXTRACT.manifest" "$LOCAL_EXTRACT.remote-manifest"' EXIT
+trap 'rm -rf "$LOCAL_EXTRACT" "$LOCAL_EXTRACT.manifest" "$LOCAL_EXTRACT.remote-manifest" "$LOCAL_EXTRACT.manifest.norm" "$LOCAL_EXTRACT.remote-manifest.norm"' EXIT
 git -c core.autocrlf=false archive "$SHA" | ( cd "$LOCAL_EXTRACT" && tar -x )
 # -print0/-0 throughout: the repo has paths with spaces ("review/Claude Output.md"), and a
 # newline-split manifest silently turns those into two missing files.
@@ -182,13 +182,23 @@ find . -type f -print0 | LC_ALL=C sort -z | xargs -0 md5sum
 EOS
 } | remote_sh > "$LOCAL_EXTRACT.remote-manifest"
 
-if ! diff -q "$LOCAL_EXTRACT.manifest" "$LOCAL_EXTRACT.remote-manifest" >/dev/null; then
+# Windows-binary-marker trap (found live 2026-08-17, first release-dir cutover): Git-Bash/Windows
+# md5sum writes "<hash> *./path" (binary-mode marker, a literal '*' before the path); GNU/Linux
+# md5sum writes "<hash>  ./path" (text mode, two spaces, no marker). Same bytes, different manifest
+# text, so every one of 575 lines diffed as "different" even though content was byte-identical.
+# Normalize both manifests to the text-mode form (drop the binary '*' marker) before diffing —
+# this makes the comparison platform-independent regardless of which side (or both) is Windows.
+normalize_manifest() { sed -E 's/^([0-9a-f]+) \*/\1  /' "$1"; }
+normalize_manifest "$LOCAL_EXTRACT.manifest" > "$LOCAL_EXTRACT.manifest.norm"
+normalize_manifest "$LOCAL_EXTRACT.remote-manifest" > "$LOCAL_EXTRACT.remote-manifest.norm"
+
+if ! diff -q "$LOCAL_EXTRACT.manifest.norm" "$LOCAL_EXTRACT.remote-manifest.norm" >/dev/null; then
   echo "ERROR: deployed release does not match the git blobs. Differences:" >&2
-  diff "$LOCAL_EXTRACT.manifest" "$LOCAL_EXTRACT.remote-manifest" | head -40 >&2
+  diff "$LOCAL_EXTRACT.manifest.norm" "$LOCAL_EXTRACT.remote-manifest.norm" | head -40 >&2
   echo "The release directory was NOT activated; 'current' still points at the old release." >&2
   exit 1
 fi
-echo "==> All $(wc -l < "$LOCAL_EXTRACT.manifest" | tr -d ' ') files byte-exact vs git blobs"
+echo "==> All $(wc -l < "$LOCAL_EXTRACT.manifest.norm" | tr -d ' ') files byte-exact vs git blobs"
 
 # ------------------------------------------------------- 4. link the shared paths
 echo "==> Linking shared runtime state into the release"
