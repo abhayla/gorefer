@@ -3,7 +3,27 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      # tests/test_qmpref_preferences.py reads this file at runtime (asserts every
+      # template name it lists still resolves) — a doc-only edit here can break the
+      # suite, so it must never be silently skipped by the blanket docs/** ignore.
+      - "!docs/integrations/WhatsApp-Template-Coverage-Matrix.md"
   pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "!docs/integrations/WhatsApp-Template-Coverage-Matrix.md"
+
+# Cancel a superseded run on the same ref (e.g. a PR branch re-pushed before its
+# previous CI finished) instead of letting both run to completion — free-tier
+# Actions minutes are billed per run, not per "latest run that matters". Never
+# cancel a main run in progress: a push to main mid-run must not silently skip
+# verification of the commit it superseded — main always finishes what it starts.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   test:
@@ -65,6 +85,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+
+      # package-lock.json is intentionally gitignored (see .gitignore), so
+      # setup-node's built-in `cache: npm` has no lockfile to hash — cache the
+      # npm download cache directly, keyed on package.json (the closest thing
+      # to a dependency manifest this repo commits).
+      - name: Cache npm download cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
 
       - name: Build + verify Tailwind CSS is fresh (no CDN runtime)
         run: |
