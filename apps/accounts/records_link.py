@@ -39,6 +39,29 @@ TOKEN_SALT = "gorefer.records-link.v1"
 
 SECONDS_PER_DAY = 86400
 
+#: T-129 root cause: WhatsApp/Meta silently substitutes EMPTY for a URL-button
+#: variable value containing ':'. Django's `signing.dumps()` output is
+#: `payload:timestamp:signature`, so every records/hub link's button suffix arrived
+#: blank in the wild (proven 2026-08-14 by a controlled tap A/B, nginx by_host log).
+#: '.' never appears in a raw signed token — the payload/signature are urlsafe base64
+#: (`[A-Za-z0-9_-]`, no padding) and the timestamp is base62 (`[A-Za-z0-9]`) — so it is
+#: an unambiguous, reversible stand-in for ':' (see `test_dot_never_appears_in_a_raw_signed_token`).
+_TRANSPORT_SEP = "."
+_SIGNING_SEP = ":"
+
+
+def _to_transport(raw_token: str) -> str:
+    """Colon-free, URL-button-safe form of a freshly `signing.dumps()`-minted token."""
+    return raw_token.replace(_SIGNING_SEP, _TRANSPORT_SEP)
+
+
+def _from_transport(token: str) -> str:
+    """Reverse of `_to_transport`. A token that still carries a literal ':' is a
+    legacy (pre-T-129) link — passed through unchanged so it keeps opening."""
+    if _SIGNING_SEP in token:
+        return token
+    return token.replace(_TRANSPORT_SEP, _SIGNING_SEP)
+
 # Payload keys kept to one letter: the token rides inside a WhatsApp URL-button suffix,
 # where every character counts against the button's length budget.
 _KEY_TENANT = "t"
@@ -76,7 +99,7 @@ def mint_records_token(referrer: ReferralIdentity) -> str:
     "current token" to invalidate by re-minting. Only `rotate_records_token()` revokes.
     """
     state = _state_for(referrer)
-    return signing.dumps(
+    raw = signing.dumps(
         {
             _KEY_TENANT: referrer.tenant_id,
             _KEY_IDENTITY: referrer.pk,
@@ -84,6 +107,7 @@ def mint_records_token(referrer: ReferralIdentity) -> str:
         },
         salt=TOKEN_SALT,
     )
+    return _to_transport(raw)
 
 
 def rotate_records_token(referrer: ReferralIdentity) -> int:
@@ -104,8 +128,9 @@ def verify_records_token(token: str | None) -> ReferralIdentity | None:
     """
     if not token:
         return None
+    signed = _from_transport(token)
     try:
-        payload = signing.loads(token, salt=TOKEN_SALT)
+        payload = signing.loads(signed, salt=TOKEN_SALT)
     except signing.BadSignature:
         return None
     if not isinstance(payload, dict):
@@ -123,7 +148,7 @@ def verify_records_token(token: str | None) -> ReferralIdentity | None:
     # adds the max_age assertion. SignatureExpired subclasses BadSignature.
     try:
         signing.loads(
-            token, salt=TOKEN_SALT, max_age=ttl_days(tenant_id) * SECONDS_PER_DAY
+            signed, salt=TOKEN_SALT, max_age=ttl_days(tenant_id) * SECONDS_PER_DAY
         )
     except signing.BadSignature:
         return None
