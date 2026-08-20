@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # GoRefer production deploy — release directories + atomic `current` symlink cutover.
-# Target: Hostinger VPS <PROD-VPS> (docs/deploy/DEPLOY-TARGET.md is authoritative).
+# Target: the Hostinger production VPS (gorefer-ops/docs/deploy/DEPLOY-TARGET.md is authoritative).
 #
 # WHY THIS SHAPE (T-162, owner-approved point 9 "Option B: release folders"):
 #   The previous runner untarred the new tree ON TOP of the live directory. For the
@@ -45,7 +45,7 @@
 # shared, flip pointer, prune) in a temp directory, and skips exactly the steps that
 # need the box (venv, migrate, systemd, public health probe), printing them instead.
 #
-# Access defaults to root@<PROD-VPS> with key ~/.ssh/firekaro_v6_vps. Override via
+# Access defaults to root@$DEPLOY_SSH_HOSTNAME with key ~/.ssh/firekaro_v6_vps. Override via
 # DEPLOY_SSH_HOST / DEPLOY_SSH_KEY / DEPLOY_SSH_USER / DEPLOY_REMOTE_DIR /
 # DEPLOY_HEALTH_URL / DEPLOY_KEEP_RELEASES / DEPLOY_PROBE_PORT.
 
@@ -63,7 +63,22 @@ for arg in "$@"; do
 done
 
 SSH_USER="${DEPLOY_SSH_USER:-root}"
-SSH_HOSTNAME="${DEPLOY_SSH_HOSTNAME:-<PROD-VPS>}"
+# The production host is NOT in this public repo (T-240). Resolve it from, in order:
+#   1. $DEPLOY_SSH_HOSTNAME
+#   2. the untracked file scripts/.deploy-target.env  (DEPLOY_SSH_HOSTNAME=...)
+#   3. gorefer-ops/docs/deploy/DEPLOY-TARGET.md is the authoritative record of the value.
+_TARGET_ENV="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.deploy-target.env"
+if [ -z "${DEPLOY_SSH_HOSTNAME:-}" ] && [ -f "$_TARGET_ENV" ]; then
+  # shellcheck disable=SC1090
+  . "$_TARGET_ENV"
+fi
+if [ -z "${DEPLOY_SSH_HOSTNAME:-}" ] && [ -z "${DEPLOY_SSH_HOST:-}" ]; then
+  echo "ERROR: deploy target host unknown. Set DEPLOY_SSH_HOSTNAME (or DEPLOY_SSH_HOST)," >&2
+  echo "       or create scripts/.deploy-target.env with DEPLOY_SSH_HOSTNAME=<ip>." >&2
+  echo "       The authoritative value lives in gorefer-ops/docs/deploy/DEPLOY-TARGET.md." >&2
+  exit 2
+fi
+SSH_HOSTNAME="${DEPLOY_SSH_HOSTNAME:-}"
 SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/firekaro_v6_vps}"
 SSH_HOST="${DEPLOY_SSH_HOST:-$SSH_USER@$SSH_HOSTNAME}"
 SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10)

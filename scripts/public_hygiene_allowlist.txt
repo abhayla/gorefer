@@ -1,0 +1,78 @@
+# scripts/public_hygiene_allowlist.txt
+#
+# Indian mobile numbers that scripts/check_public_hygiene.py may find in tracked
+# files without failing the build. One number per line (91 + 10 digits, no spaces),
+# `#` starts a comment, and EVERY entry needs a reason.
+#
+# The rule: this repository is PUBLIC. A number belongs here only if it is
+#   (a) a number PIFS already publishes to customers, or
+#   (b) obviously synthetic test/demo/fixture data.
+# A real private mobile NEVER goes on this list — it gets redacted, and the
+# operational document that needed it moves to the private gorefer-ops repo.
+#
+# Adding a line here is the reviewable moment. If a PR adds an entry, the
+# reviewer's job is to ask "is this number actually safe to publish?".
+
+# --- (a) published PIFS business numbers -------------------------------------
+917080642020   # WATI business number - printed on the live landing page share link
+917388882020   # assisted-opening helpline - rendered as the tel: link on the landing page
+
+# --- (b) synthetic placeholders introduced by the T-240 scrub ----------------
+919999900001   # placeholder replacing a real test-recipient mobile
+919999900002   # placeholder replacing a real test-recipient mobile
+919999900003   # placeholder replacing a real mobile in the Zoho dedup examples
+
+# --- (b) synthetic test / demo / fixture numbers -----------------------------
+918000000000   # test fixture
+919000000000   # test fixture
+919000000001   # test fixture
+919000000002   # test fixture
+919000000004   # test fixture
+919000000005   # test fixture
+919000000009   # test fixture
+919000011122   # test fixture
+919000022222   # test fixture
+917000000000   # test fixture
+917000000001   # test fixture
+917000000002   # test fixture
+917000000003   # test fixture
+917000000501   # test fixture
+919811110000   # test fixture
+919812340001   # test fixture
+919812345670   # test fixture
+919812345678   # test fixture
+919822220000   # test fixture
+919833330000   # test fixture
+919844440000   # test fixture
+919876500000   # test fixture
+919876500001   # test fixture
+919876500002   # test fixture
+919876500003   # test fixture
+919876500009   # test fixture
+919876500444   # test fixture
+919876500777   # test fixture
+919876504321   # test fixture
+919876543210   # documented demo number (README / docs / seed data)
+919876543211   # test fixture
+919876543221   # test fixture
+919899999999   # test fixture
+919998887777   # test fixture
+919999999999   # test fixture
+919999900004   # placeholder replacing a real customer mobile in the Client-ID -> on-file-channel example
+
+# --- (b) synthetic bare-10-digit fixtures (surfaced when the gate learned to read
+#         separator-collapsed and un-prefixed forms) -------------------------------
+918888888888   # test fixture
+919888888888   # test fixture
+919000011111   # test fixture
+919000000003   # test fixture
+919000000006   # test fixture
+919000000007   # test fixture
+919000000008   # test fixture
+919800000001   # test fixture
+919800000002   # test fixture
+919800000003   # test fixture
+919876500007   # test fixture
+919876500008   # test fixture
+919876500011   # test fixture
+919876504322   # test fixture (Zoho read-adapter sample payload)

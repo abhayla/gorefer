@@ -10,10 +10,23 @@ venv/
 staticfiles/
 /media/
 
-# Env / secrets — NEVER commit
+# Env / secrets - NEVER commit.
+# This repo is PUBLIC. `*.env` is the pattern that was MISSING before T-240: the
+# leaked checkpoint file was named `..gorefer-chk-t061.env`, which matches neither
+# `.env` nor `.env.*` (those anchor on a leading ".env"), so a filled dev dotenv
+# with DJANGO_SECRET_KEY, DB_PASSWORD and ADMIN_PASSWORD_HASH was committed and
+# published. `scripts/check_public_hygiene.py` fails CI if one is ever tracked again.
 .env
 .env.*
+*.env
 !.env.example
+
+# Fleet checker worktree checkpoints in any shape - dir OR file, any extension.
+..gorefer-chk-*
+.*-chk-*
+
+# Deploy target host - resolved by scripts/deploy.sh, never committed (T-240).
+scripts/.deploy-target.env
 
 # Tooling
 .pytest_cache/
@@ -32,11 +45,7 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Checker worktrees — accidental artifacts from fleet session runs
-# Pattern: ..<repo>-chk-<task> (e.g. ..gorefer-chk-t061)
-.*-chk-*/
-
-# Claude Code project config — the SHAREABLE parts are committed so skills/agents created
+# Claude Code project config - the SHAREABLE parts are committed so skills/agents created
 # on one machine (e.g. the Windows VPS session) reach every other machine. Needed explicitly
 # because a machine-GLOBAL git ignore (~/.config/git/ignore) excludes `.claude/` wholesale;
 # repo-level negation overrides it. Runtime state stays ignored.

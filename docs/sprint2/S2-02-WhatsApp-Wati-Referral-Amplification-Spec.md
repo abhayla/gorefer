@@ -58,7 +58,7 @@ Referrer forwards (b) to groups / posts image to Status  ──▶ prospect taps
 The webhook + `/r/` redirect must be **publicly reachable at gorefer.in** for Wati to call the webhook and for prospects to click. So a deploy of at least the redirect + webhook is required before the end-to-end live test. **Deploy target is LOCKED: the Hostinger VPS `<PROD-VPS>` (Linux nginx + certbot), NOT the local box `<BACKUP-VPS>` — see `docs/deploy/DEPLOY-TARGET.md` (authoritative).**
 
 ## 10. Acceptance = a real live WhatsApp test (the gate)
-On this machine, with Abhay logged into Wati + WhatsApp Web: send `gorefer_referral_nudge` to Abhay's number (79726 72473, the safe test recipient) → tap the button → confirm the **nudge + forwardable creative arrive** → **forward to a test group** and **post the image to Status** → confirm the **click registers on `/r/` with channel=wa**. Verify terminal delivery (not HTTP 200). Only then is WM done.
+On this machine, with Abhay logged into Wati + WhatsApp Web: send `gorefer_referral_nudge` to Abhay's number (99999 00001, the safe test recipient) → tap the button → confirm the **nudge + forwardable creative arrive** → **forward to a test group** and **post the image to Status** → confirm the **click registers on `/r/` with channel=wa**. Verify terminal delivery (not HTTP 200). Only then is WM done.
 
 ## 11. Missions (see COORDINATION.md)
 - **M11** — OG preview page + crawler-not-a-click (kept from S2-01; needed for the WhatsApp link preview).

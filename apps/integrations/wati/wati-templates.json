@@ -203,7 +203,7 @@
         "disclosure_page_verified": "gorefer.in/d/pifs live 2026-07-10 — carries §4.1 ID block (Zerodha SEBI INZ000031633 | PIFS | NSE AP AP2516003693) + §4.2 market-risk warning verbatim. §4.8 brokerage-limit line NOT required (Abhay 2026-07-10: '10% brokerage share' is a referral revenue-share to the referrer, not a client brokerage rate; §4.8 targets client rates). Page kept to registration + Zerodha association only."
       },
       "_e2e_test_2026_07_10": {
-        "method": "Read the live Wati conversation log on test line 919999900000 (wati_get_messages) — a real earlier walk-through of all 3 branches, plus Abhay's screenshot of the delivered message.",
+        "method": "Read the live Wati conversation log on test line 919999900001 (wati_get_messages) — a real earlier walk-through of all 3 branches, plus Abhay's screenshot of the delivered message.",
         "broadcast_template_actually_used": "gorefer_zerodha_eng_2026_07_10 (NOTE: NOT gorefer_zerodha_referral_2026_07_10). Delivered text differs slightly (intro 'Turn your Zerodha account into rewards'; bold on key phrases; Disclosures line BEFORE 'Choose from options'). Manifest 'live_template' pointer is STALE — reconcile: the broadcast template is the *_eng_* one. DA to re-pull & record the exact _eng_ template.",
         "branch_results": {
           "delivery": "PASS — delivered + READ.",

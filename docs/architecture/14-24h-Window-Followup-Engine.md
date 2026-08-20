@@ -114,7 +114,7 @@ Phase 1 is identical either way.
 
 ## 7. DoD · risks · rollout
 - **DoD:** unit (rule resolution; window-open→session / closed→template-or-skip; engaged/opt-out→cancel;
-  idempotent; CRUD state transitions) · live test on 7972672473 / 7767009136 (idle→nudge; reply early→
+  idempotent; CRUD state transitions) · live test on 9999900001 / 9999900002 (idle→nudge; reply early→
   none; >24h→template/none; edit/cancel a pending row) · delivery verified at destination.
 - **Risks:** webhook gap → fallback live-query · sweep latency at volume → 5-min granularity fine for
   ≥15-min targets, revisit if sub-5-min needed · `send_session_text` must inherit the allowlist ·

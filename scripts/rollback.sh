@@ -29,7 +29,22 @@ for arg in "$@"; do
 done
 
 SSH_USER="${DEPLOY_SSH_USER:-root}"
-SSH_HOSTNAME="${DEPLOY_SSH_HOSTNAME:-<PROD-VPS>}"
+# The production host is NOT in this public repo (T-240). Resolve it from, in order:
+#   1. $DEPLOY_SSH_HOSTNAME
+#   2. the untracked file scripts/.deploy-target.env  (DEPLOY_SSH_HOSTNAME=...)
+#   3. gorefer-ops/docs/deploy/DEPLOY-TARGET.md is the authoritative record of the value.
+_TARGET_ENV="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.deploy-target.env"
+if [ -z "${DEPLOY_SSH_HOSTNAME:-}" ] && [ -f "$_TARGET_ENV" ]; then
+  # shellcheck disable=SC1090
+  . "$_TARGET_ENV"
+fi
+if [ -z "${DEPLOY_SSH_HOSTNAME:-}" ] && [ -z "${DEPLOY_SSH_HOST:-}" ]; then
+  echo "ERROR: deploy target host unknown. Set DEPLOY_SSH_HOSTNAME (or DEPLOY_SSH_HOST)," >&2
+  echo "       or create scripts/.deploy-target.env with DEPLOY_SSH_HOSTNAME=<ip>." >&2
+  echo "       The authoritative value lives in gorefer-ops/docs/deploy/DEPLOY-TARGET.md." >&2
+  exit 2
+fi
+SSH_HOSTNAME="${DEPLOY_SSH_HOSTNAME:-}"
 SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/firekaro_v6_vps}"
 SSH_HOST="${DEPLOY_SSH_HOST:-$SSH_USER@$SSH_HOSTNAME}"
 SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10)

@@ -4,7 +4,7 @@
 >
 > **Owner:** Abhay Kumar Maurya / PIFS (Passive Income Financial Solutions), a Zerodha Authorised Person. **Compiled:** 2026-07-04. **Program:** Zerodha only.
 >
-> **Sprint state:** Sprint 1 is **shipped and live in production**; the project is in **Sprint 2** (share amplification, referrer login, follow-up engine). §5 below is Sprint 1's *build order*, kept as history — it is not the current worklist. **`CURRENT-STATE.md` is the authoritative now-state**; `ROADMAP-STATUS.md` is the per-feature ledger. **§6's "do NOT build" list is a Sprint-1-era freeze — several items have since been explicitly un-frozen by the owner; check §6's notes and `CURRENT-STATE.md` before treating anything there as forbidden.**
+> **Sprint state:** Sprint 1 is **shipped and live in production**; the project is in **Sprint 2** (share amplification, referrer login, follow-up engine). §5 below is Sprint 1's *build order*, kept as history — it is not the current worklist. **`gorefer-ops/CURRENT-STATE.md` is the authoritative now-state**; `gorefer-ops/ROADMAP-STATUS.md` is the per-feature ledger. Both live in the PRIVATE companion repo (see §2a). **§6's "do NOT build" list is a Sprint-1-era freeze — several items have since been explicitly un-frozen by the owner; check §6's notes and `gorefer-ops/CURRENT-STATE.md` before treating anything there as forbidden.**
 
 ---
 
@@ -33,18 +33,49 @@ Document map (start at `README.md` for the index):
 | `docs/workflow/11-Referral-Workflow-and-Edge-Cases.md` | End-to-end workflow. |
 | `docs/workflow/12-Resolved-Gaps-and-Edge-Case-Decisions.md` | **Authoritative edge-case decisions** (16 gaps, locked → ADR-015…020). |
 | `implementation/10-Claude-Code-Implementation-Guide.md` | **The build guide**: tech direction, standards, tests, git, DoD, build order. |
-| `docs/deploy/DEPLOY-TARGET.md` | **AUTHORITATIVE deploy target** — GoRefer production runs on the Hostinger VPS `<PROD-VPS>` (Linux nginx + certbot), NOT the local box `<BACKUP-VPS>`. Read before any deploy/DNS/TLS decision; if any doc disagrees, this file wins. |
-| `CURRENT-STATE.md` | **Read FIRST, every session** — the verified now-state snapshot (deployed SHA, LIVE flag values, in-flight missions). Updated in the same turn as any state change; `COORDINATION.md` stays the append-only log of record. Read COORDINATION's tail by CONTENT (`tail -n 80`, confirm the last entry's date), never by a computed line offset — blank-line-skipping counters caused the 2026-07-21 stale-state incident. When docs disagree, the live system wins. |
-| `ROADMAP-STATUS.md` | Per-feature ledger across sprints — **Discussed / Implemented / Deployed** for every mission (M1…M13, B1–B4, M-WATI-1, M-FUP-1). Refreshed on milestones only; for live flag/deploy state `CURRENT-STATE.md` wins. |
+| **`gorefer-ops/docs/deploy/DEPLOY-TARGET.md`** (PRIVATE repo) | **AUTHORITATIVE deploy target** — the production host, nginx + certbot, systemd units, and the backup host. Read before any deploy/DNS/TLS decision; if any doc disagrees, this file wins. A pointer stub remains at `docs/deploy/DEPLOY-TARGET.md`. |
+| **`gorefer-ops/CURRENT-STATE.md`** (PRIVATE repo) | **Read FIRST, every session** — the verified now-state snapshot (deployed SHA, LIVE flag values, in-flight missions). Updated in the same turn as any state change; `gorefer-ops/COORDINATION.md` stays the append-only log of record. Read COORDINATION's tail by CONTENT (`tail -n 80`, confirm the last entry's date), never by a computed line offset — blank-line-skipping counters caused the 2026-07-21 stale-state incident. When docs disagree, the live system wins. |
+| **`gorefer-ops/ROADMAP-STATUS.md`** (PRIVATE repo) | Per-feature ledger across sprints — **Discussed / Implemented / Deployed** for every mission (M1…M13, B1–B4, M-WATI-1, M-FUP-1). Refreshed on milestones only; for live flag/deploy state `gorefer-ops/CURRENT-STATE.md` wins. |
 | `docs/architecture/16-Configurable-Platform-Architecture-Review.md` | **Ratified config-platform review (Phase 0)** — ADR-042…044, enforcement rails E-1…E-6 + D-1 compliance rail; grounds §6e and the CI architecture gate. |
 | `docs/sprint2/` | Sprint-2 specs + goal contracts (share amplification, Wati referral amplification, referral UX/disclosure, independent test brief, M13 login contract). |
-| `COORDINATION.md` | **DA ⇆ Engineer coordination log** — the async channel between the Design Authority (Cowork planning session) and the Engineer (Claude Code). Read it before each mission; append a STATUS entry when you open a PR; log any surfaced inconsistency as a QUESTION and pause rather than guess. |
-| `review/` | LLM review pack (`09`) + review bundle. |
-| `_source-archive/` | Historical source-of-truth captures (context only). |
+| **`gorefer-ops/COORDINATION.md`** (PRIVATE repo) | **DA ⇆ Engineer coordination log** — the async channel between the Design Authority (Cowork planning session) and the Engineer (Claude Code). Read it before each mission; append a STATUS entry when you open a PR; log any surfaced inconsistency as a QUESTION and pause rather than guess. **Write the entry in the `gorefer-ops` clone, not here** (§2a). |
+| **`gorefer-ops/review/`** (PRIVATE repo) | LLM review pack (`09`), review bundle, verification reports, runbooks, deferred-features backlog. |
+| **`gorefer-ops/_source-archive/`** (PRIVATE repo) | Historical source-of-truth captures (context only). |
 
 When docs 11 and 12 both speak to an edge case, **doc 12 (resolved gaps) wins**.
 
 ---
+
+## 2a. This repo is PUBLIC — the ops half lives in `gorefer-ops` (2026-08-21)
+
+`github.com/abhayla/gorefer` is a **public** repository. Everything operational — the
+coordination log, the now-state snapshot, the roadmap ledger, the deploy target, the review
+pack, the source archive, the live E2E skill, and the Wati/Zoho state docs — moved to the
+**private** companion repo **`github.com/abhayla/gorefer-ops`**, because those documents carry
+real mobile numbers and production infrastructure addresses.
+
+| | |
+|---|---|
+| Private ops repo | `https://github.com/abhayla/gorefer-ops` |
+| Clone on this PC | `D:\Abhay\Ventures\gorefer-ops` |
+| Clone on the Windows VPS | `C:\Abhay\Ventures\gorefer-ops` |
+
+**Sessions and fleet workers log their STATUS / QUESTION entries in the `gorefer-ops` clone**
+(`COORDINATION.md` there), not in this repo. The files still present here at
+`COORDINATION.md`, `CURRENT-STATE.md`, `ROADMAP-STATUS.md` and `docs/deploy/DEPLOY-TARGET.md`
+are ≤15-line **pointer stubs** — they name the new home and nothing else. Writing into a stub
+loses the entry.
+
+**What must NOT be added to this public repo:** real mobile numbers, production/backup host
+addresses, secrets of any kind, or any dotenv file other than `.env.example`. Two CI rails
+enforce it on every push and PR (`.github/workflows/public-hygiene.yml`):
+`python scripts/check_public_hygiene.py` (mobiles not on `scripts/public_hygiene_allowlist.txt`,
+the private host addresses, tracked dotenv files) and a pinned **gitleaks** tree scan. Run the
+first one locally before pushing — it is stdlib-only and takes a second.
+
+**Deliberately still public:** `Wati-GoRefer/Wati-Integration-Contract.md` and
+`Zoho-GoRefer/Zoho-Integration-Contract.md`. The CI gate `scripts/check_contract_docs.py`
+couples them to `apps/integrations/**` (§6b), so they stay next to the code — redacted, not moved.
 
 ## 2b. Development commands
 
@@ -98,10 +129,10 @@ CI (`.github/workflows/ci.yml`, Postgres 16 service): contract-doc drift gate �
 - `api/` — Django Ninja routers, aggregated by `api/router.py` and mounted at `/api/` (click, leads, share, analytics, wati + zoho webhooks, health).
 - `apps/tenants/` — Tenant/Domain registry + `TenantResolutionMiddleware`; single-schema isolation via tenant-scoped managers + composite unique constraints.
 - `apps/config/` — ADR-022 config cascade: `cascade.resolve(key)` walks user → tenant-global → central → default; **compliance-locked keys resolve from central only** (lower tiers can't weaken a claim). Also integration-flag persistence and the Preferences screen backend.
-  - **Flag truth is two-layered — read this before ever judging a flag's state.** `flags.py` holds the **env default**; the *effective* value of the integration flags (`ENABLE_WATI_SEND`, `ENABLE_ZOHO_WRITE`, `ENABLE_ZOHO_READ`) is whatever `apps/config/integration_flags.py:resolve_flag(key)` returns — a DB override beats env. **Prod `.env` says `false` for all three while the live overrides are ON.** Never conclude "the integration is off" from `.env` or `flags.py`; resolve it (verify-live command in `CURRENT-STATE.md`). Per-tenant behaviour keys (`followups_enabled`, `followup_quiet_start_hour`/`_end_hour`, `followup_min_gap_minutes`, `followup_referrer_nudge_on`, `followup_poll_watch_mobiles`) live only in the cascade — they are **not** in `flags.py`.
+  - **Flag truth is two-layered — read this before ever judging a flag's state.** `flags.py` holds the **env default**; the *effective* value of the integration flags (`ENABLE_WATI_SEND`, `ENABLE_ZOHO_WRITE`, `ENABLE_ZOHO_READ`) is whatever `apps/config/integration_flags.py:resolve_flag(key)` returns — a DB override beats env. **Prod `.env` says `false` for all three while the live overrides are ON.** Never conclude "the integration is off" from `.env` or `flags.py`; resolve it (verify-live command in `gorefer-ops/CURRENT-STATE.md`). Per-tenant behaviour keys (`followups_enabled`, `followup_quiet_start_hour`/`_end_hour`, `followup_min_gap_minutes`, `followup_referrer_nudge_on`, `followup_poll_watch_mobiles`) live only in the cascade — they are **not** in `flags.py`.
 - `apps/referrals/` — core domain: `redirect_service.py` (lazy referrer/journey creation + 302), `lead_service.py` (save lead first, then redirect), `landing_mode.py`, `validators.py` (client_id format check), views, and the seed/smoke management commands.
 - `apps/events/` — immutable event stream (PII excluded by design), `bots.py` (preview/bot UA filter — a bot never creates a journey), `analytics.py` + `rollups.py` (dirty-day daily/monthly recompute).
-- `apps/integrations/` — the vendor boundary (doc 17, ADR-045…048). **Domain code imports only the vendor-neutral top level — never `.wati.*` / `.zoho.*` directly**; the E-3 architecture gate (`scripts/check_architecture.py`) enforces this with an **EMPTY baseline**, so any NEW vendor import outside this package now fails CI outright, not just a tracked regression. The boundary's front door: `ports.py` (Protocols `MessagingPort` / `CrmPort` / `CrmReadPort` + factories `get_messaging_port()` / `get_crm_port()` / `get_crm_read_port()`, which resolve to live-vs-log-only adapters by flag — factory bodies import vendor modules lazily, but the dataclass re-exports at module top are eager), `services.py` (thin task-level facade — `queue_lead_notifications`, `enqueue_lead_upsert`, `record_inbound`, `ingest_conversion`, `MAX_SYNC_ATTEMPTS` — no logic of its own), `delivery_status.py` (vendor-neutral `is_terminal` / `is_delivered` / `classify_failure`), `router.py` (aggregates the vendor webhook routers for `api/router.py` to mount), and `schedules.py` (the boundary's `INTEGRATION_SCHEDULES` fragment that `setup_schedules` aggregates, ADR-047). Inside the boundary: `wati/` (adapter, `notify.py`, `engagement.py` WA report, terminal-status polling, `api.py` — the moved webhook router, queue tasks) and `zoho/` (adapter, client, `ingest.py` — **the only code path that writes account status**, `statusmap.py`, `waxseal.py` HMAC, `api.py` — the moved webhook router, `read.py` enrichment). `wati/engagement.py` and the transport half of `wati/notify.py` deliberately stay whole inside the boundary (ADR-048; eviction tracked as `review/Deferred-Features-Backlog.md` DF-PORTS-1). Live vs log-only adapters swap by flag, so demo mode works with everything off. **Any change here must update `Wati-GoRefer/` / `Zoho-GoRefer/` contract docs — CI-enforced (§6b).**
+- `apps/integrations/` — the vendor boundary (doc 17, ADR-045…048). **Domain code imports only the vendor-neutral top level — never `.wati.*` / `.zoho.*` directly**; the E-3 architecture gate (`scripts/check_architecture.py`) enforces this with an **EMPTY baseline**, so any NEW vendor import outside this package now fails CI outright, not just a tracked regression. The boundary's front door: `ports.py` (Protocols `MessagingPort` / `CrmPort` / `CrmReadPort` + factories `get_messaging_port()` / `get_crm_port()` / `get_crm_read_port()`, which resolve to live-vs-log-only adapters by flag — factory bodies import vendor modules lazily, but the dataclass re-exports at module top are eager), `services.py` (thin task-level facade — `queue_lead_notifications`, `enqueue_lead_upsert`, `record_inbound`, `ingest_conversion`, `MAX_SYNC_ATTEMPTS` — no logic of its own), `delivery_status.py` (vendor-neutral `is_terminal` / `is_delivered` / `classify_failure`), `router.py` (aggregates the vendor webhook routers for `api/router.py` to mount), and `schedules.py` (the boundary's `INTEGRATION_SCHEDULES` fragment that `setup_schedules` aggregates, ADR-047). Inside the boundary: `wati/` (adapter, `notify.py`, `engagement.py` WA report, terminal-status polling, `api.py` — the moved webhook router, queue tasks) and `zoho/` (adapter, client, `ingest.py` — **the only code path that writes account status**, `statusmap.py`, `waxseal.py` HMAC, `api.py` — the moved webhook router, `read.py` enrichment). `wati/engagement.py` and the transport half of `wati/notify.py` deliberately stay whole inside the boundary (ADR-048; eviction tracked as `gorefer-ops/review/Deferred-Features-Backlog.md` DF-PORTS-1). Live vs log-only adapters swap by flag, so demo mode works with everything off. **Any change here must update `Wati-GoRefer/` / `Zoho-GoRefer/` contract docs — CI-enforced (§6b).**
 - `apps/otp/` — pluggable OTP delivery port (behind `ENABLE_OTP_LOGIN`); codes stored hashed + peppered, never plaintext. When the flag is OFF the DemoOtpAdapter logs instead of sending.
 - `apps/accounts/` — **M13 referrer login (Sprint 2, LIVE)**, mounted at the root behind `ENABLE_CUSTOMER_LOGIN`: `/login/` (`oauth.py` Google OAuth primary, `apps/otp` WhatsApp-OTP fallback), Path-B ownership verification (`/login/verify-ownership`), `/my/referrals` self view (`selfview.py`), and the admin Verifications queue. Models: `ReferrerAccount`, `VerificationRequest`. `onfile.py` enforces that an OTP only ever goes to a channel already on file — never to a user-supplied number.
 - `apps/followups/` — **M-FUP-1 WhatsApp follow-up engine (Sprint 2, LIVE)**. Models `FollowupRule` / `FollowupWindow` / `ScheduledFollowup`, all tenant-scoped. `services.py` is the gate: 24h-session-window check, opt-out, converted-suppression, IST quiet hours, and the anti-burst `compute_defer` min-gap. `tasks.py` runs the two scheduled jobs — `poll_inbound_windows` (opens windows by polling Wati `getMessages`, because the inbound webhook is chatbot-suppressed) and `fire_due_followups` (the sweep that actually sends). `api.py` is the staff-scoped CRUD router. Send copy is read **at fire time**, so re-seeding the cadence changes pending sends.
@@ -114,14 +145,14 @@ CI (`.github/workflows/ci.yml`, Postgres 16 service): contract-doc drift gate �
 
 ## 3. Your role
 
-You are the software **ENGINEER**, not the architect. Implement **exactly** what the spec says. **Never invent features, and never change the architecture.** Architectural decisions belong to the Design Authority. If you find an inconsistency, an OPEN decision, or a source conflict, **report it** (surface options + a recommendation) — do not guess and build on a silent pick. **Report via `COORDINATION.md`**: append a STATUS entry when you open a mission PR, and log any surfaced inconsistency/ambiguity there as a QUESTION (then pause on that point). The Design Authority answers there; Abhay relays between the two sessions.
+You are the software **ENGINEER**, not the architect. Implement **exactly** what the spec says. **Never invent features, and never change the architecture.** Architectural decisions belong to the Design Authority. If you find an inconsistency, an OPEN decision, or a source conflict, **report it** (surface options + a recommendation) — do not guess and build on a silent pick. **Report via `COORDINATION.md` — which lives in the PRIVATE `gorefer-ops` repo, NOT here** (§2a: `D:\Abhay\Ventures\gorefer-ops`, VPS `C:\Abhay\Ventures\gorefer-ops`): append a STATUS entry when you open a mission PR, and log any surfaced inconsistency/ambiguity there as a QUESTION (then pause on that point). The stub at this repo's `COORDINATION.md` is a pointer only — never log into it. The Design Authority answers there; Abhay relays between the two sessions.
 
 ---
 
 ## 4. Non-negotiable guardrails (the hard rules)
 
 **Tech stack (LOCKED — ADR-024)**
-- Build on **Django + Django Ninja + HTMX + Tailwind + PostgreSQL**, with **single-schema `tenant_id` discriminator isolation** for the ADR-023 multi-tenant boundary (NOT schema-per-tenant; resolves Q-M1-1). Server-rendered Django templates with **reusable HTMX partial components** — **NO React/SPA in Sprint 1**. **Django ORM + Django migrations** (not SQLAlchemy/Alembic). Background via `transaction.on_commit()` + a light DB-backed queue (django-q/django-rq); Celery/Redis only when scheduled workflows demand it. The `/r/{client_id}` redirect is a sync Django view (validate → 302, click write on-commit). Basis: [`review/Framework-Decision-Synthesis.md`](./review/Framework-Decision-Synthesis.md); record: ADR-024 in `docs/architecture/02` and tech direction in `implementation/10` §1.
+- Build on **Django + Django Ninja + HTMX + Tailwind + PostgreSQL**, with **single-schema `tenant_id` discriminator isolation** for the ADR-023 multi-tenant boundary (NOT schema-per-tenant; resolves Q-M1-1). Server-rendered Django templates with **reusable HTMX partial components** — **NO React/SPA in Sprint 1**. **Django ORM + Django migrations** (not SQLAlchemy/Alembic). Background via `transaction.on_commit()` + a light DB-backed queue (django-q/django-rq); Celery/Redis only when scheduled workflows demand it. The `/r/{client_id}` redirect is a sync Django view (validate → 302, click write on-commit). Basis: `gorefer-ops/review/Framework-Decision-Synthesis.md` (PRIVATE repo); record: ADR-024 in `docs/architecture/02` and tech direction in `implementation/10` §1.
 
 **Referral link & redirect**
 - Referral link identifier = the **RAW Zerodha `client_id` in the path**: `gorefer.in/r/{client_id}` (e.g. `gorefer.in/r/RJ4521`). **NO token, NO token→id mapping DB** (ADR-001). The `client_id` is already public (it appears in Zerodha's own `r=` links).
@@ -166,7 +197,7 @@ You are the software **ENGINEER**, not the architect. Implement **exactly** what
 
 ## 5. Sprint 1 build order (seven vertical slices) — HISTORY, all shipped
 
-> Kept for the reasoning behind the layering. **All seven are deployed and live**; this is not the current worklist — see `ROADMAP-STATUS.md` and `CURRENT-STATE.md`.
+> Kept for the reasoning behind the layering. **All seven are deployed and live**; this is not the current worklist — see `gorefer-ops/ROADMAP-STATUS.md` and `gorefer-ops/CURRENT-STATE.md`.
 
 Each slice left `main` deployable (see `implementation/10` §11).
 

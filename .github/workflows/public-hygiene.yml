@@ -1,0 +1,63 @@
+# Public-repo leak rails (T-240).
+#
+# github.com/abhayla/gorefer is a PUBLIC repository. On 2026-08-21 it was found to
+# be publishing real mobile numbers, both VPS addresses, and a committed dev .env
+# (DJANGO_SECRET_KEY / DB_PASSWORD / ADMIN_PASSWORD_HASH). This workflow is the rail
+# that stops the same class of leak from landing again.
+#
+# WHY IT IS A SEPARATE WORKFLOW AND NOT A STEP IN ci.yml:
+#   ci.yml carries `paths-ignore: ["**/*.md", "docs/**"]` to save free-tier Actions
+#   minutes. Every single leak we actually found was in a .md file. A hygiene gate
+#   inside ci.yml would therefore never have run on the commits that leaked. This
+#   workflow deliberately has NO paths-ignore — it must see every file, always.
+#   It is cheap: no dependency install, no database, ~30s.
+
+name: Public hygiene
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: hygiene-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # PII gate — un-allowlisted Indian mobiles, the private VPS addresses, and any
+      # tracked dotenv-shaped file. Stdlib only, so it is runnable locally with
+      # `python scripts/check_public_hygiene.py` and needs no install step here.
+      - name: PII / private-host gate
+        run: python scripts/check_public_hygiene.py
+
+      # Secret scan — a pinned gitleaks binary rather than the marketplace action, so
+      # the gate has no org-license dependency and the exact scanner version is in
+      # this file. `--no-git` scans the checked-out TREE: history still carries the
+      # pre-scrub leak until it is rewritten, and a permanently-red gate teaches
+      # people to ignore it.
+      - name: Secret scan (gitleaks)
+        env:
+          GITLEAKS_VERSION: 8.18.4
+        run: |
+          set -euo pipefail
+          curl -sSfL -o /tmp/gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          /tmp/gitleaks version
+          # --config: the default ruleset does NOT catch a Zoho Flow `zapikey`, which is
+          # exactly what was found leaked in this repo. .gitleaks.toml extends the
+          # defaults with that rule and the other vendor shapes this project handles.
+          /tmp/gitleaks detect --no-git --redact --verbose --exit-code 1 \
+            --config .gitleaks.toml --source .

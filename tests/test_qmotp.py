@@ -163,13 +163,13 @@ def test_otp_adapter_builds_ordered_template_params_and_reconciles(monkeypatch):
     import apps.integrations.wati.adapter as wati_adapter_mod
     monkeypatch.setattr(wati_adapter_mod, "get_wati_adapter", lambda: _FakeWati())
     adapter = otp_adapters.WatiWhatsAppOtpAdapter()
-    res = adapter.send(recipient="919999900000", code="123456", ttl_seconds=300,
+    res = adapter.send(recipient="919999900001", code="123456", ttl_seconds=300,
                        context={"template": "gorefer_login_otp"})
     # Ordered template_params carrying the code (not a bare {"code":...} dict).
     tvars = captured["params"]["template_params"]
     assert isinstance(tvars, list) and tvars and tvars[0]["value"] == "123456"
     # Status reconciled with mobile + template, not the empty id alone.
-    assert captured["status_call"]["mobile"] == "919999900000"
+    assert captured["status_call"]["mobile"] == "919999900001"
     assert captured["status_call"]["template"] == "gorefer_login_otp"
     from apps.otp.ports import STATUS_DELIVERED
     assert res.status == STATUS_DELIVERED
@@ -182,7 +182,7 @@ def test_logonly_wati_adapter_redacts_param_values(caplog):
 
     with caplog.at_level(logging.INFO, logger="gorefer.wati"):
         LogOnlyWatiAdapter().send_template(
-            to="919999900000", template="gorefer_login_otp",
+            to="919999900001", template="gorefer_login_otp",
             params={"template_params": [{"name": "code", "value": "654321"}]},
         )
     joined = "\n".join(r.getMessage() for r in caplog.records)
@@ -475,7 +475,7 @@ def test_whatsapp_otp_not_yet_delivered_is_QUEUED_not_a_failure(monkeypatch):
     # the exact status that used to cascade every real login OTP to `manual`.
     _stub_wati_otp_adapter(monkeypatch, delivery_status=wstatus.STATUS_ACCEPTED)
     res = adapters.WatiWhatsAppOtpAdapter().send(
-        recipient="919999900000", code="123456", ttl_seconds=300, context={}
+        recipient="919999900002", code="123456", ttl_seconds=300, context={}
     )
     assert res.status == STATUS_QUEUED, f"in-flight delivery must not be a failure, got {res.status}"
 
@@ -484,7 +484,7 @@ def test_whatsapp_otp_sent_but_not_yet_delivered_is_QUEUED(monkeypatch):
     """'sent' is also non-terminal — the message is in flight, not rejected."""
     _stub_wati_otp_adapter(monkeypatch, delivery_status=wstatus.STATUS_SENT)
     res = adapters.WatiWhatsAppOtpAdapter().send(
-        recipient="919999900000", code="123456", ttl_seconds=300, context={}
+        recipient="919999900002", code="123456", ttl_seconds=300, context={}
     )
     assert res.status == STATUS_QUEUED
 
@@ -497,7 +497,7 @@ def test_whatsapp_otp_proven_delivery_is_DELIVERED(monkeypatch):
     """
     _stub_wati_otp_adapter(monkeypatch, delivery_status=wstatus.STATUS_DELIVERED)
     res = adapters.WatiWhatsAppOtpAdapter().send(
-        recipient="919999900000", code="123456", ttl_seconds=300, context={}
+        recipient="919999900002", code="123456", ttl_seconds=300, context={}
     )
     assert res.status == STATUS_DELIVERED
 
@@ -508,7 +508,7 @@ def test_whatsapp_otp_terminal_failure_still_cascades(monkeypatch):
         monkeypatch, delivery_status=wstatus.STATUS_FAILED, meta_error_code=131049
     )
     res = adapters.WatiWhatsAppOtpAdapter().send(
-        recipient="919999900000", code="123456", ttl_seconds=300, context={}
+        recipient="919999900002", code="123456", ttl_seconds=300, context={}
     )
     assert res.status == STATUS_FAILED
     assert "131049" in (res.error or "")

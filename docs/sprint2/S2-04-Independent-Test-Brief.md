@@ -44,7 +44,7 @@ Independent verification **gates** the prod deploy; it does not follow it. For e
 - [ ] `/d/pifs` page → §4.1/§4.2 present; no superlatives; no incentive-for-account-opening.
 
 ## C3 — Live WhatsApp E2E (on this machine, Wati + WhatsApp Web + GoRefer)
-- [ ] Send the approved template to the safe test number (79726 72473) → 3 buttons render.
+- [ ] Send the approved template to the safe test number (99999 00001) → 3 buttons render.
 - [ ] **Refer & earn** (URL) → opens `gorefer.in/r/wa/{client_id}` → tracked click `channel=wa` + landing/redirect per `LANDING_MODE`.
 - [ ] **Share on WhatsApp** (QR) → the kit + forward-nudge arrive (the already-live flow).
 - [ ] **Refer directly** (QR) → capture Name+Mobile → one Zoho lead with consent flag.

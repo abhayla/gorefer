@@ -6,7 +6,7 @@
 # against "someone dropped a table" and against nothing else. If the VPS is lost —
 # disk failure, a bad `rm -rf`, an account suspension, a compromise that wipes the box —
 # the backups die with the data they were protecting. This script copies the newest
-# dump OFF the box, so a total loss of <PROD-VPS> costs at most one day of data.
+# dump OFF the box, so a total loss of the production VPS costs at most one day of data.
 #
 # It is deliberately dumb: newest dump in, one file out, verify it landed, alert on
 # failure. No rotation logic of its own — the remote destination owns retention.

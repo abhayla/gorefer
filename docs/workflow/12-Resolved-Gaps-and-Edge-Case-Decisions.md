@@ -14,7 +14,7 @@
 > [`08-Zoho-WATI-Integration.md`](./08-Zoho-WATI-Integration.md) (Zoho sync, WATI delivery status),
 > [`11-Referral-Workflow-and-Edge-Cases.md`](./11-Referral-Workflow-and-Edge-Cases.md) (the end-to-end workflow these decisions refine).
 >
-> **New ADRs encoding these decisions:** ADR-015 (partner-direct link), ADR-016 (Zoho single-source / single-winner), ADR-017 (true opening date), ADR-018 (best-effort visitor identity), ADR-019 (bot filtering), ADR-020 (DPDP baseline), and — from the Round-2 walk — ADR-021 (simple central runtime model), ADR-022 (3-tier config cascade + compliance lock), ADR-023 (multi-tenant boundary designed now / SaaS later) — see [`02-Architecture-Decisions-ADR.md`](./02-Architecture-Decisions-ADR.md). The Round-2 walk also opened backlog items **DF-1** (Zoho API pull), **DF-2** (wax-seal webhook auth), **DF-3** (edge/distributed runtime), **DF-4** (full bulk backfill) in `Deferred-Features-Backlog.md`; full walk log in [`review/Review-Matrix-v1.md`](../../review/Review-Matrix-v1.md).
+> **New ADRs encoding these decisions:** ADR-015 (partner-direct link), ADR-016 (Zoho single-source / single-winner), ADR-017 (true opening date), ADR-018 (best-effort visitor identity), ADR-019 (bot filtering), ADR-020 (DPDP baseline), and — from the Round-2 walk — ADR-021 (simple central runtime model), ADR-022 (3-tier config cascade + compliance lock), ADR-023 (multi-tenant boundary designed now / SaaS later) — see [`02-Architecture-Decisions-ADR.md`](./02-Architecture-Decisions-ADR.md). The Round-2 walk also opened backlog items **DF-1** (Zoho API pull), **DF-2** (wax-seal webhook auth), **DF-3** (edge/distributed runtime), **DF-4** (full bulk backfill) in `Deferred-Features-Backlog.md`; full walk log in `gorefer-ops/review/Review-Matrix-v1.md`.
 >
 > **Anchors:** Partner code `ZMPHZC` (injected server-side). NSE AP reg. no. `AP2516003693`. WATI business number `+91 70806 42020`. Ashok's personal number `73888 82020` (NOT used for inbound capture).
 
@@ -219,7 +219,7 @@ Gaps that span personas — reward truth, dates, timers, identity, delivery, sha
 
 # Round 2 — External-review resolved decisions (2026-07-06)
 
-A second review walk (Gemini = schema/data-model, Grok = product/growth + sync design, Claude = engineering/security) surfaced ~38 distinct suggestions; each was walked item-by-item with Abhay and **approved, deferred, or parked as a locked-decision conflict**. The decisions below are locked on the **same footing as the 16 gaps above** and refine or extend them. Where a Round-2 decision **amends** an earlier gap, that is called out. Full walk log and dispositions: [`review/Review-Matrix-v1.md`](../../review/Review-Matrix-v1.md) (Final Approval Log). Numbering (R#) follows the review matrix rows for traceability.
+A second review walk (Gemini = schema/data-model, Grok = product/growth + sync design, Claude = engineering/security) surfaced ~38 distinct suggestions; each was walked item-by-item with Abhay and **approved, deferred, or parked as a locked-decision conflict**. The decisions below are locked on the **same footing as the 16 gaps above** and refine or extend them. Where a Round-2 decision **amends** an earlier gap, that is called out. Full walk log and dispositions: `gorefer-ops/review/Review-Matrix-v1.md` (Final Approval Log). Numbering (R#) follows the review matrix rows for traceability.
 
 ## R1 — Unauthenticated referrer-name enumeration (beacon-gated name)
 

@@ -42,7 +42,7 @@ WhatsApp 24h window is open, with full CRUD. NO PartnerGroup, NO 5-tier resoluti
 ## Guardrails
 - Contract-doc CI: any `apps/integrations` change moves its contract doc with it.
 - Verify delivery at destination (terminal status), never HTTP 200.
-- Rollout: behind `followups_enabled=false` → live-test on test numbers **7972672473 / 7767009136**
+- Rollout: behind `followups_enabled=false` → live-test on test numbers **9999900001 / 9999900002**
   → owner copy sign-off → enable.
 - Suggested engine: `/development-loop` or loop-engineering (maker≠checker), sonnet workers.
 

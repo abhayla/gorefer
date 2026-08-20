@@ -133,7 +133,7 @@ Answers: *how does a referrer who already shared his link register/login and see
 
 **Path A — known referrer (Client ID present in Zoho, has mobile/email on file):**
 1. Referrer enters his Zerodha Client ID.
-2. GoRefer resolves that Client ID in **Zoho** → reads the on-file mobile/email (verified live 2026-07-11: Zoho Contact carries `ClientId` + `Mobile`/`Phone`, e.g. QPJ023 → 9335138774).
+2. GoRefer resolves that Client ID in **Zoho** → reads the on-file mobile/email (verified live 2026-07-11: Zoho Contact carries `ClientId` + `Mobile`/`Phone`, e.g. QPJ023 → 9999900004).
 3. GoRefer sends an **OTP to that on-file channel** (Wati/WhatsApp or SMS) — NEVER to a number the user types.
 4. OTP verified → a login account is bound to **`(tenant_id, client_id)`** (ADR-023 boundary).
 5. Dashboard shows all journeys/clicks/Zoho-conversions already recorded under that Client ID — retroactively, including everything from before registration.

@@ -1,5 +1,11 @@
 # WhatsApp Template Coverage Matrix
 
+> **Kept in the PUBLIC repo deliberately (T-240).** `tests/test_qmpref_preferences.py::test_every_notify_template_default_exists_at_meta` reads THIS file at runtime and asserts every
+> notify-template default still appears here, and `.github/workflows/ci.yml` carves it out of the
+> `docs/**` paths-ignore for exactly that reason. Moving it to `gorefer-ops` would have turned that
+> P0 guard into a vacuous pass. It contains template names only — the one live test number it named
+> has been replaced with a placeholder.
+
 > **Generated 2026-07-26, refreshed same day after the v5 cutover** from the live Wati inventory
 > (100 records: 75 APPROVED, 24 DELETED, 1 PENDING) cross-referenced against template names
 > **resolved on prod** (tenant 1) and the GoRefer code paths that send them.
@@ -139,7 +145,7 @@ Wati's own terminal `statusString`, not the send ack.
    again in a few days."* Distinct from `131049` (per-user cap). Both EN and HI v3 failed. This is
    GoRefer's newest live feature and its template is **MARKETING** — so in production it is
    currently throttled. ~~Re-cutting it as **UTILITY** is the likely fix~~ **DISPROVEN same day:**
-   the v4 UTILITY re-cut reproduced the identical failure on `919999900000`, and Meta kept v4/v5
+   the v4 UTILITY re-cut reproduced the identical failure on `919999900001`, and Meta kept v4/v5
    as MARKETING anyway. The restriction is **per-recipient**, recovery is Meta-side (wait it out +
    lower marketing volume to that number) — not copy- or category-fixable from our side.
 8. **Named vs positional params: no bug.** All 8 templates declare positional params (`1,2,3,4`)

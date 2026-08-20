@@ -45,8 +45,8 @@ def to_zoho_mobile(raw: str | None) -> str:
     Zoho holds Indian mobiles WITHOUT a country code (DA correction 2026-07-15,
     MCP-verified against live Leads: all bare 10-digit, zero 91-prefixed). GoRefer
     normalizes internally to the 91-prefixed form. Writing the internal form to Zoho
-    would make the upsert's `duplicate_check_fields=[Mobile]` search `919999900000`,
-    MISS the stored `9335179938`, and silently create a parallel lead — Zoho's native
+    would make the upsert's `duplicate_check_fields=[Mobile]` search `919999900003`,
+    MISS the stored `9999900003`, and silently create a parallel lead — Zoho's native
     uniqueness can't catch it because the two strings differ.
 
     So: take the canonical value and keep its LAST 10 digits (strips the `91` country

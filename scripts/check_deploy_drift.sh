@@ -96,6 +96,6 @@ fi
 
 echo "DRIFT: deployed $DEPLOYED != origin/$BRANCH $SHORT_ORIGIN"
 notify "warning" "GoRefer: prod is behind origin/$BRANCH" \
-  "Box DEPLOYED_SHA=$DEPLOYED but origin/$BRANCH HEAD=$SHORT_ORIGIN. Either a merge was never deployed, or a deploy never updated the marker. Check with: ssh root@<PROD-VPS> 'cat $ROOT/DEPLOYED_SHA; readlink $ROOT/current'" \
+  "Box DEPLOYED_SHA=$DEPLOYED but origin/$BRANCH HEAD=$SHORT_ORIGIN. Either a merge was never deployed, or a deploy never updated the marker. Check with: ssh root@$DEPLOY_SSH_HOSTNAME 'cat $ROOT/DEPLOYED_SHA; readlink $ROOT/current'" \
   "gorefer-drift-$DEPLOYED-$SHORT_ORIGIN"
 exit 0

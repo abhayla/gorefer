@@ -84,10 +84,10 @@ class _RecordingAdapter:
 def test_zoho_mobile_is_bare_10_digit_derived_from_canonical():
     """Zoho stores Indian mobiles with NO country code. The write leg must match that
     stored format or the upsert's dedup key misses and silently twins the lead."""
-    assert to_zoho_mobile("919999900000") == "9335179938"   # strips 91
-    assert to_zoho_mobile("9335179938") == "9335179938"     # already bare
-    assert to_zoho_mobile("+91-93351 79938") == "9335179938"  # punctuated
-    assert to_zoho_mobile("09335179938") == "9335179938"    # strips leading 0
+    assert to_zoho_mobile("919999900003") == "9999900003"   # strips 91
+    assert to_zoho_mobile("9999900003") == "9999900003"     # already bare
+    assert to_zoho_mobile("+91-99999 00003") == "9999900003"  # punctuated
+    assert to_zoho_mobile("09999900003") == "9999900003"    # strips leading 0
 
 
 def test_zoho_mobile_refuses_to_pad_a_malformed_number():
@@ -100,8 +100,8 @@ def test_zoho_mobile_refuses_to_pad_a_malformed_number():
 
 def test_internal_format_is_unchanged_only_the_zoho_leg_reformats():
     """GoRefer internal + WATI keep the 91-prefix; only the Zoho write leg is bare."""
-    assert normalize_phone("9335179938") == "919999900000"  # internal unchanged
-    assert to_zoho_mobile("9335179938") == "9335179938"     # Zoho leg bare
+    assert normalize_phone("9999900003") == "919999900003"  # internal unchanged
+    assert to_zoho_mobile("9999900003") == "9999900003"     # Zoho leg bare
 
 
 # --- 1. upsert shape / server-side dedup -----------------------------------------
@@ -120,10 +120,10 @@ def test_record_carries_zoho_format_mobile_and_journey_reference():
 def test_referrer_mobile_gets_the_same_bare_treatment():
     """DA correction #4 — Referrer_Mobile matches the same Zoho-stored format."""
     record = build_lead_record(
-        payload={"name": "R", "mobile": "9876543210", "referrer_mobile": "919999900000"},
+        payload={"name": "R", "mobile": "9876543210", "referrer_mobile": "919999900003"},
         gorefer_reference="GR-1",
     )
-    assert record["Referrer_Mobile"] == "9335179938"
+    assert record["Referrer_Mobile"] == "9999900003"
 
 
 def test_dedup_is_server_side_on_mobile():
@@ -317,22 +317,22 @@ def test_resubmit_does_not_create_second_lead_and_keeps_reference():
 def test_internal_91_prefixed_matches_preexisting_bare_zoho_lead_no_twin():
     """THE silent-twin regression test (DA correction 2026-07-15).
 
-    Zoho already holds `9335179938`. GoRefer normalizes internally to
-    `919999900000`. If the write leg sent the internal form, the upsert's dedup key
+    Zoho already holds `9999900003`. GoRefer normalizes internally to
+    `919999900003`. If the write leg sent the internal form, the upsert's dedup key
     would MISS the stored record and INSERT a parallel lead — and Zoho's native
     `Mobile` uniqueness could not catch it, because the two strings differ. The
     correct behaviour is action=update against the existing lead.
     """
-    rec = _RecordingAdapter(existing={"9335179938": "zoho-preexisting-1"})
+    rec = _RecordingAdapter(existing={"9999900003": "zoho-preexisting-1"})
 
     result = rec.upsert_lead(
-        payload={"name": "Ramesh", "mobile": "919999900000"},  # GoRefer internal form
+        payload={"name": "Ramesh", "mobile": "919999900003"},  # GoRefer internal form
         gorefer_reference="GR-42",
     )
 
     assert result.action == "update", "internal 91-prefixed form twinned the Zoho lead"
     assert result.zoho_lead_id == "zoho-preexisting-1", "wrote a parallel lead, not the existing one"
-    assert rec.calls[0]["Mobile"] == "9335179938", "dedup key must be Zoho's bare format"
+    assert rec.calls[0]["Mobile"] == "9999900003", "dedup key must be Zoho's bare format"
 
 
 def test_repeat_upsert_updates_rather_than_inserts():

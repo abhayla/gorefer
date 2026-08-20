@@ -1,0 +1,55 @@
+# gitleaks config for the PUBLIC gorefer repo (T-240).
+#
+# Starts from gitleaks' built-in ruleset and adds the vendor credential shapes this
+# project actually handles. The default ruleset was measured against a real leak found
+# in this repo on 2026-08-21 — a live Zoho Flow `zapikey` sitting in a tracked scratch
+# file — and it did NOT fire. Every rule below exists because something like it was
+# either found here or is one keystroke away from being committed.
+
+title = "GoRefer public-repo secret scan"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "zoho-flow-zapikey"
+description = "Zoho Flow webhook zapikey (grants unauthenticated write into the CRM flow)"
+regex = '''zapikey=[0-9]{4}\.[a-f0-9]{32}\.[a-f0-9]{32}'''
+keywords = ["zapikey"]
+
+[[rules]]
+id = "zoho-oauth-token"
+description = "Zoho OAuth client secret / refresh token"
+regex = '''(?i)zoho[_-]?(client[_-]?secret|refresh[_-]?token)\s*[=:]\s*['"]?[A-Za-z0-9._-]{20,}'''
+keywords = ["zoho"]
+
+[[rules]]
+id = "wati-bearer-token"
+description = "Wati API bearer token (a raw JWT assigned to a WATI_* variable)"
+regex = '''(?i)wati[_-]?(api[_-]?)?token\s*[=:]\s*['"]?(Bearer\s+)?eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'''
+keywords = ["wati"]
+
+[[rules]]
+id = "django-secret-key"
+description = "A populated DJANGO_SECRET_KEY (the exact shape leaked in commit bd6a8fd)"
+regex = '''(?i)django[_-]?secret[_-]?key\s*[=:]\s*['"]?[A-Za-z0-9!@#$%^&*_+=\-()]{32,}'''
+keywords = ["django_secret_key", "DJANGO_SECRET_KEY"]
+
+[allowlist]
+description = "Values that are deliberately public, obviously fake, or placeholders"
+regexes = [
+  '''ci-not-a-real-secret''',
+  '''DJANGO_SECRET_KEY\s*[=:]\s*(changeme|replace-me|your-secret-key-here|<[^>]+>)''',
+]
+paths = [
+  # .env.example ships placeholder values on purpose.
+  '''^\.env\.example$''',
+  # A developer's LOCAL, gitignored .env. `gitleaks --no-git` walks the directory, not
+  # the index, so without this a local run screams about a file that can never be
+  # committed — and a gate people learn to ignore is not a gate. Tracked dotenvs are
+  # covered by a stricter, dedicated rail: the ENVFILE check in
+  # scripts/check_public_hygiene.py fails the build on ANY tracked dotenv-shaped file,
+  # allowing only .env.example. In CI the checkout has no .env at all.
+  '''^\.env$''',
+  '''^\.env\.(local|dev|test)$''',
+]

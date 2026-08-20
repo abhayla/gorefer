@@ -2,7 +2,7 @@
 
 > **Building GoRefer?** Start with [`CLAUDE.md`](./CLAUDE.md) — the operating manual and entry point for Claude Code. It maps the docs, states the non-negotiable guardrails, and defines the Sprint 1 build order.
 
-GoRefer is a **referral management & referral intelligence platform**: users manage, share, and track referral links from partner businesses (Sprint 1: Zerodha) through multi-channel campaigns (WhatsApp/WATI + Zoho CRM), with AP compliance built in. This repository holds the **Sprint 1** design and implementation — a deliberately extensible foundation — authored with AI assistance. The documents below are the single source of truth; the raw ChatGPT/working material that seeded them is preserved under `_source-archive/`.
+GoRefer is a **referral management & referral intelligence platform**: users manage, share, and track referral links from partner businesses (Sprint 1: Zerodha) through multi-channel campaigns (WhatsApp/WATI + Zoho CRM), with AP compliance built in. This repository holds the **Sprint 1** design and implementation — a deliberately extensible foundation — authored with AI assistance. The documents below are the single source of truth; the raw ChatGPT/working material that seeded them is preserved under `_source-archive/` in the private companion repo [gorefer-ops](https://github.com/abhayla/gorefer-ops).
 
 ## Document Map
 
@@ -19,14 +19,14 @@ GoRefer is a **referral management & referral intelligence platform**: users man
 | Integrations | Zoho + WATI Integration | [docs/integrations/08-Zoho-WATI-Integration.md](docs/integrations/08-Zoho-WATI-Integration.md) |
 | Workflow | Referral Workflow & Edge Cases | [docs/workflow/11-Referral-Workflow-and-Edge-Cases.md](docs/workflow/11-Referral-Workflow-and-Edge-Cases.md) |
 | Workflow | Resolved Gaps & Edge-Case Decisions | [docs/workflow/12-Resolved-Gaps-and-Edge-Case-Decisions.md](docs/workflow/12-Resolved-Gaps-and-Edge-Case-Decisions.md) |
-| Review | LLM Review Pack | [review/09-LLM-Review-Pack.md](review/09-LLM-Review-Pack.md) |
-| Review | Review Bundle (full concatenation) | [review/GoRefer-Review-Bundle.md](review/GoRefer-Review-Bundle.md) |
+| Review | LLM Review Pack | `review/09-LLM-Review-Pack.md` in the private [gorefer-ops](https://github.com/abhayla/gorefer-ops) repo |
+| Review | Review Bundle (full concatenation) | `review/GoRefer-Review-Bundle.md` in the private [gorefer-ops](https://github.com/abhayla/gorefer-ops) repo |
 | Implementation | Claude Code Implementation Guide | [implementation/10-Claude-Code-Implementation-Guide.md](implementation/10-Claude-Code-Implementation-Guide.md) |
-| Decision | Framework/Stack Decision & Synthesis (basis of ADR-024) | [review/Framework-Decision-Synthesis.md](review/Framework-Decision-Synthesis.md) |
+| Decision | Framework/Stack Decision & Synthesis (basis of ADR-024) | `review/Framework-Decision-Synthesis.md` in the private [gorefer-ops](https://github.com/abhayla/gorefer-ops) repo |
 | Design | UI Mockups (landing, dashboard, components, journey, etc.) | [mockups/](mockups/) |
-| Source | Original ChatGPT/source & superseded drafts | [_source-archive/](_source-archive/) |
+| Source | Original ChatGPT/source & superseded drafts | `_source-archive/` in the private [gorefer-ops](https://github.com/abhayla/gorefer-ops) repo |
 | **Integration boundary** | **Zoho ⇄ GoRefer — contract** (webhook, HMAC seal, status→stage, upsert-by-mobile) | [Zoho-GoRefer/Zoho-Integration-Contract.md](Zoho-GoRefer/Zoho-Integration-Contract.md) |
-| **Integration boundary** | **Zoho ⇄ GoRefer — live state** (flags, what's proven, what's staged) | [Zoho-GoRefer/Zoho-GoRefer-State.md](Zoho-GoRefer/Zoho-GoRefer-State.md) |
+| **Integration boundary** | **Zoho ⇄ GoRefer — live state** (flags, what's proven, what's staged) | `Zoho-GoRefer/Zoho-GoRefer-State.md` in the private [gorefer-ops](https://github.com/abhayla/gorefer-ops) repo (pointer stub kept here) |
 | **Integration boundary** | Zoho-side Deluge signer — paste-ready steps | [Zoho-GoRefer/Zoho-Signer-Steps.md](Zoho-GoRefer/Zoho-Signer-Steps.md) |
 | **Integration boundary** | **Wati ⇄ GoRefer — contract** (send shape, terminal-status rule, allowlist gate, reconcile sweep) | [Wati-GoRefer/Wati-Integration-Contract.md](Wati-GoRefer/Wati-Integration-Contract.md) |
 | **Integration boundary** | **Wati ⇄ GoRefer — templates** (elementNames, ids, categories, role→template map) | [Wati-GoRefer/Wati-GoRefer-Templates.md](Wati-GoRefer/Wati-GoRefer-Templates.md) |
@@ -162,12 +162,12 @@ Two caveats worth knowing before you misread a red suite:
 
 **Feature flags** live in one place — `gorefer/flags.py`, resolved from env at startup (`ENABLE_*`, plus the single swappable `REFERRAL_INCENTIVE_CLAIM`). Defaults keep every not-yet-built capability and every external adapter **off** (adapters log their intended call instead of sending), so demo mode runs end-to-end with no external systems.
 
-> **PostgreSQL only (M10).** PostgreSQL is the sole supported engine across dev/test/CI/prod — there is no SQLite fallback, and settings raise `ImproperlyConfigured` if the resolved DB engine isn't Postgres (a green run on any other engine would be false confidence, since GoRefer relies on JSONB / partial-unique constraints / case-sensitivity). Multi-tenancy is **single-schema `tenant_id` discriminator** isolation (not django-tenants schema-per-tenant); `apps.tenants` keeps a plain Tenant/Domain registry and isolation is enforced by tenant-scoped managers + `TenantResolutionMiddleware` + composite unique constraints. Schema-per-tenant physical isolation is deferred (backlog DF-7). See the M1 QUESTION (Q-M1-1) in [`COORDINATION.md`](./COORDINATION.md).
+> **PostgreSQL only (M10).** PostgreSQL is the sole supported engine across dev/test/CI/prod — there is no SQLite fallback, and settings raise `ImproperlyConfigured` if the resolved DB engine isn't Postgres (a green run on any other engine would be false confidence, since GoRefer relies on JSONB / partial-unique constraints / case-sensitivity). Multi-tenancy is **single-schema `tenant_id` discriminator** isolation (not django-tenants schema-per-tenant); `apps.tenants` keeps a plain Tenant/Domain registry and isolation is enforced by tenant-scoped managers + `TenantResolutionMiddleware` + composite unique constraints. Schema-per-tenant physical isolation is deferred (backlog DF-7). See the M1 QUESTION (Q-M1-1) in `COORDINATION.md` in the private [gorefer-ops](https://github.com/abhayla/gorefer-ops) repo (pointer stub kept here).
 
 ## How to use for external LLM review
 
-To have another LLM review the design, feed it [review/GoRefer-Review-Bundle.md](review/GoRefer-Review-Bundle.md) (the full concatenated spec) as context, then apply the questions and rubric in [review/09-LLM-Review-Pack.md](review/09-LLM-Review-Pack.md).
+To have another LLM review the design, feed it `review/GoRefer-Review-Bundle.md` in the private [gorefer-ops](https://github.com/abhayla/gorefer-ops) repo (the full concatenated spec) as context, then apply the questions and rubric in `review/09-LLM-Review-Pack.md` in the private [gorefer-ops](https://github.com/abhayla/gorefer-ops) repo.
 
 ## Notes
 
-The numbered documents (01–12) cross-reference each other by their number and name (e.g. "see 05-Database-Design"). Those references are unchanged; every target is listed with its new path in the table above. `_source-archive/` holds raw and superseded material (ChatGPT transcripts, context/build/resume briefs, master source-of-truth, and the previous `00-README.md`) kept for provenance — not part of the active spec.
+The numbered documents (01–12) cross-reference each other by their number and name (e.g. "see 05-Database-Design"). Those references are unchanged; every target is listed with its new path in the table above. `_source-archive/` (in [gorefer-ops](https://github.com/abhayla/gorefer-ops)) holds raw and superseded material (ChatGPT transcripts, context/build/resume briefs, master source-of-truth, and the previous `00-README.md`) kept for provenance — not part of the active spec.

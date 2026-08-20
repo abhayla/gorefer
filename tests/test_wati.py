@@ -172,7 +172,7 @@ def test_live_send_template_post_shape(monkeypatch):
 
     adapter = LiveWatiAdapter(transport=fake_transport)
     res = adapter.send_template(
-        to="+91 79726 72473", template="gorefer_prospect_welcome", params={"role": "prospect"}
+        to="+91 99999 00001", template="gorefer_prospect_welcome", params={"role": "prospect"}
     )
 
     assert res.accepted is True
@@ -182,7 +182,7 @@ def test_live_send_template_post_shape(monkeypatch):
     method, url, headers, body = calls[0]
     assert method == "POST"
     assert url.startswith("https://live-mt-server.wati.io/999999/api/v1/sendTemplateMessage?")
-    assert "whatsappNumber=919999900000" in url   # normalized to digits
+    assert "whatsappNumber=919999900001" in url   # normalized to digits
     assert headers["Authorization"] == "Bearer abc.def.ghi"  # scheme re-added, once
     payload = json.loads(body.decode())
     assert payload["template_name"] == "gorefer_prospect_welcome"
@@ -204,7 +204,7 @@ def test_live_send_remaps_semantic_params_to_positional(monkeypatch):
         return 200, '{"result":true}'
 
     adapter = LiveWatiAdapter(transport=transport)
-    adapter.send_template(to="919999900000", template="t", params={"template_params": [
+    adapter.send_template(to="919999900001", template="t", params={"template_params": [
         {"name": "prospect_name", "value": "Abhay"},
         {"name": "referrer_name", "value": "Ramesh"},
         {"name": "office_number", "value": "+91 73888 82020"},
@@ -221,7 +221,7 @@ def test_live_send_blocked_for_non_allowlisted_recipient(monkeypatch):
     BLOCKED — no transport call, raw_status=blocked, not accepted."""
     monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/1")
     monkeypatch.setenv("WATI_API_TOKEN", "tok")
-    monkeypatch.setenv("WATI_TEST_RECIPIENTS", "919999900000")
+    monkeypatch.setenv("WATI_TEST_RECIPIENTS", "919999900001")
     monkeypatch.setenv("WATI_ALLOW_ALL_RECIPIENTS", "false")
 
     called = []
@@ -235,10 +235,10 @@ def test_live_send_blocked_for_non_allowlisted_recipient(monkeypatch):
 def test_live_send_allowed_for_allowlisted_recipient(monkeypatch):
     monkeypatch.setenv("WATI_API_ENDPOINT", "https://live-mt-server.wati.io/1")
     monkeypatch.setenv("WATI_API_TOKEN", "tok")
-    monkeypatch.setenv("WATI_TEST_RECIPIENTS", "919999900000")
+    monkeypatch.setenv("WATI_TEST_RECIPIENTS", "919999900001")
     monkeypatch.setenv("WATI_ALLOW_ALL_RECIPIENTS", "false")
     adapter = LiveWatiAdapter(transport=lambda *a: (200, '{"result":true}'))
-    res = adapter.send_template(to="+91 79726 72473", template="t", params={})
+    res = adapter.send_template(to="+91 99999 00001", template="t", params={})
     assert res.accepted is True  # the allowlisted number goes through
 
 
@@ -259,7 +259,7 @@ def test_live_send_empty_allowlist_blocks_everything(monkeypatch):
     monkeypatch.setenv("WATI_TEST_RECIPIENTS", "")
     monkeypatch.setenv("WATI_ALLOW_ALL_RECIPIENTS", "false")
     adapter = LiveWatiAdapter(transport=lambda *a: (200, '{"result":true}'))
-    res = adapter.send_template(to="919999900000", template="t", params={})
+    res = adapter.send_template(to="919999900001", template="t", params={})
     assert res.accepted is False and res.raw_status == st.STATUS_BLOCKED
 
 
@@ -284,7 +284,7 @@ def test_live_status_reconcile_reads_terminal(monkeypatch):
     ]}})
     adapter = LiveWatiAdapter(transport=lambda *a: (200, body))
     d = adapter.get_message_status(
-        provider_message_id="", recipient_mobile="919999900000",
+        provider_message_id="", recipient_mobile="919999900001",
         template="gorefer_prospect_welcome",
     )
     assert d.status == st.STATUS_DELIVERED
@@ -297,7 +297,7 @@ def test_live_status_honest_accepted_when_no_terminal(monkeypatch):
     monkeypatch.setenv("WATI_API_TOKEN", "tok")
     adapter = LiveWatiAdapter(transport=lambda *a: (200, json.dumps({"messages": {"items": []}})))
     d = adapter.get_message_status(
-        provider_message_id="", recipient_mobile="919999900000", template="t"
+        provider_message_id="", recipient_mobile="919999900001", template="t"
     )
     assert d.status == st.STATUS_ACCEPTED
     assert not st.is_delivered(d.status)
@@ -316,7 +316,7 @@ def test_live_status_exact_template_match_only(monkeypatch):
     ]}})
     adapter = LiveWatiAdapter(transport=lambda *a: (200, body))
     d = adapter.get_message_status(
-        provider_message_id="", recipient_mobile="919999900000", template="gr_ours",
+        provider_message_id="", recipient_mobile="919999900001", template="gr_ours",
     )
     assert d.status == st.STATUS_ACCEPTED  # no exact match -> stay honest
     assert not st.is_delivered(d.status)
@@ -336,7 +336,7 @@ def test_live_status_matches_template_in_eventdescription(monkeypatch):
     ]}})
     adapter = LiveWatiAdapter(transport=lambda *a: (200, body))
     d = adapter.get_message_status(
-        provider_message_id="", recipient_mobile="919999900000", template=tpl,
+        provider_message_id="", recipient_mobile="919999900001", template=tpl,
     )
     assert d.status == st.STATUS_DELIVERED
 
@@ -352,7 +352,7 @@ def test_live_status_eventdescription_of_other_template_not_matched(monkeypatch)
     ]}})
     adapter = LiveWatiAdapter(transport=lambda *a: (200, body))
     d = adapter.get_message_status(
-        provider_message_id="", recipient_mobile="919999900000", template="gr_ours",
+        provider_message_id="", recipient_mobile="919999900001", template="gr_ours",
     )
     assert d.status == st.STATUS_ACCEPTED  # not ours -> stay honest
 
@@ -368,7 +368,7 @@ def test_live_status_picks_the_matching_template_among_several(monkeypatch):
     ]}})
     adapter = LiveWatiAdapter(transport=lambda *a: (200, body))
     d = adapter.get_message_status(
-        provider_message_id="", recipient_mobile="919999900000", template="gr_ours",
+        provider_message_id="", recipient_mobile="919999900001", template="gr_ours",
     )
     assert d.status == st.STATUS_DELIVERED  # our row, not the other template's FAILED
 
@@ -453,7 +453,7 @@ def test_reconcile_finalizes_a_stranded_accepted_row(monkeypatch):
     call_command("seed_program")
     t = get_bootstrap_tenant()
     n = Notification.objects.create(
-        tenant=t, recipient_role="office", recipient_mobile="919999900000",
+        tenant=t, recipient_role="office", recipient_mobile="919999900001",
         template="gr_ours", idempotency_key="k1", status=st.STATUS_ACCEPTED,
         provider_message_id="", adapter_kind="live",
     )
@@ -488,7 +488,7 @@ def test_reconcile_expires_a_very_old_pending_row(monkeypatch):
     call_command("seed_program")
     t = get_bootstrap_tenant()
     n = Notification.objects.create(
-        tenant=t, recipient_role="office", recipient_mobile="919999900000",
+        tenant=t, recipient_role="office", recipient_mobile="919999900001",
         template="gr_ours", idempotency_key="k2", status=st.STATUS_ACCEPTED, adapter_kind="live",
     )
     Notification.objects.filter(pk=n.pk).update(
@@ -567,7 +567,7 @@ def test_live_status_versioned_prefix_name_does_not_bleed(monkeypatch):
     ]}})
     adapter = LiveWatiAdapter(transport=lambda *a: (200, body))
     d = adapter.get_message_status(
-        provider_message_id="", recipient_mobile="919999900000", template=v1,
+        provider_message_id="", recipient_mobile="919999900001", template=v1,
     )
     assert d.status == st.STATUS_DELIVERED  # v1 must match ITS row, not the v2 failure
 
@@ -594,7 +594,7 @@ def test_template_params_remap_to_positional_by_default(monkeypatch):
     """
     calls = []
     a = _capture_adapter(monkeypatch, calls)
-    a.send_template(to="919999900000", template="tmpl", params={"template_params": [
+    a.send_template(to="919999900002", template="tmpl", params={"template_params": [
         {"name": "name", "value": "Ramesh"}, {"name": "prospect", "value": "Rahul"},
     ]})
     assert [p["name"] for p in calls[0]["parameters"]] == ["1", "2"]
@@ -611,7 +611,7 @@ def test_template_params_named_preserves_names_for_button_templates(monkeypatch)
     """
     calls = []
     a = _capture_adapter(monkeypatch, calls)
-    a.send_template(to="919999900000", template="tmpl", params={
+    a.send_template(to="919999900002", template="tmpl", params={
         "template_params_named": True,
         "template_params": [
             {"name": "name", "value": "Ramesh"},

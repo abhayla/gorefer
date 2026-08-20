@@ -451,7 +451,7 @@ All require a valid admin JWT (§3.1). All are read-heavy; Sprint 1 admin is ope
 
 **Request body.**
 ```json
-{ "email": "**REMOVED**", "password": "••••••••" }
+{ "email": "admin@example.com", "password": "••••••••" }
 ```
 
 **Field rules.** `email` required, valid email; `password` required, 8–128 chars.
@@ -461,7 +461,7 @@ All require a valid admin JWT (§3.1). All are read-heavy; Sprint 1 admin is ope
 **Success response — 200**
 ```json
 {
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "access_token": "<compact JWS: header.payload.signature>",
   "token_type": "Bearer",
   "expires_in": 900,
   "admin": { "id": "adm_1", "name": "Abhay Kumar Maurya", "role": "admin" }

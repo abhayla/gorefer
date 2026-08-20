@@ -8,7 +8,7 @@ recipient here and the user never supplies it.
 Sources, most-authoritative first:
   1. `Customer` (Abhay's own customers, `client_id -> mobile`) — present today.
   2. Zoho Contact/Lead (`ClientId -> Mobile/Phone`, verified live 2026-07-11,
-     e.g. QPJ023 -> 9335138774) via the M9 Zoho READ adapter — gated by
+     e.g. QPJ023 -> 9999900004) via the M9 Zoho READ adapter — gated by
      ENABLE_ZOHO_READ. **OPEN (see COORDINATION Q-M-OTP-2): the exact Zoho-read
      module/method for the client_id->contact lookup is stubbed here** and returns
      "" until wired, so the flow falls back cleanly (no channel -> caller shows the
