@@ -45,23 +45,30 @@ if [ -r "$ENV_FILE" ]; then
 fi
 GIT_REMOTE="${DEPLOY_GIT_REMOTE:-$GIT_REMOTE}"
 
-notify() {  # $1 severity, $2 title, $3 body, $4 dedupeKey
+notify() {  # $1 severity (P0|P1|P2|info), $2 title, $3 body, $4 dedupeKey
   if [ -z "${NOTIFIER_URL:-}" ] || [ -z "${NOTIFIER_KEY:-}" ]; then
     echo "WARN: NOTIFIER_URL/NOTIFIER_KEY not set — cannot alert. Message was: $2 / $3" >&2
     return 1
   fi
-  curl -s -o /dev/null -w 'notifier: HTTP %{http_code}\n' \
+  local http_code
+  http_code="$(curl -s -o /dev/null -w '%{http_code}' \
     -X POST "${NOTIFIER_URL%/}/notify" \
     -H 'Content-Type: application/json' \
     -H "X-Api-Key: $NOTIFIER_KEY" \
     --data "$(printf '{"project":"%s","severity":"%s","title":"%s","body":"%s","type":"ops","dedupeKey":"%s"}' \
-                "$PROJECT" "$1" "$2" "$3" "$4")"
+                "$PROJECT" "$1" "$2" "$3" "$4")")"
+  if [ "${http_code:-000}" -ge 200 ] 2>/dev/null && [ "${http_code:-000}" -lt 300 ] 2>/dev/null; then
+    echo "notifier: HTTP $http_code"
+  else
+    echo "WARN: notifier POST failed — HTTP $http_code" >&2
+    return 1
+  fi
 }
 
 DEPLOYED="$(cat "$ROOT/DEPLOYED_SHA" 2>/dev/null | tr -d '[:space:]')"
 if [ -z "$DEPLOYED" ]; then
   echo "DEPLOYED_SHA missing/empty at $ROOT/DEPLOYED_SHA"
-  notify "warning" "GoRefer: DEPLOYED_SHA missing" \
+  notify "P2" "GoRefer: DEPLOYED_SHA missing" \
     "No readable $ROOT/DEPLOYED_SHA on the box — the deploy marker is gone, so drift cannot be measured." \
     "gorefer-drift-nomarker-$(date -u +%Y-%m-%d)"
   exit 1
@@ -82,7 +89,7 @@ if [ -z "$ORIGIN" ]; then
   # Degraded, not silent: an unreadable origin is itself worth one alert a day. A
   # drift check that quietly stops checking is exactly the failure it exists to prevent.
   echo "Could not read $BRANCH from $GIT_REMOTE (no credentials?)"
-  notify "warning" "GoRefer: drift check degraded" \
+  notify "P2" "GoRefer: drift check degraded" \
     "Could not read origin/$BRANCH from $GIT_REMOTE — set DEPLOY_GIT_REMOTE (credentialed) or GITHUB_TOKEN. Deployed SHA reads $DEPLOYED." \
     "gorefer-drift-degraded-$(date -u +%Y-%m-%d)"
   exit 1
@@ -95,7 +102,7 @@ if [ "$SHORT_ORIGIN" = "$DEPLOYED" ]; then
 fi
 
 echo "DRIFT: deployed $DEPLOYED != origin/$BRANCH $SHORT_ORIGIN"
-notify "warning" "GoRefer: prod is behind origin/$BRANCH" \
+notify "P2" "GoRefer: prod is behind origin/$BRANCH" \
   "Box DEPLOYED_SHA=$DEPLOYED but origin/$BRANCH HEAD=$SHORT_ORIGIN. Either a merge was never deployed, or a deploy never updated the marker. Check with: ssh root@$DEPLOY_SSH_HOSTNAME 'cat $ROOT/DEPLOYED_SHA; readlink $ROOT/current'" \
   "gorefer-drift-$DEPLOYED-$SHORT_ORIGIN"
 exit 0
