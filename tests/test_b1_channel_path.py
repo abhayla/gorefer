@@ -44,7 +44,7 @@ def test_channel_path_records_channel_from_path(seeded, client):
 
 @pytest.mark.parametrize(
     "code,label",
-    [("fb", "Facebook"), ("li", "LinkedIn"), ("tg", "Telegram"), ("ig", "Instagram")],
+    [("fb", "Facebook"), ("li", "LinkedIn"), ("tg", "Telegram"), ("ig", "Instagram"), ("yt", "YouTube")],
 )
 def test_channel_path_other_codes(seeded, client, code, label):
     client.get(f"/r/{code}/RJ4521", **HUMAN)
@@ -75,6 +75,17 @@ def test_channel_path_continue_302_is_clean(seeded, client):
     # Exactly the server-assembled destination — no channel, no s=, nothing extra.
     assert loc == "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=RJ4521"
     assert "wa" not in loc.rsplit("r=", 1)[0]  # 'wa' never appears before the id param
+    assert "s=" not in loc
+
+
+def test_channel_path_continue_302_is_clean_for_yt(seeded, client):
+    # Same guardrail as wa above, for the yt (YouTube) channel code (T-495).
+    client.get("/r/yt/RJ4521", **HUMAN)
+    resp = client.get("/r/yt/RJ4521/continue", HTTP_USER_AGENT="Mozilla/5.0")
+    assert resp.status_code == 302
+    loc = resp.headers["Location"]
+    assert loc == "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=RJ4521"
+    assert "yt" not in loc.rsplit("r=", 1)[0]
     assert "s=" not in loc
 
 
