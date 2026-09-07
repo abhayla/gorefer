@@ -41,6 +41,7 @@ SHARE_CHANNEL_LABELS = {
     "li": "LinkedIn",
     "tg": "Telegram",
     "ig": "Instagram",
+    "yt": "YouTube",
     "email": "Email",
     "copy": "Copy",
 }

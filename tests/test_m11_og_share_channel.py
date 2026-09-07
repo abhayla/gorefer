@@ -45,6 +45,7 @@ def test_normalize_share_channel_maps_codes():
     assert normalize_share_channel("li") == "LinkedIn"
     assert normalize_share_channel("tg") == "Telegram"
     assert normalize_share_channel("ig") == "Instagram"
+    assert normalize_share_channel("yt") == "YouTube"
     assert normalize_share_channel("email") == "Email"
     assert normalize_share_channel("copy") == "Copy"
 
