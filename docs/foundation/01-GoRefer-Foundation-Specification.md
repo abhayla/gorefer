@@ -102,7 +102,7 @@ Created → Shared → Clicked → Landing Viewed → Redirected  │  Lead Crea
                           external truth (Zoho / Zerodha) ┴────────────────────────────────────►
 ```
 
-**Account opening and reward come ONLY from Zoho and are NEVER fabricated by GoRefer.** GoRefer can prove a visitor was *redirected* to Zerodha; it cannot prove — and must never claim — that KYC completed, an account opened, or a reward was paid. Those states appear in GoRefer only after a trusted Zoho sync writes them (see REQ-021). This is a direct consequence of the live-tested fact that Zerodha's link is lead-capture-only, reCAPTCHA-gated, ends at "thanks," and is completed by a human (Ashok) off-platform.
+**Account opening and reward come ONLY from Zoho and are NEVER fabricated by GoRefer.** GoRefer can prove a visitor was *redirected* to Zerodha; it cannot prove — and must never claim — that KYC completed, an account opened, or a reward was paid. Those states appear in GoRefer only after a trusted Zoho sync writes them (see REQ-021). This is a direct consequence of the live-tested fact that Zerodha's link is lead-capture-only, reCAPTCHA-gated, ends at "thanks," and is completed by a human advisor off-platform.
 
 ### 10.3 State transitions and events
 
@@ -128,7 +128,7 @@ Every state change emits an immutable event (event-sourced; store events, not co
 1. PIFS sends a Meta-approved WATI WhatsApp template to an existing, opted-in client. The template carries the client's **personal referral link** and the **PIFS partner link** (both always present).
 2. The client taps their personal referral link → GoRefer records a **click event** (confidence classified) and, if enabled, shows the landing experience.
 3. The client shares the link with a friend (WhatsApp forward, Status, social) — recorded as a **Shared** event where observable.
-4. Alternatively (and the **recommended primary path**), the client uses "Share Friend Name + Mobile": GoRefer captures the friend's name + mobile in a PIFS-branded form, saves the lead first, and alerts Ashok. The link path stays available as the **secondary** path.
+4. Alternatively (and the **recommended primary path**), the client uses "Share Friend Name + Mobile": GoRefer captures the friend's name + mobile in a PIFS-branded form, saves the lead first, and alerts the office. The link path stays available as the **secondary** path.
 5. GoRefer never depends on the client understanding referral-link mechanics; the assisted path always leads.
 
 ### 11.2 Journey B — Referral visitor (the friend / prospect)
@@ -137,8 +137,8 @@ Every state change emits an immutable event (event-sourced; store events, not co
 2. GoRefer creates the journey **lazily on this first click** (no tracking record existed before), stores the click as a separate event with a confidence classification (default `Unknown`), and captures available signals (timestamp, referer, user-agent, and IP handled per the DPDP rules in NFR-006).
 3. If the program has a landing experience enabled, the visitor sees a PIFS-branded page ("Your friend invited you… Open your Zerodha account", benefits, "Open Account", "Need Help?"). The page is **not** a Zerodha look-alike.
 4. On "Open Account", GoRefer records a **RedirectInitiated** event and redirects the real human browser to Zerodha's official public lead URL (`https://signup.zerodha.com/api/lead/?c=ZMPHZC&r={client_id}`).
-5. On "Need Help?" (or via the assisted flow), the visitor submits name + mobile → **LeadCreated** in GoRefer/Zoho → the three WATI messages fire (to Ashok, to the new person, and to the referrer only if the referrer's phone is resolvable from Zoho).
-6. Ashok calls and helps complete Zerodha account opening (the human satisfies reCAPTCHA legitimately). GoRefer's view of this journey **stops at Redirected/Lead Created**; account status appears later only via Zoho sync.
+5. On "Need Help?" (or via the assisted flow), the visitor submits name + mobile → **LeadCreated** in GoRefer/Zoho → the three WATI messages fire (to the office, to the new person, and to the referrer only if the referrer's phone is resolvable from Zoho).
+6. The advisor calls and helps complete Zerodha account opening (the human satisfies reCAPTCHA legitimately). GoRefer's view of this journey **stops at Redirected/Lead Created**; account status appears later only via Zoho sync.
 
 ### 11.3 Journey C — Administrator
 
@@ -171,8 +171,8 @@ Every state change emits an immutable event (event-sourced; store events, not co
 ### 12.4 Lead capture & CRM
 
 - **REQ-009** GoRefer provides its **own PIFS-branded capture form** ("Passive Income Financial Solutions — open your Zerodha account"). On submit of **name + mobile**, GoRefer creates a lead (`LeadCreated`) and saves it **first** in GoRefer's own store so the lead is never lost, even if the person abandons Zerodha. _Canonical lead schema (whether "City" is required) is an OPEN decision inherited from the source docs; the mandatory minimum is name + mobile._
-- **REQ-010** On lead creation, GoRefer triggers the **three WATI messages** via Meta-approved templates: (a) alert to Ashok, (b) warm utility-style notice to the new person naming the referrer + a `r=`-bearing continue link, (c) thank-you to the referrer **only if** the referrer's phone is resolvable from Zoho. Message (b) must be utility-style, not a marketing blast (see BR-008).
-- **REQ-011** GoRefer writes/reconciles the lead to **Zoho CRM** (lead destination — Zoho, WATI, or both — is an OPEN decision; the requirement is that a durable CRM record exists and Ashok is alerted instantly).
+- **REQ-010** On lead creation, GoRefer triggers the **three WATI messages** via Meta-approved templates: (a) alert to the office, (b) warm utility-style notice to the new person naming the referrer + a `r=`-bearing continue link, (c) thank-you to the referrer **only if** the referrer's phone is resolvable from Zoho. Message (b) must be utility-style, not a marketing blast (see BR-008).
+- **REQ-011** GoRefer writes/reconciles the lead to **Zoho CRM** (lead destination — Zoho, WATI, or both — is an OPEN decision; the requirement is that a durable CRM record exists and the office is alerted instantly).
 
 ### 12.5 Admin, dashboard & explorer
 
@@ -246,9 +246,9 @@ Every state change emits an immutable event (event-sourced; store events, not co
 - **BR-002 Referrer credit source.** The `r=` value is the **referrer's Zerodha client_id**, taken directly from the `gorefer.in/r/{client_id}` path (no lookup). `c=ZMPHZC` is constant for PIFS and injected server-side. The `client_id` is visible in the link (already public); `c=ZMPHZC` is never exposed in the shared GoRefer link.
 - **BR-003 Attribution window.** A referred account must open **within 60 days** of the referral. GoRefer records timestamps but does not enforce Zerodha's window; it must not claim attribution it cannot prove.
 - **BR-004 Prior-registration voids mapping.** If the prospect had already registered with Zerodha before using the link, the referral mapping does not apply. GoRefer must not assert a reward for such cases.
-- **BR-005 reCAPTCHA reality — never auto-submit.** Zerodha's `api/lead` form is a **lead-capture form that ends at "thanks," is reCAPTCHA-gated, and has editable code fields.** GoRefer **must not** auto-submit or script it. The only compliant path is redirecting a **real human**, who is then assisted by Ashok to complete account opening. Code-swap on Zerodha's editable form is a residual, un-preventable risk (mitigated by a hidden default in our link).
+- **BR-005 reCAPTCHA reality — never auto-submit.** Zerodha's `api/lead` form is a **lead-capture form that ends at "thanks," is reCAPTCHA-gated, and has editable code fields.** GoRefer **must not** auto-submit or script it. The only compliant path is redirecting a **real human**, who is then assisted by the advisor to complete account opening. Code-swap on Zerodha's editable form is a residual, un-preventable risk (mitigated by a hidden default in our link).
 - **BR-006 Verification boundary.** GoRefer independently verifies **only up to Redirected**. `Contact/Account` and `Reward` come **only** from Zoho sync and are never fabricated (see REQ-019/021).
-- **BR-007 Lead-first.** On any capture, save the lead in GoRefer/Zoho **before** handing off to Zerodha, and alert Ashok instantly. The lead must survive Zerodha abandonment.
+- **BR-007 Lead-first.** On any capture, save the lead in GoRefer/Zoho **before** handing off to Zerodha, and alert the office instantly. The lead must survive Zerodha abandonment.
 - **BR-008 Warm first contact.** The first WATI message to a lead who did **not** personally opt in (referrer submitted their details) must be a **warm, utility-style notice naming the referrer** — never a marketing blast — to protect the WhatsApp business number from Meta throttling.
 - **BR-009 No clone.** GoRefer's forms and landing pages must be clearly **PIFS-branded** and must **not** clone or impersonate Zerodha's signup page (misrepresentation risk under NSE/COMP/55482).
 - **BR-010 Referrer notification is best-effort.** The thank-you to the referrer fires **only** when the referrer's phone is resolvable from Zoho; for open-ended referrers known only by `client_id`, no message is sent.
@@ -300,7 +300,7 @@ Sprint 1 is accepted when all of the following hold (mapped to the Success Metri
 - **AC-007** A second referral partner can be onboarded via configuration only, with no partner-specific application code. _(REQ-018, NFR-008; Metric: minimal change for partner #2.)_
 - **AC-008** No unfinished capability is visible: no "Coming Soon", placeholder menus, or disabled buttons; admin is reachable only via env-bootstrapped login. _(REQ-015/016/017.)_
 - **AC-009** Every public asset carries the AP disclosure block and has passed the compliance-skill review; no clone of Zerodha's page ships; the incentive claim is confined to one swappable location. _(§15, BR-009, BR-011.)_
-- **AC-010** Zerodha's form is never auto-submitted; the flow redirects a human and hands off to Ashok. _(BR-005.)_
+- **AC-010** Zerodha's form is never auto-submitted; the flow redirects a human and hands off to the advisor. _(BR-005.)_
 
 ---
 

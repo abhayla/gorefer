@@ -29,7 +29,7 @@ This is the load-bearing decision of the whole system. If you remember one thing
                         ┌──────────────────────────────────────────┐
                         │             END USERS / CHANNELS          │
                         │  Existing Zerodha customer · Friend/       │
-                        │  prospect · Executive (Ashok) · Admin     │
+                        │  prospect · Executive (advisor) · Admin     │
                         │  via WhatsApp · web browser · social       │
                         └───────────────┬──────────────────────────┘
                                         │  (HTTPS / short links / WA)
@@ -142,7 +142,7 @@ Redirect/Link Service (edge)
   5. 302 the REAL HUMAN BROWSER to Zerodha. GoRefer never submits the form.
         │
         ▼
-  Zerodha lead-capture form (reCAPTCHA) → "thanks" → Zerodha follow-up / Ashok completes KYC
+  Zerodha lead-capture form (reCAPTCHA) → "thanks" → Zerodha follow-up / the advisor completes KYC
 ```
 
 \* IP/PII handling per DPDP — see §7.5.
@@ -160,13 +160,13 @@ GoRefer API: SAVE LEAD FIRST (PostgreSQL prospect + referral rows)   ← never l
         ├── create Lead in Zoho CRM (CRM Sync Engine)
         │
         └── enqueue 3 WhatsApp sends via WATI (each a Meta-approved template):
-              a) → Ashok:    "new lead [name, mobile, referred-by], call now"
+              a) → Office:    "new lead [name, mobile, referred-by], call now"
               b) → new person:"[Referrer] referred you to PIFS… continue: [link with r=]"
               c) → referrer:  "Your referral for [name] is registered — thank you"
                               (ONLY if referrer phone resolvable from Zoho)
         │
         ▼
-Ashok calls, helps complete Zerodha account opening (human satisfies reCAPTCHA legitimately)
+The advisor calls, helps complete Zerodha account opening (human satisfies reCAPTCHA legitimately)
 ```
 
 Opt-in caution (§7) applies to message (b): the first message to a lead who did **not** opt in themselves must be a warm, utility-style notice naming the referrer — not a marketing blast.
@@ -298,7 +298,7 @@ These are verified, non-negotiable facts from the 2026-07-04 live test (`Build-S
 1. **Zerodha's `api/lead?c=ZMPHZC&r={client_id}` is a reCAPTCHA-gated, lead-capture-only page that ends at a "thanks / we'll contact you" screen.** It does **not** proceed into PAN/KYC/account opening. The `/?c=…&r=…` variant behaves identically.
 2. **Account opening and reward crediting come ONLY from Zoho** (the pipeline system of record), imported back into GoRefer with a recorded `source`. They are never inferred from a click or a redirect.
 3. **GoRefer never fabricates unverifiable events.** A click proves `ReferralLinkOpened`, at a stated confidence level — nothing more. `SignupCompleted` / `ReferralConfirmed` are only ever set from a verified partner source.
-4. **Never auto-submit Zerodha's form** (reCAPTCHA + compliance + account risk). The only compliant path is redirecting a real human browser. A human (Ashok) satisfies reCAPTCHA and completes KYC on a call, preserving both the `c=` (partner) and `r=` (referrer) mappings.
+4. **Never auto-submit Zerodha's form** (reCAPTCHA + compliance + account risk). The only compliant path is redirecting a real human browser. A human (advisor) satisfies reCAPTCHA and completes KYC on a call, preserving both the `c=` (partner) and `r=` (referrer) mappings.
 5. **The partner/referrer codes are pre-filled but editable on Zerodha's own page**, so code-swap (R7 revenue leakage) is mitigated by a hidden default in our link but **cannot be fully prevented** — it is Zerodha's page, not ours. Residual risk accepted.
 
 ---

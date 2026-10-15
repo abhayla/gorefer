@@ -167,11 +167,11 @@ You are the software **ENGINEER**, not the architect. Implement **exactly** what
 - Store the **TRUE Zoho account-opening date** as a first-class field, distinct from the sync/import date; **all conversion analytics run off the true opening date** so imports land in their real period with no fake day-1 spike (ADR-017).
 
 **Never auto-submit Zerodha**
-- Zerodha's signup/lead form is **reCAPTCHA-gated and lead-capture-only** (ends at a "thanks" screen; does not proceed into PAN/KYC). **NEVER auto-submit, headless-submit, or bot-submit it.** The ONLY compliant path is redirecting a **real human browser**; a human (Ashok) completes KYC on a call.
+- Zerodha's signup/lead form is **reCAPTCHA-gated and lead-capture-only** (ends at a "thanks" screen; does not proceed into PAN/KYC). **NEVER auto-submit, headless-submit, or bot-submit it.** The ONLY compliant path is redirecting a **real human browser**; a human advisor completes KYC on a call.
 
 **Landing page (branded, config-driven)**
 - The landing page is **per-partner CONFIG (not hardcoded)**, clearly **PIFS-branded**, and must **NOT resemble/clone Zerodha's page** (misrepresentation risk).
-- Two buttons: **(1) "Continue to Zerodha"** → a short name/email/phone form that **saves the lead FIRST** (GoRefer + Zoho), then redirects to `https://signup.zerodha.com/api/lead/?c=ZMPHZC&r={client_id}`. (Auto-filling Zerodha's own fields is an **OPEN POC, NOT a dependency** — do not block on it.) **(2) "Share referral details on WhatsApp"** → a `wa.me` deep link to the **WATI BUSINESS number `+91 70806 42020`** (NOT Ashok's personal `73888 82020`) with a referring-language pre-fill that **includes the referral id**.
+- Two buttons: **(1) "Continue to Zerodha"** → a short name/email/phone form that **saves the lead FIRST** (GoRefer + Zoho), then redirects to `https://signup.zerodha.com/api/lead/?c=ZMPHZC&r={client_id}`. (Auto-filling Zerodha's own fields is an **OPEN POC, NOT a dependency** — do not block on it.) **(2) "Share referral details on WhatsApp"** → a `wa.me` deep link to the **WATI BUSINESS number `+91 70806 42020`** (NOT the advisor helpline `73888 82020`) with a referring-language pre-fill that **includes the referral id**.
 - Show a small **"Referral ID: X"** echo line for self-serve visual confirmation (no separate confirm page).
 
 **Lazy journey creation**
@@ -205,7 +205,7 @@ Each slice left `main` deployable (see `implementation/10` §11).
 2. **M2 — Raw `client_id` redirect + lazy journey + click event**: format-validate the id; lazy create-or-find referrer + journey on first click; fast/edge redirect `/r/{client_id}` → log Click → 302 with `c=ZMPHZC` injected server-side. **Redirect only — never submit.**
 3. **M3 — Branded landing page**: PIFS-branded, mobile-first capture form; two buttons (Continue to Zerodha / Share on WhatsApp); disclosure block + risk warning present; must not resemble Zerodha.
 4. **M4 — Analytics / journey**: ReferralJourney + funnel events (link created, opened, landing viewed, redirect completed); read-only aggregation, no fabricated conversions.
-5. **M5 — WATI hooks**: WATI adapter behind the doc-08 contract; three notifications (Ashok / new person / referrer-if-phone-known); deduped, opt-in-aware; terminal-status verification. Behind `ENABLE_WATI_SEND=false` until templates are Meta-approved.
+5. **M5 — WATI hooks**: WATI adapter behind the doc-08 contract; three notifications (office / new person / referrer-if-phone-known); deduped, opt-in-aware; terminal-status verification. Behind `ENABLE_WATI_SEND=false` until templates are Meta-approved.
 6. **M6 — Zoho lead + status sync**: Zoho adapter; create Lead on submit (save lead FIRST); resolve referrer from `client_id`; read account/reward status back. Behind `ENABLE_ZOHO_WRITE=false`. **Status only from Zoho.**
 7. **M7 — Admin dashboard / referral explorer**: search customers, view leads + statuses, funnel analytics, top-referrer view. Renders in demo mode with seeded data.
 

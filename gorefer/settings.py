@@ -282,12 +282,12 @@ ADMIN_PASSWORD_HASH = os.environ.get("ADMIN_PASSWORD_HASH", "")
 PARTNER_CODE = os.environ.get("PARTNER_CODE", "ZMPHZC")
 NSE_AP_NO = os.environ.get("NSE_AP_NO", "AP2516003693")
 # WATI BUSINESS number (config, not a secret) — the wa.me share target. Digits only
-# (no +/spaces) so it drops straight into a wa.me link. NOT Ashok's personal number.
+# (no +/spaces) so it drops straight into a wa.me link. NOT the advisor helpline number.
 WATI_BUSINESS_NUMBER = os.environ.get("WATI_BUSINESS_NUMBER", "917080642020")
-# Office/Ashok alert recipient for the "new lead" notification (config, not secret).
+# Office alert recipient for the "new lead" notification (config, not secret).
 OFFICE_ALERT_NUMBER = os.environ.get("OFFICE_ALERT_NUMBER", "917388882020")
 # Human-facing support helpline (config, not a secret) — the "free, fully-assisted
-# account opening — call" line on the landing page (Ashok). Display format (with +91).
+# account opening — call" line on the landing page (advisor helpline). Display format (with +91).
 SUPPORT_HELPLINE_PHONE = os.environ.get("SUPPORT_HELPLINE_PHONE", "+91 73888 82020")
 
 # --- Compliance strings — canonical, byte-exact, single source (ADR-014) ---------

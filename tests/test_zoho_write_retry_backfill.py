@@ -1,7 +1,7 @@
 """Zoho WRITE retry + backfill (async queue) — the remaining WRITE gate.
 
 Before this, a Zoho upsert failure logged and left the lead local-only forever:
-nothing was technically dropped, but Ashok would never see the lead in the CRM —
+nothing was technically dropped, but the office would never see the lead in the CRM —
 silent loss from the operator's point of view. These tests prove the closure:
 
   1. capture is async: the submit never waits on Zoho (enqueued on_commit);

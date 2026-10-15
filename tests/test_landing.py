@@ -46,7 +46,7 @@ def test_landing_has_compliance_referral_echo_and_business_whatsapp(seeded, clie
     # from it at click time — DA polish #1); it is the WhatsApp SHARE target.
     assert "917080642020" in html
     assert 'watiNumber: "917080642020"' in html
-    # Ashok's helpline (73888…) now legitimately appears on the landing as the config
+    # The advisor helpline (73888…) now legitimately appears on the landing as the config
     # "call" line (DA M9 fix batch) — but it is NEVER the wa.me SHARE target.
     assert "wa.me/917388882020" not in html and "917388882020?text" not in html
     assert "tel:+917388882020" in html   # helpline is a tel: link only

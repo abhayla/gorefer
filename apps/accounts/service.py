@@ -207,7 +207,7 @@ def submit_evidence_request(
     _assert_decodes_as_image(evidence_bytes, content_type)
     onfile_status = _onfile_status(tenant, client_id)
     # One open request per (tenant, client_id, kind): a re-submit replaces the
-    # pending evidence rather than queueing duplicates for Ashok to reconcile.
+    # pending evidence rather than queueing duplicates for the office to reconcile.
     existing = VerificationRequest.objects.for_tenant(tenant).filter(
         client_id=client_id,
         kind=VerificationRequest.KIND_EVIDENCE, status=VerificationRequest.STATUS_PENDING,

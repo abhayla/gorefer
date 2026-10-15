@@ -99,7 +99,7 @@ def test_landing_shows_config_helpline_distinct_from_wati_share():
     call_command("seed_program")
     c = Client()
     html = c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0").content.decode()
-    assert "73888 82020" in html            # helpline (Ashok) on the call line
+    assert "73888 82020" in html            # advisor helpline on the call line
     assert "tel:+917388882020" in html      # config-driven tel: link
     assert "917080642020" in html           # WhatsApp share still on the WATI number
 

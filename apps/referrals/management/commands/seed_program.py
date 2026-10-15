@@ -67,7 +67,7 @@ class Command(BaseCommand):
             "market_risk_warning": getattr(settings, "MARKET_RISK_WARNING", ""),
             # attribution_window_days removed (doc 16 D-5): seeded since M1 but never
             # read by any code path. Existing rows are harmless; no longer created.
-            # WhatsApp share target = WATI BUSINESS number (NOT Ashok's personal),
+            # WhatsApp share target = WATI BUSINESS number (NOT the advisor helpline number),
             # config-driven via the cascade (ADR-022). Digits only for wa.me.
             "wati_business_number": settings.WATI_BUSINESS_NUMBER,
             # Relative path so it resolves against whatever host serves the app

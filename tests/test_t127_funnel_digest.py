@@ -295,7 +295,7 @@ def test_run_digest_for_tenant_greeting_name_resolves_from_config(tenant, monkey
     actually takes effect, not just that the default happens to match."""
     _set_config(tenant, **{
         MESSAGING_DIGEST_RECIPIENTS: "919876543210",
-        digest.MESSAGING_DIGEST_GREETING_NAME: "Ashok",
+        digest.MESSAGING_DIGEST_GREETING_NAME: "Ramesh",
     })
     fake_crm = _FakeCrmRead(SendQueueCounts(date_ist="x", referral={}, other={}))
     fake_messaging = _FakeMessaging()
@@ -305,7 +305,7 @@ def test_run_digest_for_tenant_greeting_name_resolves_from_config(tenant, monkey
     digest.run_digest_for_tenant(tenant, day=date(2026, 8, 10))
 
     slot_2 = fake_messaging.template_sends[0]["params"]["template_params"][1]["value"]
-    assert slot_2 == "Ashok"
+    assert slot_2 == "Ramesh"
 
 
 def test_run_digest_for_tenant_greeting_name_default_is_not_the_tenant_name(tenant, monkeypatch):

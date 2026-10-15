@@ -164,7 +164,7 @@ A read resolves `config_user → config_global → config_central`, returning th
 **Purpose.** The external organization whose referral journeys GoRefer manages, and the home of the **Partner Credentials abstraction** (Client ID / Agent ID / Advisor Code). Sprint 1: **PIFS**, partner code `ZMPHZC`, NSE AP `AP2516003693`. (`Master` Additions 8, 15; `04` §10.)
 
 - **`partners`** — id; name (`Passive Income Financial Solutions Pvt Ltd`); code (unique, e.g. `ZMPHZC`); credentials (JSONB — the Partner Credentials abstraction: `{ client_id, agent_id, advisor_code, nse_ap_no, sebi_reg_no }`, secrets referenced from a vault, not stored raw); website; status; + audit + soft-delete. Indexes: `code` (unique), `status`.
-- **`partner_contacts`** — id; partner_id → partners.id; contact_type (`helpline`/`executive`/`billing`); name; mobile; email; is_primary; + audit. (Ashok's Prayagraj helpline lives here.) Index: `partner_id`.
+- **`partner_contacts`** — id; partner_id → partners.id; contact_type (`helpline`/`executive`/`billing`); name; mobile; email; is_primary; + audit. (The advisor helpline lives here.) Index: `partner_id`.
 - **`partner_branding`** — id; partner_id; logo_url; primary_color; secondary_color; footer_disclosure (the mandatory AP disclosure block, `04` §7.7); + audit. Index: `partner_id`.
 - **`partner_domains`** — id; partner_id; domain (e.g. `gorefer.in`); is_primary; ssl_status; + audit. Supports the single-domain, `client_id`-in-path routing scheme (ADR-005) and future per-partner domains. Index: `domain` (unique).
 

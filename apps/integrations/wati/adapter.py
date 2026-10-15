@@ -212,7 +212,7 @@ class LiveWatiAdapter:
         # WATI_TEST_RECIPIENTS — no network call is made. This is the same rail the
         # test-send skill enforces, now enforced inside GoRefer's own send path so a
         # capture during testing can never fire a real message to a non-test number
-        # (e.g. the office/Ashok alert). A blocked send is recorded, not sent.
+        # (e.g. the office alert). A blocked send is recorded, not sent.
         if not _recipient_allowed(number):
             logger.warning("WATI send BLOCKED by allowlist: template=%s (recipient not allowlisted)",
                            template)

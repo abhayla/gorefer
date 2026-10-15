@@ -1,7 +1,7 @@
 """Lead-time WATI notification service (M5).
 
 On `lead_captured`, fire THREE transactional notifications (doc-08 A6):
-  (a) office/Ashok  — "new lead {name}, referred by {client_id}"       [UTILITY]
+  (a) office  — "new lead {name}, referred by {client_id}"       [UTILITY]
   (b) prospect      — warm UTILITY naming the referrer + next steps      [UTILITY]
   (c) referrer      — ONLY if the referrer's phone is known; else skip    [UTILITY]
 
@@ -130,7 +130,7 @@ def queue_lead_notifications(*, tenant, referral, prospect, client_id: str) -> l
     referrer_name = _referrer_display_name(referrer)
     office_number = get_preferences(tenant_id).get(SUPPORT_HELPLINE_PHONE) or ""
 
-    # (a) office / Ashok — internal alert. Vars (approved order):
+    # (a) office — internal alert. Vars (approved order):
     # prospect_name, prospect_mobile, referrer_name, referrer_client_id.
     office_skip = _routing_skip("office") or (
         "" if _office_mobile() else "office number not configured"
