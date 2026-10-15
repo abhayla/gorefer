@@ -18,8 +18,8 @@ When a referrer sends a referral keyword ("Refer", "get referral message"), the 
 
 ## 2. Assisted-referral branch (TO BUILD — needs Zoho wiring)
 
-If the referrer picks "Refer directly," the bot captures the prospect's **Name + Mobile** (Email optional), creates a **lead in Zoho** (Ashok's follow-up queue), and confirms "we'll reach out to help them open the account."
-- **Consent guardrail (DPDP):** it's a third party's PII → frame as "with their permission, share their name & number"; Ashok obtains + logs the prospect's consent on first contact. **Never collect a password** — name/mobile/email only.
+If the referrer picks "Refer directly," the bot captures the prospect's **Name + Mobile** (Email optional), creates a **lead in Zoho** (the advisor's follow-up queue), and confirms "we'll reach out to help them open the account."
+- **Consent guardrail (DPDP):** it's a third party's PII → frame as "with their permission, share their name & number"; the advisor obtains + logs the prospect's consent on first contact. **Never collect a password** — name/mobile/email only.
 - **Architecture:** the Wati flow posts captured details to **GoRefer's webhook** → GoRefer creates the Zoho lead (same pipeline as the landing-page form, behind `ENABLE_ZOHO_WRITE`). One lead pipeline, not two.
 - **Why it was dropped from the rebuild originally:** the old multi-broker flow's "share your friend's details → we contact them" had a DPDP/consent gap and weaker Zerodha mapping than prospect self-signup. The assisted branch re-adds it *with* the consent guardrail; "forward the link" stays the primary CTA.
 
@@ -31,7 +31,7 @@ A **per-tenant (sub-broker) config flag** `LANDING_MODE = page | direct`:
 - Fits the config cascade (central default → per-sub-broker override) + the multi-tenant model: some sub-brokers bypass, some show. All tracking value preserved either way.
 
 **Two coupled consequences of `direct` (decisions, not just display):**
-- **(a) Lead-capture loss:** direct mode yields a click, not a contact — no name for Ashok. Fine for frictionless conversion; a loss for assisted follow-up.
+- **(a) Lead-capture loss:** direct mode yields a click, not a contact — no name for the advisor. Fine for frictionless conversion; a loss for assisted follow-up.
 - **(b) Disclosure relocation (compliance):** the light WhatsApp message relies on §4.4 (full disclosure lives on a linked page). If the landing page is bypassed, that host disappears — UNLESS the per-user disclosure page (§4) exists. **Resolution:** with the disclosure page in place, the message always links to `/d/{id}`, so `direct` mode no longer forces full-inline disclosure. Wire `LANDING_MODE` + message-disclosure-level together so no one gets a bypass link + a light message with no disclosure host.
 
 ## 4. Per-user Disclosure Page (NEW — Abhay 2026-07-09) (TO SPEC)
@@ -138,13 +138,13 @@ Answers: *how does a referrer who already shared his link register/login and see
 4. OTP verified → a login account is bound to **`(tenant_id, client_id)`** (ADR-023 boundary).
 5. Dashboard shows all journeys/clicks/Zoho-conversions already recorded under that Client ID — retroactively, including everything from before registration.
 
-**Path B — unknown referrer (NOT in Zoho, no OTP channel on file):** assisted / evidence verification (Abhay 2026-07-11). Ashok — or a WhatsApp auto-response — asks the referrer to **share a screenshot of his LOGGED-IN Zerodha console showing his Client ID together with his registered name** (ideally date-stamped). Ashok **human-reviews** and approves, which creates the referrer's identity + binds the login. **Caveats to bake in (advisor):** an image is spoofable and the Client ID alone is public, so the screenshot MUST show **Client ID + registered name together** (name is the ownership signal, not the ID); keep it **human-reviewed** in Sprint 2 (OCR auto-approval is Sprint 3+); capture **minimal PII**, and **purge the screenshot after verification** (DPDP / ADR-020, PII out of the immutable event log). On approval, the verified referrer is upserted into Zoho so future logins fall back to Path A (OTP).
+**Path B — unknown referrer (NOT in Zoho, no OTP channel on file):** assisted / evidence verification (Abhay 2026-07-11). The advisor — or a WhatsApp auto-response — asks the referrer to **share a screenshot of his LOGGED-IN Zerodha console showing his Client ID together with his registered name** (ideally date-stamped). The advisor **human-reviews** and approves, which creates the referrer's identity + binds the login. **Caveats to bake in (advisor):** an image is spoofable and the Client ID alone is public, so the screenshot MUST show **Client ID + registered name together** (name is the ownership signal, not the ID); keep it **human-reviewed** in Sprint 2 (OCR auto-approval is Sprint 3+); capture **minimal PII**, and **purge the screenshot after verification** (DPDP / ADR-020, PII out of the immutable event log). On approval, the verified referrer is upserted into Zoho so future logins fall back to Path A (OTP).
 
 **Caveat that shapes the whole feature — click analytics exist ONLY for links routed through `gorefer.in`.** If a referrer shared the **raw** `signup.zerodha.com/...?r={client_id}` link instead of the `gorefer.in/r/...` link, those clicks bypassed GoRefer entirely → after login he'd see only **Zoho-sourced conversions** for his Client ID, **zero clicks**. This is exactly why the refer-&-earn assets hand out the `gorefer.in/r/wa/{{client_id}}` link, not the raw Zerodha one — reinforce in referrer education.
 
 **To lock now (identity model, even though build is Sprint 2+):** verify-by-OTP-to-on-file-channel (Path A) + human-reviewed screenshot evidence (Path B); bind login to `(tenant_id, client_id)`; **no link-claiming step** (links are self-identifying by Client ID).
 
-**OTP channel — DECIDED (Abhay 2026-07-11): WhatsApp via Wati is the PRIMARY OTP channel** (already the vendor in use; India WhatsApp **authentication**-category template ≈ ₹0.115/msg per the Jan-2026 rate card — reportedly < half the cheapest SMS OTP; re-confirm rate at build). Build the OTP sender as a **pluggable channel port** (WhatsApp primary → SMS/manual fallback), consistent with the ports-and-adapters architecture. Caveats to enforce: (a) **delivery reliability MUST be fixed first** — the account's historical ~60% send-failure is survivable for marketing but fatal for time-sensitive OTP; verify terminal delivery before OTP depends on it ([[wati-setup-reference]]); (b) it is **not free** — ~₹0.115/msg, billed per-message and charged even inside the service window; (c) needs a **dedicated AUTHENTICATION-category template** (OTP + copy-code button, no marketing/URLs), separate approval from the marketing templates; (d) reaches **only numbers on WhatsApp** → keep the SMS/manual (Ashok / Path-B) fallback for non-WhatsApp or failed delivery.
+**OTP channel — DECIDED (Abhay 2026-07-11): WhatsApp via Wati is the PRIMARY OTP channel** (already the vendor in use; India WhatsApp **authentication**-category template ≈ ₹0.115/msg per the Jan-2026 rate card — reportedly < half the cheapest SMS OTP; re-confirm rate at build). Build the OTP sender as a **pluggable channel port** (WhatsApp primary → SMS/manual fallback), consistent with the ports-and-adapters architecture. Caveats to enforce: (a) **delivery reliability MUST be fixed first** — the account's historical ~60% send-failure is survivable for marketing but fatal for time-sensitive OTP; verify terminal delivery before OTP depends on it ([[wati-setup-reference]]); (b) it is **not free** — ~₹0.115/msg, billed per-message and charged even inside the service window; (c) needs a **dedicated AUTHENTICATION-category template** (OTP + copy-code button, no marketing/URLs), separate approval from the marketing templates; (d) reaches **only numbers on WhatsApp** → keep the SMS/manual (advisor / Path-B) fallback for non-WhatsApp or failed delivery.
 
 ### Mission Q-M-OTP — pluggable OTP channel port (BUILD, Abhay 2026-07-11: "make WhatsApp/Wati primary, pluggable port, very easily configurable for admin")
 
@@ -155,7 +155,7 @@ Build the OTP delivery infrastructure as a **ports-and-adapters** unit, admin-sw
 **Adapters:**
 - `WatiWhatsAppOtpAdapter` — PRIMARY. Sends the AUTHENTICATION-category template (copy-code button) via Wati; asserts terminal delivery; on non-delivery, the service cascades to the next configured fallback.
 - `SmsOtpAdapter` — interface + STUB only (real provider TBD; log-only until chosen).
-- `ManualOtpAdapter` — routes to assisted (Ashok / Path-B); log/queue.
+- `ManualOtpAdapter` — routes to assisted (advisor / Path-B); log/queue.
 - `DemoOtpAdapter` — log-only when flags off (offline demo).
 
 **Service:** `OtpService.issue(identity)` → generate code, store **hash+expiry only**, call primary, auto-cascade to fallback on non-delivery; `OtpService.verify(identity, code)` → check hash+expiry+attempts, single-use.

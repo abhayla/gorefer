@@ -2,7 +2,7 @@
 
 Why this exists: the lead is saved locally FIRST (capture-first, 06-API §5.3), and
 the Zoho upsert is a mirror. Before this module a Zoho outage logged the failure and
-left the lead local-only forever — Ashok would never see it. That is silent data
+left the lead local-only forever — the office would never see it. That is silent data
 loss from the operator's point of view, even though nothing was technically dropped.
 
 The flow:

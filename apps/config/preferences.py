@@ -543,7 +543,7 @@ SHARE_KIT_MESSAGE_TEMPLATE_HI_DEFAULT = (
 # ENABLE_WATI_SEND (log-only when off), opt-out state, and "referrer phone unknown ⇒
 # skip, never guess". This is the admin saying "don't route this one", not a way to
 # force a send past a suppression.
-NOTIFY_OFFICE = "notify_office"      # (a) Ashok / the office alert
+NOTIFY_OFFICE = "notify_office"      # (a) the office alert
 NOTIFY_PROSPECT = "notify_prospect"  # (b) the new person (warm UTILITY, opt-in-aware)
 NOTIFY_REFERRER = "notify_referrer"  # (c) the referrer thank-you (only if phone known)
 
@@ -636,7 +636,7 @@ def notify_template_name(role: str, *, lang: str = LANG_EN, tenant_id: int | Non
 # order. One row per editable template-name field. Office is en-only (its hi key maps
 # to the same en name, so the screen shows a single office field).
 NOTIFY_TEMPLATE_FIELDS = [
-    ("office", LANG_EN, "Office / Ashok alert (English)"),
+    ("office", LANG_EN, "Office alert (English)"),
     ("prospect", LANG_EN, "Prospect welcome (English)"),
     ("prospect", LANG_HI, "Prospect welcome (Hindi)"),
     ("referrer", LANG_EN, "Referrer thank-you (English)"),

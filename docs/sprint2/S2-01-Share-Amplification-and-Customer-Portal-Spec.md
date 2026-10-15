@@ -19,7 +19,7 @@ Enable referrers (PIFS's Zerodha clients) to **share their referral link across 
 
 - **Referrer** — a PIFS Zerodha client (e.g. RJ4111) who shares their link. New self-serve login persona.
 - **Prospect / new user** — the person who clicks and opens a Zerodha account.
-- **Admin** — Abhay / Ashok. Full visibility + verification fallback.
+- **Admin** — Abhay. Full visibility + verification fallback.
 
 ---
 
@@ -98,7 +98,7 @@ The 8 approved designs (see `mockups/share-creatives-shortlist.html`): Bold Hero
 - **Google OAuth** sign-in (flips `ENABLE_CUSTOMER_LOGIN=true`; adds Google as the first provider — more later).
 - First login: referrer enters **Zerodha Client ID + registered mobile**.
 - **Auto-verify:** if the **Google email OR the entered mobile** matches the Zoho record for that Client ID → bind instantly (both normalized; phone one canonical way per CLAUDE.md).
-- **Mismatch:** no auto-bind → a **"pending verification"** state; request goes to an **admin queue** where Ashok sees entered-vs-on-file email/mobile and Approves & links (or rejects). Anti-impersonation gate; needs no Zerodha API.
+- **Mismatch:** no auto-bind → a **"pending verification"** state; request goes to an **admin queue** where the advisor sees entered-vs-on-file email/mobile and Approves & links (or rejects). Anti-impersonation gate; needs no Zerodha API.
 - No Zerodha password ever handled. Mobile-OTP self-serve = deferred (DF-6).
 - Flow visual: `mockups/customer-login-flow-mockup.html`.
 

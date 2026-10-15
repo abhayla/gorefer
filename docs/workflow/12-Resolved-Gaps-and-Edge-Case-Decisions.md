@@ -16,7 +16,7 @@
 >
 > **New ADRs encoding these decisions:** ADR-015 (partner-direct link), ADR-016 (Zoho single-source / single-winner), ADR-017 (true opening date), ADR-018 (best-effort visitor identity), ADR-019 (bot filtering), ADR-020 (DPDP baseline), and — from the Round-2 walk — ADR-021 (simple central runtime model), ADR-022 (3-tier config cascade + compliance lock), ADR-023 (multi-tenant boundary designed now / SaaS later) — see [`02-Architecture-Decisions-ADR.md`](./02-Architecture-Decisions-ADR.md). The Round-2 walk also opened backlog items **DF-1** (Zoho API pull), **DF-2** (wax-seal webhook auth), **DF-3** (edge/distributed runtime), **DF-4** (full bulk backfill) in `Deferred-Features-Backlog.md`; full walk log in `gorefer-ops/review/Review-Matrix-v1.md`.
 >
-> **Anchors:** Partner code `ZMPHZC` (injected server-side). NSE AP reg. no. `AP2516003693`. WATI business number `+91 70806 42020`. Ashok's personal number `73888 82020` (NOT used for inbound capture).
+> **Anchors:** Partner code `ZMPHZC` (injected server-side). NSE AP reg. no. `AP2516003693`. WATI business number `+91 70806 42020`. The advisor helpline number `73888 82020` (NOT used for inbound capture).
 
 ---
 
@@ -59,7 +59,7 @@ Gaps that concern **who gets credited**, how off-platform referrers appear, and 
 
 - **Title:** Accounts opened with a referrer but where the friend never clicked a GoRefer link.
 - **Decision (what GoRefer does):** GoRefer referral records = **observed clicks** ∪ **Zoho-imported conversions** (accounts opened with a referrer but with no GoRefer click). A **referrer identity is created lazily** on the **first click OR the first Zoho-imported conversion** — whichever comes first. A referrer's numbers therefore equal **everything Zoho credits to them** plus **click-level detail for the link-sourced subset only**. **A conversion can exist with zero GoRefer clicks.**
-- **Rationale / notes:** Referrers are open-ended (ADR-001) and many real referrals happen off-platform (word of mouth, a phone call, Ashok keying a lead). Refusing to count those would under-report referrers and make the dashboard untrustworthy. Lazy creation on first-click-or-first-conversion (extends ADR-008) lets a referrer exist purely because Zoho credited them. Encoded in **ADR-016**.
+- **Rationale / notes:** Referrers are open-ended (ADR-001) and many real referrals happen off-platform (word of mouth, a phone call, an advisor keying a lead). Refusing to count those would under-report referrers and make the dashboard untrustworthy. Lazy creation on first-click-or-first-conversion (extends ADR-008) lets a referrer exist purely because Zoho credited them. Encoded in **ADR-016**.
 
 ## Gap 5 — Referrer feedback / notifications
 
@@ -94,8 +94,8 @@ Gaps that concern the **referred prospect (the "friend")** — their identity, t
 ## Gap 8 — Friend already a Zerodha client / unconverted reason
 
 - **Title:** Why didn't a lead convert — e.g. the friend already has a Zerodha account?
-- **Decision (what GoRefer does):** GoRefer **cannot detect** this itself. It uses a **Zoho lead disposition / reason** (set by Ashok) that GoRefer **surfaces on the journey** — e.g. *"existing Zerodha client / not interested / wrong number."* This applies **only to leads that reached Zoho**; **anonymous clicks stay reason-less**.
-- **Rationale / notes:** Without a Zerodha API GoRefer has no way to know a prospect is already a client (ADR-013); the human who worked the lead (Ashok) does. Surfacing his Zoho disposition turns "unconverted" from a black box into an explained outcome, while honestly leaving anonymous clicks unexplained. See Gap 9 (stale leads) and Gap 4b (dates).
+- **Decision (what GoRefer does):** GoRefer **cannot detect** this itself. It uses a **Zoho lead disposition / reason** (set by the advisor) that GoRefer **surfaces on the journey** — e.g. *"existing Zerodha client / not interested / wrong number."* This applies **only to leads that reached Zoho**; **anonymous clicks stay reason-less**.
+- **Rationale / notes:** Without a Zerodha API GoRefer has no way to know a prospect is already a client (ADR-013); the human who worked the lead (advisor) does. Surfacing his Zoho disposition turns "unconverted" from a black box into an explained outcome, while honestly leaving anonymous clicks unexplained. See Gap 9 (stale leads) and Gap 4b (dates).
 
 ---
 
@@ -142,7 +142,7 @@ Gaps that span personas — reward truth, dates, timers, identity, delivery, sha
 ## Gap 13 — Share-on-WhatsApp destination number
 
 - **Title:** Which WhatsApp number does the "Share on WhatsApp" button point to?
-- **Decision (what GoRefer does):** It points to the **WATI business number `+91 70806 42020`**, **NOT** Ashok's personal number `73888 82020`. Inbound messages are **captured**, the **referral id is parsed**, and a **Zoho lead is created with attribution**; the **prospect's WhatsApp number becomes the captured mobile**; the exchange **opens the WhatsApp 24-hour service window**.
+- **Decision (what GoRefer does):** It points to the **WATI business number `+91 70806 42020`**, **NOT** the advisor helpline number `73888 82020`. Inbound messages are **captured**, the **referral id is parsed**, and a **Zoho lead is created with attribution**; the **prospect's WhatsApp number becomes the captured mobile**; the exchange **opens the WhatsApp 24-hour service window**.
 - **Rationale / notes:** Routing inbound to the WATI business number is what makes capture, attribution, and the 24-hour service window possible — a personal number gives none of that and can't be automated compliantly. The parsed referral id ties the inbound chat back to the right referrer. Feeds Gap 2 (join key) and Gap 11 (mobile identity).
 
 ## Gap 14 — Compliance rendering (per-partner, auto-injected)
@@ -336,7 +336,7 @@ The following Round-2 findings were **deferred to Sprint 2 or parked as strategi
 - **#21** — trackable link alone won't sustain sharing (monitor; feed Sprint 2).
 - **#22** — referrer feedback loops in Sprint 1 → **CONFLICTS with Gap 5 (none in Sprint 1)**; deferred to Sprint 2, gated on the WATI fix.
 - **#23** — A/B capture-first vs direct redirect → capture-first stays locked; **instrument** friction, do not drop it.
-- **#25** — Ashok as a human bottleneck (~15 leads/week) — scaling gap, Sprint 2.
+- **#25** — The advisor as a human bottleneck (~15 leads/week) — scaling gap, Sprint 2.
 - **#26** — incentive concentration / PIFS micro-incentive "Plan B" → **the PIFS-funded cash incentive is REJECTED** (violates Gap 4 / Gap 7 no-top-up); recognition-only if ever revisited.
 - **#27** — referrer differentiation vs simply forwarding the Zerodha link — Sprint 2.
 - **#28** — fraud / abuse economic model (bot filtering ≠ incentive-abuse) — Sprint 2 gap.

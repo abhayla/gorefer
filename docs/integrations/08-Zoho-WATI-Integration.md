@@ -12,7 +12,7 @@
 
 ## 0. The one-paragraph mental model
 
-GoRefer is the **referral intelligence layer** that sits between WATI and Zerodha. **WATI is a messenger, not a brain** — it delivers the campaigns and notifications GoRefer tells it to send. **GoRefer is the brain** — each referrer's link is simply `gorefer.in/r/{client_id}` carrying their raw Zerodha `client_id` (no token, no mapping — ADR-001); GoRefer captures the lead and decides what fires. **Zoho is the ledger of truth for people and outcomes** — GoRefer creates the Lead on submit and *reads back* account-opening and reward status from Zoho. **GoRefer never fabricates an account-opening or reward event; those originate only in Zoho.** Zerodha remains the underlying brokerage; a real human (Ashok) completes account opening on a call.
+GoRefer is the **referral intelligence layer** that sits between WATI and Zerodha. **WATI is a messenger, not a brain** — it delivers the campaigns and notifications GoRefer tells it to send. **GoRefer is the brain** — each referrer's link is simply `gorefer.in/r/{client_id}` carrying their raw Zerodha `client_id` (no token, no mapping — ADR-001); GoRefer captures the lead and decides what fires. **Zoho is the ledger of truth for people and outcomes** — GoRefer creates the Lead on submit and *reads back* account-opening and reward status from Zoho. **GoRefer never fabricates an account-opening or reward event; those originate only in Zoho.** Zerodha remains the underlying brokerage; a real human advisor completes account opening on a call.
 
 ```
                  generates link, decides sends           reads status back
@@ -23,7 +23,7 @@ GoRefer is the **referral intelligence layer** that sits between WATI and Zerodh
                             │ tells WATI what to send                        ▲
                             ▼                                                 │ human
                        ┌─────────┐                                     ┌────────────┐
-                       │  WATI   │ ── WhatsApp ──▶ Ashok / lead / ...  │  ZERODHA   │
+                       │  WATI   │ ── WhatsApp ──▶ Staff / lead / ...  │  ZERODHA   │
                        └─────────┘                                     │  (broker)  │
                                                                        └────────────┘
 ```
@@ -34,7 +34,7 @@ GoRefer is the **referral intelligence layer** that sits between WATI and Zerodh
 
 ### A1. What WATI is responsible for
 
-[Certain] WATI sends **the referral campaigns** (the outbound WhatsApp templates targeting existing Zerodha customers) and **the three transactional notifications** that fire when a lead is captured (to Ashok, to the new person, and — conditionally — to the referrer). WATI does **not** generate links, does **not** hold the referral mapping, and is **not** a source of truth for anything. It is the delivery pipe.
+[Certain] WATI sends **the referral campaigns** (the outbound WhatsApp templates targeting existing Zerodha customers) and **the three transactional notifications** that fire when a lead is captured (to the office, to the new person, and — conditionally — to the referrer). WATI does **not** generate links, does **not** hold the referral mapping, and is **not** a source of truth for anything. It is the delivery pipe.
 
 [Certain] **Each referrer's link is `gorefer.in/r/{client_id}`** — the raw Zerodha `client_id` in the path (no token, no mapping — ADR-001). For a WATI campaign to Abhay's own customers, GoRefer builds each customer's `gorefer.in/r/{their_client_id}` link from data Abhay already has (this is **not** an import) and injects the finished string into the WATI template as a variable. The public GoRefer link is what the customer sees and shares; the raw Zerodha URL (`https://signup.zerodha.com/api/lead/?c=ZMPHZC&r={{client_id}}`) is never exposed in any template — `c=ZMPHZC` is injected server-side at click time.
 
@@ -93,7 +93,7 @@ Meta failure codes to classify: `131049` (per-user marketing cap), `131048` / `1
 [Certain] (`GoRefer-Build-Spec` §9, `wati-templates.json`, `WATI-ZOHO-INTEGRATION-MAP.md`.)
 
 - **Every WhatsApp template must be Meta-approved before it can send.** Approval lead time is **hours to ~2 days**. **Submit templates in parallel with the build** — do not serialize the build behind approval.
-- The GoRefer three transactional notifications (Ashok alert / new-person warm notice / referrer thank-you) each need an approved template. Choose category deliberately: the Ashok alert and the referrer thank-you are **UTILITY**; the new-person notice is **UTILITY** (warm, referrer-named — see A4).
+- The GoRefer three transactional notifications (Office alert / new-person warm notice / referrer thank-you) each need an approved template. Choose category deliberately: the office alert and the referrer thank-you are **UTILITY**; the new-person notice is **UTILITY** (warm, referrer-named — see A4).
 - **Existing manifest** (`Wati-Project/docs/wati-templates.json`, all currently `pending`): `daily_delivery_report` (UTILITY, internal), `zerodha_refer_earn_v3` (MARKETING, en — vars `{{1}}`=name, `{{2}}`=client_id; dynamic URL button `https://signup.zerodha.com/api/lead/?c=ZMPHZC&r={{2}}`), `zerodha_refer_earn_v3_hi` (Hindi variant).
 - A rejected template must be revised and resubmitted (idempotent tracking — Abhay's `wati-template-create-and-track` skill). Never resubmit an already-APPROVED/PENDING template.
 
@@ -103,13 +103,13 @@ Meta failure codes to classify: `131049` (per-user marketing cap), `131048` / `1
 
 | # | Recipient | Trigger condition | Category | Body (intent) |
 |---|---|---|---|---|
-| a | **Ashok** (Prayagraj office) | always | UTILITY | New lead `[name, mobile, referred-by]` — call now. |
+| a | **Office** | always | UTILITY | New lead `[name, mobile, referred-by]` — call now. |
 | b | **New person / friend** | always | UTILITY | "[Referrer] referred you to PIFS to open a Zerodha account. Our representative will call to help. To continue yourself: [link with `r=`]." (warm, referrer-named — A4) |
 | c | **Referrer** | **only if referrer phone resolvable from Zoho** | UTILITY | "Your referral for [name] is registered — thank you." |
 
 - Message (c) fires **only** when the referrer's phone is resolvable from Zoho by `client_id` (see B4). For open-ended/unknown referrers GoRefer has only the `client_id`, no phone → **skip silently, do not fabricate a number.**
-- **Referrer-notification side-effects (the msg (c) thank-you) are deferred to Sprint 2.** Sprint 1 captures the lead and fires the Ashok + new-person messages; wiring the referrer thank-you as an automatic side-effect waits until the delivery-failure fix above is proven, so it does not amplify a leaking pipe.
-- **Ashok's WhatsApp number for the alert template is an OPEN decision** (Context-Brief §7.2 #4). The helpline +91 73888 82020 exists but the alert-target number is unconfirmed — treat as a config value, not a hardcode.
+- **Referrer-notification side-effects (the msg (c) thank-you) are deferred to Sprint 2.** Sprint 1 captures the lead and fires the office alert + new-person messages; wiring the referrer thank-you as an automatic side-effect waits until the delivery-failure fix above is proven, so it does not amplify a leaking pipe.
+- **The office WhatsApp number for the alert template is an OPEN decision** (Context-Brief §7.2 #4). The helpline +91 73888 82020 exists but the alert-target number is unconfirmed — treat as a config value, not a hardcode.
 
 ### A7. WATI security finding (must fix)
 
@@ -136,7 +136,7 @@ When a GoRefer-sourced lead ages without converting (e.g. approaching Zerodha's 
 
 **GoRefer WRITES the Lead (on name + mobile submit) and READS BACK account/contact status from Zoho. GoRefer never fabricates an account-opening or reward event.** Zoho is **pulled/mirrored** — GoRefer's conversion view is a mirror of Zoho's **current** mappings, held with no provisional/final distinction: a conversion is exactly what Zoho maps at read time, nothing more. The chain of authority:
 
-- **A referral is "converted" only when Zoho says so.** Account opening happens off-platform (Zerodha drives KYC after a human, Ashok, assists). Zoho is where that outcome is recorded — as an **"Imported Event" with a recorded source** — and GoRefer reflects Zoho's state; it does not invent it.
+- **A referral is "converted" only when Zoho says so.** Account opening happens off-platform (Zerodha drives KYC after a human, the advisor, assists). Zoho is where that outcome is recorded — as an **"Imported Event" with a recorded source** — and GoRefer reflects Zoho's state; it does not invent it.
 - **Reward status** (300 points, 10% brokerage-share eligibility) is likewise a downstream Zerodha/Zoho fact. GoRefer displays it by reading Zoho; it must never compute or assert a reward that Zoho hasn't recorded.
 - This keeps GoRefer honest: the referral dashboard can show "lead captured / contacted / KYC started / account opened" states, but the transition to **account opened** and **rewarded** must be sourced from Zoho, tagged with the recorded source of that import.
 - **A monthly reconciliation batch (~5th–6th of the following month) fills in missing mappings and fixes gaps** — Zoho's referral mappings are often incomplete until Zerodha's month-end settlement lands, so GoRefer re-pulls and reconciles rather than freezing an early, incomplete snapshot.
@@ -148,7 +148,7 @@ When a GoRefer-sourced lead ages without converting (e.g. approaching Zerodha's 
 
 1. **Save the lead to our system FIRST** — before anything Zerodha-side — so the lead is never lost even if the person abandons Zerodha's form.
 2. Create a **Lead** in Zoho carrying: friend name, friend mobile, friend email (if given), **source** (whatsapp_campaign / landing_page / manual / etc.), and **referred-by** = the referrer's `client_id`.
-3. Alert Ashok instantly (via the WATI Ashok template, A6-a).
+3. Alert the office instantly (via the WATI office-alert template, A6-a).
 
 > **Lead destination is an OPEN decision** — Zoho CRM, WATI, or both (Build-Spec §6, Context-Brief §7.2 #3). This contract assumes Zoho is the lead of record; if "both," WATI's contact record is a mirror, and Zoho remains the ledger for status.
 
@@ -238,7 +238,7 @@ Zerodha Broking Ltd.: SEBI Registration no.: INZ000031633 | Passive Income Finan
 | **WATI — delivery** | Read terminal message status; classify failures by Meta code. | Trust HTTP 200 as "delivered." |
 | **WATI — templates** | Submit for Meta approval in parallel with build (hours–~2 days). | Serialize build behind approval; resubmit approved templates. |
 | **WATI — secrets** | Read bearer token from secret store. | Inline the JWT. |
-| **Zoho — write** | Create the Lead on name+mobile submit; save lead FIRST; alert Ashok. | Skip local capture and go straight to Zerodha. |
+| **Zoho — write** | Create the Lead on name+mobile submit; save lead FIRST; alert the office. | Skip local capture and go straight to Zerodha. |
 | **Zoho — read** | Read account-opening & reward status back from Zoho ("Imported Event," recorded source). | Fabricate an account-opened or reward event. |
 | **Zoho — keys** | Join on normalized `Mobile` and Client ID (`ClientId`/`Client_Id`). | Assume a single field name; assume missing opt-out = safe. |
 | **Compliance** | Disclosure block + risk warning on every asset; run compliance skill; 10% claim in one swappable place. | Publish anything unaudited; hardcode the 10% claim in many places. |

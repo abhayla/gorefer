@@ -139,7 +139,7 @@ Three trust tiers:
 6. **Redirect to Zerodha.** Build the destination server-side (the partner code is **injected server-side** and never exposed to the client until this 302's `Location`):
    `https://signup.zerodha.com/api/lead?c=ZMPHZC&r={client_id}` — where `{client_id}` is the raw value from the path (Option A: `r=` is always preserved so the referrer stays credited — locked decision #2). Respond **302 Found** with that `Location`, and write a `referral_journey_event` of type `REDIRECTED_TO_PARTNER`.
 
-**reCAPTCHA reality (mandatory note).** GoRefer **never** submits Zerodha's form. Step 6 only issues an HTTP redirect that lands a *real human browser* on Zerodha's own reCAPTCHA-gated, lead-capture-only page. Zerodha's page ends at a "thanks, we'll contact you" screen; full KYC is completed later by a human (Ashok) on a call. Any attempt to auto-fill or auto-submit that form is prohibited (Build-Spec locked decision #4; compliance + account risk).
+**reCAPTCHA reality (mandatory note).** GoRefer **never** submits Zerodha's form. Step 6 only issues an HTTP redirect that lands a *real human browser* on Zerodha's own reCAPTCHA-gated, lead-capture-only page. Zerodha's page ends at a "thanks, we'll contact you" screen; full KYC is completed later by a human advisor on a call. Any attempt to auto-fill or auto-submit that form is prohibited (Build-Spec locked decision #4; compliance + account risk).
 
 **Success responses.**
 - `302 Found` with `Location: https://signup.zerodha.com/api/lead?c=ZMPHZC&r=<client_id>` (direct-redirect mode), **or**
@@ -289,7 +289,7 @@ When a program is in `show_landing` mode the visitor sees a branded **PIFS** pag
 - The `referrer` object carries **only** `has_referrer` on initial load — no `first_name` (see the name-reveal note above and §5.2.1).
 - `continue_url` points back at `GET /r/{client_id}?continue=1` — the client never sees the Zerodha destination; the server builds it at redirect time.
 - `reward_note` wording is served from a single config value so the "10%/300 points" claim can be pulled or reworded in one place if NSE reinstates the ban (Build-Spec §7.1 — keep the claim swappable). The exact incentive figures are intentionally rendered from config, not hardcoded in the client.
-- `help.helpline` resolves from config through the 3-tier cascade (central → global → user); the central default is the **WATI business number `+91 70806 42020`**, never Ashok's personal number.
+- `help.helpline` resolves from config through the 3-tier cascade (central → global → user); the central default is the **WATI business number `+91 70806 42020`**, never the advisor helpline number.
 - `disclosure` and `risk_warning` are mandatory on every rendered asset (compliance gate).
 
 **Validation.** Same `client_id` regex as §4.1.
@@ -325,7 +325,7 @@ When a program is in `show_landing` mode the visitor sees a branded **PIFS** pag
 | 429 | `RATE_LIMITED` | Over cap. |
 
 ### 5.3 `POST /api/leads`
-**Purpose.** Capture-first lead intake (Build-Spec locked decision #1). Creates a lead in GoRefer, mirrors it to Zoho CRM, and starts/extends the referral journey — **before** any hand-off to Zerodha, so the lead is never lost even if the person abandons Zerodha's form. Fires the downstream Wati messages (to Ashok, to the new person, and — only if resolvable — to the referrer) via the integration layer.
+**Purpose.** Capture-first lead intake (Build-Spec locked decision #1). Creates a lead in GoRefer, mirrors it to Zoho CRM, and starts/extends the referral journey — **before** any hand-off to Zerodha, so the lead is never lost even if the person abandons Zerodha's form. Fires the downstream Wati messages (to the office, to the new person, and — only if resolvable — to the referrer) via the integration layer.
 
 **Method / Path.** `POST /api/leads`
 
@@ -365,7 +365,7 @@ When a program is in `show_landing` mode the visitor sees a branded **PIFS** pag
 2. **Persist the lead in GoRefer first** (`referral_lead` row, status `NEW`, referrer = the `client_id` from the URL, partner = `ZMPHZC`). This write is the source of truth and must succeed before any external call. After it succeeds, the client is redirected to `signup.zerodha.com/api/lead?c=ZMPHZC&r={client_id}` (auto-filling Zerodha's own form with the captured name/email/phone is an OPEN build-time POC, **not** a dependency — the lead is captured regardless).
 3. Mirror to **Zoho CRM** (lead pipeline). Zoho failure does **not** fail the request — it is retried asynchronously; the response still returns 201 because the lead is safely captured locally.
 4. Append `referral_journey_event` of type `LEAD_CREATED`.
-5. Enqueue the **three Wati messages** (each a Meta-approved template): (a) alert Ashok, (b) warm utility notice to the new person naming the referrer + a continue link that keeps `r=`, (c) thank-you to the referrer **only if** their phone is resolvable from Zoho. Enqueue is async. **WATI delivery is a prerequisite and is verified from WATI's terminal delivery status, never HTTP 200 (Gap 12); GoRefer consumes that delivery status and records it on the journey** (the `WATI_NOTIFIED` event's `delivery` field — see §6.4 timeline). A message that fails to deliver leaves the funnel flagged, not silently lost.
+5. Enqueue the **three Wati messages** (each a Meta-approved template): (a) alert the office, (b) warm utility notice to the new person naming the referrer + a continue link that keeps `r=`, (c) thank-you to the referrer **only if** their phone is resolvable from Zoho. Enqueue is async. **WATI delivery is a prerequisite and is verified from WATI's terminal delivery status, never HTTP 200 (Gap 12); GoRefer consumes that delivery status and records it on the journey** (the `WATI_NOTIFIED` event's `delivery` field — see §6.4 timeline). A message that fails to deliver leaves the funnel flagged, not silently lost.
 6. Return **201**.
 
 **Success response — 201**
@@ -618,7 +618,7 @@ Plus `Set-Cookie: gr_refresh=...; HttpOnly; Secure; SameSite=Strict; Max-Age=604
     { "seq": 2, "type": "LINK_CLICKED", "confidence": "human_high", "device": "Android", "browser": "Chrome", "utm_source": "whatsapp", "at": "2026-07-04T08:40:00Z" },
     { "seq": 3, "type": "LANDING_VIEWED", "at": "2026-07-04T08:40:20Z" },
     { "seq": 4, "type": "LEAD_CREATED", "source": "landing_need_help", "at": "2026-07-04T09:05:00Z" },
-    { "seq": 5, "type": "WATI_NOTIFIED", "recipient": "ashok", "template": "gorefer_new_lead_alert", "delivery": "delivered", "at": "2026-07-04T09:05:30Z" },
+    { "seq": 5, "type": "WATI_NOTIFIED", "recipient": "office", "template": "gorefer_new_lead_alert", "delivery": "delivered", "at": "2026-07-04T09:05:30Z" },
     { "seq": 6, "type": "REDIRECTED_TO_PARTNER", "at": "2026-07-04T09:07:00Z" },
     { "seq": 7, "type": "ACCOUNT_STATUS_IMPORTED", "status": "KYC_STARTED", "source": "zoho", "at": "2026-07-04T14:20:00Z" }
   ]
@@ -754,7 +754,7 @@ Unmatched:
 1. **Identifier scheme — RESOLVED/LOCKED (ADR-001):** raw Zerodha `client_id` in the path (`/r/{client_id}`); no opaque token, no token→id mapping. This item is closed. (Future non-Zerodha partners will use a GoRefer-generated id minted at referrer login — not Sprint 1.)
 2. **Lead schema — City required?** `POST /api/leads` treats `city` as config-driven-optional until the 2-field vs 3-field conflict is resolved (Foundation/Build-Spec).
 3. **Domain / URL scheme — LOCKED (ADR-005):** `gorefer.in` bare path with the raw `client_id` in the segment; no `z.gorefer.in` subdomain.
-4. **The new-lead alert WhatsApp number (Ashok)** is a config value resolved through the 3-tier cascade — not a hardcoded id; customer-facing surfaces default to the WATI business number `+91 70806 42020` at the central tier (Build-Spec §6, matrix #15).
+4. **The new-lead alert WhatsApp number (office)** is a config value resolved through the 3-tier cascade — not a hardcoded id; customer-facing surfaces default to the WATI business number `+91 70806 42020` at the central tier (Build-Spec §6, matrix #15).
 5. **"Continue to Zerodha" form → Zerodha auto-fill** — an OPEN, build-time POC (currently believed not possible). The form still captures the lead regardless; auto-fill is **not** a dependency.
 
 _End of 06-API-Specification.md — Sprint 1._

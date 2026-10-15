@@ -41,7 +41,7 @@
 |---|---|---|---|---|---|---|---|---|
 | `gorefer_referrer_prospect_pending_en_2026_07_26_v5` | APPROVED | MARK* | en | 3 | 0 | GoRefer code | S6.1 referrer nudge - idle prospect (EN); `{{3}}` = FULL link from `nudge_link_for()` | `followup_referrer_nudge_template_en` |
 | `gorefer_referrer_prospect_pending_hi_2026_07_26_v5` | APPROVED | MARK* | hi | 3 | 0 | GoRefer code | S6.1 referrer nudge - idle prospect (HI); `{{3}}` = FULL link from `nudge_link_for()` | `followup_referrer_nudge_template_hi` |
-| `gr_brokers_zerodha_office_lead_alert_en_2026_07_19` | APPROVED | UTIL | en | 4 | 0 | GoRefer code | Lead captured -> office/Ashok alert | `notify_template_office_en` |
+| `gr_brokers_zerodha_office_lead_alert_en_2026_07_19` | APPROVED | UTIL | en | 4 | 0 | GoRefer code | Lead captured -> office alert | `notify_template_office_en` |
 | `gr_brokers_zerodha_prospect_welcome_en_2026_07_17_v2` | APPROVED | UTIL | en | 3 | 0 | GoRefer code | Lead captured -> prospect welcome (EN) | `notify_template_prospect_en` |
 | `gr_brokers_zerodha_prospect_welcome_hi_2026_07_17_v2` | APPROVED | UTIL | hi | 3 | 0 | GoRefer code | Lead captured -> prospect welcome (HI) | `notify_template_prospect_hi` |
 | `gr_brokers_zerodha_referrer_update_en_2026_07_19` | APPROVED | UTIL | en | 2 | 0 | GoRefer code | Lead captured -> referrer update (EN) | `notify_template_referrer_en` |

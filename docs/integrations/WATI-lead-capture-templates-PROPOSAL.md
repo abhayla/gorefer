@@ -9,7 +9,7 @@
 > notifications GoRefer fires on every lead capture (Family A in `WATI-TEMPLATE-INVENTORY.md`), which
 > currently DON'T EXIST in Wati. Reviewed end-to-end per `WATI-TEMPLATE-CREATION-RULE.md`.
 >
-> Applying Abhay's guidance (2026-07-17): **Ashok alert = no compliance**; **prospect welcome +
+> Applying Abhay's guidance (2026-07-17): **Office alert = no compliance**; **prospect welcome +
 > referrer-used = add the disclosure line at the end** (matching the approved templates:
 > `*Disclosures*: https://gorefer.in/d/pifs`), **keep everything else the same**.
 >
@@ -27,11 +27,11 @@
 - **Buttons: NONE, by design (recommendation).** These are one-way *notifications*, not conversation
   entry points. A quick reply is only useful if a route listens for it (RULE §6); wiring routes here
   adds the legacy-bot coexistence + attribution risks for no lead-flow benefit. The prospect's next
-  step is a phone call from Ashok (already the flow), not a WhatsApp button. **Open for your call** —
+  step is a phone call from the advisor (already the flow), not a WhatsApp button. **Open for your call** —
   if you want e.g. a "Call me" quick reply on the prospect message, we design its route too (see §Open).
 - **Language: English first; Hindi parity recommended.** Below I give the English body for each and a
   Hindi companion for the prospect + referrer messages (the two a customer sees). The office alert is
-  internal (Ashok) → English only is fine. Each Hindi template is a separate name + approval.
+  internal (office) → English only is fine. Each Hindi template is a separate name + approval.
 - **Variables:** named meanings listed; the code (`notify.py`) currently sends the office one with 3
   positional vars and the prospect with 2 — noted per template so counts match.
 - **Delivery:** verified via `getMessages` terminal status (the adapter already does this); never off
@@ -39,9 +39,9 @@
 
 ---
 
-## 1. `gr_brokers_zerodha_office_new_lead_en_2026_07_17` — Office/Ashok alert · UTILITY · **NO disclosure** (internal)
+## 1. `gr_brokers_zerodha_office_new_lead_en_2026_07_17` — Office alert · UTILITY · **NO disclosure** (internal)
 
-**Audience:** PIFS's own office line (Ashok). Internal staff → no client disclosure needed (RULE §4).
+**Audience:** PIFS's own office line. Internal staff → no client disclosure needed (RULE §4).
 **Trigger:** a lead is captured. **Category:** UTILITY. **Buttons:** none. **Language:** EN only (internal).
 
 **Body (unchanged from manifest):**
@@ -51,7 +51,7 @@ New GoRefer lead: {{1}} (mobile {{2}}), referred by client {{3}}. Please call to
 **Variables:** `{{1}}` = prospect_name (sample "Rahul Sharma") · `{{2}}` = prospect_mobile ("9876543210")
 · `{{3}}` = referrer_client_id ("RJ4521"). Matches the 3 the code sends.
 
-**Flow after receipt:** none — Ashok reads it and calls the prospect. No buttons, no routes.
+**Flow after receipt:** none — the advisor reads it and calls the prospect. No buttons, no routes.
 
 ---
 
@@ -81,7 +81,7 @@ market-risk sentence put on its own line. Wording otherwise identical.)*
 
 *खुलासा (disclosure)*: https://gorefer.in/d/pifs
 ```
-**Flow after receipt:** none (no buttons). Next step = Ashok's call.
+**Flow after receipt:** none (no buttons). Next step = the advisor's call.
 
 ---
 
@@ -112,7 +112,7 @@ Good news! Someone just used your PIFS referral link to start opening a Zerodha 
 
 | Template (`gr_brokers_zerodha_…_<lang>_2026_07_17`) | Audience | Category | Disclosure | Buttons | Languages | Vars |
 |---|---|---|---|---|---|---|
-| `…_office_new_lead_en_…` | Ashok (internal) | UTILITY | ❌ no | none | EN | 3 |
+| `…_office_new_lead_en_…` | Office (internal) | UTILITY | ❌ no | none | EN | 3 |
 | `…_prospect_welcome_en_…` + `…_hin_…` | prospect | UTILITY | ✅ yes | none | EN + HI | 2 |
 | `…_referrer_used_en_…` + `…_hin_…` | referrer | UTILITY | ✅ yes | none | EN + HI | 0 |
 

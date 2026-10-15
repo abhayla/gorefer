@@ -90,7 +90,7 @@
 
   // ---- WhatsApp share: build the wa.me deep link from the form inputs + referral
   //      id at click time, record the share event, then open WhatsApp. Target = the
-  //      config-driven WATI business number (never Ashok's personal number). ----
+  //      config-driven WATI business number (never the advisor helpline number). ----
   function buildWhatsappShareUrl() {
     var name = (document.getElementById("nameInput").value || "").trim();
     var email = (document.getElementById("emailInput").value || "").trim();

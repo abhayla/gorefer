@@ -20,7 +20,7 @@ class Notification(TimestampedModel, TenantScopedModel):
     """One WATI transactional message + its terminal delivery status."""
 
     RECIPIENT_CHOICES = [
-        ("office", "office"),      # Ashok / office alert
+        ("office", "office"),      # office alert
         ("prospect", "prospect"),  # the new person / friend
         ("referrer", "referrer"),  # the referrer (only if phone known)
     ]

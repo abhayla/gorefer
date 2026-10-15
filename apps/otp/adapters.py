@@ -8,7 +8,7 @@ Each adapter implements `OtpDeliveryChannel.send()`:
   - SmsOtpAdapter — interface + STUB only (no provider chosen yet). Log-only; always
     returns STATUS_FAILED so a mis-set primary=sms never silently "succeeds" without
     a real send, and cascades to the next channel.
-  - ManualOtpAdapter — routes to the assisted/Ashok path (Path B). Logs/queues an
+  - ManualOtpAdapter — routes to the assisted/advisor path (Path B). Logs/queues an
     assisted-verification request; returns STATUS_QUEUED (handoff, not proven
     delivery) so it terminates a cascade without claiming machine delivery.
   - EmailOtpAdapter — the SECOND, SIMULTANEOUS leg (T-078). Sends the same code to
@@ -278,7 +278,7 @@ class SmsOtpAdapter:
 
 
 class ManualOtpAdapter:
-    """Manual / assisted channel (Path B) — routes to Ashok for human-assisted OTP.
+    """Manual / assisted channel (Path B) — routes to the office for human-assisted OTP.
 
     Logs/queues an assisted request. Returns STATUS_QUEUED (a human handoff, not
     machine-proven delivery) — this is a valid terminal for a cascade: the identity
@@ -288,7 +288,7 @@ class ManualOtpAdapter:
     code = "manual"
 
     def send(self, *, recipient: str, code: str, ttl_seconds: int, context: dict) -> DeliveryResult:
-        # Route to the assisted queue (Ashok). We record the request; the code is
+        # Route to the assisted queue (advisor). We record the request; the code is
         # relayed by a human out-of-band, so it is NOT logged here either.
         logger.info(
             "OTP manual/assisted handoff queued: to=%s purpose=%s code_len=%d",

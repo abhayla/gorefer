@@ -355,7 +355,7 @@ class LiveZohoReadAdapter:
         """People this referrer introduced — the Referred-People tab.
 
         Sourced from Zoho Leads carrying `Referrer_Client_Id` (the field GoRefer's
-        own WRITE leg stamps, and the field Ashok's manual leads carry). Leads that
+        own WRITE leg stamps, and the field the advisor's manual leads carry). Leads that
         converted hold the account facts, so one search answers the whole tab.
 
         Deliberately Leads-only: a converted person also exists as a Contact, but
