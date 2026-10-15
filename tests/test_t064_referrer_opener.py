@@ -230,12 +230,12 @@ def test_nonsense_max_chars_falls_back_to_the_default(seeded):
 def test_saving_an_opener_changes_every_share_surface_on_the_hub(seeded, client):
     identity = _identity(seeded)
     token = mint_records_token(identity)
-    resp = client.post(_opener_url(token), {"opener": "Ashok here — this is who I use."})
+    resp = client.post(_opener_url(token), {"opener": "Ramesh here — this is who I use."})
     assert resp.status_code == 302
 
     body = client.get(f"/hub/{token}").content.decode()
     ctx = hub_ctx(identity, token)
-    assert ctx["share_message"].startswith("Ashok here — this is who I use.\n")
+    assert ctx["share_message"].startswith("Ramesh here — this is who I use.\n")
     _locked_parts_intact(ctx["share_message"], tracked_link("wa", CID))
 
     # Every platform button carries the SAME composed message (url-encoded), and the
