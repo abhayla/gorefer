@@ -376,8 +376,13 @@ def partner_referral_page_destination(program: ReferralProgram, *, tenant_id: in
         override = str(resolve(PARTNER_REFERRAL_PAGE_KEY, tenant_id=tenant_id, default="") or "")
     except Exception:
         override = ""
-    template = override.strip() or rule.destination_url_template.split("&r=")[0].split("?r=")[0]
-    return template.format(partner_code=program.partner.code, client_id="")
+    default = rule.destination_url_template.split("&r=")[0].split("?r=")[0]
+    template = override.strip() or default
+    try:
+        return template.format(partner_code=program.partner.code, client_id="")
+    except (KeyError, IndexError, ValueError):
+        # A malformed operator override (stray `{}`) must not 500 the link — use the default.
+        return default.format(partner_code=program.partner.code, client_id="")
 
 
 def handle_unknown_id_redirect(*, tenant, raw_value: str, visitor_id, user_agent, raw_ip,

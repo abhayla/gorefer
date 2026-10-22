@@ -51,6 +51,8 @@ def _assert_passthrough(resp, expected_r):
     ("/r/XYZ", "XYZ"),
     ("/r/zerodhaid", "zerodhaid"),
     ("/r/AB%20CD", "AB%20CD"),
+    ("/r/A%26B%23C%3FD", "A%26B%23C%3FD"),  # & # ? stay encoded — cannot add params/fragment
+    ("/r/A%0D%0AB", "A%0D%0AB"),  # CR/LF encoded — no header injection
     ("/r/wa/ZERODHAID", "ZERODHAID"),
     ("/r/ZERODHAID/continue", "ZERODHAID"),
     ("/r/wa/ZERODHAID/continue", "ZERODHAID"),
@@ -117,6 +119,17 @@ def test_partner_referral_page_key_is_a_cascade_key(seeded, client, django_captu
     )
     resp = _get(client, "/r/open", django_capture_on_commit_callbacks)
     assert resp.headers["Location"] == "https://example.test/refer?c=ZMPHZC"
+
+
+def test_malformed_referral_page_override_falls_back(seeded, client, django_capture_on_commit_callbacks):
+    """A stray `{}` in the operator override must not 500 /r/open."""
+    ConfigCentral.objects.update_or_create(
+        key="partner_referral_page_url_template",
+        defaults={"value": "https://example.test/refer?c={}"},
+    )
+    resp = _get(client, "/r/open", django_capture_on_commit_callbacks)
+    assert resp.status_code == 302
+    assert resp.headers["Location"] == "https://signup.zerodha.com/api/lead/?c=ZMPHZC"
 
 
 def test_valid_id_is_unchanged(seeded, client):
