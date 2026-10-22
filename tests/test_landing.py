@@ -93,7 +93,7 @@ def test_landing_does_not_clone_zerodha(seeded, client):
 
 
 def test_invalid_link_renders_branded_fallback_no_incentive(seeded, client):
-    resp = client.get("/r/bad--id", HTTP_USER_AGENT="Mozilla/5.0")
+    resp = client.get("/r/" + "b" * 33, HTTP_USER_AGENT="Mozilla/5.0")  # T-574: >32 chars keeps the 400
     html = resp.content.decode()
     assert resp.status_code == 400
     assert "isn't valid" in html

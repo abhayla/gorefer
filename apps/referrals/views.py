@@ -32,9 +32,12 @@ from .landing_mode import LANDING_MODE_DIRECT, resolve_landing_mode
 from .models import ProgramRedirectRule, ReferralIdentity, ReferralProgram
 from .redirect_service import (
     build_continue_redirect,
+    can_pass_through,
     handle_direct_redirect,
     handle_landing_view,
     handle_partner_direct,
+    handle_unknown_id_redirect,
+    is_reserved_open,
 )
 from .share_intent_service import handle_share_intent
 from .validators import InvalidClientId, validate_client_id_for
@@ -151,6 +154,24 @@ def _landing_context(request, tenant, client_id: str, nonce: str | None):
     return ctx
 
 
+def _passthrough_response(request, tenant, raw_value: str, channel: str | None):
+    """T-574: reserved `open` and unknown placeholder ids -> 302 to the partner, no identity."""
+    if is_bot_user_agent(request.META.get("HTTP_USER_AGENT", "")):
+        return render_preview(request, tenant_id=getattr(tenant, "id", None))
+    visitor_id, is_new = _ensure_visitor_id(request)
+    try:
+        destination, _human = handle_unknown_id_redirect(
+            tenant=tenant, raw_value=raw_value, visitor_id=visitor_id,
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            raw_ip=_client_ip(request), share_channel=_share_channel(request, channel),
+        )
+    except PartnerUnavailable:
+        return _partner_unavailable(request)
+    response = HttpResponseRedirect(destination)
+    _set_visitor_cookie(response, visitor_id, is_new)
+    return response
+
+
 @require_GET
 def referral_redirect(request, client_id: str, channel: str | None = None):
     """GET /r/{client_id} (or /r/{channel}/{client_id}) — render the branded landing.
@@ -160,13 +181,18 @@ def referral_redirect(request, client_id: str, channel: str | None = None):
     /r/{client_id}?s= still works — see _share_channel.
     """
     tenant = get_current_tenant(request)
+    if is_reserved_open(client_id):  # /r/open - checked BEFORE validation (T-574)
+        return _passthrough_response(request, tenant, client_id, channel)
     try:
         # STRICT, per-partner (owner decision 2026-07-27): this path CREATES an identity,
         # so a leaked chatbot label like `TALK` — or the partner code `ZMPHZC` itself —
         # must never become a referrer. Lookup paths keep the loose spec rule.
         normalized = validate_client_id_for(tenant, client_id)
     except InvalidClientId:
-        # Friendly branded fallback — never a raw error, no journey created.
+        # T-574 (owner 2026-10-22): a placeholder/unknown value passes through to the
+        # partner with NO identity; only over-long values keep the branded 400.
+        if can_pass_through(client_id):
+            return _passthrough_response(request, tenant, client_id, channel)
         return render(request, "landing_invalid.html", status=400)
 
     # D2 — a CRAWLER gets a PIFS link-preview card, never a 302.
@@ -221,10 +247,14 @@ def referral_continue(request, client_id: str, channel: str | None = None):
     Continue-to-Zerodha 302 (reuses M2 engine). `channel` is the optional B1 path
     prefix; captured for attribution, NEVER added to the Location."""
     tenant = get_current_tenant(request)
+    if is_reserved_open(client_id):
+        return _passthrough_response(request, tenant, client_id, channel)
     try:
         # STRICT, per-partner — this path lazily creates the identity too.
         normalized = validate_client_id_for(tenant, client_id)
     except InvalidClientId:
+        if can_pass_through(client_id):
+            return _passthrough_response(request, tenant, client_id, channel)
         return render(request, "landing_invalid.html", status=400)
     identity = ReferralIdentity.objects.for_tenant(tenant).filter(
         client_id=normalized, id_source="native"

@@ -65,7 +65,8 @@ def test_repeat_landing_same_visitor_is_idempotent_on_identity(seeded, client):
 
 
 def test_invalid_client_id_returns_400_and_creates_nothing(seeded, client):
-    resp = client.get("/r/bad--id!!", HTTP_USER_AGENT="Mozilla/5.0")
+    # T-574: only over-long (>32) values keep the 400; shorter junk now passes through.
+    resp = client.get("/r/" + "x" * 33, HTTP_USER_AGENT="Mozilla/5.0")
     assert resp.status_code == 400
     assert ReferralIdentity.objects.count() == 0
     assert Referral.objects.count() == 0
@@ -299,7 +300,8 @@ def test_a_junk_client_id_creates_no_identity_on_the_redirect_path(client, seede
 
     before = ReferralIdentity.objects.count()
     resp = client.get("/r/ABHAY", HTTP_USER_AGENT="Mozilla/5.0 (Android)", REMOTE_ADDR="203.0.113.9")
-    assert resp.status_code == 400
+    assert resp.status_code == 302  # T-574: passed through to the partner, was 400
+    assert resp.headers["Location"] == "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=ABHAY"
     assert ReferralIdentity.objects.count() == before, "a junk id must create NO identity"
     assert not ReferralIdentity.objects.filter(client_id="ABHAY").exists()
 

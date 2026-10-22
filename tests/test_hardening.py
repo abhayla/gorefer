@@ -20,7 +20,7 @@ def test_no_tailwind_or_htmx_cdn_in_any_page():
     call_command("seed_program")
     c = Client()
     c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0")  # prime a journey
-    for path in ("/", "/r/RJ4521", "/r/bad--id", "/admin-panel/login/"):
+    for path in ("/", "/r/RJ4521", "/r/" + "b" * 33, "/admin-panel/login/"):  # T-574: 33 chars keeps the 400
         html = c.get(path, HTTP_USER_AGENT="Mozilla/5.0").content.decode()
         assert "cdn.tailwindcss.com" not in html, f"Tailwind CDN in {path}"
         assert "unpkg.com/htmx" not in html, f"HTMX CDN in {path}"
@@ -83,7 +83,7 @@ def test_compliance_strings_byte_exact_on_customer_pages():
     call_command("seed_program")
     c = Client()
     c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0")  # prime a journey
-    for path in ("/", "/r/RJ4521", "/r/bad--id", "/admin-panel/login/"):
+    for path in ("/", "/r/RJ4521", "/r/" + "b" * 33, "/admin-panel/login/"):  # T-574: 33 chars keeps the 400
         html = c.get(path, HTTP_USER_AGENT="Mozilla/5.0").content.decode()
         assert _CANON_DISCLOSURE in html, f"disclosure not byte-exact on {path}"
         assert _CANON_RISK in html, f"risk warning not byte-exact on {path}"

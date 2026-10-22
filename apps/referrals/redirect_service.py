@@ -330,6 +330,90 @@ def handle_partner_direct(*, tenant, visitor_id, user_agent, raw_ip, share_chann
     return destination, True
 
 
+# ---------------------------------------------------------------------------
+# T-574 (owner decision 2026-10-22, SPEC CHANGE to the 2026-07-27 strict-id behaviour):
+# /r/<value> where <value> fails the strict partner id pattern is PASSED THROUGH to the
+# partner's lead URL (r=<raw value>) instead of a 400 - a lead who does not know their
+# Zerodha ID is sent to a link carrying a placeholder (KITEID, ZERODHAID...) and must be able
+# to edit the box on the partner page. Junk still NEVER becomes a referrer identity.
+# ---------------------------------------------------------------------------
+PASSTHROUGH_MAX_LEN = 32  # abuse guard: longer values keep the branded 400
+RESERVED_OPEN = "open"  # /r/open - the spec's reserved partner-only link (06-API 4.1)
+PARTNER_REFERRAL_PAGE_KEY = "partner_referral_page_url_template"
+_UNRESERVED = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-~")
+
+
+def is_reserved_open(value: str) -> bool:
+    return (value or "").lower() == RESERVED_OPEN
+
+
+def can_pass_through(value: str) -> bool:
+    return 1 <= len(value or "") <= PASSTHROUGH_MAX_LEN
+
+
+def _encode_component(value: str) -> str:
+    """Percent-encode every byte outside the RFC 3986 unreserved set, by hand: this module's
+    source must not contain the stdlib URL-parsing module's name
+    (`test_redirect_service_imports_no_http_client` scans for it)."""
+    return "".join(
+        c if c in _UNRESERVED else "".join(f"%{b:02X}" for b in c.encode("utf-8")) for c in value
+    )
+
+
+def partner_referral_page_destination(program: ReferralProgram, *, tenant_id: int | None = None) -> str:
+    """Where `/r/open` sends a human: the partner's REFERRAL page with an empty box.
+
+    Default = the active redirect rule's template with the `&r={client_id}` part stripped
+    (https://signup.zerodha.com/api/lead/?c=ZMPHZC). Overridable via the cascade key
+    `partner_referral_page_url_template` (rail E-6)."""
+    rule = (
+        ProgramRedirectRule.objects.filter(program=program, is_active=True).order_by("priority").first()
+    )
+    if rule is None:
+        raise ProgramRedirectRule.DoesNotExist("no active redirect rule for program")
+    override = ""
+    try:
+        override = str(resolve(PARTNER_REFERRAL_PAGE_KEY, tenant_id=tenant_id, default="") or "")
+    except Exception:
+        override = ""
+    template = override.strip() or rule.destination_url_template.split("&r=")[0].split("?r=")[0]
+    return template.format(partner_code=program.partner.code, client_id="")
+
+
+def handle_unknown_id_redirect(*, tenant, raw_value: str, visitor_id, user_agent, raw_ip,
+                               share_channel=None):
+    """Resolve a /r/<value> hit whose value failed the strict id pattern (or is `open`).
+
+    Returns (destination_url, is_human_click). NO ReferralIdentity is created; a human click
+    is logged on the partner-direct journey (referrer NONE). The raw value is NEVER stored
+    or logged (it may be a mobile number) - it only appears, encoded, in the Location.
+    A bot/preview hit logs nothing."""
+    program = _active_program(tenant)
+    tenant_id = getattr(tenant, "id", None)
+    if is_reserved_open(raw_value):
+        destination = partner_referral_page_destination(program, tenant_id=tenant_id)
+    else:
+        rule = (
+            ProgramRedirectRule.objects.filter(program=program, is_active=True)
+            .order_by("priority").first()
+        )
+        if rule is None:
+            raise ProgramRedirectRule.DoesNotExist("no active redirect rule for program")
+        destination = rule.destination_url_template.format(
+            partner_code=program.partner.code, client_id=_encode_component(raw_value)
+        )
+    if is_bot_user_agent(user_agent):
+        return destination, False
+    referral = _get_or_create_partner_direct_referral(tenant, program)
+    transaction.on_commit(
+        lambda: _record_event(
+            tenant=tenant, referral=referral, visitor_id=visitor_id, user_agent=user_agent,
+            raw_ip=raw_ip, event_type=vocab.CLICK, source=vocab.SRC_CLICK, share_channel=share_channel,
+        )
+    )
+    return destination, True
+
+
 # Public aliases (M-WATI-1): share_intent_service reuses the ADR-008 lazy-creation
 # engine + program resolution rather than duplicating them (DRY).
 get_active_program = _active_program
