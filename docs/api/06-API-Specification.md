@@ -129,7 +129,8 @@ Three trust tiers:
 | `preview` | boolean | If `true`, logs the click as `internal` and does not count it in analytics — but **only** when the request carries a **valid, logged-in GoRefer admin session** (§3.1). A present-but-invalid `Authorization` header is not enough; a request lacking a valid admin session is treated as an ordinary public click, and `preview` is ignored (ADR-023). |
 
 **Behavior (ordered).**
-1. **Format-validate** `client_id` against the regex below (reject empty, oversized, or illegal-char values → branded error page, no DB work). **No ownership verification** — there is no Zerodha API to confirm the id belongs to a real client; GoRefer accepts and redirects (a wrong id simply fails to credit that referrer; `c=ZMPHZC` still credits PIFS). Then **lazily create-or-find** the `referral_identity` keyed by `(partner=Zerodha, client_id, id_source=native)` and its `referral_journey`, both from config — nothing was pre-loaded.
+0. **Reserved `open` (checked first).** `/r/open` (case-insensitive, also `/r/{channel}/open`) is the reserved partner-only link: a human gets a partner-direct journey and a 302 to the partner's **referral page with an empty referral box** (config key `partner_referral_page_url_template`, default = the redirect rule's template with `&r={client_id}` stripped, e.g. `https://signup.zerodha.com/api/lead/?c=ZMPHZC`); a crawler gets the PIFS preview card. **Owner decision 2026-10-22.**
+1. **Format-validate** `client_id` against the strict per-partner pattern below. **Unknown-id pass-through (owner decision 2026-10-22, SPEC CHANGE to the 2026-07-27 strict-id behaviour, which returned a 400 here):** a value of 1–32 characters that fails the pattern (e.g. `KITEID`, `ZERODHAID`, `XYZ`) is **not blocked** — a human is 302'd to the partner's lead URL with `r=<raw value>` (URL-encoded, case preserved), **no referrer identity is created**, no landing page is shown (whatever the landing mode), and the click is logged on the partner-direct journey (referrer NONE, `source=partner_direct`). The raw value is **never stored or logged** (it may be a mobile number). A crawler gets the preview card with no DB work. Values **longer than 32 characters** (abuse guard) still get the branded error page, no DB work. Valid ids are unchanged. The same applies to `/r/{channel}/{x}` and the `/continue` forms. **No ownership verification** — there is no Zerodha API to confirm the id belongs to a real client; GoRefer accepts and redirects (a wrong id simply fails to credit that referrer; `c=ZMPHZC` still credits PIFS). Then **lazily create-or-find** the `referral_identity` keyed by `(partner=Zerodha, client_id, id_source=native)` and its `referral_journey`, both from config — nothing was pre-loaded.
 2. Derive request signals: IP, `User-Agent`, `Referer`, `Accept` headers, device class, and timing.
 3. **Classify the click** into a confidence band (see §4.4) — `human_high`, `human_likely`, `suspicious`, or `bot` — and write a `click_event` row (see 05-Database-Design) with the classification, UTM values, device, browser, and a **hashed** IP. The row carries **`is_bot`** (set from the known bot/preview user-agent list) and **`is_confirmed_human = false`**; it flips to human **only** when the JS-confirmation **beacon** (`POST /api/click/confirm`, §4.3) fires. Bot/preview hits are stored for audit but excluded from human counts (Gap 16).
 4. Start or extend the **referral journey**: if this is the first observed event for this link+visitor, create a `referral_journey_event` of type `LINK_CLICKED`; the journey key is the link plus a first-party visitor cookie (`gr_vid`, `HttpOnly` not required since it is not sensitive) so repeat clicks are stitched to one journey.
@@ -144,7 +145,8 @@ Three trust tiers:
 **Success responses.**
 - `302 Found` with `Location: https://signup.zerodha.com/api/lead?c=ZMPHZC&r=<client_id>` (direct-redirect mode), **or**
 - `302 Found` with `Location: /landing/<client_id>` (landing mode), **or**
-- `200 OK` branded error HTML if the `client_id` fails format validation.
+- `302 Found` to the partner lead URL with `r=<raw value>` when the `client_id` fails format validation but is 1–32 characters (pass-through, no identity; owner decision 2026-10-22), **or**
+- `400` branded error HTML only if the value is longer than 32 characters.
 
 **Response headers.**
 - `Set-Cookie: gr_vid=<uuid>; Path=/; Max-Age=5184000; SameSite=Lax` (60-day visitor cookie — mirrors Zerodha's 60-day attribution window so a journey can be stitched across the whole eligible period).
@@ -165,21 +167,22 @@ Cache-Control: no-store
 ```
 
 **Validation.**
-- `client_id` must match `^[A-Za-z0-9]{4,16}$` (a Zerodha client id shape). A malformed `client_id` short-circuits to the branded error page (no DB work). This is **format validation only** — GoRefer cannot and does not verify that the id belongs to a real Zerodha client.
+- `client_id` must match `^[A-Za-z0-9]{4,16}$` (a Zerodha client id shape). A value failing the pattern is passed through to the partner with no identity (§4.1 step 1, owner decision 2026-10-22); only values longer than 32 characters short-circuit to the branded error page (no DB work). This is **format validation only** — GoRefer cannot and does not verify that the id belongs to a real Zerodha client.
 
 **Errors.**
 | Status | code | When |
 |---|---|---|
-| 200 (HTML) | `INVALID_CLIENT_ID` (rendered) | The path segment fails format validation. Friendly page with a "Open a Zerodha account with PIFS" fallback CTA to `/r/open` (the partner-only link). |
+| 302 | — (pass-through) | The path segment fails the id pattern and is 1–32 chars: redirect to the partner lead URL with `r=<raw value>`, no identity (owner decision 2026-10-22). |
+| 400 (HTML) | `INVALID_CLIENT_ID` (rendered) | The path segment is longer than 32 characters. Friendly page with a "Open a Zerodha account with PIFS" fallback CTA to `/r/open` (the partner-only link). |
 | 429 | `RATE_LIMITED` | IP over the per-minute cap. |
 | 503 | `PARTNER_UNAVAILABLE` | Destination cannot be built (config missing). Rendered as branded HTML with retry guidance. |
 
-> **Note — the partner-only link.** `GET /r/open` is the same handler with a reserved path segment (`open`) that carries no `r=` (plain `c=ZMPHZC`, injected server-side). It credits PIFS as AP but no referrer (Build-Spec R2). It is documented here as a reserved path, not a separate route.
+> **Note — the partner-only link.** `GET /r/open` is the same handler with a reserved path segment (`open`) that carries no `r=` (plain `c=ZMPHZC`, injected server-side). It credits PIFS as AP but no referrer (Build-Spec R2). It is documented here as a reserved path, not a separate route. **Destination (owner decision 2026-10-22):** unlike `/open` (§4.2), `/r/open` lands on the partner's **referral page with an empty referral box** — config key `partner_referral_page_url_template` (default `https://signup.zerodha.com/api/lead/?c=ZMPHZC`, i.e. the redirect rule's template minus `&r={client_id}`).
 
 ### 4.2 `GET /open` — partner-direct (no referrer)
 **Purpose.** The **PIFS-direct** entry point for a visitor who arrives with **no referrer** (Gap 1). It is a sibling of §4.1 that carries the partner code **only** — `c=ZMPHZC`, **no `r=`** — credits PIFS as AP but no referrer, and **creates a partner-direct journey**.
 
-**Method / Path.** `GET /open` (also reachable as the reserved `GET /r/open`; both resolve to the partner-direct handler).
+**Method / Path.** `GET /open` (the reserved `GET /r/open` is a **different destination** since 2026-10-22: the partner's referral page with an empty box, §4.1 note).
 
 **Auth.** None (public).
 
@@ -189,9 +192,9 @@ Cache-Control: no-store
 1. **No format-validation of a referrer is needed** (there is no `r=`). Lazily create-or-find the **partner-direct journey** with `source=partner_direct` and `referrer = null` (05-Database-Design, `referrals.source`).
 2. Derive request signals; set the `gr_vid` visitor cookie; classify the click and apply **bot-UA filtering** exactly as §4.1 (a click only counts human after the §4.3 beacon).
 3. Show the branded landing page in `show_landing` mode — the **partner-direct variant** (no referral-id echo; the WhatsApp-share prefill omits the referral id and the eventual redirect omits `r=`).
-4. **Redirect** server-side to `https://signup.zerodha.com/api/lead?c=ZMPHZC` (**no `r=`**). Write a `REDIRECTED_TO_PARTNER` journey event.
+4. **Redirect** server-side to the plain signup page `https://signup.zerodha.com/?c=ZMPHZC` (**no `r=`**; config `partner_direct_url_template`, decision 2026-07-26). Write a `REDIRECTED_TO_PARTNER` journey event.
 
-**Success responses.** `302 Found` to the landing page or, in direct mode, to `https://signup.zerodha.com/api/lead?c=ZMPHZC` (no `r=`). Sets the same `gr_vid` cookie and `Cache-Control: no-store` as §4.1.
+**Success responses.** `302 Found` to the landing page or, in direct mode, to `https://signup.zerodha.com/?c=ZMPHZC` (no `r=`; config `partner_direct_url_template`, decision 2026-07-26). Sets the same `gr_vid` cookie and `Cache-Control: no-store` as §4.1.
 
 **Notes.** A partner-direct journey can still convert: the Zoho sync (§7) will attribute it **referrer-level-only / PIFS-only** since there is no referrer to credit (Gaps 2, 3).
 
