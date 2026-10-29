@@ -27,8 +27,10 @@ from django.views.generic import TemplateView
 
 from api.router import api
 from apps.referrals.views import (
+    channel_only_redirect,
     disclosure_page,
     partner_direct_redirect,
+    prefixed_channel_only_redirect,
     prefixed_partner_direct_redirect,
     prefixed_referral_continue,
     prefixed_referral_redirect,
@@ -62,6 +64,9 @@ urlpatterns = [
     path("r/<channel:channel>/<str:client_id>/continue", referral_continue, name="referral_continue_channel"),
     path("r/<channel:channel>/<str:client_id>", referral_redirect, name="referral_redirect_channel"),
     # Legacy single-segment form (M2/M3) — unchanged; still honours ?s=.
+    # Channel with no client id (owner 2026-10-29): /r/wa/ behaves like /r/open. The `str`
+    # converter never matches an empty segment, so this cannot shadow any route here.
+    path("r/<channel:channel>/", channel_only_redirect, name="referral_channel_only"),
     path("r/<str:client_id>/continue", referral_continue, name="referral_continue"),
     path("r/<str:client_id>", referral_redirect, name="referral_redirect"),
     # Bare /r/ and /r (no client_id at all) — T-122 soft-landing recovery, never a
@@ -174,6 +179,8 @@ urlpatterns += [
          name="referral_redirect_prefixed"),
     path("<slug:program_prefix>/r/", prefixed_share_recovery_view, name="referral_recovery_slash_prefixed"),
     path("<slug:program_prefix>/r", prefixed_share_recovery_view, name="referral_recovery_bare_prefixed"),
+    path("<slug:program_prefix>/r/<channel:channel>/", prefixed_channel_only_redirect,
+         name="referral_channel_only_prefixed"),
 ]
 
 # Program-prefixed twins of /share/... — same ENABLE_SHARE_INTENT gate as the bare
