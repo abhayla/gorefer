@@ -6,6 +6,9 @@ Wires: the server-rendered home page, the Django Ninja API mount, the Django adm
   - GET /r/{channel}/{client_id}           -> same, channel carried as a PATH PREFIX
     (B1/ADR-028) so a WhatsApp dynamic URL button can keep the client_id LAST
   - GET /open                              -> partner-direct redirect (302, no r=)
+  - GET /{program}/open, /{program}/r/...  -> program-prefixed twins of the above
+    (e.g. /zerodha/r/RJ4521); `{program}` is ReferralProgram.url_prefix — DATA, so
+    no partner-named route exists. Registered LAST (see the block at the bottom).
 
 Ordering note: the `{channel}` converter matches only 1–8 lowercase letters, and
 the two-segment `/r/X/Y` form is what selects the channel route — so it can never
@@ -24,6 +27,10 @@ from api.router import api
 from apps.referrals.views import (
     disclosure_page,
     partner_direct_redirect,
+    prefixed_partner_direct_redirect,
+    prefixed_referral_continue,
+    prefixed_referral_redirect,
+    prefixed_share_recovery_view,
     privacy_policy_view,
     referral_continue,
     referral_redirect,
@@ -139,3 +146,28 @@ if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_ADMIN_DASHBOARD", True):
 # when ENABLE_CUSTOMER_LOGIN is on (Constitution §4 — no dead UI when off).
 if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_CUSTOMER_LOGIN", False):
     urlpatterns.append(path("", include("apps.accounts.urls")))
+
+# Program-prefixed twins of /open and /r/... (owner decision 2026-10-29) — e.g.
+# /zerodha/open, /zerodha/r/open, /zerodha/r/RJ4521, /zerodha/r/wa/RJ4521. The first
+# segment is matched against ReferralProgram.url_prefix in the view (unknown word ->
+# 404), so the route itself names no partner. Appended LAST on purpose: a leading
+# `<slug>` segment is wide, and Django takes the first match — registering after every
+# other pattern means these can only ever catch a URL nothing else claims, so no
+# existing link changes behaviour. Same ordering rules as the bare /r/ block above.
+urlpatterns += [
+    path("<slug:program_prefix>/open", prefixed_partner_direct_redirect, name="partner_direct_prefixed"),
+    path(
+        "<slug:program_prefix>/r/<channel:channel>/<str:client_id>/continue",
+        prefixed_referral_continue, name="referral_continue_channel_prefixed",
+    ),
+    path(
+        "<slug:program_prefix>/r/<channel:channel>/<str:client_id>",
+        prefixed_referral_redirect, name="referral_redirect_channel_prefixed",
+    ),
+    path("<slug:program_prefix>/r/<str:client_id>/continue", prefixed_referral_continue,
+         name="referral_continue_prefixed"),
+    path("<slug:program_prefix>/r/<str:client_id>", prefixed_referral_redirect,
+         name="referral_redirect_prefixed"),
+    path("<slug:program_prefix>/r/", prefixed_share_recovery_view, name="referral_recovery_slash_prefixed"),
+    path("<slug:program_prefix>/r", prefixed_share_recovery_view, name="referral_recovery_bare_prefixed"),
+]

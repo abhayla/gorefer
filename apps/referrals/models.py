@@ -107,6 +107,11 @@ class ReferralProgram(AuditedModel, SoftDeleteModel, TenantScopedModel):
     brand_color = models.CharField(max_length=20, blank=True, default="")
     reward_description = models.TextField(blank=True, default="")
     terms_url = models.URLField(blank=True, default="")
+    # The program's word in its branded public links: `/{url_prefix}/open`,
+    # `/{url_prefix}/r/{client_id}` (e.g. `zerodha`). DATA, not a route literal —
+    # so no partner-named route exists in code (CLAUDE.md §4). Blank = the program
+    # has no prefixed links and every generated link keeps the bare `/r/` form.
+    url_prefix = models.SlugField(max_length=32, blank=True, default="")
 
     # --- Disclosure composition (B2 / ADR-031) — the /d/{slug} page renders each
     # ACTIVE program's regulator block, ordered by (disclosure_sequence, regulator).
@@ -123,6 +128,12 @@ class ReferralProgram(AuditedModel, SoftDeleteModel, TenantScopedModel):
             # Program name unique per partner per tenant (05 §6 + ADR-023 §2).
             models.UniqueConstraint(
                 fields=["tenant", "partner", "name"], name="uq_program_tenant_partner_name"
+            ),
+            # One program per link word per tenant; blank (no prefixed links) repeats freely.
+            models.UniqueConstraint(
+                fields=["tenant", "url_prefix"],
+                condition=~models.Q(url_prefix=""),
+                name="uq_program_tenant_url_prefix",
             ),
         ]
         indexes = [models.Index(fields=["status"])]

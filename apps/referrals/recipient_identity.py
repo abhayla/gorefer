@@ -190,8 +190,10 @@ def nudge_link_for(identity: RecipientIdentity, *, tenant_id=None, channel: str 
 
     ``referrer_then_open`` (default): the prospect's referrer link ``/r/{channel}/{id}``
     (credits the original referrer, idempotent with their pending application) when known,
-    else the partner-direct ``/open`` (PIFS credit). ``open_only`` always ``/open``;
-    ``none`` returns "". Bare host, no scheme (matches kit-message convention).
+    else the partner-direct ``/open`` (PIFS credit). Both carry the program's link word
+    (``/zerodha/r/...``, ``/zerodha/open``) when one is configured — apps.referrals.links.
+    ``open_only`` always ``/open``; ``none`` returns "". Bare host, no scheme (matches
+    kit-message convention).
     """
     try:
         from apps.config.cascade import resolve
@@ -201,7 +203,10 @@ def nudge_link_for(identity: RecipientIdentity, *, tenant_id=None, channel: str 
         mode = LINK_MODE_DEFAULT
     if mode == "none":
         return ""
+    from .links import partner_direct_path, referral_path
+
     host = _public_host()
     if mode != "open_only" and identity.referrer_client_id:
-        return f"{host}/r/{channel}/{identity.referrer_client_id}"
-    return f"{host}/open"
+        path = referral_path(identity.referrer_client_id, channel=channel, tenant=tenant_id)
+        return f"{host}{path}"
+    return f"{host}{partner_direct_path(tenant=tenant_id)}"

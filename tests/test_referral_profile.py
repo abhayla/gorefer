@@ -56,7 +56,7 @@ def test_profile_renders_top_band_and_zoho_enrichment(admin_client):
     assert "Rajesh Joshi" in html          # Zoho-read name (fixture)
     assert "Active Investor" in html       # is_active_investor chip
     assert "Pune, MH" in html              # Mailing_City/State enrichment
-    assert "gorefer.in/r/RJ4521" in html   # per-link card link
+    assert "gorefer.in/zerodha/r/RJ4521" in html   # per-link card link
     assert "Referral Profile" in html
 
 

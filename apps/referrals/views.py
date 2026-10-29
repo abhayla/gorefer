@@ -29,6 +29,7 @@ from gorefer import flags as flagmod
 from gorefer.flags import flags, normalize_share_channel
 
 from .landing_mode import LANDING_MODE_DIRECT, resolve_landing_mode
+from .links import matches_program_prefix, referral_path
 from .models import ProgramRedirectRule, ReferralIdentity, ReferralProgram
 from .redirect_service import (
     build_continue_redirect,
@@ -116,7 +117,7 @@ def _og_context(request, client_id: str) -> dict:
         "og_title": settings.OG_TITLE,
         "og_description": settings.OG_DESCRIPTION,
         "og_image": image,
-        "og_url": f"{base}/r/{client_id}",
+        "og_url": f"{base}{referral_path(client_id, tenant=get_current_tenant(request))}",
         "og_site_name": settings.OG_SITE_NAME,
     }
 
@@ -467,3 +468,40 @@ def privacy_policy_view(request):
         "wati_business_number_digits": digits,
     }
     return render(request, "privacy_policy.html", context)
+
+
+# ---------------------------------------------------------------------------
+# Program-prefixed twins (owner decision 2026-10-29): /{url_prefix}/open,
+# /{url_prefix}/r/[{channel}/]{client_id}[/continue], /{url_prefix}/r[/]. Each one
+# checks that the prefix is the active program's link word (data on ReferralProgram,
+# e.g. `zerodha`) and then hands off to the SAME view as its bare twin — so landing,
+# redirect, attribution and every guardrail are shared, not copied. An unknown word
+# is a 404. The bare routes are untouched.
+# ---------------------------------------------------------------------------
+def _require_program_prefix(request, program_prefix: str) -> None:
+    if not matches_program_prefix(get_current_tenant(request), program_prefix):
+        raise Http404("unknown program link prefix")
+
+
+@require_GET
+def prefixed_partner_direct_redirect(request, program_prefix: str):
+    _require_program_prefix(request, program_prefix)
+    return partner_direct_redirect(request)
+
+
+@require_GET
+def prefixed_referral_redirect(request, program_prefix: str, client_id: str, channel: str | None = None):
+    _require_program_prefix(request, program_prefix)
+    return referral_redirect(request, client_id, channel=channel)
+
+
+@require_GET
+def prefixed_referral_continue(request, program_prefix: str, client_id: str, channel: str | None = None):
+    _require_program_prefix(request, program_prefix)
+    return referral_continue(request, client_id, channel=channel)
+
+
+@require_GET
+def prefixed_share_recovery_view(request, program_prefix: str):
+    _require_program_prefix(request, program_prefix)
+    return share_recovery_view(request)

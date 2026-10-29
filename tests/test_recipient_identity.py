@@ -51,7 +51,7 @@ def test_prospect_with_referrer_resolves_referrer_link(tenant):
     assert idn.role == ri.ROLE_PROSPECT
     assert idn.referrer_client_id == "RJ4521"
     assert idn.confidence == "lead_join"
-    assert ri.nudge_link_for(idn, tenant_id=tenant.id) == "gorefer.in/r/wa/RJ4521"
+    assert ri.nudge_link_for(idn, tenant_id=tenant.id) == "gorefer.in/zerodha/r/wa/RJ4521"
 
 
 def test_prospect_partner_direct_falls_back_to_open(tenant):
@@ -64,7 +64,7 @@ def test_prospect_partner_direct_falls_back_to_open(tenant):
     idn = ri.resolve_recipient(tenant, "9800000001")
     assert idn.role == ri.ROLE_PROSPECT
     assert idn.referrer_client_id == ""
-    assert ri.nudge_link_for(idn, tenant_id=tenant.id) == "gorefer.in/open"
+    assert ri.nudge_link_for(idn, tenant_id=tenant.id) == "gorefer.in/zerodha/open"
 
 
 def test_zoho_credited_referrer_wins_over_identity(tenant):
@@ -100,7 +100,7 @@ def test_dual_role_prospect_in_progress_wins_then_referrer_when_converted(tenant
 def test_unknown_mobile_gets_open_link(tenant):
     idn = ri.resolve_recipient(tenant, "919899999999")
     assert idn.role == ri.ROLE_UNKNOWN
-    assert ri.nudge_link_for(idn, tenant_id=tenant.id) == "gorefer.in/open"
+    assert ri.nudge_link_for(idn, tenant_id=tenant.id) == "gorefer.in/zerodha/open"
 
 
 def test_language_comes_from_existing_referrer_language_rule(tenant):
@@ -118,4 +118,4 @@ def test_link_mode_open_only_ignores_referrer(tenant):
     _prospect_referred_by(tenant, "RJ4521", "9800000003")
     set_tenant("followup_link_mode", "open_only", tenant_id=tenant.id)
     idn = ri.resolve_recipient(tenant, "9800000003")
-    assert ri.nudge_link_for(idn, tenant_id=tenant.id) == "gorefer.in/open"
+    assert ri.nudge_link_for(idn, tenant_id=tenant.id) == "gorefer.in/zerodha/open"

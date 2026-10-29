@@ -139,7 +139,7 @@ def test_opener_post_is_gated_too(client, seeded):
 def test_hub_renders_for_the_session_identity(seeded):
     identity = _identity(seeded)
     html = _logged_in(seeded).get(HUB).content.decode()
-    assert f"gorefer.in/r/wa/{CID}" in html
+    assert f"gorefer.in/zerodha/r/wa/{CID}" in html
     assert identity.client_id in html
 
 
@@ -195,7 +195,7 @@ def test_session_opener_edit_saves_and_composes_locked(seeded):
     message = hub_ctx(identity, "", session_mode=True)["share_message"]
     assert message.startswith("Rajesh here — this is what I use.")
     # The locked tail is appended AFTER the opener, server-side, always.
-    assert f"gorefer.in/r/wa/{CID}" in message
+    assert f"gorefer.in/zerodha/r/wa/{CID}" in message
     assert disclosure_anchor() in message
 
 

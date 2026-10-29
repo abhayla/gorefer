@@ -832,7 +832,7 @@ def test_prospect_send_substitutes_referrer_link(enabled, monkeypatch):
     assert counts["sent"] == 1
     assert rec.sent, "adapter received no message"
     _to, msg = rec.sent[0]
-    assert "gorefer.in/r/wa/RJ4521" in msg   # the referrer's link, credit preserved
+    assert "gorefer.in/zerodha/r/wa/RJ4521" in msg   # the referrer's link, credit preserved
     assert "{link}" not in msg                # placeholder fully substituted
 
 

@@ -22,6 +22,9 @@ from gorefer.flags import flags
 
 BOOTSTRAP_TENANT_SLUG = "pifs"
 DESTINATION_TEMPLATE = "https://signup.zerodha.com/api/lead/?c={partner_code}&r={client_id}"
+# The program's word in its branded links (/zerodha/r/{id}, /zerodha/open) — data, not a
+# route literal. Existing databases get it from migration referrals.0011.
+URL_PREFIX = "zerodha"
 
 
 class Command(BaseCommand):
@@ -115,6 +118,7 @@ class Command(BaseCommand):
                 "reward_description": flags.REFERRAL_INCENTIVE_CLAIM,
                 "brand_color": "#387ED1",
                 "terms_url": "https://zerodha.com/open-account",
+                "url_prefix": URL_PREFIX,
                 # Disclosure composition (B2/ADR-031): Zerodha carries the SEBI/NSE
                 # block, first in regulator order. Template blank => fall back to the
                 # canonical central AP disclosure block (interim single-partner).
