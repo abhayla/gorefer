@@ -251,6 +251,8 @@ def referral_redirect(request, client_id: str, channel: str | None = None):
 @require_GET
 def channel_only_redirect(request, channel: str):
     """GET /r/{channel}/ (owner 2026-10-29) - a channel link with no client id: same as /r/open."""
+    if not is_channel_code(channel):  # converter takes any 1-8 letters; only KNOWN codes act
+        raise Http404("unknown channel")
     return _passthrough_response(request, get_current_tenant(request), RESERVED_OPEN, channel)
 
 

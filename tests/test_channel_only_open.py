@@ -97,3 +97,9 @@ def test_channel_referral_with_real_id_unchanged(seeded, django_capture_on_commi
     resp = _get("/r/wa/RJ4521", django_capture_on_commit_callbacks)
     assert resp.status_code == 200  # branded landing for a real id
     assert ReferralIdentity.objects.filter(client_id="RJ4521").exists()
+
+
+@pytest.mark.parametrize("path", ["/r/abc/", "/r/foo/", "/r/open/", "/zerodha/r/abc/", "/zerodha/r/open/"])
+def test_unknown_channel_slash_is_404_unknown_no_writes(seeded, django_capture_on_commit_callbacks, path):
+    assert _get(path, django_capture_on_commit_callbacks).status_code == 404
+    assert (Referral.objects.count(), Event.objects.count(), ReferralIdentity.objects.count()) == (0, 0, 0)
