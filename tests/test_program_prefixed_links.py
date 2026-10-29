@@ -213,3 +213,59 @@ def test_my_referrals_and_profile_links_are_prefixed(tenant, client, django_capt
     assert f"https://gorefer.in/zerodha/r/wa/{CID} " in ctx["share_text"]
     cards = profile.per_link_cards(tenant, CID)
     assert cards and all(card["link"] == f"gorefer.in/zerodha/r/{CID}" for card in cards)
+
+
+# --- share-intent twins (flag-on mount mirrored by tests.urls_share_intent) ----------
+
+SHARE_TWINS = [
+    (f"/share/wa/{CID}", f"/zerodha/share/wa/{CID}"),
+    ("/share/wa/", "/zerodha/share/wa/"),
+    ("/share/wa", "/zerodha/share/wa"),
+]
+
+
+@pytest.mark.urls("tests.urls_share_intent")
+@pytest.mark.parametrize("bare,prefixed", SHARE_TWINS)
+def test_prefixed_share_matches_its_bare_twin(seeded, django_capture_on_commit_callbacks, bare, prefixed):
+    old = _get(Client(), bare, django_capture_on_commit_callbacks)
+    old_writes = _writes()
+    _clear_writes()
+    new = _get(Client(), prefixed, django_capture_on_commit_callbacks)
+    assert new.status_code == old.status_code
+    assert new.headers.get("Location") == old.headers.get("Location")
+    assert _writes() == old_writes
+
+
+@pytest.mark.urls("tests.urls_share_intent")
+def test_prefixed_share_is_a_real_wa_me_redirect(seeded, django_capture_on_commit_callbacks):
+    resp = _get(Client(), f"/zerodha/share/wa/{CID}", django_capture_on_commit_callbacks)
+    assert resp.status_code == 302
+    assert resp.headers["Location"].startswith("https://wa.me/")
+
+
+@pytest.mark.urls("tests.urls_share_intent")
+def test_prefixed_share_prefix_is_case_insensitive(seeded, django_capture_on_commit_callbacks):
+    old = _get(Client(), f"/share/wa/{CID}", django_capture_on_commit_callbacks)
+    _clear_writes()
+    new = _get(Client(), f"/Zerodha/share/wa/{CID}", django_capture_on_commit_callbacks)
+    assert (new.status_code, new.headers.get("Location")) == (old.status_code, old.headers.get("Location"))
+
+
+@pytest.mark.urls("tests.urls_share_intent")
+@pytest.mark.parametrize("path", [f"/groww/share/wa/{CID}", "/groww/share/wa/", "/groww/share/wa"])
+def test_prefixed_share_unknown_prefix_is_404_and_writes_nothing(
+    seeded, django_capture_on_commit_callbacks, path
+):
+    assert _get(Client(), path, django_capture_on_commit_callbacks).status_code == 404
+    assert _writes() == (0, [], [])
+
+
+@pytest.mark.urls("tests.urls_share_intent")
+def test_prefixed_share_post_is_405(seeded):
+    assert Client().post(f"/zerodha/share/wa/{CID}").status_code == 405
+
+
+def test_prefixed_share_routes_absent_when_flag_off(seeded, client, django_capture_on_commit_callbacks):
+    """Default urlconf = flag off (ENABLE_SHARE_INTENT defaults False): no bare, no prefixed share route."""
+    assert _get(client, f"/share/wa/{CID}", django_capture_on_commit_callbacks).status_code == 404
+    assert _get(client, f"/zerodha/share/wa/{CID}", django_capture_on_commit_callbacks).status_code == 404

@@ -198,7 +198,7 @@ Cache-Control: no-store
 
 **Notes.** A partner-direct journey can still convert: the Zoho sync (§7) will attribute it **referrer-level-only / PIFS-only** since there is no referrer to credit (Gaps 2, 3).
 
-### 4.2a Program-prefixed twins — `GET /{program}/open`, `GET /{program}/r/...` (owner decision 2026-10-29)
+### 4.2a Program-prefixed twins — `GET /{program}/open`, `GET /{program}/r/...`, `GET /{program}/share/...` (owner decision 2026-10-29)
 
 Every public link in §4.1–§4.2 also answers under the program's link word, so a shared link names the partner (GoRefer is not Zerodha-only):
 
@@ -209,6 +209,7 @@ Every public link in §4.1–§4.2 also answers under the program's link word, s
 | `/{program}/r/{client_id}` | `/r/{client_id}` |
 | `/{program}/r/{channel}/{client_id}` | `/r/{channel}/{client_id}` |
 | `…/continue`, `/{program}/r/`, `/{program}/r` | their bare twins |
+| `/{program}/share/{channel}/{client_id}`, `/{program}/share/{channel}/`, `/{program}/share/{channel}` | `/share/{channel}/{client_id}` and its two recovery forms; present only when `ENABLE_SHARE_INTENT` is on, exactly like the bare routes |
 
 `{program}` is `ReferralProgram.url_prefix` — **data, not a route literal** (Zerodha = `zerodha`, seeded by migration `referrals.0011` and `seed_program`), matched case-insensitively against the **active** program's word; any other word is a `404`. The view checks the word and then calls the bare twin's view, so the response, journey writes, bot handling and guardrails are the same. The bare links are unchanged and stay served. **Generated links** (share kit, follow-up nudges, My Referrals, admin profile, landing `og:url`) are built by `apps/referrals/links.py` and use the prefixed form; with a blank `url_prefix` they fall back to the bare form. Meta-approved template URLs are not affected.
 

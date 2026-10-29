@@ -9,6 +9,8 @@ Wires: the server-rendered home page, the Django Ninja API mount, the Django adm
   - GET /{program}/open, /{program}/r/...  -> program-prefixed twins of the above
     (e.g. /zerodha/r/RJ4521); `{program}` is ReferralProgram.url_prefix — DATA, so
     no partner-named route exists. Registered LAST (see the block at the bottom).
+  - GET /{program}/share/{channel}/{client_id} (+ the two recovery forms) -> twin of
+    /share/..., behind the same ENABLE_SHARE_INTENT flag (also registered last).
 
 Ordering note: the `{channel}` converter matches only 1–8 lowercase letters, and
 the two-segment `/r/X/Y` form is what selects the channel route — so it can never
@@ -30,6 +32,8 @@ from apps.referrals.views import (
     prefixed_partner_direct_redirect,
     prefixed_referral_continue,
     prefixed_referral_redirect,
+    prefixed_share_channel_recovery_view,
+    prefixed_share_intent_redirect,
     prefixed_share_recovery_view,
     privacy_policy_view,
     referral_continue,
@@ -171,3 +175,18 @@ urlpatterns += [
     path("<slug:program_prefix>/r/", prefixed_share_recovery_view, name="referral_recovery_slash_prefixed"),
     path("<slug:program_prefix>/r", prefixed_share_recovery_view, name="referral_recovery_bare_prefixed"),
 ]
+
+# Program-prefixed twins of /share/... — same ENABLE_SHARE_INTENT gate as the bare
+# routes (flag off -> these routes do not exist either) and, like the block above,
+# appended after every other pattern so nothing existing can be shadowed.
+if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_SHARE_INTENT", False):
+    urlpatterns += [
+        path(
+            "<slug:program_prefix>/share/<channel:channel>/<str:client_id>",
+            prefixed_share_intent_redirect, name="share_intent_prefixed",
+        ),
+        path("<slug:program_prefix>/share/<channel:channel>/", prefixed_share_channel_recovery_view,
+             name="share_recovery_slash_prefixed"),
+        path("<slug:program_prefix>/share/<channel:channel>", prefixed_share_channel_recovery_view,
+             name="share_recovery_bare_prefixed"),
+    ]
