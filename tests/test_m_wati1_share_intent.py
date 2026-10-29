@@ -46,14 +46,14 @@ def test_share_intent_redirects_to_wa_me_with_tracked_link(seeded, client):
     location = resp.headers["Location"]
     assert location.startswith("https://wa.me/?text=")
     decoded = unquote(location.split("?text=", 1)[1])
-    assert "gorefer.in/r/wa/RJ4521" in decoded
+    assert "gorefer.in/zerodha/r/wa/RJ4521" in decoded
     assert decoded.startswith("Open a free Zerodha account")
     # The tracked link must be a FULL https URL (scheme-less links aren't linkified by
     # every client), and it must come BEFORE the disclosure URL: WhatsApp builds the
     # message's preview card from the first full URL, and the preview must be the
     # branded referral landing — never the disclosures page (live defect 2026-07-28).
-    assert "https://gorefer.in/r/wa/RJ4521" in decoded
-    assert decoded.index("https://gorefer.in/r/wa/RJ4521") < decoded.index("https://gorefer.in/d/pifs")
+    assert "https://gorefer.in/zerodha/r/wa/RJ4521" in decoded
+    assert decoded.index("https://gorefer.in/zerodha/r/wa/RJ4521") < decoded.index("https://gorefer.in/d/pifs")
 
 
 def test_share_intent_event_is_pii_free(seeded, client, django_capture_on_commit_callbacks):

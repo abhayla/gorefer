@@ -164,7 +164,7 @@ def test_every_button_gets_a_platform_web_intent():
 def test_the_share_message_carries_the_channel_tagged_credit_link(seeded):
     identity = _identity(seeded)
     ctx = hub_ctx(identity, mint_records_token(identity))
-    assert ctx["my_link"] == "https://gorefer.in/r/wa/RJ4521"
+    assert ctx["my_link"] == "https://gorefer.in/zerodha/r/wa/RJ4521"
     assert ctx["my_link"] in ctx["share_message"]
 
 

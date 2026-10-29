@@ -99,7 +99,7 @@ def test_no_opener_output_is_byte_identical_to_the_pre_change_state(seeded):
     """
     expected = (
         "Open a free Zerodha account — my referral link:\n"
-        "https://gorefer.in/r/wa/RJ4521\n"
+        "https://gorefer.in/zerodha/r/wa/RJ4521\n"  # program link word (owner, 2026-10-29)
         "\n"
         "Disclosures: https://gorefer.in/d/pifs"
     )

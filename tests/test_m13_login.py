@@ -466,7 +466,7 @@ def test_my_referrals_works_with_zero_activity(client, seeded, onfile_customer, 
     _login_via_otp(client, seeded)
     resp = client.get("/my/referrals")
     assert resp.status_code == 200
-    assert f"gorefer.in/r/{CID}" in resp.content.decode()
+    assert f"gorefer.in/zerodha/r/{CID}" in resp.content.decode()
 
 
 # --- ADR-026 shared-template sweep: nothing admin-only may reach the customer role ---

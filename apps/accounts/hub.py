@@ -342,7 +342,7 @@ def hub_ctx(identity, token: str, lang: str = LANG_EN, *, session_mode: bool = F
     tenant_id = identity.tenant_id
     client_id = identity.client_id
 
-    link = tracked_link(LINK_CHANNEL, client_id)
+    link = tracked_link(LINK_CHANNEL, client_id, tenant_id=tenant_id)
     # T-064: the referrer's own opening line, when they have written one and the
     # feature is on for this tenant. It reaches EVERY share surface on this page
     # through the single `message` below — the platform buttons, the copy button and

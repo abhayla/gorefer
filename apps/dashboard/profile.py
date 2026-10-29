@@ -24,6 +24,7 @@ from apps.integrations.ports import (
     ZohoContact,
     get_crm_read_port,
 )
+from apps.referrals.links import referral_path
 from apps.referrals.models import Lead, Prospect, Referral, ReferralIdentity
 
 # Referrer-name lookup: the ONE shared helper (also used by apps/dashboard/queries),
@@ -52,10 +53,17 @@ PROFILE_CONFIG = {
         "Visitor count is approximate (bot-filtered). Bot/preview hits are logged but "
         "excluded from click & visitor totals."
     ),
-    "link_base": "gorefer.in/r/",
+    # Host of the referral links shown here; the path (with the program's link word,
+    # e.g. /zerodha/r/{id}) comes from apps.referrals.links — see referral_link().
+    "link_host": "gorefer.in",
     # §4.4 disclosure host linked from the referrer self-view share text (ADR-031).
     "disclosure_url": "gorefer.in/d/pifs",
 }
+
+
+def referral_link(tenant, client_id: str, *, channel: str | None = None) -> str:
+    """Scheme-less referral link for display/share, e.g. gorefer.in/zerodha/r/RJ4521."""
+    return f"{PROFILE_CONFIG['link_host']}{referral_path(client_id, channel=channel, tenant=tenant)}"
 
 
 def _device_and_ua(user_agent: str) -> tuple[str, str]:
@@ -362,7 +370,7 @@ def per_link_cards(tenant, client_id: str) -> list[dict]:
             {
                 "partner_name": program.name,
                 "partner_code": program.partner.code if program.partner_id else "",
-                "link": f"{PROFILE_CONFIG['link_base']}{client_id}",
+                "link": referral_link(tenant, client_id),
                 "clicks": 0, "leads": 0, "accounts": 0,
             },
         )

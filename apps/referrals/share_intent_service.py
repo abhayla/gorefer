@@ -29,6 +29,7 @@ from apps.events.bots import is_bot_user_agent
 from apps.events.models import Event
 from gorefer.flags import SHARE_CHANNEL_OTHER, SHARE_INTENT_CHANNELS, flags, normalize_share_channel
 
+from .links import referral_path
 from .redirect_service import get_active_program, lazy_get_or_create_referral
 
 logger = logging.getLogger("gorefer.share_intent")
@@ -56,14 +57,15 @@ def _public_host() -> str:
     return base
 
 
-def tracked_link(channel: str, client_id: str) -> str:
+def tracked_link(channel: str, client_id: str, *, tenant_id: int | None = None) -> str:
     # Full https URL, matching the selfview share builder. A scheme-less link is
     # not linkified by every client, and — observed live 2026-07-28 — it loses the
     # WhatsApp preview card to the disclosure URL (the message's only full URL),
     # so recipients saw a "Disclosures" headline instead of the referral landing.
     # The tracked link must be the FIRST full URL in the kit so the preview is the
-    # PIFS-branded landing page.
-    return f"https://{_public_host()}/r/{channel}/{client_id}"
+    # PIFS-branded landing page. The path comes from the ONE link builder, so it
+    # carries the program's link word (/zerodha/r/wa/{id}) when one is configured.
+    return f"https://{_public_host()}{referral_path(client_id, channel=channel, tenant=tenant_id)}"
 
 
 SHARE_KIT_MESSAGE_KEY = "share_kit_message_template"
@@ -123,7 +125,7 @@ def kit_message(
     except Exception:
         template = default
     brand = brand_for_program(program) if program is not None else brand_for_tenant_id(tenant_id)
-    link = tracked_link(channel, client_id)
+    link = tracked_link(channel, client_id, tenant_id=tenant_id)
     anchor = disclosure_anchor()
 
     personal = str(opener or "").strip()

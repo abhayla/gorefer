@@ -113,7 +113,7 @@ def my_referrals_ctx(tenant, client_id: str) -> dict:
     clicks = profile.clicks_rows(tenant, client_id)
     if getattr(settings, "PII_MASK_FOR_CUSTOMER_VIEW", True):
         clicks = _mask_clicks(clicks)
-    my_link = f"https://{profile.PROFILE_CONFIG['link_base']}{client_id}"
+    my_link = f"https://{profile.referral_link(tenant, client_id)}"
     disclosure = f"https://{profile.PROFILE_CONFIG['disclosure_url']}"
     return {
         "client_id": client_id,
@@ -141,7 +141,7 @@ def my_referrals_ctx(tenant, client_id: str) -> dict:
         # disclosure host (ADR-031/032 — the light message's compliance anchor).
         "share_text": (
             f"Open your free {_program_brand(tenant, client_id)} account with my referral link: "
-            f"https://{profile.PROFILE_CONFIG['link_base']}wa/{client_id} "
+            f"https://{profile.referral_link(tenant, client_id, channel='wa')} "
             f"· Disclosures: {disclosure}"
         ),
     }

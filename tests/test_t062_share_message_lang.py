@@ -276,8 +276,9 @@ def test_zero_behavior_change_default_share_prefill_is_byte_identical(seeded, cl
     with no cascade override and no stored language set."""
     resp = client.get(f"/share/wa/{CID}", **HUMAN)
     text = urllib.parse.parse_qs(urllib.parse.urlparse(resp["Location"]).query).get("text", [""])[0]
+    # Link carries the program's link word since 2026-10-29 (owner decision).
     expected = flags.SHARE_KIT_MESSAGE_TEMPLATE.format(
-        link=f"https://gorefer.in/r/wa/{CID}", program_brand="Zerodha"
+        link=f"https://gorefer.in/zerodha/r/wa/{CID}", program_brand="Zerodha"
     )
     assert text == expected + "\n\nDisclosures: https://gorefer.in/d/pifs"
 
