@@ -32,12 +32,14 @@ from .landing_mode import LANDING_MODE_DIRECT, resolve_landing_mode
 from .links import matches_program_prefix, referral_path
 from .models import ProgramRedirectRule, ReferralIdentity, ReferralProgram
 from .redirect_service import (
+    RESERVED_OPEN,
     build_continue_redirect,
     can_pass_through,
     handle_direct_redirect,
     handle_landing_view,
     handle_partner_direct,
     handle_unknown_id_redirect,
+    is_channel_code,
     is_reserved_open,
 )
 from .share_intent_service import handle_share_intent
@@ -184,6 +186,10 @@ def referral_redirect(request, client_id: str, channel: str | None = None):
     tenant = get_current_tenant(request)
     if is_reserved_open(client_id):  # /r/open - checked BEFORE validation (T-574)
         return _passthrough_response(request, tenant, client_id, channel)
+    if channel is None and is_channel_code(client_id):
+        # /r/wa, /r/yt (owner 2026-10-29): a bare channel code is a channel-only link, not a
+        # referrer id - behaves exactly like /r/{channel}/open, recording the channel.
+        return _passthrough_response(request, tenant, RESERVED_OPEN, client_id)
     try:
         # STRICT, per-partner (owner decision 2026-07-27): this path CREATES an identity,
         # so a leaked chatbot label like `TALK` — or the partner code `ZMPHZC` itself —
@@ -240,6 +246,12 @@ def referral_redirect(request, client_id: str, channel: str | None = None):
     response = render(request, "landing.html", context)
     _set_visitor_cookie(response, visitor_id, is_new)
     return response
+
+
+@require_GET
+def channel_only_redirect(request, channel: str):
+    """GET /r/{channel}/ (owner 2026-10-29) - a channel link with no client id: same as /r/open."""
+    return _passthrough_response(request, get_current_tenant(request), RESERVED_OPEN, channel)
 
 
 @require_GET
@@ -493,6 +505,12 @@ def prefixed_partner_direct_redirect(request, program_prefix: str):
 def prefixed_referral_redirect(request, program_prefix: str, client_id: str, channel: str | None = None):
     _require_program_prefix(request, program_prefix)
     return referral_redirect(request, client_id, channel=channel)
+
+
+@require_GET
+def prefixed_channel_only_redirect(request, program_prefix: str, channel: str):
+    _require_program_prefix(request, program_prefix)  # 404 before any write
+    return channel_only_redirect(request, channel)
 
 
 @require_GET
