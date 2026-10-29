@@ -505,3 +505,16 @@ def prefixed_referral_continue(request, program_prefix: str, client_id: str, cha
 def prefixed_share_recovery_view(request, program_prefix: str):
     _require_program_prefix(request, program_prefix)
     return share_recovery_view(request)
+
+
+@require_GET
+def prefixed_share_intent_redirect(request, program_prefix: str, channel: str, client_id: str):
+    # Fails closed (404) on a non-matching prefix BEFORE the delegate can write anything.
+    _require_program_prefix(request, program_prefix)
+    return share_intent_redirect(request, channel, client_id)
+
+
+@require_GET
+def prefixed_share_channel_recovery_view(request, program_prefix: str, channel: str):
+    _require_program_prefix(request, program_prefix)
+    return share_recovery_view(request, channel=channel)
