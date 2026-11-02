@@ -412,7 +412,10 @@ def test_a_deleted_referrer_link_shows_the_prompt_and_records_nothing(
     resp = _get(path, django_capture_on_commit_callbacks)
     assert resp.status_code == 200
     assert REF_TITLE in resp.content.decode()
-    assert not Event.objects.filter(event_type="click", id__gt=deleted_ref).exists()
+    # Only the pop-up's own view event may appear: no click, landing or continue event.
+    assert set(Event.objects.filter(id__gt=deleted_ref).values_list("event_type", flat=True)) <= {
+        "share_recovery_viewed"
+    }
     assert ReferralIdentity.objects.filter(client_id="ZQ7001").count() == 1
 
 
@@ -461,3 +464,19 @@ def test_a_live_referrer_still_works(seeded, django_capture_on_commit_callbacks)
     assert resp.status_code in (200, 302)
     assert ReferralIdentity.objects.filter(client_id="ZQ7002", deleted_at__isnull=True).exists()
     assert Event.objects.filter(event_type="click", referral__referral_identity__client_id="ZQ7002").exists()
+
+
+def test_lead_api_refuses_a_deleted_referrer(deleted_ref):
+    """A landing page opened before the delete must not save a lead on the deleted row."""
+    import json
+
+    from apps.referrals.models import Lead
+
+    resp = Client().post(
+        "/api/leads/",
+        data=json.dumps({"client_id": "ZQ7001", "name": "Rahul Sharma",
+                         "mobile": "9876543210", "consent": True}),
+        content_type="application/json", **HUMAN,
+    )
+    assert resp.status_code == 400
+    assert not Lead.objects.exists()
