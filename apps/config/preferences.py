@@ -138,6 +138,86 @@ KITE_PROMPT_FIELDS = [
 ]
 
 
+# --- Link preview card v2 (owner 2026-11-03) ----------------------------------------
+# Two tenant switches, both default OFF: with v2 off every public output is byte-identical
+# to the v1 card. The name switch only matters when v2 is on.
+PREVIEW_CARD_V2_ENABLED = "preview_card_v2_enabled"
+PREVIEW_CARD_NAME_ENABLED = "preview_card_referrer_name_enabled"
+# Every word on the card and in its preview title is a key (rail E-6). `{first_name}` is
+# substituted with a plain str.replace, so a stray brace in operator copy cannot break it.
+PREVIEW_CARD_EYEBROW = "preview_card_eyebrow"
+PREVIEW_CARD_EYEBROW_DEFAULT = "YOU'VE BEEN PERSONALLY INVITED"
+PREVIEW_CARD_NAMED_EYEBROW = "preview_card_named_eyebrow"
+PREVIEW_CARD_NAMED_EYEBROW_DEFAULT = "{first_name} INVITED YOU"
+PREVIEW_CARD_HEADLINE = "preview_card_headline"
+PREVIEW_CARD_HEADLINE_DEFAULT = "Open your Zerodha account online"
+PREVIEW_CARD_PRICE_BIG = "preview_card_price_big"
+PREVIEW_CARD_PRICE_BIG_DEFAULT = "₹0"
+PREVIEW_CARD_PRICE_REST = "preview_card_price_rest"
+PREVIEW_CARD_PRICE_REST_DEFAULT = "account opening"
+PREVIEW_CARD_DOCS_LINE = "preview_card_docs_line"
+PREVIEW_CARD_DOCS_LINE_DEFAULT = "Keep PAN, Aadhaar-linked mobile & bank details ready."
+PREVIEW_CARD_CTA = "preview_card_cta"
+PREVIEW_CARD_CTA_DEFAULT = "Tap to start  →"
+PREVIEW_CARD_OG_TITLE = "preview_card_og_title"
+PREVIEW_CARD_OG_TITLE_DEFAULT = "Open your Zerodha account online — ₹0 account opening"
+PREVIEW_CARD_OG_TITLE_NAMED = "preview_card_og_title_named"
+PREVIEW_CARD_OG_TITLE_NAMED_DEFAULT = "{first_name} invited you — open your Zerodha account online"
+PREVIEW_CARD_OG_DESCRIPTION = "preview_card_og_description"
+PREVIEW_CARD_OG_DESCRIPTION_DEFAULT = (
+    "You've been personally invited. Keep PAN, Aadhaar-linked mobile & bank details ready. "
+    + settings.MARKET_RISK_WARNING
+)
+PREVIEW_CARD_OG_SITE_NAME = "preview_card_og_site_name"
+PREVIEW_CARD_OG_SITE_NAME_DEFAULT = "GoRefer"
+
+PREVIEW_CARD_FIELDS = [
+    (PREVIEW_CARD_EYEBROW, "Card: top line", PREVIEW_CARD_EYEBROW_DEFAULT),
+    (PREVIEW_CARD_NAMED_EYEBROW, "Card: top line with the referrer's name",
+     PREVIEW_CARD_NAMED_EYEBROW_DEFAULT),
+    (PREVIEW_CARD_HEADLINE, "Card: headline", PREVIEW_CARD_HEADLINE_DEFAULT),
+    (PREVIEW_CARD_PRICE_BIG, "Card: price (big)", PREVIEW_CARD_PRICE_BIG_DEFAULT),
+    (PREVIEW_CARD_PRICE_REST, "Card: price (rest)", PREVIEW_CARD_PRICE_REST_DEFAULT),
+    (PREVIEW_CARD_DOCS_LINE, "Card: documents line", PREVIEW_CARD_DOCS_LINE_DEFAULT),
+    (PREVIEW_CARD_CTA, "Card: tap button", PREVIEW_CARD_CTA_DEFAULT),
+    (PREVIEW_CARD_OG_TITLE, "Preview title", PREVIEW_CARD_OG_TITLE_DEFAULT),
+    (PREVIEW_CARD_OG_TITLE_NAMED, "Preview title with the referrer's name",
+     PREVIEW_CARD_OG_TITLE_NAMED_DEFAULT),
+    (PREVIEW_CARD_OG_DESCRIPTION, "Preview description", PREVIEW_CARD_OG_DESCRIPTION_DEFAULT),
+    (PREVIEW_CARD_OG_SITE_NAME, "Preview site name", PREVIEW_CARD_OG_SITE_NAME_DEFAULT),
+]
+
+# My Referrals "Your link preview" box (shown only when both switches are on).
+MY_PREVIEW_HEADING = "my_preview_heading"
+MY_PREVIEW_HELP = "my_preview_help"
+MY_PREVIEW_NAME_LABEL = "my_preview_name_label"
+MY_PREVIEW_SWITCH_LABEL = "my_preview_switch_label"
+MY_PREVIEW_SAVE = "my_preview_save"
+MY_PREVIEW_SAVED = "my_preview_saved"
+MY_PREVIEW_ERROR = "my_preview_error"
+MY_PREVIEW_FIELDS = [
+    (MY_PREVIEW_HEADING, "My Referrals: heading", "Your link preview"),
+    (MY_PREVIEW_HELP, "My Referrals: help text",
+     "Friends see this card when you share your link. Turn the switch off to show the card "
+     "without your name."),
+    (MY_PREVIEW_NAME_LABEL, "My Referrals: name box label", "First name to show"),
+    (MY_PREVIEW_SWITCH_LABEL, "My Referrals: switch label", "Show my first name on my link preview"),
+    (MY_PREVIEW_SAVE, "My Referrals: save button", "Save"),
+    (MY_PREVIEW_SAVED, "My Referrals: saved message", "Saved. New shares will show this card."),
+    (MY_PREVIEW_ERROR, "My Referrals: error message",
+     "Use your first name in English letters only (2–15 letters)."),
+]
+
+
+def preview_card_fields_view(tenant_id: int | None = None) -> list[dict]:
+    """Rows for the Preferences 'Link preview card' section: form key, label, current value."""
+    return [
+        {"form_key": key, "label": label, "default": default,
+         "value": resolve(key, tenant_id=tenant_id, default=default)}
+        for key, label, default in PREVIEW_CARD_FIELDS + MY_PREVIEW_FIELDS
+    ]
+
+
 def kite_prompt_fields_view(tenant_id: int | None = None) -> list[dict]:
     """Rows for the Preferences 'Kite ID pop-up' section: form key, label, current value."""
     rows = []
@@ -942,6 +1022,10 @@ def central_defaults() -> dict:
         # Kite ID pop-up (owner 2026-11-02) — see the key block above.
         **{key: default for key, _label, default in KITE_PROMPT_FIELDS if key != CLIENT_ID_PLACEHOLDER_WORDS},
         CLIENT_ID_PLACEHOLDER_WORDS: CLIENT_ID_PLACEHOLDER_WORDS_DEFAULT,
+        # Link preview card v2 (owner 2026-11-03): switches OFF, copy = the approved card.
+        PREVIEW_CARD_V2_ENABLED: False,
+        PREVIEW_CARD_NAME_ENABLED: False,
+        **{key: default for key, _label, default in PREVIEW_CARD_FIELDS + MY_PREVIEW_FIELDS},
         RECORDS_LINK_TTL_DAYS: RECORDS_LINK_TTL_DAYS_DEFAULT,
         RECORDS_MINT_DATE_FORMAT: RECORDS_MINT_DATE_FORMAT_DEFAULT,
         RECORDS_LINK_TEMPLATE_EN: RECORDS_LINK_TEMPLATE_EN_DEFAULT,

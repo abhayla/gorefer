@@ -97,6 +97,8 @@ def current_view(tenant) -> dict:
         "messaging_engine_fields": prefkeys.messaging_engine_fields_view(tenant_id),
         # Kite ID pop-up (owner 2026-11-02) — the words on the pop-up + placeholder list.
         "kite_prompt_fields": prefkeys.kite_prompt_fields_view(tenant_id),
+        # Link preview card v2 (owner 2026-11-03) — every word on the card + My Referrals box.
+        "preview_card_fields": prefkeys.preview_card_fields_view(tenant_id),
     }
 
 
@@ -401,7 +403,22 @@ def save_preferences(tenant, data, *, user=None) -> list[str]:
 
     # --- Kite ID pop-up copy + placeholder words (owner 2026-11-02) ----------------
     notices.extend(_save_kite_prompt(tenant_id, data, user=user))
+
+    # --- Link preview card v2 copy (owner 2026-11-03) ------------------------------
+    notices.extend(_save_preview_card(tenant_id, data, user=user))
     return notices
+
+
+def _save_preview_card(tenant_id, data, *, user=None) -> list[str]:
+    """Persist the preview-card + My Referrals box wording. Blank resets to the default.
+
+    The legal band is NOT here: it always uses the locked compliance values."""
+    for key, _label, default in prefkeys.PREVIEW_CARD_FIELDS + prefkeys.MY_PREVIEW_FIELDS:
+        if key not in data:
+            continue  # field not submitted -> leave as-is
+        raw = str(data.get(key) or "").strip()
+        set_tenant(key, raw or default, tenant_id=tenant_id, user=user)
+    return []
 
 
 def _share_template_problem(message: str) -> str:

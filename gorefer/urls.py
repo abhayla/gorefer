@@ -29,6 +29,8 @@ from api.router import api
 from apps.referrals.views import (
     channel_only_redirect,
     disclosure_page,
+    og_card,
+    og_card_named,
     partner_direct_redirect,
     prefixed_channel_only_redirect,
     prefixed_partner_direct_redirect,
@@ -56,6 +58,9 @@ if "channel" not in get_converters():
 urlpatterns = [
     path("", TemplateView.as_view(template_name="home.html"), name="home"),
     path("open", partner_direct_redirect, name="partner_direct"),
+    # Preview card v2 images (owner 2026-11-03) — public; 404 while the v2 switch is off.
+    path("og/card.png", og_card, name="og_card"),
+    path("og/card/<str:client_id>.png", og_card_named, name="og_card_named"),
     # Per-sub-broker disclosure page (B2 / ADR-031) — the canonical §4.4 host.
     path("d/<slug:slug>", disclosure_page, name="disclosure_page"),
     # Public, no-login DPDP privacy policy (T-148) — the landing form's consent

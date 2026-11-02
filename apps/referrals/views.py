@@ -114,9 +114,19 @@ def _og_context(request, client_id: str) -> dict:
     """
     from django.conf import settings
 
+    from apps.referrals import og
     from apps.referrals.og import absolute_image_url
 
     base = (settings.PUBLIC_BASE_URL or "").rstrip("/")
+    tenant = get_current_tenant(request)
+    og_url = f"{base}{referral_path(client_id, tenant=tenant)}"
+    tenant_id = getattr(tenant, "id", None)
+    if og.v2_enabled(tenant_id):
+        # v2 (owner 2026-11-03): the same generic card the crawler page serves, so the two
+        # cards cannot drift. Never named here — only the crawler bot branch names.
+        meta = og.v2_meta(tenant_id, tenant=tenant)
+        return {key: meta[key] for key in ("og_title", "og_description", "og_image", "og_site_name")} | {
+            "og_url": og_url}
     # ONE canonical absolute-OG-image builder, shared with the D2 crawler card — the
     # crawler card shipped with a relative og:image because it did not reuse this.
     image = absolute_image_url(settings.OG_IMAGE)
@@ -216,7 +226,10 @@ def referral_redirect(request, client_id: str, channel: str | None = None):
     # PIFS's — on the one surface a friend sees before tapping. Checked BEFORE visitor-cookie
     # issuance and before any journey work, so a preview fetch still creates nothing.
     if is_bot_user_agent(request.META.get("HTTP_USER_AGENT", "")):
-        return render_preview(request, tenant_id=getattr(tenant, "id", None))
+        # v2 (owner 2026-11-03): the ONLY caller that passes the id, so only a referral
+        # link can carry the referrer's first name; every other preview is generic.
+        return render_preview(request, tenant_id=getattr(tenant, "id", None),
+                              client_id=normalized, tenant=tenant)
 
     visitor_id, is_new = _ensure_visitor_id(request)
 
@@ -712,3 +725,43 @@ def prefixed_share_intent_redirect(request, program_prefix: str, channel: str, c
 def prefixed_share_prompt_view(request, program_prefix: str, channel: str):
     _require_program_prefix(request, program_prefix)
     return share_prompt_view(request, channel)
+
+
+# --- Preview card v2 image routes (owner 2026-11-03) -------------------------------------
+# Public, no login. 404 while `preview_card_v2_enabled` is off. The named route NEVER fails:
+# any ineligible id (switch off, unknown, deleted, placeholder, no/invalid name, opted out)
+# gets the GENERIC card bytes, because a broken image kills the whole preview.
+
+def _card_response(request, tenant, client_id: str | None):
+    from django.conf import settings
+    from django.http import HttpResponse, HttpResponseNotFound
+
+    from apps.referrals import og
+
+    tenant_id = getattr(tenant, "id", None)
+    if not og.v2_enabled(tenant_id):
+        return HttpResponseNotFound()
+    try:
+        check_rate("og_card", client_ip(request),
+                   limit=settings.RATELIMIT_CLICK_MAX, window=settings.RATELIMIT_API_WINDOW)
+    except RateLimited as exc:
+        resp = HttpResponse("Too many requests", status=429, content_type="text/plain")
+        resp["Retry-After"] = str(exc.retry_after)
+        return resp
+    first_name = og.named_first_name(tenant, client_id) if client_id else None
+    png = og.card_png(og.v2_card_text(tenant_id, first_name))
+    resp = HttpResponse(png, content_type="image/png")
+    resp["Cache-Control"] = "public, max-age=86400"
+    return resp
+
+
+@require_GET
+def og_card(request):
+    """GET /og/card.png — the generic v2 preview card."""
+    return _card_response(request, get_current_tenant(request), None)
+
+
+@require_GET
+def og_card_named(request, client_id: str):
+    """GET /og/card/<client_id>.png — the referrer's named card, or the generic one."""
+    return _card_response(request, get_current_tenant(request), client_id)
