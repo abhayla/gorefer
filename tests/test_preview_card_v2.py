@@ -719,6 +719,34 @@ def test_anonymous_post_goes_to_login(seeded):
     assert resp.status_code == 302 and "/login" in resp["Location"]
 
 
+def test_every_new_string_and_switch_has_a_central_default(seeded):
+    """E-6: every card / preview / My Referrals string is seeded centrally by seed_program
+    (central_defaults), and both switches are seeded OFF."""
+    for key, _label, default in p.PREVIEW_CARD_FIELDS + p.MY_PREVIEW_FIELDS:
+        assert resolve(key) == default, key
+    assert resolve(p.PREVIEW_CARD_V2_ENABLED) is False
+    assert resolve(p.PREVIEW_CARD_NAME_ENABLED) is False
+
+
+@pytestmark_login
+def test_every_my_referrals_box_string_is_a_cascade_key(seeded):
+    """E-6 spot test: each my_preview_* key, overridden at the tenant tier, changes the page."""
+    _on(seeded, name=True)
+    _identity(seeded)
+    _customer(seeded)
+    for key, _label, _default in p.MY_PREVIEW_FIELDS:
+        set_tenant(key, f"Changed {key}", tenant_id=seeded.id)
+    client = _login(seeded)
+    body = client.get("/my/referrals").content.decode()
+    for key in (p.MY_PREVIEW_HEADING, p.MY_PREVIEW_HELP, p.MY_PREVIEW_NAME_LABEL,
+                p.MY_PREVIEW_SWITCH_LABEL, p.MY_PREVIEW_SAVE):
+        assert f"Changed {key}" in body, key
+    bad = client.post("/my/referrals/preview-name", {"preview_name": "R1"}).content.decode()
+    assert f"Changed {p.MY_PREVIEW_ERROR}" in bad
+    client.post("/my/referrals/preview-name", {"preview_name": "Priya"})
+    assert f"Changed {p.MY_PREVIEW_SAVED}" in client.get("/my/referrals").content.decode()
+
+
 def test_django_admin_change_form_shows_the_preview_fields(seeded):
     cust = _customer(seeded)
     get_user_model().objects.create_superuser(username="root@pifs.in", email="root@pifs.in",
