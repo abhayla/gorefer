@@ -234,23 +234,23 @@ def is_evidenced_referrer(tenant, normalized: str) -> bool:
     referrer. One click on `/r/<any id>` creates an identity, and the daily Zoho name sync
     then fills that client's real first name — so a stranger could switch on a public name
     for a client who never shared a link. The owner's rule names *referrers*; these are the
-    signals that mean one, none of which a click can create:
-      1. an ACTIVE ReferrerAccount bound to the id (they logged in: ownership proven);
-      2. a Zoho-sourced, non-reversed Conversion crediting the id (Zoho is the truth);
-      3. an ACTIVE SyncedReferrer row (the Zoho-synced referrer audience).
+    signals that mean one, none of which a click or a form submit can create:
+      1. an ACTIVE ReferrerAccount bound to the id (they logged in via an OTP to the
+         on-file channel, OAuth on-file bind, or staff approval: ownership proven);
+      2. a non-reversed Conversion crediting the id (written only by the Zoho ingest path).
+    NOT a signal: a SyncedReferrer row. It mirrors Zoho's Referrers module, which Zoho-side
+    rules fill; nothing in this repo proves a stranger's lead cannot create one there, so
+    it fails closed (Tier-A review round 3, 2026-11-03).
     """
     from apps.accounts.models import ReferrerAccount
-    from apps.campaigns.models import SyncedReferrer
     from apps.integrations.models import Conversion
 
     tenant_id = getattr(tenant, "id", tenant)
     if ReferrerAccount.objects.for_tenant(tenant_id).filter(
             client_id=normalized, status=ReferrerAccount.STATUS_ACTIVE).exists():
         return True
-    if Conversion.objects.for_tenant(tenant_id).filter(
-            referrer_client_id=normalized, is_reversed=False).exists():
-        return True
-    return SyncedReferrer.objects.for_tenant(tenant_id).filter(client_id=normalized, active=True).exists()
+    return Conversion.objects.for_tenant(tenant_id).filter(
+        referrer_client_id=normalized, is_reversed=False).exists()
 
 
 def v2_card_text(tenant_id: int | None, first_name: str | None = None):
@@ -350,7 +350,11 @@ def v2_meta(tenant_id: int | None, *, tenant=None, client_id: str | None = None)
     """og title/description/site/image for v2. Named only when `client_id` is eligible."""
     from apps.config import preferences as p
 
-    first_name = named_first_name(tenant, client_id) if client_id else None
+    try:
+        first_name = named_first_name(tenant, client_id) if client_id else None
+    except Exception:  # a lookup failure -> the generic card, never a 500 on the crawler page
+        logger.error("preview card v2: name lookup failed; serving the generic card", exc_info=True)
+        first_name = None
     normalized = None
     if first_name:
         from apps.referrals.validators import validate_client_id_for

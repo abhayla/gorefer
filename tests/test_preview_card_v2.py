@@ -173,14 +173,10 @@ def _customer(tenant, client_id: str = CID, *, first_name: str = "Rahul", eviden
     return customer
 
 
-def _evidence(tenant, client_id: str = CID, kind: str = "synced", *, active: bool = True):
-    """One real-referrer signal (og.is_evidenced_referrer): synced / account / conversion."""
-    from apps.campaigns.models import SyncedReferrer
-
-    if kind == "synced":
-        SyncedReferrer.objects.get_or_create(
-            tenant=tenant, client_id=client_id,
-            defaults={"mobile": "919876543210", "record_created_at": timezone.now(), "active": active})
+def _evidence(tenant, client_id: str = CID, kind: str = "conversion", *, active: bool = True):
+    """One real-referrer signal (og.is_evidenced_referrer): "conversion" or "account"."""
+    if kind == "conversion":
+        _conversion(tenant, client_id, reversed_=not active)
     elif kind == "account":
         from apps.accounts import service as accounts_service
         from apps.accounts.models import ReferrerAccount
@@ -190,18 +186,19 @@ def _evidence(tenant, client_id: str = CID, kind: str = "synced", *, active: boo
         if not active:
             account.status = ReferrerAccount.STATUS_DISABLED
             account.save(update_fields=["status"])
-    elif kind == "conversion":
-        _conversion(tenant, client_id)
+    else:  # pragma: no cover - guards a typo in a test
+        raise ValueError(kind)
 
 
-def _conversion(tenant, client_id: str, *, reversed_: bool = False):
+def _conversion(tenant, client_id: str, *, reversed_: bool = False, program=None):
     """A Zoho-shaped conversion row crediting `client_id` (test fixture, not a GoRefer write)."""
     from apps.integrations.models import Conversion
 
-    return Conversion.objects.create(
-        tenant=tenant, program=ReferralProgram.objects.get(tenant=tenant),
-        referrer_client_id=client_id, opener_zerodha_account_id=f"OP{client_id}",
-        source_origin="zoho", is_reversed=reversed_)
+    row, _ = Conversion.objects.get_or_create(
+        tenant=tenant, opener_zerodha_account_id=f"OP{client_id}",
+        defaults={"program": program or ReferralProgram.objects.get(tenant=tenant),
+                  "referrer_client_id": client_id, "source_origin": "zoho", "is_reversed": reversed_})
+    return row
 
 
 def _identity(tenant, client_id: str = CID) -> ReferralIdentity:
@@ -460,7 +457,7 @@ def test_a_strangers_click_plus_the_zoho_sync_never_publishes_a_name(
     assert "Priya" not in html and "/og/card.png?v=" in html
 
 
-@pytest.mark.parametrize("kind", ["synced", "account", "conversion"])
+@pytest.mark.parametrize("kind", ["account", "conversion"])
 def test_each_real_referrer_signal_turns_the_name_on(seeded, kind):
     _on(seeded, name=True)
     _customer(seeded, evidence=False)
@@ -469,14 +466,24 @@ def test_each_real_referrer_signal_turns_the_name_on(seeded, kind):
     assert og.named_first_name(seeded, CID) == "Rahul"
 
 
-@pytest.mark.parametrize("kind", ["synced", "account", "conversion"])
+@pytest.mark.parametrize("kind", ["account", "conversion"])
 def test_a_switched_off_signal_is_not_evidence(seeded, kind):
+    # disabled login account / Zoho-reversed conversion
     _on(seeded, name=True)
     _customer(seeded, evidence=False)
-    if kind == "conversion":
-        _conversion(seeded, CID, reversed_=True)  # Zoho took the credit back
-    else:
-        _evidence(seeded, CID, kind, active=False)
+    _evidence(seeded, CID, kind, active=False)
+    assert og.named_first_name(seeded, CID) is None
+
+
+def test_a_synced_referrer_row_alone_is_not_evidence(seeded):
+    """Round-3 review: Zoho's Referrers module is filled by Zoho-side rules we cannot prove
+    a stranger's lead never triggers, so a SyncedReferrer row alone fails closed."""
+    from apps.campaigns.models import SyncedReferrer
+
+    _on(seeded, name=True)
+    _customer(seeded, evidence=False)
+    SyncedReferrer.objects.create(tenant=seeded, client_id=CID, mobile="919876543210",
+                                  record_created_at=timezone.now(), active=True)
     assert og.named_first_name(seeded, CID) is None
 
 
@@ -486,11 +493,21 @@ def test_another_tenants_signal_is_not_evidence(seeded):
     _on(seeded, name=True)
     _customer(seeded, evidence=False)
     other = Tenant.objects.create(name="Other AP", slug="other-ap")
-    from apps.campaigns.models import SyncedReferrer
-
-    SyncedReferrer.objects.create(tenant=other, client_id=CID, mobile="919876543210",
-                                  record_created_at=timezone.now())
+    _conversion(other, CID, program=ReferralProgram.objects.get(tenant=seeded))
     assert og.named_first_name(seeded, CID) is None
+
+
+def test_crawler_page_falls_back_to_generic_when_the_name_lookup_fails(seeded, monkeypatch):
+    _on(seeded, name=True)
+    _customer(seeded)
+
+    def boom(*_a, **_k):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(og, "named_first_name", boom)
+    resp = Client().get(f"/r/{CID}", **BOT)
+    assert resp.status_code == 200
+    assert "/og/card.png?v=" in resp.content.decode()
 
 
 def test_empty_first_name_gets_the_generic_card(seeded):
