@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -160,10 +161,14 @@ def legal_blocks(draw, disclosure: str, risk: str) -> tuple[list[str], list[str]
     return wrap(draw, disclosure, font, INNER), wrap(draw, risk, font, INNER)
 
 
+_LINE_BREAKS = re.compile(r"\s*[\r\n\t\v\f  ]+\s*")
+
+
 def _one_line(text: str) -> str:
-    """Collapse every whitespace run (incl. newlines) to one space: Pillow cannot measure
-    multi-line text, and operator copy can carry a newline (review finding, 2026-11-03)."""
-    return " ".join((text or "").split())
+    """Turn line breaks and tabs into one space: Pillow cannot measure multi-line text, and
+    operator copy can carry a newline (review finding, 2026-11-03). Ordinary spaces are
+    kept as typed — the approved "Tap to start  →" has a deliberate double space."""
+    return _LINE_BREAKS.sub(" ", text or "").strip()
 
 
 def render_card(lines: CardText) -> RenderResult:

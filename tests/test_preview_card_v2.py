@@ -95,6 +95,11 @@ def test_a_newline_in_operator_copy_does_not_crash_the_renderer(field):
     assert "Ab Cd Ef" in result.drawn
 
 
+def test_typed_spaces_are_kept_so_the_default_card_is_unchanged():
+    # The approved "Tap to start  →" has a deliberate double space; only line breaks go.
+    assert pc.render_card(_defaults_text()).drawn[5] == p.PREVIEW_CARD_CTA_DEFAULT
+
+
 def test_a_long_price_shrinks_instead_of_running_under_the_button():
     drawn = pc.render_card(_defaults_text(price_big="₹0 only today for everyone")).drawn
     assert drawn[2].endswith("…") or drawn[2] == "₹0 only today for everyone"
