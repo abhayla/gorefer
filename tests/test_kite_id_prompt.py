@@ -337,6 +337,7 @@ def test_every_channel_gets_the_prompt_and_keeps_its_channel(
 # which is per-partner config. The server never shortens a long id to that length.
 
 
+@pytest.mark.urls("tests.urls_share_intent")
 def test_the_box_stops_at_six_characters_for_zerodha(seeded, django_capture_on_commit_callbacks):
     for path in ("/r/wa/", "/share/wa/", "/zerodha/r/KITEID"):
         body = _get(path, django_capture_on_commit_callbacks).content.decode()
