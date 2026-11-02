@@ -180,13 +180,13 @@ def _evidence(tenant, client_id: str = CID, kind: str = "synced", *, active: boo
     if kind == "synced":
         SyncedReferrer.objects.get_or_create(
             tenant=tenant, client_id=client_id,
-            defaults={"mobile": "919800000000", "record_created_at": timezone.now(), "active": active})
+            defaults={"mobile": "919876543210", "record_created_at": timezone.now(), "active": active})
     elif kind == "account":
         from apps.accounts import service as accounts_service
         from apps.accounts.models import ReferrerAccount
 
         account = accounts_service.get_or_create_account(
-            tenant, client_id, bound_via=ReferrerAccount.BOUND_VIA_OTP, mobile="919800000001")
+            tenant, client_id, bound_via=ReferrerAccount.BOUND_VIA_OTP, mobile="919876543210")
         if not active:
             account.status = ReferrerAccount.STATUS_DISABLED
             account.save(update_fields=["status"])
@@ -488,7 +488,7 @@ def test_another_tenants_signal_is_not_evidence(seeded):
     other = Tenant.objects.create(name="Other AP", slug="other-ap")
     from apps.campaigns.models import SyncedReferrer
 
-    SyncedReferrer.objects.create(tenant=other, client_id=CID, mobile="919800000002",
+    SyncedReferrer.objects.create(tenant=other, client_id=CID, mobile="919876543210",
                                   record_created_at=timezone.now())
     assert og.named_first_name(seeded, CID) is None
 
