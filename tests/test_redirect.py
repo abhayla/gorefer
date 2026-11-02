@@ -64,10 +64,11 @@ def test_repeat_landing_same_visitor_is_idempotent_on_identity(seeded, client):
     assert Referral.objects.filter(source="referral_link").count() == 1
 
 
-def test_invalid_client_id_returns_400_and_creates_nothing(seeded, client):
-    # T-574: only over-long (>32) values keep the 400; shorter junk now passes through.
+def test_invalid_client_id_shows_prompt_and_creates_nothing(seeded, client):
+    # Owner 2026-11-02: any unusable id (incl. over-long) shows the Kite ID pop-up.
     resp = client.get("/r/" + "x" * 33, HTTP_USER_AGENT="Mozilla/5.0")
-    assert resp.status_code == 400
+    assert resp.status_code == 200
+    assert "Who referred you?" in resp.content.decode()
     assert ReferralIdentity.objects.count() == 0
     assert Referral.objects.count() == 0
 
@@ -299,11 +300,11 @@ def test_a_junk_client_id_creates_no_identity_on_the_redirect_path(client, seede
     from apps.referrals.models import ReferralIdentity
 
     before = ReferralIdentity.objects.count()
-    resp = client.get("/r/ABHAY", HTTP_USER_AGENT="Mozilla/5.0 (Android)", REMOTE_ADDR="203.0.113.9")
-    assert resp.status_code == 302  # T-574: passed through to the partner, was 400
-    assert resp.headers["Location"] == "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=ABHAY"
-    assert ReferralIdentity.objects.count() == before, "a junk id must create NO identity"
-    assert not ReferralIdentity.objects.filter(client_id="ABHAY").exists()
+    for junk in ("ABHAY", "KITEID"):  # wrong shape, and a placeholder with a real id's shape
+        resp = client.get(f"/r/{junk}", HTTP_USER_AGENT="Mozilla/5.0 (Android)", REMOTE_ADDR="203.0.113.9")
+        assert resp.status_code == 200  # Kite ID pop-up (owner 2026-11-02)
+        assert ReferralIdentity.objects.count() == before, "a junk id must create NO identity"
+        assert not ReferralIdentity.objects.filter(client_id=junk).exists()
 
 
 def test_a_real_client_id_still_works_end_to_end(client, seeded):

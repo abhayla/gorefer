@@ -47,10 +47,15 @@ SHARE_CHANNEL_LABELS = {
 }
 SHARE_CHANNEL_OTHER = "other"
 
-# One-tap share endpoint (M-WATI-1). Launch supports WhatsApp only — an unsupported
-# or unlisted channel 404s rather than silently falling back to "other" (unlike the
-# /r/ attribution tag above, this gates which channels the endpoint will SERVE).
-SHARE_INTENT_CHANNELS = frozenset({"wa"})
+# One-tap share endpoint (M-WATI-1). Launched with WhatsApp; X and Telegram added
+# 2026-11-02 (owner). An unsupported or unlisted channel 404s rather than silently
+# falling back to "other" (unlike the /r/ attribution tag above, this gates which
+# channels the endpoint will SERVE). Each code here needs a target builder in
+# apps.referrals.share_intent_service._CHANNEL_TARGET_BUILDERS.
+# Facebook ("fb") has a builder but is HELD (compliance review 2026-11-02): Facebook
+# accepts only a link, so the post carries no disclosure text — add "fb" here only once
+# the owner confirms the preview-card route with Zerodha compliance.
+SHARE_INTENT_CHANNELS = frozenset({"wa", "x", "tg"})
 
 
 def normalize_share_channel(raw: str | None) -> str | None:

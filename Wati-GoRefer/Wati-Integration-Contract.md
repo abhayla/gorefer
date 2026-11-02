@@ -396,6 +396,13 @@ fallback, the spec rule) raises `AssistedCaptureError` and the capture is reject
 same external behavior as before, just a narrower set of accepted ids on the happy
 path.
 
+**Placeholder words are refused too (owner decision 2026-11-02).** After the pattern
+check, `validate_client_id_for` also rejects a configured placeholder word such as
+`KITEID` — it has a real Zerodha id's shape, so the pattern alone let it through and it
+became a referrer. The list is the cascade key `client_id_placeholder_words` (editable on
+the Preferences screen); a capture carrying one is rejected exactly like any other
+invalid `client_id`. No webhook code changed — this rides on the shared validator.
+
 ## 10. Read-only engagement reporting — `apps/integrations/wati/engagement.py` (T-032)
 
 A daily scheduled job (`wa_engagement_report_daily`, django-q, fires at

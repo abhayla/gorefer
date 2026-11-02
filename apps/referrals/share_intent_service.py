@@ -24,6 +24,7 @@ from urllib.parse import quote
 from django.db import transaction
 from django.http import Http404
 
+from apps.config.cascade import resolve
 from apps.events import vocab
 from apps.events.bots import is_bot_user_agent
 from apps.events.models import Event
@@ -35,13 +36,32 @@ from .redirect_service import get_active_program, lazy_get_or_create_referral
 logger = logging.getLogger("gorefer.share_intent")
 
 
-def build_whatsapp_target(message: str) -> str:
+def build_whatsapp_target(message: str, link: str = "") -> str:
     """The WhatsApp share deep-link: a prefilled compose screen, no recipient."""
     return f"https://wa.me/?text={quote(message, safe='')}"
 
 
+# Facebook, X, Telegram (owner decision 2026-11-02): plain web share intents, the SAME
+# addresses the share hub's buttons already use (apps.accounts.hub._share_targets) — no
+# SDK, no third-party script. Facebook takes only the link (it ignores prefilled text);
+# X takes text only; Telegram takes both.
+def build_facebook_target(message: str, link: str) -> str:
+    return f"https://www.facebook.com/sharer/sharer.php?u={quote(link, safe='')}"
+
+
+def build_x_target(message: str, link: str) -> str:
+    return f"https://x.com/intent/post?text={quote(message, safe='')}"
+
+
+def build_telegram_target(message: str, link: str) -> str:
+    return f"https://t.me/share/url?url={quote(link, safe='')}&text={quote(message, safe='')}"
+
+
 _CHANNEL_TARGET_BUILDERS = {
     "wa": build_whatsapp_target,
+    "fb": build_facebook_target,
+    "x": build_x_target,
+    "tg": build_telegram_target,
 }
 
 
@@ -79,6 +99,7 @@ def kit_message(
     program=None,
     lang: str = "en",
     opener: str | None = None,
+    link: str | None = None,
 ) -> str:
     """The share prefill, resolved through the config cascade (CLAUDE.md §6d).
 
@@ -124,8 +145,20 @@ def kit_message(
         )
     except Exception:
         template = default
+    # A channel may carry its own English message (owner 2026-11-02: X allows 280
+    # characters, so it gets a shorter one). Cascade key `share_kit_message_template__{ch}`;
+    # blank/unset = the shared message above.
+    if lang == "en":
+        try:
+            key = f"{SHARE_KIT_MESSAGE_KEY}__{channel}"
+            override = str(resolve(key, tenant_id=tenant_id, default="") or "")
+        except Exception:
+            override = ""
+        template = override.strip() or template
     brand = brand_for_program(program) if program is not None else brand_for_tenant_id(tenant_id)
-    link = tracked_link(channel, client_id, tenant_id=tenant_id)
+    # `link` overrides the sharer's own credit link — only the Kite ID pop-up's "share
+    # without my ID" path passes one (the no-referrer link); every other caller omits it.
+    link = link or tracked_link(channel, client_id, tenant_id=tenant_id)
     anchor = disclosure_anchor()
 
     personal = str(opener or "").strip()
@@ -183,6 +216,19 @@ _tracked_link = tracked_link
 _kit_message = kit_message
 
 
+def share_message_for(tenant, channel: str, client_id: str, *, program=None, lang: str = "en") -> str:
+    """THE share message a referrer forwards for `channel` — the one-tap /share/ link and
+    the My Referrals page both read it from here, so they can never disagree (found
+    2026-11-02: My Referrals built its own text and ignored the owner's edited message).
+    `program` defaults to the tenant's active program."""
+    tenant_id = getattr(tenant, "id", None)
+    return kit_message(
+        channel, client_id, tenant_id,
+        program=program if program is not None else get_active_program(tenant),
+        lang=lang, opener=_opener_for(tenant_id, client_id),
+    )
+
+
 def _opener_for(tenant_id: int | None, client_id: str) -> str:
     """This client_id's saved personal opener, or "" — for the /share/ endpoint.
 
@@ -229,12 +275,9 @@ def handle_share_intent(
     # reads the referrer's personal opener too. Resolved from the already-existing
     # identity only — this lookup never creates one, so a bot hit (handled below) and
     # a first-ever share still behave exactly as they did before.
-    opener = _opener_for(tenant_id, client_id)
-
-    message = kit_message(
-        channel, client_id, tenant_id, program=program, lang=lang, opener=opener
-    )
-    destination = _CHANNEL_TARGET_BUILDERS[channel](message)
+    message = share_message_for(tenant, channel, client_id, program=program, lang=lang)
+    link = tracked_link(channel, client_id, tenant_id=tenant_id)
+    destination = _CHANNEL_TARGET_BUILDERS[channel](message, link)
 
     if is_bot_user_agent(user_agent):
         logger.info("bot/preview hit on /share/%s/%s — no journey created", channel, client_id)
@@ -252,6 +295,51 @@ def handle_share_intent(
             is_bot=False,
             person_ref_id=None,  # PII-FREE — no VisitorPII write for this endpoint
             metadata={"channel": normalize_share_channel(channel) or SHARE_CHANNEL_OTHER},
+        )
+    )
+    return destination
+
+
+def is_share_channel_served(channel: str) -> bool:
+    """True when /share/{channel}/... actually serves `channel` (same gate as below)."""
+    return channel in SHARE_INTENT_CHANNELS and channel in _CHANNEL_TARGET_BUILDERS
+
+
+def handle_share_without_id(*, tenant, channel: str, user_agent: str | None, lang: str = "en"):
+    """The Kite ID pop-up's "Share without my ID" (owner 2026-11-02). Returns the destination.
+
+    Same share message as /share/{channel}/{client_id}, but the link inside is the
+    program's no-referrer link (/{prefix}/r/open), so the friend still gets a working link
+    and nobody is credited. Records a PII-free share_intent on the partner-direct journey;
+    creates NO referrer identity. Raises Http404 for a channel the endpoint doesn't serve.
+    """
+    if not is_share_channel_served(channel):
+        raise Http404(f"unsupported share channel: {channel!r}")
+
+    from .links import referral_path
+    from .redirect_service import RESERVED_OPEN, _get_or_create_partner_direct_referral
+
+    program = get_active_program(tenant)
+    tenant_id = getattr(tenant, "id", None)
+    link = f"https://{_public_host()}{referral_path(RESERVED_OPEN, tenant=tenant)}"
+    message = kit_message(channel, "", tenant_id, program=program, lang=lang, link=link)
+    destination = _CHANNEL_TARGET_BUILDERS[channel](message, link)
+
+    if is_bot_user_agent(user_agent):
+        return destination
+
+    referral = _get_or_create_partner_direct_referral(tenant, program)
+    transaction.on_commit(
+        lambda: Event.objects.create(
+            tenant=tenant,
+            event_type=vocab.SHARE_INTENT,
+            source=vocab.SRC_WATI,
+            referral=referral,
+            user_type="anonymous",
+            user_agent=user_agent or "",
+            is_bot=False,
+            person_ref_id=None,
+            metadata={"channel": normalize_share_channel(channel) or SHARE_CHANNEL_OTHER, "without_id": True},
         )
     )
     return destination

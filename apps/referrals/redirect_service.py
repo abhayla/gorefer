@@ -332,16 +332,13 @@ def handle_partner_direct(*, tenant, visitor_id, user_agent, raw_ip, share_chann
 
 
 # ---------------------------------------------------------------------------
-# T-574 (owner decision 2026-10-22, SPEC CHANGE to the 2026-07-27 strict-id behaviour):
-# /r/<value> where <value> fails the strict partner id pattern is PASSED THROUGH to the
-# partner's lead URL (r=<raw value>) instead of a 400 - a lead who does not know their
-# Zerodha ID is sent to a link carrying a placeholder (KITEID, ZERODHAID...) and must be able
-# to edit the box on the partner page. Junk still NEVER becomes a referrer identity.
+# /r/open — the reserved partner-only link (06-API 4.1). T-574 (owner 2026-10-22) also
+# passed unknown/placeholder ids through to the partner as r=<value>; owner decision
+# 2026-11-02 replaced that with the Kite ID pop-up (apps.referrals.views), whose Skip
+# lands here: the partner's referral page with an empty box, no referrer identity.
 # ---------------------------------------------------------------------------
-PASSTHROUGH_MAX_LEN = 32  # abuse guard: longer values keep the branded 400
 RESERVED_OPEN = "open"  # /r/open - the spec's reserved partner-only link (06-API 4.1)
 PARTNER_REFERRAL_PAGE_KEY = "partner_referral_page_url_template"
-_UNRESERVED = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-~")
 
 
 def is_reserved_open(value: str) -> bool:
@@ -354,19 +351,6 @@ def is_channel_code(value: str) -> bool:
     Single source of truth: gorefer.flags.SHARE_CHANNEL_LABELS. Codes are letters-only, so
     one can never be a real Zerodha id (those carry digits); unknown words are NOT channels."""
     return (value or "").lower() in SHARE_CHANNEL_LABELS
-
-
-def can_pass_through(value: str) -> bool:
-    return 1 <= len(value or "") <= PASSTHROUGH_MAX_LEN
-
-
-def _encode_component(value: str) -> str:
-    """Percent-encode every byte outside the RFC 3986 unreserved set, by hand: this module's
-    source must not contain the stdlib URL-parsing module's name
-    (`test_redirect_service_imports_no_http_client` scans for it)."""
-    return "".join(
-        c if c in _UNRESERVED else "".join(f"%{b:02X}" for b in c.encode("utf-8")) for c in value
-    )
 
 
 def partner_referral_page_destination(program: ReferralProgram, *, tenant_id: int | None = None) -> str:
@@ -394,28 +378,14 @@ def partner_referral_page_destination(program: ReferralProgram, *, tenant_id: in
         return default.format(partner_code=program.partner.code, client_id="")
 
 
-def handle_unknown_id_redirect(*, tenant, raw_value: str, visitor_id, user_agent, raw_ip,
-                               share_channel=None):
-    """Resolve a /r/<value> hit whose value failed the strict id pattern (or is `open`).
+def handle_partner_referral_page_redirect(*, tenant, visitor_id, user_agent, raw_ip, share_channel=None):
+    """Resolve /r/open's destination (the Kite ID pop-up's Skip on a referral link).
 
-    Returns (destination_url, is_human_click). NO ReferralIdentity is created; a human click
-    is logged on the partner-direct journey (referrer NONE). The raw value is NEVER stored
-    or logged (it may be a mobile number) - it only appears, encoded, in the Location.
-    A bot/preview hit logs nothing."""
+    Returns (destination_url, is_human_click): the partner's referral page with an empty
+    box, partner code injected server-side. NO ReferralIdentity is created; a human click
+    is logged on the partner-direct journey (referrer NONE). A bot/preview hit logs nothing."""
     program = _active_program(tenant)
-    tenant_id = getattr(tenant, "id", None)
-    if is_reserved_open(raw_value):
-        destination = partner_referral_page_destination(program, tenant_id=tenant_id)
-    else:
-        rule = (
-            ProgramRedirectRule.objects.filter(program=program, is_active=True)
-            .order_by("priority").first()
-        )
-        if rule is None:
-            raise ProgramRedirectRule.DoesNotExist("no active redirect rule for program")
-        destination = rule.destination_url_template.format(
-            partner_code=program.partner.code, client_id=_encode_component(raw_value)
-        )
+    destination = partner_referral_page_destination(program, tenant_id=getattr(tenant, "id", None))
     if is_bot_user_agent(user_agent):
         return destination, False
     referral = _get_or_create_partner_direct_referral(tenant, program)

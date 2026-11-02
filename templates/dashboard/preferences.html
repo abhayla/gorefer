@@ -131,6 +131,13 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
                   class="mt-1.5 w-full rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none"
                   >{{ prefs.share_kit_message_template_hi }}</textarea>
       </div>
+      <div class="py-1.5 border-t border-line">
+        <label for="share_kit_message_template__x" class="text-[13.5px] font-semibold">Share message for X (English)</label>
+        <div class="text-[11.5px] text-ink-500 mt-0.5">X allows 280 characters (a link counts as 23), and the disclosure line is added after this text, so keep it short. Keep the market-risk warning in it. Telegram uses the English message above.</div>
+        <textarea id="share_kit_message_template__x" name="share_kit_message_template__x" rows="2"
+                  class="mt-1.5 w-full rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none"
+                  >{{ prefs.share_kit_message_template__x }}</textarea>
+      </div>
     </div>
 
     {# ---- Personal share message (T-064) ---------------------------------- #}
@@ -374,6 +381,27 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
           <input type="text" id="{{ f.form_key }}" name="{{ f.form_key }}" value="{{ f.value }}"
                  class="w-full sm:w-auto sm:min-w-[220px] rounded-lg border border-line text-[13px] px-3 py-2 bg-white">
         {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    {% comment %}
+    Kite ID pop-up (owner 2026-11-02) — the words shown when a referral or share link
+    has a missing, wrong or placeholder Kite ID, and the placeholder-word list.
+    {% endcomment %}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Kite ID pop-up</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">
+      <div class="text-[11.5px] text-ink-500 mb-1">
+        Shown when a link has no Kite ID, a wrong one, or an example such as KITEID. Use
+        {program_brand} where the partner's name should appear and {channel} for the share
+        platform (WhatsApp, Facebook, X, Telegram). Leave a field blank to restore its default.
+      </div>
+      {% for f in kite_prompt_fields %}
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 py-1.5 {% if not forloop.first %}border-t border-line{% endif %}">
+        <label for="{{ f.form_key }}" class="text-[13px] font-semibold flex-1">{{ f.label }}</label>
+        <input type="text" id="{{ f.form_key }}" name="{{ f.form_key }}" value="{{ f.value }}"
+               class="w-full sm:w-auto sm:min-w-[320px] rounded-lg border border-line text-[13px] px-3 py-2 bg-white"
+               placeholder="{{ f.default }}">
       </div>
       {% endfor %}
     </div>

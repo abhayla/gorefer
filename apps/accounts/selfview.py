@@ -26,6 +26,18 @@ def _program_brand(tenant, client_id: str) -> str:
     return brand_for_tenant_id(getattr(tenant, "id", None))
 
 
+def _share_text(tenant, client_id: str) -> str:
+    from apps.config.i18n import resolve_stored_referrer_language
+    from apps.referrals.share_intent_service import share_message_for
+
+    identity = identity_for(tenant, client_id)
+    return share_message_for(
+        tenant, "wa", client_id,
+        program=identity.program if identity is not None else None,
+        lang=resolve_stored_referrer_language(getattr(tenant, "id", None)),
+    )
+
+
 def _mask_clicks(rows: list[dict]) -> list[dict]:
     """ADR-026/S2-01: customer view masks IP (city stays). Mutates copies, not admin data."""
     masked = []
@@ -114,7 +126,6 @@ def my_referrals_ctx(tenant, client_id: str) -> dict:
     if getattr(settings, "PII_MASK_FOR_CUSTOMER_VIEW", True):
         clicks = _mask_clicks(clicks)
     my_link = f"https://{profile.referral_link(tenant, client_id)}"
-    disclosure = f"https://{profile.PROFILE_CONFIG['disclosure_url']}"
     return {
         "client_id": client_id,
         "band": band,
@@ -136,12 +147,10 @@ def my_referrals_ctx(tenant, client_id: str) -> dict:
             tenant_id=getattr(tenant, "id", None),
             default=MY_REFERRALS_HUB_CTA_DEFAULT,
         ),
-        # WhatsApp share prefill: routed via gorefer.in with the wa channel prefix
-        # (ADR-030 — never direct-to-Zerodha; ADR-028 B1 attribution), plus the §4.4
-        # disclosure host (ADR-031/032 — the light message's compliance anchor).
-        "share_text": (
-            f"Open your free {_program_brand(tenant, client_id)} account with my referral link: "
-            f"https://{profile.referral_link(tenant, client_id, channel='wa')} "
-            f"· Disclosures: {disclosure}"
-        ),
+        # WhatsApp share prefill — the SAME message the one-tap /share/wa/ link sends
+        # (owner's editable share message, the referrer's own opener, their language),
+        # built by one function so the two can't drift. The link is routed via gorefer.in
+        # with the wa channel prefix (ADR-030/ADR-028); the §4.4 disclosure line is
+        # appended by kit_message() (ADR-031/032).
+        "share_text": _share_text(tenant, client_id),
     }

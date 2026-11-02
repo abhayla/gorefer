@@ -31,7 +31,10 @@ CID = "RJ4521"
 
 # --- exact literals as they read on origin/main (pre-T-059), pinned verbatim ---
 OLD_KIT_MESSAGE_PREFIX = "Open a free Zerodha account — my referral link:\n"
-OLD_SELFVIEW_SHARE_PREFIX = "Open your free Zerodha account with my referral link: "
+# Since 2026-11-02 My Referrals sends the SAME message as the one-tap share link (it used
+# to build its own "Open your free ... with my referral link: " line) — so its prefix is
+# the kit message's.
+OLD_SELFVIEW_SHARE_PREFIX = OLD_KIT_MESSAGE_PREFIX
 OLD_STEP1_EN = (
     "Hi! Your Zerodha account opening is still pending — reply here and we'll help you "
     "complete it in a couple of minutes."
@@ -180,7 +183,7 @@ def test_selfview_share_text_second_program_no_code_change(seeded, django_captur
         tenant=seeded, program=groww, partner=groww.partner, client_id="GRW9001",
     )
     ctx = my_referrals_ctx(seeded, "GRW9001")
-    assert ctx["share_text"].startswith("Open your free Groww account with my referral link: ")
+    assert ctx["share_text"].startswith("Open a free Groww account — my referral link:\n")
     assert "Zerodha" not in ctx["share_text"]
 
 

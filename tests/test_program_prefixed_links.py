@@ -96,8 +96,9 @@ def test_prefixed_link_matches_its_bare_twin(seeded, client, django_capture_on_c
 
 @pytest.mark.parametrize("path,expected_location", [
     ("/zerodha/open", "https://signup.zerodha.com/?c=ZMPHZC"),
-    ("/zerodha/r/open", "https://signup.zerodha.com/api/lead/?c=ZMPHZC"),
-    ("/zerodha/r/ZERODHAID", "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=ZERODHAID"),
+    # /r/open and placeholder ids show the Kite ID pop-up since 2026-11-02; its Skip lands here
+    ("/zerodha/r/open?skip=1", "https://signup.zerodha.com/api/lead/?c=ZMPHZC"),
+    ("/zerodha/r/ZERODHAID?skip=1", "https://signup.zerodha.com/api/lead/?c=ZMPHZC"),
     (f"/zerodha/r/{CID}/continue", f"https://signup.zerodha.com/api/lead/?c=ZMPHZC&r={CID}"),
 ])
 def test_prefixed_redirect_destinations(seeded, client, django_capture_on_commit_callbacks,
@@ -210,7 +211,7 @@ def test_my_referrals_and_profile_links_are_prefixed(tenant, client, django_capt
     _get(client, f"/r/{CID}", django_capture_on_commit_callbacks)  # create the identity
     ctx = my_referrals_ctx(tenant, CID)
     assert ctx["my_link"] == f"https://gorefer.in/zerodha/r/{CID}"
-    assert f"https://gorefer.in/zerodha/r/wa/{CID} " in ctx["share_text"]
+    assert f"https://gorefer.in/zerodha/r/wa/{CID}\n" in ctx["share_text"]
     cards = profile.per_link_cards(tenant, CID)
     assert cards and all(card["link"] == f"gorefer.in/zerodha/r/{CID}" for card in cards)
 

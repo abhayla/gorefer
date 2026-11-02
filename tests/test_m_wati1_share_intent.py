@@ -76,16 +76,18 @@ def test_share_intent_lazily_creates_the_journey(seeded, client, django_capture_
 
 def test_unsupported_channel_404s_with_no_event(seeded, client, django_capture_on_commit_callbacks):
     with django_capture_on_commit_callbacks(execute=True):
-        resp = client.get("/share/tg/RJ4521", **HUMAN)
+        resp = client.get("/share/li/RJ4521", **HUMAN)  # tg is served since 2026-11-02; li is not
     assert resp.status_code == 404
     assert Event.objects.count() == 0
 
 
-def test_invalid_client_id_400s_with_no_writes(seeded, client, django_capture_on_commit_callbacks):
+def test_invalid_client_id_shows_prompt_with_no_identity(seeded, client, django_capture_on_commit_callbacks):
+    # Owner 2026-11-02: the sharer is asked for their Kite ID (was a branded 400).
     with django_capture_on_commit_callbacks(execute=True):
         resp = client.get("/share/wa/AB", **HUMAN)
-    assert resp.status_code == 400
-    assert Event.objects.count() == 0
+    assert resp.status_code == 200
+    assert "Enter your Kite ID" in resp.content.decode()
+    assert not Event.objects.exclude(event_type="share_recovery_viewed").exists()
     assert ReferralIdentity.objects.count() == 0
 
 
