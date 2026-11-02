@@ -198,6 +198,25 @@ Cache-Control: no-store
 
 **Placeholders never become referrers.** `validate_client_id_for` (every identity-creating path: `/r/`, `/share/`, the Wati webhook) refuses a configured placeholder word even when it has a real id's shape. Default list: `KITEID, YOURID, MYID, CLIENT, CLIENTID, USERID, KITEUSERID, ZERODHAID, REFERRALID, REFID, XXXXXX, ABCDEF` — only obvious words; anything that might be real is let through.
 
+### 4.1b Preview image routes — preview card v2 (owner decision 2026-11-03)
+
+A server-rendered 1200×630 link-preview card (`apps/referrals/preview_card.py`) replaces the static v1 image **only when the tenant switch `preview_card_v2_enabled` is on** (cascade key, default `False`). A second switch, `preview_card_referrer_name_enabled` (default `False`), adds the referrer's first name ("RAHUL INVITED YOU"); it only counts while v2 is on. With v2 off, every public output (crawler page, landing OG meta, share-hub OG meta) is byte-identical to the v1 card (snapshot test `tests/test_preview_card_v2.py`).
+
+| Route | Name | Behaviour |
+|---|---|---|
+| `GET /og/card.png` | `og_card` | The generic v2 card. `404` while `preview_card_v2_enabled` is off. |
+| `GET /og/card/{client_id}.png` | `og_card_named` | The referrer's named card **only if** the name switch is on, the id passes `validate_client_id_for` (format + placeholder words), the identity is not soft-deleted (`is_deleted_referrer`), and a live `Customer` row (tenant, active program, `deleted_at IS NULL`) has `show_name_on_preview=True` and a valid display name. **Anything else returns the GENERIC card bytes — never a 404 or 500**, because a broken image kills the whole preview. `404` while v2 is off. |
+
+Both routes are public (no login), rate-limited (`check_rate("og_card", client_ip, limit=RATELIMIT_CLICK_MAX, window=RATELIMIT_API_WINDOW)` → `429`), and answer `Content-Type: image/png`, `Cache-Control: public, max-age=86400`. Rendered bytes are cached in the Django (DB) cache under `ogcard:v1:<sha256 of the drawn text + design version>` for 7 days.
+
+**Display name** = `Customer.preview_name` if set, else the first word of `Customer.first_name` (Zoho); valid only if it matches `^[A-Za-z]{2,15}$` after strip. The card eyebrow uses it upper-case, the preview title capitalised. Invalid or missing → the generic card.
+
+**Crawler page wiring.** `render_preview(request, *, tenant_id, client_id=None, tenant=None)`. With v2 on: `og:image` = absolute `/og/card/{id}.png?v=…` when name-eligible, else `/og/card.png?v=…`; `og:title` = `preview_card_og_title_named` (name substituted) when eligible, else `preview_card_og_title`; description and site name from `preview_card_og_description` / `preview_card_og_site_name`; plus `twitter:card=summary_large_image`, `twitter:image`, `og:image:width=1200`, `og:image:height=630`. `?v=` is the first 10 hex characters of the text fingerprint, so a copy change busts WhatsApp/Cloudflare image caches. **Only `referral_redirect`'s bot branch passes the id** (so `/r/{id}`, `/r/{channel}/{id}` and the `/{program}/` twins can be named); `/open`, `/r/open`, the Kite ID pop-up path and every other caller get the generic v2 card. The landing page OG meta and the share-hub OG meta use the same function and switch (generic only).
+
+**Card text = cascade keys** (rail E-6; central defaults seeded by `seed_program`, editable on the Preferences screen, "Link preview card"): `preview_card_eyebrow`, `preview_card_named_eyebrow` (`{first_name}` via plain `str.replace`), `preview_card_headline`, `preview_card_price_big`, `preview_card_price_rest`, `preview_card_docs_line`, `preview_card_cta`, `preview_card_og_title`, `preview_card_og_title_named`, `preview_card_og_description` (ends with the verbatim market-risk warning), `preview_card_og_site_name`. **The legal band always uses the locked compliance resolvers** (`ap_disclosure_block`, `market_risk_warning`) — never a tenant-editable key. The v1 keys/settings (`og_preview_*`, `OG_*`) are unchanged; v2 reads its own keys. Guardrail 3 holds: no partner code and no `signup.zerodha.com` in the crawler page or the drawn text.
+
+**My Referrals control.** `POST /my/referrals/preview-name` (`my_referrals_preview_name`, referrer session + CSRF): saves `preview_name` (`^[A-Za-z]{2,15}$`, blank = fall back to the Zoho first name), `show_name_on_preview` and `preview_name_updated_at`; the row comes **only** from the session's bound account (a posted `client_id` is ignored). The box renders on the self view only, and only when both switches are on. Staff switch it off in Django admin (`CustomerAdmin`, filter on `show_name_on_preview`).
+
 ### 4.2 `GET /open` — partner-direct (no referrer)
 **Purpose.** The **PIFS-direct** entry point for a visitor who arrives with **no referrer** (Gap 1). It is a sibling of §4.1 that carries the partner code **only** — `c=ZMPHZC`, **no `r=`** — credits PIFS as AP but no referrer, and **creates a partner-direct journey**.
 
@@ -337,6 +356,8 @@ When a program is in `show_landing` mode the visitor sees a branded **PIFS** pag
 |---|---|---|
 | 400 | `INVALID_CLIENT_ID` | `client_id` fails format validation (JSON here, since this is the data API). |
 | 429 | `RATE_LIMITED` | Over cap. |
+
+**SPEC CHANGE 2026-11-03 (owner) — amendment to ADR-021 for the preview card.** Owner-accepted privacy decision, recorded verbatim: *a referrer's first name is shown on their own preview card and preview title by default, to anyone who fetches `/r/<their id>` or `/og/card/<their id>.png`, including bots; the owner accepted the id→first-name exposure (DPDP/ADR-021 risk) on 2026-11-03; referrers can switch it off or edit the name on My Referrals; staff can switch it off in admin; deleted/placeholder ids never show a name.* This applies only while both preview switches are on (§4.1b). Honest limit: **WhatsApp caches a preview per message**, so switching the name off does not change previews already sent — only new shares. The landing-page reveal above (§5.2.1, beacon-gated) is unchanged.
 
 ### 5.2.1 `GET /api/landing/{client_id}/referrer` — beacon-gated name reveal
 **Purpose.** Return the referrer's first name for personalising the landing page, but **only** to a real human who has cleared the confirmation beacon — closing the id→name enumeration hole (ADR-021).

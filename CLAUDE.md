@@ -181,6 +181,7 @@ You are the software **ENGINEER**, not the architect. Implement **exactly** what
 
 **Landing page (branded, config-driven)**
 - The landing page is **per-partner CONFIG (not hardcoded)**, clearly **PIFS-branded**, and must **NOT resemble/clone Zerodha's page** (misrepresentation risk).
+- Note: the **v2 preview card** (`preview_card_v2_enabled`, default off; 06-API §4.1b) carries the AP legal name in its footer and **no PIFS brand label** — owner SPEC CHANGE 2026-11-03. Brand + "₹0 account opening" on it are owner-reviewed cascade settings only (ADR-014 note).
 - Two buttons: **(1) "Continue to Zerodha"** → a short name/email/phone form that **saves the lead FIRST** (GoRefer + Zoho), then redirects to `https://signup.zerodha.com/api/lead/?c=ZMPHZC&r={client_id}`. (Auto-filling Zerodha's own fields is an **OPEN POC, NOT a dependency** — do not block on it.) **(2) "Share referral details on WhatsApp"** → a `wa.me` deep link to the **WATI BUSINESS number `+91 70806 42020`** (NOT the advisor helpline `73888 82020`) with a referring-language pre-fill that **includes the referral id**.
 - Show a small **"Referral ID: X"** echo line for self-serve visual confirmation (no separate confirm page).
 
