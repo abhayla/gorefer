@@ -66,8 +66,8 @@ def create_lead(request, payload: LeadIn):
     tenant = get_current_tenant(request)
     # The referral/identity must already exist from the landing view (lazy M2/M3).
     identity = ReferralIdentity.objects.for_tenant(tenant).filter(
-        client_id=client_id, id_source="native"
-    ).first()
+        client_id=client_id, id_source="native", deleted_at__isnull=True
+    ).first()  # a soft-deleted referrer never takes a lead (owner 2026-11-02)
     if identity is None:
         raise HttpError(400, "no active referral journey for this client_id")
     referral = identity.referrals.filter(source="referral_link").order_by("id").first()

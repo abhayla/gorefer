@@ -378,3 +378,105 @@ def test_a_long_id_typed_into_the_url_is_rejected_not_shortened(
     assert escape(prefkeys.KITE_PROMPT_ERROR_SHAPE_DEFAULT) in body
     assert not ReferralIdentity.objects.filter(client_id="AD1111").exists()
     assert _no_referrer_saved()
+
+
+# --- Soft-deleted referrers (owner decision 2026-11-02) ---------------------------------
+# A junk/test referrer that an operator soft-deleted must stop collecting clicks: its links
+# show the Kite ID pop-up and record nothing. Live referrers are unaffected.
+
+
+def _soft_delete(client_id):
+    from django.utils import timezone
+
+    ident = ReferralIdentity.objects.get(client_id=client_id)
+    now = timezone.now()
+    Referral.objects.filter(referral_identity=ident).update(deleted_at=now, delete_reason="test")
+    ident.deleted_at = now
+    ident.save(update_fields=["deleted_at"])
+
+
+@pytest.fixture
+def deleted_ref(seeded, django_capture_on_commit_callbacks):
+    assert _get("/r/ZQ7001", django_capture_on_commit_callbacks).status_code in (200, 302)
+    _soft_delete("ZQ7001")
+    from django.db.models import Max
+
+    return Event.objects.aggregate(m=Max("id"))["m"] or 0  # ids, not count: sequences are not reset
+
+
+@pytest.mark.parametrize("path", ["/r/ZQ7001", "/r/wa/ZQ7001", "/r/ZQ7001/continue",
+                                  "/zerodha/r/wa/ZQ7001", "/zerodha/r/ZQ7001/continue"])
+def test_a_deleted_referrer_link_shows_the_prompt_and_records_nothing(
+    deleted_ref, django_capture_on_commit_callbacks, path
+):
+    resp = _get(path, django_capture_on_commit_callbacks)
+    assert resp.status_code == 200
+    assert REF_TITLE in resp.content.decode()
+    # Only the pop-up's own view event may appear: no click, landing or continue event.
+    assert set(Event.objects.filter(id__gt=deleted_ref).values_list("event_type", flat=True)) <= {
+        "share_recovery_viewed"
+    }
+    assert ReferralIdentity.objects.filter(client_id="ZQ7001").count() == 1
+
+
+@pytest.mark.urls("tests.urls_share_intent")
+def test_a_deleted_referrer_share_link_shows_the_prompt(deleted_ref, django_capture_on_commit_callbacks):
+    resp = _get("/share/wa/ZQ7001", django_capture_on_commit_callbacks)
+    assert resp.status_code == 200
+    assert SHARE_TITLE in resp.content.decode()
+    assert not Event.objects.filter(event_type="share_intent").exists()
+
+
+def test_typing_a_deleted_id_into_the_prompt_gets_the_placeholder_error(
+    deleted_ref, django_capture_on_commit_callbacks
+):
+    from django.utils.html import escape
+
+    resp = _get("/r/wa/?kite_id=ZQ7001", django_capture_on_commit_callbacks)
+    assert resp.status_code == 200
+    assert escape(prefkeys.KITE_PROMPT_ERROR_PLACEHOLDER_DEFAULT) in resp.content.decode()
+
+
+def test_a_deleted_referrer_is_not_revived(deleted_ref, django_capture_on_commit_callbacks):
+    _get("/r/ZQ7001", django_capture_on_commit_callbacks)
+    ident = ReferralIdentity.objects.get(client_id="ZQ7001")
+    assert ident.deleted_at is not None
+    assert ReferralIdentity.objects.filter(client_id="ZQ7001").count() == 1
+
+
+def test_other_users_of_the_strict_check_are_unchanged_for_a_deleted_id(deleted_ref, tenant):
+    """The records page and the Wati assisted-lead webhook use validate_client_id_for; it
+    still accepts a deleted id (only the public link views refuse it)."""
+    assert validate_client_id_for(tenant, "ZQ7001") == "ZQ7001"
+
+
+def test_share_button_api_never_credits_a_deleted_referrer(deleted_ref):
+    import json
+
+    resp = Client().post("/api/share/", data=json.dumps({"client_id": "ZQ7001", "channel": "whatsapp"}),
+                         content_type="application/json", **HUMAN)
+    assert resp.status_code == 202
+    assert Event.objects.filter(event_type="share_clicked", referral__isnull=True).exists()
+
+
+def test_a_live_referrer_still_works(seeded, django_capture_on_commit_callbacks):
+    resp = _get("/r/ZQ7002", django_capture_on_commit_callbacks)
+    assert resp.status_code in (200, 302)
+    assert ReferralIdentity.objects.filter(client_id="ZQ7002", deleted_at__isnull=True).exists()
+    assert Event.objects.filter(event_type="click", referral__referral_identity__client_id="ZQ7002").exists()
+
+
+def test_lead_api_refuses_a_deleted_referrer(deleted_ref):
+    """A landing page opened before the delete must not save a lead on the deleted row."""
+    import json
+
+    from apps.referrals.models import Lead
+
+    resp = Client().post(
+        "/api/leads/",
+        data=json.dumps({"client_id": "ZQ7001", "name": "Rahul Sharma",
+                         "mobile": "9876543210", "consent": True}),
+        content_type="application/json", **HUMAN,
+    )
+    assert resp.status_code == 400
+    assert not Lead.objects.exists()
