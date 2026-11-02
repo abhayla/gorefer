@@ -24,6 +24,7 @@ from urllib.parse import quote
 from django.db import transaction
 from django.http import Http404
 
+from apps.config.cascade import resolve
 from apps.events import vocab
 from apps.events.bots import is_bot_user_agent
 from apps.events.models import Event
@@ -35,13 +36,32 @@ from .redirect_service import get_active_program, lazy_get_or_create_referral
 logger = logging.getLogger("gorefer.share_intent")
 
 
-def build_whatsapp_target(message: str) -> str:
+def build_whatsapp_target(message: str, link: str = "") -> str:
     """The WhatsApp share deep-link: a prefilled compose screen, no recipient."""
     return f"https://wa.me/?text={quote(message, safe='')}"
 
 
+# Facebook, X, Telegram (owner decision 2026-11-02): plain web share intents, the SAME
+# addresses the share hub's buttons already use (apps.accounts.hub._share_targets) — no
+# SDK, no third-party script. Facebook takes only the link (it ignores prefilled text);
+# X takes text only; Telegram takes both.
+def build_facebook_target(message: str, link: str) -> str:
+    return f"https://www.facebook.com/sharer/sharer.php?u={quote(link, safe='')}"
+
+
+def build_x_target(message: str, link: str) -> str:
+    return f"https://x.com/intent/post?text={quote(message, safe='')}"
+
+
+def build_telegram_target(message: str, link: str) -> str:
+    return f"https://t.me/share/url?url={quote(link, safe='')}&text={quote(message, safe='')}"
+
+
 _CHANNEL_TARGET_BUILDERS = {
     "wa": build_whatsapp_target,
+    "fb": build_facebook_target,
+    "x": build_x_target,
+    "tg": build_telegram_target,
 }
 
 
@@ -125,6 +145,16 @@ def kit_message(
         )
     except Exception:
         template = default
+    # A channel may carry its own English message (owner 2026-11-02: X allows 280
+    # characters, so it gets a shorter one). Cascade key `share_kit_message_template__{ch}`;
+    # blank/unset = the shared message above.
+    if lang == "en":
+        try:
+            key = f"{SHARE_KIT_MESSAGE_KEY}__{channel}"
+            override = str(resolve(key, tenant_id=tenant_id, default="") or "")
+        except Exception:
+            override = ""
+        template = override.strip() or template
     brand = brand_for_program(program) if program is not None else brand_for_tenant_id(tenant_id)
     # `link` overrides the sharer's own credit link — only the Kite ID pop-up's "share
     # without my ID" path passes one (the no-referrer link); every other caller omits it.
@@ -237,7 +267,8 @@ def handle_share_intent(
     message = kit_message(
         channel, client_id, tenant_id, program=program, lang=lang, opener=opener
     )
-    destination = _CHANNEL_TARGET_BUILDERS[channel](message)
+    link = tracked_link(channel, client_id, tenant_id=tenant_id)
+    destination = _CHANNEL_TARGET_BUILDERS[channel](message, link)
 
     if is_bot_user_agent(user_agent):
         logger.info("bot/preview hit on /share/%s/%s — no journey created", channel, client_id)
@@ -283,7 +314,7 @@ def handle_share_without_id(*, tenant, channel: str, user_agent: str | None, lan
     tenant_id = getattr(tenant, "id", None)
     link = f"https://{_public_host()}{referral_path(RESERVED_OPEN, tenant=tenant)}"
     message = kit_message(channel, "", tenant_id, program=program, lang=lang, link=link)
-    destination = _CHANNEL_TARGET_BUILDERS[channel](message)
+    destination = _CHANNEL_TARGET_BUILDERS[channel](message, link)
 
     if is_bot_user_agent(user_agent):
         return destination

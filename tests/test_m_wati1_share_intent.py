@@ -76,7 +76,7 @@ def test_share_intent_lazily_creates_the_journey(seeded, client, django_capture_
 
 def test_unsupported_channel_404s_with_no_event(seeded, client, django_capture_on_commit_callbacks):
     with django_capture_on_commit_callbacks(execute=True):
-        resp = client.get("/share/tg/RJ4521", **HUMAN)
+        resp = client.get("/share/li/RJ4521", **HUMAN)  # tg is served since 2026-11-02; li is not
     assert resp.status_code == 404
     assert Event.objects.count() == 0
 

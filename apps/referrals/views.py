@@ -503,18 +503,20 @@ SKIP_PARAM = "skip"
 KITE_ID_INPUT_MAX = 32  # matches the old pass-through abuse bound; longer input is cut
 
 
-def _kite_prompt_copy(tenant_id: int | None, mode: str) -> dict:
-    """Config-driven pop-up wording (rail E-6 / §6d). `{program_brand}` is substituted by
-    plain replacement, so a stray brace in operator copy can never break the page."""
+def _kite_prompt_copy(tenant_id: int | None, mode: str, channel: str | None = None) -> dict:
+    """Config-driven pop-up wording (rail E-6 / §6d). `{program_brand}` and `{channel}` (the
+    share platform's name) are substituted by plain replacement, so a stray brace in
+    operator copy can never break the page."""
     from apps.config import preferences as prefkeys
 
     from .branding import brand_for_tenant_id
 
     brand = brand_for_tenant_id(tenant_id) or ""
+    channel_name = normalize_share_channel(channel) or ""
 
     def text(key, default):
         value = resolve(key, tenant_id=tenant_id, default=default)
-        return str(value or default).replace("{program_brand}", brand)
+        return str(value or default).replace("{program_brand}", brand).replace("{channel}", channel_name)
 
     if mode == PROMPT_SHARE:
         keys = {
@@ -578,7 +580,7 @@ def _kite_prompt_response(request, tenant, *, mode: str, channel: str | None = N
             return _partner_unavailable(request)
         return HttpResponseRedirect(destination)
 
-    copy = _kite_prompt_copy(tenant_id, mode)
+    copy = _kite_prompt_copy(tenant_id, mode, channel)
     error = ""
     entered = ""
     if KITE_ID_PARAM in request.GET:
@@ -613,6 +615,7 @@ def _kite_prompt_response(request, tenant, *, mode: str, channel: str | None = N
     context = {
         "copy": copy,
         "mode": mode,
+        "channel": channel or "",
         "error": error,
         "entered": entered,
         "kite_id_param": KITE_ID_PARAM,

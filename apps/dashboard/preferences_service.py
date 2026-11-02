@@ -297,6 +297,16 @@ def save_preferences(tenant, data, *, user=None) -> list[str]:
         tenant_id=tenant_id,
         user=user,
     )
+    # X's own shorter message (owner 2026-11-02). Only touched when the field was
+    # submitted, so an older form or a partial save never resets it.
+    if prefkeys.SHARE_KIT_MESSAGE_TEMPLATE_X in data:
+        x_message = (data.get(prefkeys.SHARE_KIT_MESSAGE_TEMPLATE_X) or "").strip()
+        set_tenant(
+            prefkeys.SHARE_KIT_MESSAGE_TEMPLATE_X,
+            x_message or defaults[prefkeys.SHARE_KIT_MESSAGE_TEMPLATE_X],
+            tenant_id=tenant_id,
+            user=user,
+        )
 
     # --- Share hub images (T-063) — up to two poster-image slots, same-origin only --
     # A cross-origin value is REJECTED here (never persisted) — `resolve_share_image_url`

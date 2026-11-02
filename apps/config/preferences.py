@@ -54,6 +54,7 @@ SHARE_RECOVERY_PREFILL_DEFAULT = "Hi, I need my referral link"
 # Preferences "Kite ID pop-up" section. `{program_brand}` renders the program's brand
 # (T-059), so the copy is partner-neutral. Two audiences: on /r/ links the visitor is the
 # FRIEND (asked for the referrer's id); on /share/ links it is the REFERRER (own id).
+# `{channel}` renders the share platform's name (WhatsApp, Facebook, X, Telegram).
 KITE_PROMPT_REF_TITLE = "kite_prompt_referral_title"
 KITE_PROMPT_REF_TITLE_DEFAULT = "Who referred you?"
 KITE_PROMPT_REF_TEXT = "kite_prompt_referral_text"
@@ -80,7 +81,7 @@ KITE_PROMPT_SHARE_TEXT_DEFAULT = (
 KITE_PROMPT_SHARE_LABEL = "kite_prompt_share_label"
 KITE_PROMPT_SHARE_LABEL_DEFAULT = "Your Kite ID"
 KITE_PROMPT_SHARE_BUTTON = "kite_prompt_share_button"
-KITE_PROMPT_SHARE_BUTTON_DEFAULT = "Share on WhatsApp"
+KITE_PROMPT_SHARE_BUTTON_DEFAULT = "Share on {channel}"  # {channel}: WhatsApp, Facebook, X, Telegram
 KITE_PROMPT_SHARE_SKIP = "kite_prompt_share_skip"
 KITE_PROMPT_SHARE_SKIP_DEFAULT = "Share without my ID"
 KITE_PROMPT_SHARE_FOOT = "kite_prompt_share_footnote"
@@ -637,6 +638,20 @@ SHARE_KIT_MESSAGE_TEMPLATE_HI_DEFAULT = (
     "एक मुफ़्त {program_brand} खाता खोलें — मेरा रेफ़रल लिंक:\n{link}"
 )
 
+# X (Twitter) share message, EN (owner 2026-11-02). X allows 280 characters, so the
+# one-tap /share/x/{client_id} uses its own shorter message; same {link}/{program_brand}
+# placeholders, disclosure line appended by kit_message() as always. The default carries
+# the NSE/COMP/55482 §4.2 market-risk warning VERBATIM (compliance review 2026-11-02): it
+# fits inside 280 characters with the link and the disclosure line. Key shape
+# `share_kit_message_template__{channel}` — any channel can get its own message the same
+# way, blank = the shared message above.
+SHARE_KIT_MESSAGE_TEMPLATE_X = "share_kit_message_template__x"
+SHARE_KIT_MESSAGE_TEMPLATE_X_DEFAULT = (
+    "Open a free {program_brand} account with my referral link:\n{link}\n\n"
+    "Investments in securities market are subject to market risks, read all the related "
+    "documents carefully before investing."
+)
+
 # --- WhatsApp notification routing (Tier 2, admin) ---------------------------------
 # Which of the three lead-time notifications actually go out (doc-08 A6 a/b/c).
 # Routing only: turning one OFF suppresses that recipient; it never changes WHAT is
@@ -1039,6 +1054,7 @@ def central_defaults() -> dict:
         # until an admin edits it through the screen.
         SHARE_KIT_MESSAGE_TEMPLATE: flags.SHARE_KIT_MESSAGE_TEMPLATE,
         SHARE_KIT_MESSAGE_TEMPLATE_HI: SHARE_KIT_MESSAGE_TEMPLATE_HI_DEFAULT,
+        SHARE_KIT_MESSAGE_TEMPLATE_X: SHARE_KIT_MESSAGE_TEMPLATE_X_DEFAULT,
         # Notification routing defaults to ON for all three — this mirrors today's
         # behaviour exactly (doc-08 A6 fires all three), so adding the toggles changes
         # nothing until an admin turns one off.
@@ -1198,6 +1214,11 @@ def get_preferences(tenant_id: int | None) -> dict:
             SHARE_KIT_MESSAGE_TEMPLATE_HI,
             tenant_id=tenant_id,
             default=defaults[SHARE_KIT_MESSAGE_TEMPLATE_HI],
+        ),
+        SHARE_KIT_MESSAGE_TEMPLATE_X: resolve(
+            SHARE_KIT_MESSAGE_TEMPLATE_X,
+            tenant_id=tenant_id,
+            default=defaults[SHARE_KIT_MESSAGE_TEMPLATE_X],
         ),
         SHARE_CHANNELS_ALLOWLIST: list(channels),
         # Share hub images (T-063) — resolved raw here; `apps.accounts.hub` is the one
