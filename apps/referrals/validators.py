@@ -226,6 +226,37 @@ def validate_client_id_for(tenant, raw: str | None) -> str:
     return normalized
 
 
+# --- Soft-deleted referrers (owner decision 2026-11-02) ---------------------------------
+# An operator soft-deletes a junk referrer (KITEID, ZZ9999, test ids). Before this, a later
+# click on that id still resolved the DELETED identity and logged events against its
+# deleted Referral, so junk kept collecting clicks. Public LINK paths now treat a deleted
+# id like a placeholder: the Kite ID pop-up, nothing recorded. Deliberately NOT inside
+# validate_client_id_for, which the records page and the Wati assisted-lead webhook also
+# use; their behaviour for a deleted id is unchanged.
+
+
+class DeletedClientId(InvalidClientId):
+    """The id belongs to a soft-deleted referrer identity."""
+
+
+def is_deleted_referrer(tenant, normalized: str) -> bool:
+    from apps.referrals.models import ReferralIdentity
+
+    return (
+        ReferralIdentity.objects.for_tenant(tenant)
+        .filter(client_id=normalized, id_source="native", deleted_at__isnull=False)
+        .exists()
+    )
+
+
+def validate_link_client_id(tenant, raw: str | None) -> str:
+    """validate_client_id_for + refuse a soft-deleted referrer — for the public link views."""
+    normalized = validate_client_id_for(tenant, raw)
+    if is_deleted_referrer(tenant, normalized):
+        raise DeletedClientId("client_id belongs to a deleted referrer")
+    return normalized
+
+
 def active_partner_code(tenant) -> str | None:
     """The active program's partner code, or None — best-effort, never raises."""
     try:

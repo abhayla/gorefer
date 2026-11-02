@@ -58,8 +58,8 @@ def record_share(request, payload: ShareIn):
 
     tenant = get_current_tenant(request)
     identity = ReferralIdentity.objects.for_tenant(tenant).filter(
-        client_id=client_id, id_source="native"
-    ).first()
+        client_id=client_id, id_source="native", deleted_at__isnull=True
+    ).first()  # a soft-deleted referrer is never credited (owner 2026-11-02)
     referral = identity.referrals.filter(source="referral_link").first() if identity else None
 
     Event.objects.create(

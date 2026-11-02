@@ -42,11 +42,12 @@ from .redirect_service import (
 )
 from .share_intent_service import handle_share_intent, handle_share_without_id, is_share_channel_served
 from .validators import (
+    DeletedClientId,
     InvalidClientId,
     active_partner_code,
     is_placeholder_id,
     resolve_client_id_length,
-    validate_client_id_for,
+    validate_link_client_id,
 )
 
 VISITOR_COOKIE = "gr_vid"
@@ -202,7 +203,7 @@ def referral_redirect(request, client_id: str, channel: str | None = None):
         # STRICT, per-partner (owner decision 2026-07-27): this path CREATES an identity,
         # so a leaked chatbot label like `TALK` — or the partner code `ZMPHZC` itself —
         # must never become a referrer. Lookup paths keep the loose spec rule.
-        normalized = validate_client_id_for(tenant, client_id)
+        normalized = validate_link_client_id(tenant, client_id)
     except InvalidClientId:
         # Owner 2026-11-02 (replaces the T-574 pass-through): a missing, malformed or
         # placeholder id asks for the real Kite ID instead; Skip keeps the old /r/open path.
@@ -273,7 +274,7 @@ def referral_continue(request, client_id: str, channel: str | None = None):
         return _partner_referral_page_response(request, tenant, channel)
     try:
         # STRICT, per-partner — this path lazily creates the identity too.
-        normalized = validate_client_id_for(tenant, client_id)
+        normalized = validate_link_client_id(tenant, client_id)
     except InvalidClientId:
         return _kite_prompt_response(request, tenant, mode=PROMPT_REFERRAL, channel=channel)
     identity = ReferralIdentity.objects.for_tenant(tenant).filter(
@@ -344,7 +345,7 @@ def share_intent_redirect(request, channel: str, client_id: str):
         return HttpResponseNotFound()  # unsupported channel stays a 404, before any prompt
     try:
         # STRICT, per-partner — this path lazily creates the identity too.
-        normalized = validate_client_id_for(tenant, client_id)
+        normalized = validate_link_client_id(tenant, client_id)
     except InvalidClientId:
         # Owner 2026-11-02: a malformed or placeholder id asks the sharer for their Kite ID.
         return _kite_prompt_response(request, tenant, mode=PROMPT_SHARE, channel=channel)
@@ -602,7 +603,10 @@ def _kite_prompt_response(request, tenant, *, mode: str, channel: str | None = N
             error = copy["error_empty"]
         else:
             try:
-                normalized = validate_client_id_for(tenant, entered)
+                normalized = validate_link_client_id(tenant, entered)
+            except DeletedClientId:
+                # A soft-deleted (junk/test) id: same message as a placeholder word.
+                error = copy["error_placeholder"]
             except InvalidClientId:
                 cleaned = "".join(ch for ch in entered if ch.isalnum()).upper()
                 placeholder = is_placeholder_id(tenant_id, cleaned)
