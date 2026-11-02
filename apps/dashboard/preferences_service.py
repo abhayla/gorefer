@@ -282,31 +282,30 @@ def save_preferences(tenant, data, *, user=None) -> list[str]:
     # A blank submission falls back to the central default rather than persisting an
     # empty override (an empty template would break {link}/{program_brand} formatting
     # and drop the referrer's forward-to-a-prospect message entirely).
+    # A message with no {link}, or with a placeholder kit_message() can't fill, is
+    # REFUSED with a notice and the previous message kept (found 2026-11-02: a missing
+    # {link} would send shares with no referral link; an unknown {placeholder} would
+    # break the share endpoint outright).
     defaults = prefkeys.central_defaults()
-    en_message = (data.get("share_kit_message_template") or "").strip()
-    set_tenant(
-        prefkeys.SHARE_KIT_MESSAGE_TEMPLATE,
-        en_message or defaults[prefkeys.SHARE_KIT_MESSAGE_TEMPLATE],
-        tenant_id=tenant_id,
-        user=user,
+    share_message_fields = (
+        ("share_kit_message_template", prefkeys.SHARE_KIT_MESSAGE_TEMPLATE,
+         "Share message (English)", True),
+        ("share_kit_message_template_hi", prefkeys.SHARE_KIT_MESSAGE_TEMPLATE_HI,
+         "Share message (Hindi)", True),
+        # X's own shorter message (owner 2026-11-02). Only touched when the field was
+        # submitted, so an older form or a partial save never resets it.
+        (prefkeys.SHARE_KIT_MESSAGE_TEMPLATE_X, prefkeys.SHARE_KIT_MESSAGE_TEMPLATE_X,
+         "Share message for X", False),
     )
-    hi_message = (data.get("share_kit_message_template_hi") or "").strip()
-    set_tenant(
-        prefkeys.SHARE_KIT_MESSAGE_TEMPLATE_HI,
-        hi_message or defaults[prefkeys.SHARE_KIT_MESSAGE_TEMPLATE_HI],
-        tenant_id=tenant_id,
-        user=user,
-    )
-    # X's own shorter message (owner 2026-11-02). Only touched when the field was
-    # submitted, so an older form or a partial save never resets it.
-    if prefkeys.SHARE_KIT_MESSAGE_TEMPLATE_X in data:
-        x_message = (data.get(prefkeys.SHARE_KIT_MESSAGE_TEMPLATE_X) or "").strip()
-        set_tenant(
-            prefkeys.SHARE_KIT_MESSAGE_TEMPLATE_X,
-            x_message or defaults[prefkeys.SHARE_KIT_MESSAGE_TEMPLATE_X],
-            tenant_id=tenant_id,
-            user=user,
-        )
+    for form_key, pref_key, label, always_submitted in share_message_fields:
+        if not always_submitted and form_key not in data:
+            continue
+        message = (data.get(form_key) or "").strip()
+        problem = _share_template_problem(message) if message else ""
+        if problem:
+            notices.append(f"“{label}” was not saved — {problem} Kept the previous message.")
+            continue
+        set_tenant(pref_key, message or defaults[pref_key], tenant_id=tenant_id, user=user)
 
     # --- Share hub images (T-063) — up to two poster-image slots, same-origin only --
     # A cross-origin value is REJECTED here (never persisted) — `resolve_share_image_url`
@@ -403,6 +402,17 @@ def save_preferences(tenant, data, *, user=None) -> list[str]:
     # --- Kite ID pop-up copy + placeholder words (owner 2026-11-02) ----------------
     notices.extend(_save_kite_prompt(tenant_id, data, user=user))
     return notices
+
+
+def _share_template_problem(message: str) -> str:
+    """Why a share-message template can't be saved, or "" when it is fine."""
+    if "{link}" not in message:
+        return "it must contain {link}, where the referral link goes."
+    try:
+        message.format(link="", program_brand="")
+    except (KeyError, IndexError, ValueError):
+        return "only {link} and {program_brand} can be used inside curly brackets."
+    return ""
 
 
 def _save_kite_prompt(tenant_id, data, *, user=None) -> list[str]:

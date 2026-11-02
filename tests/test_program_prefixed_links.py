@@ -211,7 +211,7 @@ def test_my_referrals_and_profile_links_are_prefixed(tenant, client, django_capt
     _get(client, f"/r/{CID}", django_capture_on_commit_callbacks)  # create the identity
     ctx = my_referrals_ctx(tenant, CID)
     assert ctx["my_link"] == f"https://gorefer.in/zerodha/r/{CID}"
-    assert f"https://gorefer.in/zerodha/r/wa/{CID} " in ctx["share_text"]
+    assert f"https://gorefer.in/zerodha/r/wa/{CID}\n" in ctx["share_text"]
     cards = profile.per_link_cards(tenant, CID)
     assert cards and all(card["link"] == f"gorefer.in/zerodha/r/{CID}" for card in cards)
 

@@ -216,6 +216,19 @@ _tracked_link = tracked_link
 _kit_message = kit_message
 
 
+def share_message_for(tenant, channel: str, client_id: str, *, program=None, lang: str = "en") -> str:
+    """THE share message a referrer forwards for `channel` — the one-tap /share/ link and
+    the My Referrals page both read it from here, so they can never disagree (found
+    2026-11-02: My Referrals built its own text and ignored the owner's edited message).
+    `program` defaults to the tenant's active program."""
+    tenant_id = getattr(tenant, "id", None)
+    return kit_message(
+        channel, client_id, tenant_id,
+        program=program if program is not None else get_active_program(tenant),
+        lang=lang, opener=_opener_for(tenant_id, client_id),
+    )
+
+
 def _opener_for(tenant_id: int | None, client_id: str) -> str:
     """This client_id's saved personal opener, or "" — for the /share/ endpoint.
 
@@ -262,11 +275,7 @@ def handle_share_intent(
     # reads the referrer's personal opener too. Resolved from the already-existing
     # identity only — this lookup never creates one, so a bot hit (handled below) and
     # a first-ever share still behave exactly as they did before.
-    opener = _opener_for(tenant_id, client_id)
-
-    message = kit_message(
-        channel, client_id, tenant_id, program=program, lang=lang, opener=opener
-    )
+    message = share_message_for(tenant, channel, client_id, program=program, lang=lang)
     link = tracked_link(channel, client_id, tenant_id=tenant_id)
     destination = _CHANNEL_TARGET_BUILDERS[channel](message, link)
 
