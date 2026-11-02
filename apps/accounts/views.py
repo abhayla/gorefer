@@ -417,7 +417,7 @@ def my_referrals_preview_name(request):
     customer.save(update_fields=["preview_name", "show_name_on_preview", "preview_name_updated_at"])
     saved = resolve_config(p.MY_PREVIEW_SAVED, tenant_id=tenant_id,
                            default=dict((k, d) for k, _l, d in p.MY_PREVIEW_FIELDS)[p.MY_PREVIEW_SAVED])
-    messages.success(request, saved)
+    messages.success(request, saved, extra_tags="preview-card")
     return redirect("my_referrals")
 
 

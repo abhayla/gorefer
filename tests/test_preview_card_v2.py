@@ -88,6 +88,18 @@ def test_long_headlines_never_overlap_the_legal_band(headline):
     assert result.png.startswith(b"\x89PNG")
 
 
+@pytest.mark.parametrize("field", ["eyebrow", "price_big", "price_rest", "docs", "cta", "headline"])
+def test_a_newline_in_operator_copy_does_not_crash_the_renderer(field):
+    # Review finding 2026-11-03: Pillow cannot measure multi-line text -> a 500 on the route.
+    result = pc.render_card(_defaults_text(**{field: "Ab\nCd\r\nEf"}))
+    assert "Ab Cd Ef" in result.drawn
+
+
+def test_a_long_price_shrinks_instead_of_running_under_the_button():
+    drawn = pc.render_card(_defaults_text(price_big="₹0 only today for everyone")).drawn
+    assert drawn[2].endswith("…") or drawn[2] == "₹0 only today for everyone"
+
+
 def test_rupee_sign_is_a_real_glyph_in_the_committed_font():
     font = ImageFont.truetype(str(pc.BOLD), 92)
     assert font.getmask("₹").getbbox() != font.getmask("").getbbox()
@@ -235,6 +247,36 @@ def test_image_route_is_rate_limited(seeded, settings):
     client = Client()
     codes = [client.get("/og/card.png", REMOTE_ADDR="198.51.100.7").status_code for _ in range(3)]
     assert codes == [200, 200, 429]
+
+
+def test_route_serves_a_fallback_card_when_rendering_fails(seeded, monkeypatch):
+    """Never a 500 from an image route: operator copy that cannot be drawn -> default card."""
+    _on(seeded)
+    real = pc.render_card
+
+    def flaky(text):
+        if text.headline == "boom":
+            raise ValueError("card content overlaps the legal band")
+        return real(text)
+
+    monkeypatch.setattr(pc, "render_card", flaky)
+    set_tenant(p.PREVIEW_CARD_HEADLINE, "boom", tenant_id=seeded.id)
+    resp = Client().get("/og/card.png")
+    assert resp.status_code == 200 and resp["Content-Type"] == "image/png"
+    assert resp.content == real(_defaults_text(
+        legal_disclosure=resolve("ap_disclosure_block"), legal_risk=resolve("market_risk_warning"))).png
+
+
+def test_route_serves_the_v1_card_when_even_the_default_card_fails(seeded, monkeypatch):
+    _on(seeded)
+
+    def broken(_text):
+        raise ValueError("legal band too tall")
+
+    monkeypatch.setattr(pc, "render_card", broken)
+    resp = Client().get(f"/og/card/{CID}.png")
+    v1 = (Path(dj_settings.BASE_DIR) / "static" / "img" / "referral-preview-card.png").read_bytes()
+    assert resp.status_code == 200 and resp.content == v1
 
 
 def test_card_from_central_defaults_draws_the_cascade_locked_strings(seeded):

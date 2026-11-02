@@ -748,7 +748,10 @@ def _card_response(request, tenant, client_id: str | None):
         resp = HttpResponse("Too many requests", status=429, content_type="text/plain")
         resp["Retry-After"] = str(exc.retry_after)
         return resp
-    first_name = og.named_first_name(tenant, client_id) if client_id else None
+    try:
+        first_name = og.named_first_name(tenant, client_id) if client_id else None
+    except Exception:  # any lookup failure -> the generic card, never a 500
+        first_name = None
     png = og.card_png(og.v2_card_text(tenant_id, first_name))
     resp = HttpResponse(png, content_type="image/png")
     resp["Cache-Control"] = "public, max-age=86400"

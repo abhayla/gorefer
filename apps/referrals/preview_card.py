@@ -160,8 +160,23 @@ def legal_blocks(draw, disclosure: str, risk: str) -> tuple[list[str], list[str]
     return wrap(draw, disclosure, font, INNER), wrap(draw, risk, font, INNER)
 
 
+def _one_line(text: str) -> str:
+    """Collapse every whitespace run (incl. newlines) to one space: Pillow cannot measure
+    multi-line text, and operator copy can carry a newline (review finding, 2026-11-03)."""
+    return " ".join((text or "").split())
+
+
 def render_card(lines: CardText) -> RenderResult:
-    """Draw the card. Pure + deterministic: the same `CardText` always gives the same bytes."""
+    """Draw the card. Pure + deterministic: the same `CardText` always gives the same bytes.
+
+    Raises ValueError only if the content would overlap the legal band; callers that serve
+    the image must catch it and fall back (see `apps.referrals.og.card_png`)."""
+    lines = CardText(
+        eyebrow=_one_line(lines.eyebrow), headline=_one_line(lines.headline),
+        price_big=_one_line(lines.price_big), price_rest=_one_line(lines.price_rest),
+        docs=_one_line(lines.docs), cta=_one_line(lines.cta),
+        legal_disclosure=lines.legal_disclosure, legal_risk=lines.legal_risk, named=lines.named,
+    )
     img = Image.new("RGB", (W, H), COBALT_TOP)
     d = ImageDraw.Draw(img)
 
@@ -192,14 +207,14 @@ def render_card(lines: CardText) -> RenderResult:
     cy1 = by + (BADGE_H - CTA_H) // 2
 
     # Price badge: big price Bold 92 + rest Bold 46, both NAVY on YELLOW.
-    f_big = _bold(92)
-    wb = d.textlength(lines.price_big, font=f_big)
+    price_big, f_big = _fit_one_line(d, lines.price_big, _bold, 92, 60, INNER // 3)
+    wb = d.textlength(price_big, font=f_big)
     room = (cx1 - 24) - (X + BADGE_PAD + wb + BADGE_GAP + BADGE_PAD)
     rest, f_rest = _fit_one_line(d, lines.price_rest, _bold, 46, 30, max(0, int(room)))
     wr = d.textlength(rest, font=f_rest)
     d.rounded_rectangle([X, by, X + BADGE_PAD + wb + BADGE_GAP + wr + BADGE_PAD, by + BADGE_H],
                         radius=BADGE_RADIUS, fill=YELLOW)
-    d.text((X + BADGE_PAD, by + 2), lines.price_big, font=f_big, fill=NAVY)
+    d.text((X + BADGE_PAD, by + 2), price_big, font=f_big, fill=NAVY)
     d.text((X + BADGE_PAD + wb + BADGE_GAP, by + 34), rest, font=f_rest, fill=NAVY)
 
     d.rounded_rectangle([cx1, cy1, cx2, cy1 + CTA_H], radius=CTA_RADIUS, fill=WHITE)
@@ -220,6 +235,6 @@ def render_card(lines: CardText) -> RenderResult:
     img.save(buf, format="PNG", optimize=False)
     # One entry per element, wrapped lines re-joined, so a test can assert a whole string
     # (e.g. the byte-exact AP disclosure) was drawn, not just its fragments.
-    drawn = [eyebrow, " ".join(h1), lines.price_big, rest, docs, cta,
+    drawn = [eyebrow, " ".join(h1), price_big, rest, docs, cta,
              " ".join(legal_ap), " ".join(legal_risk)]
     return RenderResult(png=buf.getvalue(), drawn=drawn)

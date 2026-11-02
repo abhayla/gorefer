@@ -9,6 +9,7 @@ Copy is config-driven (CLAUDE.md §6d) so the owner can reword it without a depl
 """
 from __future__ import annotations
 
+import logging
 import re
 
 from django.shortcuts import render
@@ -118,6 +119,7 @@ def render_preview(request, *, tenant_id: int | None = None, client_id: str | No
 # cascade key (rail E-6); the legal band always uses the LOCKED compliance values.
 # =====================================================================================
 
+logger = logging.getLogger(__name__)
 NAME_RE = re.compile(r"[A-Za-z]{2,15}")
 CARD_CACHE_PREFIX = "ogcard:v1:"
 CARD_CACHE_SECONDS = 7 * 24 * 3600
@@ -259,12 +261,42 @@ def card_png(card_text) -> bytes:
         cached = None
     if cached:
         return cached
-    png = render_card(card_text).png
+    try:
+        png = render_card(card_text).png
+    except Exception:
+        # Never a 500 from an image route: a broken image kills the whole preview. Fall
+        # back without caching, so the fixed copy shows as soon as the operator corrects it.
+        logger.error("preview card v2: render failed for %s; serving a fallback card",
+                     card_text.fingerprint()[:VERSION_CHARS], exc_info=True)
+        return _fallback_png(card_text)
     try:
         cache.set(key, png, timeout=CARD_CACHE_SECONDS)
     except Exception:
         pass  # a cache outage costs a re-render, never the image
     return png
+
+
+def _fallback_png(card_text) -> bytes:
+    """The generic card from the shipped default copy; if even that fails (e.g. the locked
+    legal text grew too tall for the layout), the committed v1 static card."""
+    from pathlib import Path
+
+    from django.conf import settings
+
+    from apps.config import preferences as p
+    from apps.referrals.preview_card import CardText, render_card
+
+    try:
+        return render_card(CardText(
+            eyebrow=p.PREVIEW_CARD_EYEBROW_DEFAULT, headline=p.PREVIEW_CARD_HEADLINE_DEFAULT,
+            price_big=p.PREVIEW_CARD_PRICE_BIG_DEFAULT, price_rest=p.PREVIEW_CARD_PRICE_REST_DEFAULT,
+            docs=p.PREVIEW_CARD_DOCS_LINE_DEFAULT, cta=p.PREVIEW_CARD_CTA_DEFAULT,
+            legal_disclosure=card_text.legal_disclosure, legal_risk=card_text.legal_risk,
+        )).png
+    except Exception:
+        logger.error("preview card v2: default card failed too; serving the v1 static card",
+                     exc_info=True)
+        return (Path(settings.BASE_DIR) / "static" / "img" / "referral-preview-card.png").read_bytes()
 
 
 def card_version(card_text) -> str:
