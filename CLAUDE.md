@@ -104,6 +104,8 @@ ruff check .
 python manage.py check
 python scripts/check_architecture.py                   # rail E-3: fails only on NEW vendor leaks (baseline: scripts/architecture_import_baseline.txt)
 python manage.py makemigrations --check --dry-run      # schema drift fails CI
+python scripts/check_public_hygiene.py                 # public-repo rail (§2a): no real mobiles / host addresses / dotenv files
+python -m pytest -q --cov=apps --cov=api --cov=gorefer --cov-fail-under=86   # CI's coverage FLOOR (never lower it to pass a PR)
 
 # Tailwind — compiled and COMMITTED (no CDN runtime). CI fails if app.css is stale.
 npm run build:css      # rerun after ANY template/CSS change; commit static/css/app.css
@@ -116,12 +118,19 @@ python manage.py recompute_rollups
 python manage.py setup_schedules && python manage.py qcluster   # registers ALL ~10 recurring jobs (rollups, Zoho backfill/reconcile/name-sync, PII retention purge, nonce purges, Wati pending-delivery reconcile, followup sweep + inbound poll)
 python manage.py createcachetable    # once per deploy — DB cache backs the rate limiter
 python manage.py seed_followup_cadence   # idempotent: the 3h→21h FollowupRule cadence + per-step copy
+python manage.py seed_messaging_campaigns   # idempotent: the `referrer-recurring` campaign, DISABLED by default; never overwrites operator edits
 python manage.py reconcile_conversions [--since YYYY-MM-DD] [--dry-run]   # sweep Zoho Contacts → conversions (webhook backstop)
 python manage.py erase_pii --mobile 98xxxxxxxx [--dry-run]                # DPDP manual erasure request (ADR-020)
 python manage.py purge_expired_pii [--days 365] [--dry-run]               # 12-month unconverted-PII retention sweep (also scheduled daily)
+# Real WhatsApp sends — dry-run by default, explicit client-id list only:
+python manage.py send_invite_links ...      # invite template + per-recipient minted token
+python manage.py send_records_links ...     # Referral Records link
+python manage.py wa_engagement_report       # daily WA engagement digest → owner via Notifier
+python manage.py sweep_name_drift           # report-only: Customer name vs Zoho Referrers-module name
+python manage.py backfill_first_click_at    # idempotent: Referral.first_click_at from earliest non-bot click
 ```
 
-CI (`.github/workflows/ci.yml`, Postgres 16 service): contract-doc drift gate → Tailwind freshness → ruff → `manage.py check` → architecture boundary gate (`scripts/check_architecture.py`, rail E-3) → migration drift → migrate → pytest.
+CI (`.github/workflows/ci.yml`, Python 3.13, Postgres 16 service): contract-doc drift gate → Tailwind freshness → ruff → `manage.py check` → architecture boundary gate (`scripts/check_architecture.py`, rail E-3) → migration drift → migrate → pytest with an 86% coverage floor. A second workflow, `public-hygiene.yml`, runs `check_public_hygiene.py` + gitleaks.
 
 ## 2c. Code map
 
@@ -136,6 +145,7 @@ CI (`.github/workflows/ci.yml`, Postgres 16 service): contract-doc drift gate �
 - `apps/otp/` — pluggable OTP delivery port (behind `ENABLE_OTP_LOGIN`); codes stored hashed + peppered, never plaintext. When the flag is OFF the DemoOtpAdapter logs instead of sending.
 - `apps/accounts/` — **M13 referrer login (Sprint 2, LIVE)**, mounted at the root behind `ENABLE_CUSTOMER_LOGIN`: `/login/` (`oauth.py` Google OAuth primary, `apps/otp` WhatsApp-OTP fallback), Path-B ownership verification (`/login/verify-ownership`), `/my/referrals` self view (`selfview.py`), and the admin Verifications queue. Models: `ReferrerAccount`, `VerificationRequest`. `onfile.py` enforces that an OTP only ever goes to a channel already on file — never to a user-supplied number.
 - `apps/followups/` — **M-FUP-1 WhatsApp follow-up engine (Sprint 2, LIVE)**. Models `FollowupRule` / `FollowupWindow` / `ScheduledFollowup`, all tenant-scoped. `services.py` is the gate: 24h-session-window check, opt-out, converted-suppression, IST quiet hours, and the anti-burst `compute_defer` min-gap. `tasks.py` runs the two scheduled jobs — `poll_inbound_windows` (opens windows by polling Wati `getMessages`, because the inbound webhook is chatbot-suppressed) and `fire_due_followups` (the sweep that actually sends). `api.py` is the staff-scoped CRUD router. Send copy is read **at fire time**, so re-seeding the cadence changes pending sends.
+- `apps/campaigns/` — **configurable messaging engine** (T-124/T-125). `MessagingCampaign` / `MessagingCampaignStep` are config rows (on/off, step ladder, eligibility, per-recipient send budgets, send-days bitmask + send-hour, per-language template map); `SyncedReferrer` / `ScheduledCampaignMessage` are the audience and due-table. Same decision/I-O split as followups: `services.py` returns a decision and **reuses** the followups gates (`is_opted_out`, `has_converted`, `in_quiet_hours`, `next_active_time`) by import — never reimplement them; `tasks.py` / `send.py` do the sends. Admin CRUD at `/admin-panel/campaigns/`.
 - `apps/dashboard/` — M7 admin dashboard + M9 referral profile served at `/admin-panel/`.
 - `apps/common/` — `phone.py` (the one canonical phone normalization), `ratelimit.py` (DB-cache-backed so counters are shared across gunicorn workers), `netaddr.py` (trusted-proxy-hops X-Forwarded-For resolution for webhook IP allowlists).
 - `tests/` — single flat pytest-django suite (`pytest.ini` → `gorefer.settings`); the three guardrail tests live in `tests/test_guardrails.py`, third-party-origin ban in `tests/test_no_third_party_origin.py`.
