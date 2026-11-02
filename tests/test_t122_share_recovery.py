@@ -15,6 +15,12 @@ Guardrails asserted:
   - the compliance disclosure block + market-risk warning render;
   - `share_recovery_viewed` is recorded for a human UA and skipped for a bot UA;
   - no raw Zerodha URL / partner code ever appears in the body.
+
+Since 2026-11-02 (owner decision) `/r/`, `/r`, `/share/wa/` and `/share/wa` show the Kite ID
+pop-up instead (tests/test_kite_id_prompt.py); it is still a 200 with the compliance block,
+still records `share_recovery_viewed`, and still never carries the partner code. This page
+remains for `/rr/` and for a share channel the endpoint doesn't serve (`/share/xx/`), so
+its content tests below use `/share/xx/`.
 """
 from urllib.parse import unquote
 
@@ -43,7 +49,7 @@ def client():
 def test_bare_r_with_trailing_slash_returns_200(seeded, client):
     resp = client.get("/r/", **HUMAN)
     assert resp.status_code == 200
-    assert "wa.me/" in resp.content.decode()
+    assert "Who referred you?" in resp.content.decode()  # the Kite ID pop-up since 2026-11-02
 
 
 def test_bare_r_without_trailing_slash_returns_200(seeded, client):
@@ -102,13 +108,15 @@ def test_share_channel_recovery_404s_when_flag_off(seeded, client):
 
 # --- Content / compliance / CTA ---------------------------------------------
 
+@pytest.mark.urls("tests.urls_share_intent")
 def test_recovery_page_has_exactly_one_primary_cta(seeded, client):
-    body = client.get("/r/", **HUMAN).content.decode()
+    body = client.get("/share/xx/", **HUMAN).content.decode()
     assert body.count('href="https://wa.me/') == 1
 
 
+@pytest.mark.urls("tests.urls_share_intent")
 def test_recovery_page_wa_link_uses_configured_number_and_prefill(seeded, client):
-    body = client.get("/r/", **HUMAN).content.decode()
+    body = client.get("/share/xx/", **HUMAN).content.decode()
     assert "https://wa.me/917080642020?text=" in body
     start = body.index("https://wa.me/917080642020?text=") + len("https://wa.me/917080642020?text=")
     end = body.index('"', start)
@@ -129,12 +137,14 @@ def test_recovery_page_renders_market_risk_warning(seeded, client, settings):
     assert settings.MARKET_RISK_WARNING in body
 
 
+@pytest.mark.urls("tests.urls_share_intent")
 def test_recovery_page_has_no_partner_code_or_raw_zerodha_url(seeded, client):
-    body = client.get("/r/", **HUMAN).content.decode()
+    body = client.get("/share/xx/", **HUMAN).content.decode()
     assert "ZMPHZC" not in body
     assert "signup.zerodha.com" not in body
 
 
+@pytest.mark.urls("tests.urls_share_intent")
 def test_recovery_page_has_no_login_or_form(seeded, client):
-    body = client.get("/r/", **HUMAN).content.decode()
+    body = client.get("/share/xx/", **HUMAN).content.decode()
     assert "<form" not in body

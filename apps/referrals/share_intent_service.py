@@ -79,6 +79,7 @@ def kit_message(
     program=None,
     lang: str = "en",
     opener: str | None = None,
+    link: str | None = None,
 ) -> str:
     """The share prefill, resolved through the config cascade (CLAUDE.md §6d).
 
@@ -125,7 +126,9 @@ def kit_message(
     except Exception:
         template = default
     brand = brand_for_program(program) if program is not None else brand_for_tenant_id(tenant_id)
-    link = tracked_link(channel, client_id, tenant_id=tenant_id)
+    # `link` overrides the sharer's own credit link — only the Kite ID pop-up's "share
+    # without my ID" path passes one (the no-referrer link); every other caller omits it.
+    link = link or tracked_link(channel, client_id, tenant_id=tenant_id)
     anchor = disclosure_anchor()
 
     personal = str(opener or "").strip()
@@ -252,6 +255,51 @@ def handle_share_intent(
             is_bot=False,
             person_ref_id=None,  # PII-FREE — no VisitorPII write for this endpoint
             metadata={"channel": normalize_share_channel(channel) or SHARE_CHANNEL_OTHER},
+        )
+    )
+    return destination
+
+
+def is_share_channel_served(channel: str) -> bool:
+    """True when /share/{channel}/... actually serves `channel` (same gate as below)."""
+    return channel in SHARE_INTENT_CHANNELS and channel in _CHANNEL_TARGET_BUILDERS
+
+
+def handle_share_without_id(*, tenant, channel: str, user_agent: str | None, lang: str = "en"):
+    """The Kite ID pop-up's "Share without my ID" (owner 2026-11-02). Returns the destination.
+
+    Same share message as /share/{channel}/{client_id}, but the link inside is the
+    program's no-referrer link (/{prefix}/r/open), so the friend still gets a working link
+    and nobody is credited. Records a PII-free share_intent on the partner-direct journey;
+    creates NO referrer identity. Raises Http404 for a channel the endpoint doesn't serve.
+    """
+    if not is_share_channel_served(channel):
+        raise Http404(f"unsupported share channel: {channel!r}")
+
+    from .links import referral_path
+    from .redirect_service import RESERVED_OPEN, _get_or_create_partner_direct_referral
+
+    program = get_active_program(tenant)
+    tenant_id = getattr(tenant, "id", None)
+    link = f"https://{_public_host()}{referral_path(RESERVED_OPEN, tenant=tenant)}"
+    message = kit_message(channel, "", tenant_id, program=program, lang=lang, link=link)
+    destination = _CHANNEL_TARGET_BUILDERS[channel](message)
+
+    if is_bot_user_agent(user_agent):
+        return destination
+
+    referral = _get_or_create_partner_direct_referral(tenant, program)
+    transaction.on_commit(
+        lambda: Event.objects.create(
+            tenant=tenant,
+            event_type=vocab.SHARE_INTENT,
+            source=vocab.SRC_WATI,
+            referral=referral,
+            user_type="anonymous",
+            user_agent=user_agent or "",
+            is_bot=False,
+            person_ref_id=None,
+            metadata={"channel": normalize_share_channel(channel) or SHARE_CHANNEL_OTHER, "without_id": True},
         )
     )
     return destination

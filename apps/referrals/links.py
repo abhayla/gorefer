@@ -41,6 +41,11 @@ def referral_path(client_id: str, *, channel: str | None = None, tenant=None) ->
     return _prefixed(f"/r/{channel_segment}{client_id}", tenant)
 
 
+def share_path(channel: str, client_id: str, *, tenant=None) -> str:
+    """`/{prefix}/share/{channel}/{client_id}` — or the bare `/share/...` form without a prefix."""
+    return _prefixed(f"/share/{channel}/{client_id}", tenant)
+
+
 def partner_direct_path(*, tenant=None) -> str:
     """`/{prefix}/open` — or the bare `/open` without a prefix."""
     return _prefixed("/open", tenant)

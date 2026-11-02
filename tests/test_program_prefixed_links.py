@@ -96,8 +96,9 @@ def test_prefixed_link_matches_its_bare_twin(seeded, client, django_capture_on_c
 
 @pytest.mark.parametrize("path,expected_location", [
     ("/zerodha/open", "https://signup.zerodha.com/?c=ZMPHZC"),
-    ("/zerodha/r/open", "https://signup.zerodha.com/api/lead/?c=ZMPHZC"),
-    ("/zerodha/r/ZERODHAID", "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=ZERODHAID"),
+    # /r/open and placeholder ids show the Kite ID pop-up since 2026-11-02; its Skip lands here
+    ("/zerodha/r/open?skip=1", "https://signup.zerodha.com/api/lead/?c=ZMPHZC"),
+    ("/zerodha/r/ZERODHAID?skip=1", "https://signup.zerodha.com/api/lead/?c=ZMPHZC"),
     (f"/zerodha/r/{CID}/continue", f"https://signup.zerodha.com/api/lead/?c=ZMPHZC&r={CID}"),
 ])
 def test_prefixed_redirect_destinations(seeded, client, django_capture_on_commit_callbacks,

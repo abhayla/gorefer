@@ -33,14 +33,16 @@ from apps.referrals.views import (
     prefixed_channel_only_redirect,
     prefixed_partner_direct_redirect,
     prefixed_referral_continue,
+    prefixed_referral_prompt_view,
     prefixed_referral_redirect,
-    prefixed_share_channel_recovery_view,
     prefixed_share_intent_redirect,
-    prefixed_share_recovery_view,
+    prefixed_share_prompt_view,
     privacy_policy_view,
     referral_continue,
+    referral_prompt_view,
     referral_redirect,
     share_intent_redirect,
+    share_prompt_view,
     share_recovery_view,
 )
 from gorefer.converters import ChannelConverter
@@ -64,16 +66,18 @@ urlpatterns = [
     path("r/<channel:channel>/<str:client_id>/continue", referral_continue, name="referral_continue_channel"),
     path("r/<channel:channel>/<str:client_id>", referral_redirect, name="referral_redirect_channel"),
     # Legacy single-segment form (M2/M3) — unchanged; still honours ?s=.
-    # Channel with no client id (owner 2026-10-29): /r/wa/ behaves like /r/open. The `str`
-    # converter never matches an empty segment, so this cannot shadow any route here.
+    # Channel with no client id (owner 2026-10-29): /r/wa/ behaves like /r/open — since
+    # 2026-11-02 that is the Kite ID pop-up. The `str` converter never matches an empty
+    # segment, so this cannot shadow any route here.
     path("r/<channel:channel>/", channel_only_redirect, name="referral_channel_only"),
     path("r/<str:client_id>/continue", referral_continue, name="referral_continue"),
     path("r/<str:client_id>", referral_redirect, name="referral_redirect"),
-    # Bare /r/ and /r (no client_id at all) — T-122 soft-landing recovery, never a
-    # 404. Structurally disjoint from every pattern above: the `str` converter never
-    # matches an empty segment, so these can't shadow (or be shadowed by) them.
-    path("r/", share_recovery_view, name="referral_recovery_slash"),
-    path("r", share_recovery_view, name="referral_recovery_bare"),
+    # Bare /r/ and /r (no client_id at all) — the Kite ID pop-up (owner 2026-11-02;
+    # was the T-122 soft-landing page), never a 404. Structurally disjoint from every
+    # pattern above: the `str` converter never matches an empty segment, so these can't
+    # shadow (or be shadowed by) them.
+    path("r/", referral_prompt_view, name="referral_recovery_slash"),
+    path("r", referral_prompt_view, name="referral_recovery_bare"),
     path("api/", api.urls),
 ]
 
@@ -83,15 +87,16 @@ if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_SHARE_INTENT", False):
     urlpatterns.append(
         path("share/<channel:channel>/<str:client_id>", share_intent_redirect, name="share_intent")
     )
-    # Missing/empty client_id (T-122) — same flag gate as the route above, since this
-    # is the recovery page for exactly that route's broken links. Both segment shapes
+    # Missing/empty client_id — the sharer's Kite ID pop-up (owner 2026-11-02; was the
+    # T-122 recovery page); same flag gate as the route above, since it serves exactly
+    # that route's broken links. Both segment shapes
     # (trailing slash and bare) are disjoint from the pattern above, which requires a
     # non-empty client_id segment.
     urlpatterns.append(
-        path("share/<channel:channel>/", share_recovery_view, name="share_recovery_slash")
+        path("share/<channel:channel>/", share_prompt_view, name="share_recovery_slash")
     )
     urlpatterns.append(
-        path("share/<channel:channel>", share_recovery_view, name="share_recovery_bare")
+        path("share/<channel:channel>", share_prompt_view, name="share_recovery_bare")
     )
 
 # Read-only "Referral Records" page (T-051; client-id shape T-129). The ENTIRE route
@@ -177,8 +182,8 @@ urlpatterns += [
          name="referral_continue_prefixed"),
     path("<slug:program_prefix>/r/<str:client_id>", prefixed_referral_redirect,
          name="referral_redirect_prefixed"),
-    path("<slug:program_prefix>/r/", prefixed_share_recovery_view, name="referral_recovery_slash_prefixed"),
-    path("<slug:program_prefix>/r", prefixed_share_recovery_view, name="referral_recovery_bare_prefixed"),
+    path("<slug:program_prefix>/r/", prefixed_referral_prompt_view, name="referral_recovery_slash_prefixed"),
+    path("<slug:program_prefix>/r", prefixed_referral_prompt_view, name="referral_recovery_bare_prefixed"),
     path("<slug:program_prefix>/r/<channel:channel>/", prefixed_channel_only_redirect,
          name="referral_channel_only_prefixed"),
 ]
@@ -192,8 +197,8 @@ if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_SHARE_INTENT", False):
             "<slug:program_prefix>/share/<channel:channel>/<str:client_id>",
             prefixed_share_intent_redirect, name="share_intent_prefixed",
         ),
-        path("<slug:program_prefix>/share/<channel:channel>/", prefixed_share_channel_recovery_view,
+        path("<slug:program_prefix>/share/<channel:channel>/", prefixed_share_prompt_view,
              name="share_recovery_slash_prefixed"),
-        path("<slug:program_prefix>/share/<channel:channel>", prefixed_share_channel_recovery_view,
+        path("<slug:program_prefix>/share/<channel:channel>", prefixed_share_prompt_view,
              name="share_recovery_bare_prefixed"),
     ]

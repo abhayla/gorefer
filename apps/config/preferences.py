@@ -47,6 +47,107 @@ SHARE_RECOVERY_BUTTON_LABEL_DEFAULT = "Message us on WhatsApp"
 SHARE_RECOVERY_PREFILL = "share_recovery_prefill_text"
 SHARE_RECOVERY_PREFILL_DEFAULT = "Hi, I need my referral link"
 
+# --- Kite ID pop-up (owner decision 2026-11-02) ---------------------------------------
+# A referral or share link whose id is missing, malformed or an obvious placeholder
+# (/r/wa/KITEID, /share/wa/YOUR_KITE_ID, /r/wa/) shows a pop-up asking for the Kite ID
+# instead of a dead end. Every word on it is a cascade key (rail E-6 / §6d), edited in the
+# Preferences "Kite ID pop-up" section. `{program_brand}` renders the program's brand
+# (T-059), so the copy is partner-neutral. Two audiences: on /r/ links the visitor is the
+# FRIEND (asked for the referrer's id); on /share/ links it is the REFERRER (own id).
+KITE_PROMPT_REF_TITLE = "kite_prompt_referral_title"
+KITE_PROMPT_REF_TITLE_DEFAULT = "Who referred you?"
+KITE_PROMPT_REF_TEXT = "kite_prompt_referral_text"
+KITE_PROMPT_REF_TEXT_DEFAULT = (
+    "Enter the Kite ID of the friend who shared this link, so they get credit when you "
+    "open your {program_brand} account."
+)
+KITE_PROMPT_REF_LABEL = "kite_prompt_referral_label"
+KITE_PROMPT_REF_LABEL_DEFAULT = "Your friend's Kite ID"
+KITE_PROMPT_REF_BUTTON = "kite_prompt_referral_button"
+KITE_PROMPT_REF_BUTTON_DEFAULT = "Continue to {program_brand}"
+KITE_PROMPT_REF_SKIP = "kite_prompt_referral_skip"
+KITE_PROMPT_REF_SKIP_DEFAULT = "I don't have one, continue"
+KITE_PROMPT_REF_FOOT = "kite_prompt_referral_footnote"
+KITE_PROMPT_REF_FOOT_DEFAULT = "You can open your account either way."
+
+KITE_PROMPT_SHARE_TITLE = "kite_prompt_share_title"
+KITE_PROMPT_SHARE_TITLE_DEFAULT = "Enter your Kite ID"
+KITE_PROMPT_SHARE_TEXT = "kite_prompt_share_text"
+KITE_PROMPT_SHARE_TEXT_DEFAULT = (
+    "Your referral link needs your Kite ID, so you get credit when friends open an "
+    "account through it."
+)
+KITE_PROMPT_SHARE_LABEL = "kite_prompt_share_label"
+KITE_PROMPT_SHARE_LABEL_DEFAULT = "Your Kite ID"
+KITE_PROMPT_SHARE_BUTTON = "kite_prompt_share_button"
+KITE_PROMPT_SHARE_BUTTON_DEFAULT = "Share on WhatsApp"
+KITE_PROMPT_SHARE_SKIP = "kite_prompt_share_skip"
+KITE_PROMPT_SHARE_SKIP_DEFAULT = "Share without my ID"
+KITE_PROMPT_SHARE_FOOT = "kite_prompt_share_footnote"
+KITE_PROMPT_SHARE_FOOT_DEFAULT = (
+    "Without your ID, friends can still open an account, but you won't be credited."
+)
+
+KITE_PROMPT_HINT = "kite_prompt_hint"
+KITE_PROMPT_HINT_DEFAULT = (
+    "6 characters, starting with a letter. It's on the profile screen of the Kite app."
+)
+KITE_PROMPT_ERROR_EMPTY = "kite_prompt_error_empty"
+KITE_PROMPT_ERROR_EMPTY_DEFAULT = "Enter a Kite ID, or use the link below to continue without one."
+KITE_PROMPT_ERROR_SHAPE = "kite_prompt_error_shape"
+KITE_PROMPT_ERROR_SHAPE_DEFAULT = (
+    "This doesn't look like a Kite ID. It has 6 characters and starts with a letter, like AB1234."
+)
+KITE_PROMPT_ERROR_PLACEHOLDER = "kite_prompt_error_placeholder"
+KITE_PROMPT_ERROR_PLACEHOLDER_DEFAULT = "That is an example, not a real ID. Enter the actual Kite ID."
+
+# Obvious placeholder words that are never a real id (read by
+# apps.referrals.validators.validate_client_id_for). JSON list, or comma-separated text
+# when saved from the Preferences screen; compared uppercase, letters and digits only.
+CLIENT_ID_PLACEHOLDER_WORDS = "client_id_placeholder_words"
+CLIENT_ID_PLACEHOLDER_WORDS_DEFAULT = [
+    "KITEID", "YOURID", "MYID", "CLIENT", "CLIENTID", "USERID", "KITEUSERID",
+    "ZERODHAID", "REFERRALID", "REFID", "XXXXXX", "ABCDEF",
+]
+
+# The rows the Preferences "Kite ID pop-up" section renders + persists, in display order
+# (same data-driven shape as MESSAGING_ENGINE_FIELDS: a new string is a row, not markup).
+KITE_PROMPT_FIELDS = [
+    (KITE_PROMPT_REF_TITLE, "Referral link: heading", KITE_PROMPT_REF_TITLE_DEFAULT),
+    (KITE_PROMPT_REF_TEXT, "Referral link: message", KITE_PROMPT_REF_TEXT_DEFAULT),
+    (KITE_PROMPT_REF_LABEL, "Referral link: box label", KITE_PROMPT_REF_LABEL_DEFAULT),
+    (KITE_PROMPT_REF_BUTTON, "Referral link: button", KITE_PROMPT_REF_BUTTON_DEFAULT),
+    (KITE_PROMPT_REF_SKIP, "Referral link: skip link", KITE_PROMPT_REF_SKIP_DEFAULT),
+    (KITE_PROMPT_REF_FOOT, "Referral link: footnote", KITE_PROMPT_REF_FOOT_DEFAULT),
+    (KITE_PROMPT_SHARE_TITLE, "Share link: heading", KITE_PROMPT_SHARE_TITLE_DEFAULT),
+    (KITE_PROMPT_SHARE_TEXT, "Share link: message", KITE_PROMPT_SHARE_TEXT_DEFAULT),
+    (KITE_PROMPT_SHARE_LABEL, "Share link: box label", KITE_PROMPT_SHARE_LABEL_DEFAULT),
+    (KITE_PROMPT_SHARE_BUTTON, "Share link: button", KITE_PROMPT_SHARE_BUTTON_DEFAULT),
+    (KITE_PROMPT_SHARE_SKIP, "Share link: skip link", KITE_PROMPT_SHARE_SKIP_DEFAULT),
+    (KITE_PROMPT_SHARE_FOOT, "Share link: footnote", KITE_PROMPT_SHARE_FOOT_DEFAULT),
+    (KITE_PROMPT_HINT, "Hint under the box", KITE_PROMPT_HINT_DEFAULT),
+    (KITE_PROMPT_ERROR_EMPTY, "Error: nothing entered", KITE_PROMPT_ERROR_EMPTY_DEFAULT),
+    (KITE_PROMPT_ERROR_SHAPE, "Error: wrong shape", KITE_PROMPT_ERROR_SHAPE_DEFAULT),
+    (KITE_PROMPT_ERROR_PLACEHOLDER, "Error: placeholder entered", KITE_PROMPT_ERROR_PLACEHOLDER_DEFAULT),
+    (
+        CLIENT_ID_PLACEHOLDER_WORDS,
+        "Placeholder words (comma-separated; never treated as a real ID)",
+        ", ".join(CLIENT_ID_PLACEHOLDER_WORDS_DEFAULT),
+    ),
+]
+
+
+def kite_prompt_fields_view(tenant_id: int | None = None) -> list[dict]:
+    """Rows for the Preferences 'Kite ID pop-up' section: form key, label, current value."""
+    rows = []
+    for key, label, default in KITE_PROMPT_FIELDS:
+        value = resolve(key, tenant_id=tenant_id, default=default)
+        if isinstance(value, (list, tuple)):
+            value = ", ".join(str(v) for v in value)
+        rows.append({"form_key": key, "label": label, "value": value, "default": default})
+    return rows
+
+
 # --- Records magic link (T-051; behind ENABLE_RECORDS_LINK) ------------------------
 # How long a WhatsApp [Referral Records] link stays usable. A cascade key, not a
 # literal (rail E-6 / §6d): shortening the window has to take effect on links ALREADY
@@ -823,6 +924,9 @@ def central_defaults() -> dict:
         SHARE_RECOVERY_BODY: SHARE_RECOVERY_BODY_DEFAULT,
         SHARE_RECOVERY_BUTTON_LABEL: SHARE_RECOVERY_BUTTON_LABEL_DEFAULT,
         SHARE_RECOVERY_PREFILL: SHARE_RECOVERY_PREFILL_DEFAULT,
+        # Kite ID pop-up (owner 2026-11-02) — see the key block above.
+        **{key: default for key, _label, default in KITE_PROMPT_FIELDS if key != CLIENT_ID_PLACEHOLDER_WORDS},
+        CLIENT_ID_PLACEHOLDER_WORDS: CLIENT_ID_PLACEHOLDER_WORDS_DEFAULT,
         RECORDS_LINK_TTL_DAYS: RECORDS_LINK_TTL_DAYS_DEFAULT,
         RECORDS_MINT_DATE_FORMAT: RECORDS_MINT_DATE_FORMAT_DEFAULT,
         RECORDS_LINK_TEMPLATE_EN: RECORDS_LINK_TEMPLATE_EN_DEFAULT,

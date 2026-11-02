@@ -1,8 +1,9 @@
 """Channel-only links (`/r/wa/`, `/r/wa`, `/zerodha/r/wa/`, ...) behave exactly like `/r/open`.
 
 Owner decision 2026-10-29 (SPEC CHANGE to 06-API 4.1 step 1: a value equal to a configured
-channel code is no longer passed through as r=<value>). D2: `/r/`, `/r`, `/share/...`,
-`/r/{id}`, `/r/{channel}/{id}`, `/continue` forms and `/open` are unchanged.
+channel code is no longer passed through as r=<value>). Since 2026-11-02 `/r/open` (and so
+these) shows the Kite ID pop-up; its Skip is the old 302 to the partner referral page, with
+the channel recorded on the click. `/r/{id}` with a real id and `/open` are unchanged.
 """
 import pytest
 from django.core.management import call_command
@@ -47,14 +48,19 @@ def _state():
     ("/zerodha/r/yt/", "YouTube"),
 ])
 def test_channel_only_equals_open(seeded, django_capture_on_commit_callbacks, path, channel_meta):
+    # Shown: the pop-up, exactly like /r/open, and nothing but its view event recorded.
     resp = _get(path, django_capture_on_commit_callbacks)
+    ref = _get("/zerodha/r/open" if path.startswith("/zerodha") else "/r/open",
+               django_capture_on_commit_callbacks)
+    assert resp.status_code == ref.status_code == 200
+    assert "Who referred you?" in resp.content.decode()
+    assert not Event.objects.filter(event_type="click").exists()
+    Event.objects.all().delete()
+    # Skip: the partner referral page with the channel recorded on the click.
+    resp = _get(path + "?skip=1", django_capture_on_commit_callbacks)
     assert resp.status_code == 302
     assert resp.headers["Location"] == REFERRAL_PAGE
     assert _state() == (0, 1, 1, ("click", {"channel": channel_meta}))
-    # same status + Location as the reserved open link
-    ref = _get("/zerodha/r/open" if path.startswith("/zerodha") else "/r/open",
-               django_capture_on_commit_callbacks)
-    assert (ref.status_code, ref.headers["Location"]) == (resp.status_code, resp.headers["Location"])
 
 
 @pytest.mark.parametrize("path", ["/r/wa/", "/r/wa", "/zerodha/r/wa/", "/zerodha/r/wa"])
@@ -75,22 +81,20 @@ def test_wrong_prefix_404s_without_writes(seeded, django_capture_on_commit_callb
 
 
 @pytest.mark.parametrize("path", ["/r/", "/r", "/zerodha/r/", "/zerodha/r"])
-def test_recovery_pages_unchanged(seeded, django_capture_on_commit_callbacks, path):
+def test_bare_r_shows_the_prompt(seeded, django_capture_on_commit_callbacks, path):
     resp = _get(path, django_capture_on_commit_callbacks)
     assert resp.status_code == 200
-    # recovery page: only its own view event, never a click or a journey
+    assert "Who referred you?" in resp.content.decode()
+    # only its own view event, never a click or a journey
     assert not Event.objects.filter(event_type="click").exists()
     assert Referral.objects.count() == 0
 
 
-@pytest.mark.parametrize("path,loc", [
-    ("/r/ZERODHAID", REFERRAL_PAGE + "&r=ZERODHAID"),
-    ("/r/XYZ", REFERRAL_PAGE + "&r=XYZ"),
-    ("/r/wa/ZERODHAID", REFERRAL_PAGE + "&r=ZERODHAID"),
-])
-def test_other_passthrough_unchanged(seeded, django_capture_on_commit_callbacks, path, loc):
+@pytest.mark.parametrize("path", ["/r/ZERODHAID", "/r/XYZ", "/r/wa/ZERODHAID"])
+def test_other_unknown_values_show_the_prompt(seeded, django_capture_on_commit_callbacks, path):
     resp = _get(path, django_capture_on_commit_callbacks)
-    assert (resp.status_code, resp.headers["Location"]) == (302, loc)
+    assert resp.status_code == 200
+    assert "Who referred you?" in resp.content.decode()
 
 
 def test_channel_referral_with_real_id_unchanged(seeded, django_capture_on_commit_callbacks):

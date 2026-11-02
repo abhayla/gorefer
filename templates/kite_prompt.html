@@ -1,0 +1,40 @@
+{% extends "landing_base.html" %}
+{% comment %}
+Kite ID pop-up (owner decision 2026-11-02) — shown for any referral or share link whose
+id is missing, malformed or an obvious placeholder. A plain GET form posting back to the
+SAME url (no JavaScript needed): ?kite_id=… is validated server-side, ?skip=1 takes the
+skip path. Every word comes from the config cascade (`copy`, rail E-6). The dimmed
+backdrop sits behind the pop-up only, so the AP disclosure + market-risk warning injected
+by landing_base.html below stay fully legible (compliance rule, CLAUDE.md §4).
+{% endcomment %}
+{% block title %}{{ copy.title }} — PIFS{% endblock %}
+{% block body %}
+<section class="bg-ink-900/40 px-4 py-8 sm:py-12 flex items-center justify-center min-h-[60vh]">
+  <form method="get" action="{{ request.path }}" role="dialog" aria-modal="true" aria-labelledby="kite-title"
+        class="w-full max-w-sm rounded-2xl bg-white card border border-line px-5 pt-6 pb-5 space-y-3 text-left" novalidate>
+    <div class="h-11 w-11 rounded-full bg-cobalt-50 text-cobalt-600 flex items-center justify-center" aria-hidden="true">
+      <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6.5 16c.6-1.4 1.6-2 2.5-2s1.9.6 2.5 2M14 10h4M14 13h3"/></svg>
+    </div>
+    <h1 id="kite-title" class="text-[19px] leading-snug font-extrabold tracking-tight text-ink-900">{{ copy.title }}</h1>
+    <p class="text-[13px] text-ink-500 leading-relaxed">{{ copy.text }}</p>
+    <label for="kite-id" class="block text-xs font-semibold text-ink-700">{{ copy.label }}</label>
+    <input id="kite-id" name="{{ kite_id_param }}" type="text" value="{{ entered }}" maxlength="{{ input_max }}"
+           autocomplete="off" autocapitalize="characters" spellcheck="false" autofocus placeholder="AB1234"
+           {% if error %}aria-invalid="true" aria-describedby="kite-error"{% endif %}
+           class="w-full rounded-xl border {% if error %}border-danger{% else %}border-line{% endif %} bg-white px-4 py-3 text-lg font-mono uppercase tracking-widest text-ink-900 focus:outline-none focus:ring-2 focus:ring-cobalt-500">
+    <p class="text-[11.5px] text-ink-500 -mt-1">{{ copy.hint }}</p>
+    {% if error %}
+      <p id="kite-error" role="alert" class="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2">{{ error }}</p>
+    {% endif %}
+    <button type="submit"
+      class="w-full rounded-full bg-cobalt-600 hover:bg-cobalt-500 transition-colors text-white text-sm font-bold py-3.5 card flex items-center justify-center gap-2">
+      {% if mode == "share" %}
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 004.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0012.04 2z"/></svg>
+      {% endif %}
+      {{ copy.button }}
+    </button>
+    <a href="{{ skip_url }}" class="block text-center text-[13px] font-semibold text-cobalt-600 py-1.5">{{ copy.skip }}</a>
+    <p class="text-center text-[11px] text-ink-500">{{ copy.foot }}</p>
+  </form>
+</section>
+{% endblock %}

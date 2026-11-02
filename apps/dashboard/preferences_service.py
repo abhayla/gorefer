@@ -95,6 +95,8 @@ def current_view(tenant) -> dict:
         # Messaging engine (T-124 W1) — digest send hour/recipients + alert thresholds.
         # Campaign CONFIG itself lives on its own page at /admin-panel/campaigns.
         "messaging_engine_fields": prefkeys.messaging_engine_fields_view(tenant_id),
+        # Kite ID pop-up (owner 2026-11-02) — the words on the pop-up + placeholder list.
+        "kite_prompt_fields": prefkeys.kite_prompt_fields_view(tenant_id),
     }
 
 
@@ -387,6 +389,36 @@ def save_preferences(tenant, data, *, user=None) -> list[str]:
 
     # --- Messaging engine (T-124 W1) — digest/alert knobs ------------------------
     notices.extend(_save_messaging_engine(tenant_id, data, user=user))
+
+    # --- Kite ID pop-up copy + placeholder words (owner 2026-11-02) ----------------
+    notices.extend(_save_kite_prompt(tenant_id, data, user=user))
+    return notices
+
+
+def _save_kite_prompt(tenant_id, data, *, user=None) -> list[str]:
+    """Persist the Kite ID pop-up wording and the placeholder-word list.
+
+    A blank field resets that string to its default rather than saving an empty
+    pop-up line. The placeholder list is stored as a JSON list of normalized words; a
+    blank list is refused (it would let `KITEID` become a referrer again).
+    """
+    notices: list[str] = []
+    for key, label, default in prefkeys.KITE_PROMPT_FIELDS:
+        if key not in data:
+            continue  # field not submitted -> leave as-is
+        raw = str(data.get(key) or "").strip()
+        if key == prefkeys.CLIENT_ID_PLACEHOLDER_WORDS:
+            words = []
+            for entry in raw.split(","):
+                word = "".join(ch for ch in entry if ch.isalnum()).upper()
+                if word and word not in words:
+                    words.append(word)
+            if not words:
+                notices.append(f"“{label}” was not saved — keep at least one word. Kept the previous list.")
+                continue
+            set_tenant(key, words, tenant_id=tenant_id, user=user)
+            continue
+        set_tenant(key, raw or default, tenant_id=tenant_id, user=user)
     return notices
 
 

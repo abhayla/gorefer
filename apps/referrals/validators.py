@@ -180,12 +180,43 @@ def resolve_client_id_pattern(tenant_id: int | None, partner_code: str | None = 
     return ""
 
 
+# --- Placeholder ids (owner decision 2026-11-02) --------------------------------------
+# A link that carries an example instead of a real id (`/r/wa/KITEID`) must never create a
+# referrer. `KITEID` has exactly the shape of a real Zerodha id, so the pattern alone can't
+# catch it: the obvious placeholder WORDS are a cascade key (rail E-6 / §6d), editable on
+# the Preferences screen (key + default live in apps.config.preferences with the other
+# screen keys). Only obvious words belong there — when in doubt, let it through (owner:
+# "if you're not sure, let the user proceed").
+
+
+def placeholder_words(tenant_id: int | None) -> set[str]:
+    """The configured placeholder words, normalized. Accepts a JSON list or a
+    comma-separated string (the Preferences text field), so either storage shape works."""
+    from apps.config.cascade import resolve
+    from apps.config.preferences import CLIENT_ID_PLACEHOLDER_WORDS, CLIENT_ID_PLACEHOLDER_WORDS_DEFAULT
+
+    try:
+        value = resolve(
+            CLIENT_ID_PLACEHOLDER_WORDS, tenant_id=tenant_id, default=CLIENT_ID_PLACEHOLDER_WORDS_DEFAULT
+        )
+    except Exception:
+        value = CLIENT_ID_PLACEHOLDER_WORDS_DEFAULT
+    if isinstance(value, str):
+        value = value.split(",")
+    return {"".join(ch for ch in str(word) if ch.isalnum()).upper() for word in (value or [])} - {""}
+
+
+def is_placeholder_id(tenant_id: int | None, normalized: str) -> bool:
+    return (normalized or "").upper() in placeholder_words(tenant_id)
+
+
 def validate_client_id_for(tenant, raw: str | None) -> str:
     """Validate against the ACTIVE partner's pattern — for identity-CREATING paths.
 
     Resolving the partner is best-effort: with no program configured we fall back to the
     spec rule rather than refusing every link, because a config gap must never take the
-    redirect path down.
+    redirect path down. A well-shaped placeholder (`KITEID`) is refused too, so it can
+    never become a referrer.
     """
     tenant_id = getattr(tenant, "id", None)
     partner_code = None
@@ -196,4 +227,7 @@ def validate_client_id_for(tenant, raw: str | None) -> str:
         partner_code = getattr(getattr(program, "partner", None), "code", None)
     except Exception:
         partner_code = None
-    return validate_client_id(raw, pattern=resolve_client_id_pattern(tenant_id, partner_code))
+    normalized = validate_client_id(raw, pattern=resolve_client_id_pattern(tenant_id, partner_code))
+    if is_placeholder_id(tenant_id, normalized):
+        raise InvalidClientId("client_id is a placeholder, not a real id")
+    return normalized

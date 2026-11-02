@@ -29,21 +29,19 @@ from gorefer import flags as flagmod
 from gorefer.flags import flags, normalize_share_channel
 
 from .landing_mode import LANDING_MODE_DIRECT, resolve_landing_mode
-from .links import matches_program_prefix, referral_path
+from .links import matches_program_prefix, referral_path, share_path
 from .models import ProgramRedirectRule, ReferralIdentity, ReferralProgram
 from .redirect_service import (
-    RESERVED_OPEN,
     build_continue_redirect,
-    can_pass_through,
     handle_direct_redirect,
     handle_landing_view,
     handle_partner_direct,
-    handle_unknown_id_redirect,
+    handle_partner_referral_page_redirect,
     is_channel_code,
     is_reserved_open,
 )
-from .share_intent_service import handle_share_intent
-from .validators import InvalidClientId, validate_client_id_for
+from .share_intent_service import handle_share_intent, handle_share_without_id, is_share_channel_served
+from .validators import InvalidClientId, is_placeholder_id, validate_client_id_for
 
 VISITOR_COOKIE = "gr_vid"
 # 60 days — matches the API spec (06 §4.1) AND Zerodha's 60-day attribution window, so
@@ -157,14 +155,15 @@ def _landing_context(request, tenant, client_id: str, nonce: str | None):
     return ctx
 
 
-def _passthrough_response(request, tenant, raw_value: str, channel: str | None):
-    """T-574: reserved `open` and unknown placeholder ids -> 302 to the partner, no identity."""
+def _partner_referral_page_response(request, tenant, channel: str | None):
+    """The old /r/open path, now the referral pop-up's Skip: 302 to the partner's referral
+    page (empty box, partner code server-side), no identity; crawlers get the PIFS card."""
     if is_bot_user_agent(request.META.get("HTTP_USER_AGENT", "")):
         return render_preview(request, tenant_id=getattr(tenant, "id", None))
     visitor_id, is_new = _ensure_visitor_id(request)
     try:
-        destination, _human = handle_unknown_id_redirect(
-            tenant=tenant, raw_value=raw_value, visitor_id=visitor_id,
+        destination, _human = handle_partner_referral_page_redirect(
+            tenant=tenant, visitor_id=visitor_id,
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
             raw_ip=_client_ip(request), share_channel=_share_channel(request, channel),
         )
@@ -185,22 +184,20 @@ def referral_redirect(request, client_id: str, channel: str | None = None):
     """
     tenant = get_current_tenant(request)
     if is_reserved_open(client_id):  # /r/open - checked BEFORE validation (T-574)
-        return _passthrough_response(request, tenant, client_id, channel)
+        return _kite_prompt_response(request, tenant, mode=PROMPT_REFERRAL, channel=channel)
     if channel is None and is_channel_code(client_id):
         # /r/wa, /r/yt (owner 2026-10-29): a bare channel code is a channel-only link, not a
-        # referrer id - behaves exactly like /r/{channel}/open, recording the channel.
-        return _passthrough_response(request, tenant, RESERVED_OPEN, client_id)
+        # referrer id - same as /r/{channel}/open, recording the channel.
+        return _kite_prompt_response(request, tenant, mode=PROMPT_REFERRAL, channel=client_id)
     try:
         # STRICT, per-partner (owner decision 2026-07-27): this path CREATES an identity,
         # so a leaked chatbot label like `TALK` — or the partner code `ZMPHZC` itself —
         # must never become a referrer. Lookup paths keep the loose spec rule.
         normalized = validate_client_id_for(tenant, client_id)
     except InvalidClientId:
-        # T-574 (owner 2026-10-22): a placeholder/unknown value passes through to the
-        # partner with NO identity; only over-long values keep the branded 400.
-        if can_pass_through(client_id):
-            return _passthrough_response(request, tenant, client_id, channel)
-        return render(request, "landing_invalid.html", status=400)
+        # Owner 2026-11-02 (replaces the T-574 pass-through): a missing, malformed or
+        # placeholder id asks for the real Kite ID instead; Skip keeps the old /r/open path.
+        return _kite_prompt_response(request, tenant, mode=PROMPT_REFERRAL, channel=channel)
 
     # D2 — a CRAWLER gets a PIFS link-preview card, never a 302.
     #
@@ -253,7 +250,7 @@ def channel_only_redirect(request, channel: str):
     """GET /r/{channel}/ (owner 2026-10-29) - a channel link with no client id: same as /r/open."""
     if not is_channel_code(channel):  # converter takes any 1-8 letters; only KNOWN codes act
         raise Http404("unknown channel")
-    return _passthrough_response(request, get_current_tenant(request), RESERVED_OPEN, channel)
+    return _kite_prompt_response(request, get_current_tenant(request), mode=PROMPT_REFERRAL, channel=channel)
 
 
 @require_GET
@@ -263,14 +260,12 @@ def referral_continue(request, client_id: str, channel: str | None = None):
     prefix; captured for attribution, NEVER added to the Location."""
     tenant = get_current_tenant(request)
     if is_reserved_open(client_id):
-        return _passthrough_response(request, tenant, client_id, channel)
+        return _kite_prompt_response(request, tenant, mode=PROMPT_REFERRAL, channel=channel)
     try:
         # STRICT, per-partner — this path lazily creates the identity too.
         normalized = validate_client_id_for(tenant, client_id)
     except InvalidClientId:
-        if can_pass_through(client_id):
-            return _passthrough_response(request, tenant, client_id, channel)
-        return render(request, "landing_invalid.html", status=400)
+        return _kite_prompt_response(request, tenant, mode=PROMPT_REFERRAL, channel=channel)
     identity = ReferralIdentity.objects.for_tenant(tenant).filter(
         client_id=normalized, id_source="native"
     ).first()
@@ -319,8 +314,8 @@ def share_intent_redirect(request, channel: str, client_id: str):
     route conditionally, per Constitution §4 — no dead UI when off). Builds the
     channel's share deep-link (launch: WhatsApp) with a prefilled kit message
     carrying the tracked `/r/{channel}/{client_id}` link, records a PII-free
-    `share_intent` event, then 302s. Unsupported channel -> 404; invalid
-    client_id -> the same branded 400 as `/r/`; unresolvable partner config -> the
+    `share_intent` event, then 302s. Unsupported channel -> 404; a missing, malformed
+    or placeholder client_id -> the Kite ID pop-up; unresolvable partner config -> the
     same branded 503 as `/r/`.
     """
     from django.conf import settings
@@ -335,11 +330,14 @@ def share_intent_redirect(request, channel: str, client_id: str):
     from apps.config.i18n import resolve_lang_or_stored
 
     tenant = get_current_tenant(request)
+    if not is_share_channel_served(channel):
+        return HttpResponseNotFound()  # unsupported channel stays a 404, before any prompt
     try:
         # STRICT, per-partner — this path lazily creates the identity too.
         normalized = validate_client_id_for(tenant, client_id)
     except InvalidClientId:
-        return render(request, "landing_invalid.html", status=400)
+        # Owner 2026-11-02: a malformed or placeholder id asks the sharer for their Kite ID.
+        return _kite_prompt_response(request, tenant, mode=PROMPT_SHARE, channel=channel)
     # T-062: explicit ?lang= always wins; otherwise the referrer's stored language.
     lang = resolve_lang_or_stored(request, getattr(tenant, "id", None))
     try:
@@ -485,6 +483,162 @@ def privacy_policy_view(request):
 
 
 # ---------------------------------------------------------------------------
+# Kite ID pop-up (owner decision 2026-11-02). Every referral or share link whose id is
+# missing, malformed or an obvious placeholder (/r/wa/KITEID, /r/wa/, /r/, /r/open,
+# /share/wa/YOUR_KITE_ID, /share/wa/ and every /{program}/ twin) renders ONE page: a
+# PIFS-branded pop-up asking for the Kite ID. It is a plain GET form posting back to the
+# SAME URL, so it works with no JavaScript and every link shape keeps its own address:
+#   ?kite_id=AB1234 -> validated with the same strict rule as the link itself, then a 302
+#                      to the canonical link (/{program}/r/[ch/]AB1234 or
+#                      /{program}/share/{ch}/AB1234), which records the click as before;
+#   ?skip=1         -> referral links: the old /r/open path (partner referral page, empty
+#                      box, partner code server-side, no referrer); share links: the share
+#                      message carrying the no-referrer link.
+# Crawlers still get the PIFS preview card and nothing is recorded for them.
+# ---------------------------------------------------------------------------
+PROMPT_REFERRAL = "referral"
+PROMPT_SHARE = "share"
+KITE_ID_PARAM = "kite_id"
+SKIP_PARAM = "skip"
+KITE_ID_INPUT_MAX = 32  # matches the old pass-through abuse bound; longer input is cut
+
+
+def _kite_prompt_copy(tenant_id: int | None, mode: str) -> dict:
+    """Config-driven pop-up wording (rail E-6 / §6d). `{program_brand}` is substituted by
+    plain replacement, so a stray brace in operator copy can never break the page."""
+    from apps.config import preferences as prefkeys
+
+    from .branding import brand_for_tenant_id
+
+    brand = brand_for_tenant_id(tenant_id) or ""
+
+    def text(key, default):
+        value = resolve(key, tenant_id=tenant_id, default=default)
+        return str(value or default).replace("{program_brand}", brand)
+
+    if mode == PROMPT_SHARE:
+        keys = {
+            "title": (prefkeys.KITE_PROMPT_SHARE_TITLE, prefkeys.KITE_PROMPT_SHARE_TITLE_DEFAULT),
+            "text": (prefkeys.KITE_PROMPT_SHARE_TEXT, prefkeys.KITE_PROMPT_SHARE_TEXT_DEFAULT),
+            "label": (prefkeys.KITE_PROMPT_SHARE_LABEL, prefkeys.KITE_PROMPT_SHARE_LABEL_DEFAULT),
+            "button": (prefkeys.KITE_PROMPT_SHARE_BUTTON, prefkeys.KITE_PROMPT_SHARE_BUTTON_DEFAULT),
+            "skip": (prefkeys.KITE_PROMPT_SHARE_SKIP, prefkeys.KITE_PROMPT_SHARE_SKIP_DEFAULT),
+            "foot": (prefkeys.KITE_PROMPT_SHARE_FOOT, prefkeys.KITE_PROMPT_SHARE_FOOT_DEFAULT),
+        }
+    else:
+        keys = {
+            "title": (prefkeys.KITE_PROMPT_REF_TITLE, prefkeys.KITE_PROMPT_REF_TITLE_DEFAULT),
+            "text": (prefkeys.KITE_PROMPT_REF_TEXT, prefkeys.KITE_PROMPT_REF_TEXT_DEFAULT),
+            "label": (prefkeys.KITE_PROMPT_REF_LABEL, prefkeys.KITE_PROMPT_REF_LABEL_DEFAULT),
+            "button": (prefkeys.KITE_PROMPT_REF_BUTTON, prefkeys.KITE_PROMPT_REF_BUTTON_DEFAULT),
+            "skip": (prefkeys.KITE_PROMPT_REF_SKIP, prefkeys.KITE_PROMPT_REF_SKIP_DEFAULT),
+            "foot": (prefkeys.KITE_PROMPT_REF_FOOT, prefkeys.KITE_PROMPT_REF_FOOT_DEFAULT),
+        }
+    keys.update({
+        "hint": (prefkeys.KITE_PROMPT_HINT, prefkeys.KITE_PROMPT_HINT_DEFAULT),
+        "error_empty": (prefkeys.KITE_PROMPT_ERROR_EMPTY, prefkeys.KITE_PROMPT_ERROR_EMPTY_DEFAULT),
+        "error_shape": (prefkeys.KITE_PROMPT_ERROR_SHAPE, prefkeys.KITE_PROMPT_ERROR_SHAPE_DEFAULT),
+        "error_placeholder": (
+            prefkeys.KITE_PROMPT_ERROR_PLACEHOLDER, prefkeys.KITE_PROMPT_ERROR_PLACEHOLDER_DEFAULT
+        ),
+    })
+    return {name: text(key, default) for name, (key, default) in keys.items()}
+
+
+def _kite_prompt_response(request, tenant, *, mode: str, channel: str | None = None):
+    """Render (or act on) the Kite ID pop-up for a link whose id is unusable."""
+    from django.conf import settings
+    from django.http import HttpResponse, HttpResponseNotFound
+
+    user_agent = request.META.get("HTTP_USER_AGENT", "")
+    tenant_id = getattr(tenant, "id", None)
+    if is_bot_user_agent(user_agent):  # preview fetch: the PIFS card, never the pop-up
+        return render_preview(request, tenant_id=tenant_id)
+
+    if SKIP_PARAM in request.GET:
+        if mode == PROMPT_REFERRAL:
+            # Exactly the old /r/open path: partner referral page, empty box, partner code
+            # injected server-side, click on the partner-direct journey, no referrer.
+            return _partner_referral_page_response(request, tenant, channel)
+        try:
+            check_rate("share", client_ip(request),
+                       limit=settings.RATELIMIT_SHARE_MAX, window=settings.RATELIMIT_API_WINDOW)
+        except RateLimited as exc:
+            return HttpResponse(status=429, headers={"Retry-After": str(exc.retry_after)})
+        from apps.config.i18n import resolve_lang_or_stored
+
+        try:
+            destination = handle_share_without_id(
+                tenant=tenant, channel=channel or "", user_agent=user_agent,
+                lang=resolve_lang_or_stored(request, tenant_id),
+            )
+        except Http404:
+            return HttpResponseNotFound()
+        except PartnerUnavailable:
+            return _partner_unavailable(request)
+        return HttpResponseRedirect(destination)
+
+    copy = _kite_prompt_copy(tenant_id, mode)
+    error = ""
+    entered = ""
+    if KITE_ID_PARAM in request.GET:
+        entered = "".join((request.GET.get(KITE_ID_PARAM) or "").split())[:KITE_ID_INPUT_MAX]
+        if not entered:
+            error = copy["error_empty"]
+        else:
+            try:
+                normalized = validate_client_id_for(tenant, entered)
+            except InvalidClientId:
+                cleaned = "".join(ch for ch in entered if ch.isalnum()).upper()
+                placeholder = is_placeholder_id(tenant_id, cleaned)
+                error = copy["error_placeholder"] if placeholder else copy["error_shape"]
+            else:
+                if mode == PROMPT_SHARE:
+                    return HttpResponseRedirect(share_path(channel, normalized, tenant=tenant))
+                return HttpResponseRedirect(referral_path(normalized, channel=channel, tenant=tenant))
+    else:
+        # First view only (not each retry). Reuses the T-122 recovery event, which the
+        # daily digest counts: this pop-up is now where an id-less link lands.
+        Event.objects.create(
+            tenant=tenant,
+            event_type=vocab.SHARE_RECOVERY_VIEWED,
+            source=vocab.SRC_SYSTEM,
+            referral=None,
+            user_type="anonymous",
+            user_agent=user_agent,
+            is_bot=False,
+            person_ref_id=None,
+            metadata={"channel": normalize_share_channel(channel) if channel else "", "prompt": mode},
+        )
+    context = {
+        "copy": copy,
+        "mode": mode,
+        "error": error,
+        "entered": entered,
+        "kite_id_param": KITE_ID_PARAM,
+        "skip_url": f"{request.path}?{SKIP_PARAM}=1",
+        "input_max": KITE_ID_INPUT_MAX,
+    }
+    return render(request, "kite_prompt.html", context, status=200)
+
+
+@require_GET
+def referral_prompt_view(request):
+    """GET /r/ and /r (no id at all) — the Kite ID pop-up (replaced the T-122 help page)."""
+    return _kite_prompt_response(request, get_current_tenant(request), mode=PROMPT_REFERRAL)
+
+
+@require_GET
+def share_prompt_view(request, channel: str):
+    """GET /share/{channel}/ and /share/{channel} — the sharer's Kite ID pop-up. A channel
+    the share endpoint doesn't serve keeps the T-122 help page (the pop-up would lead to a
+    404 once an id is entered)."""
+    if not is_share_channel_served(channel):
+        return share_recovery_view(request, channel=channel)
+    return _kite_prompt_response(request, get_current_tenant(request), mode=PROMPT_SHARE, channel=channel)
+
+
+# ---------------------------------------------------------------------------
 # Program-prefixed twins (owner decision 2026-10-29): /{url_prefix}/open,
 # /{url_prefix}/r/[{channel}/]{client_id}[/continue], /{url_prefix}/r[/]. Each one
 # checks that the prefix is the active program's link word (data on ReferralProgram,
@@ -522,9 +676,9 @@ def prefixed_referral_continue(request, program_prefix: str, client_id: str, cha
 
 
 @require_GET
-def prefixed_share_recovery_view(request, program_prefix: str):
+def prefixed_referral_prompt_view(request, program_prefix: str):
     _require_program_prefix(request, program_prefix)
-    return share_recovery_view(request)
+    return referral_prompt_view(request)
 
 
 @require_GET
@@ -535,6 +689,6 @@ def prefixed_share_intent_redirect(request, program_prefix: str, channel: str, c
 
 
 @require_GET
-def prefixed_share_channel_recovery_view(request, program_prefix: str, channel: str):
+def prefixed_share_prompt_view(request, program_prefix: str, channel: str):
     _require_program_prefix(request, program_prefix)
-    return share_recovery_view(request, channel=channel)
+    return share_prompt_view(request, channel)

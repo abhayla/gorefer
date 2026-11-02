@@ -13,7 +13,7 @@ from django.urls import include, path
 
 from apps.accounts.hub import hub_me_opener_view, hub_me_view, hub_opener_view, hub_view
 from apps.accounts.records import records_view
-from apps.referrals.views import share_intent_redirect, share_recovery_view
+from apps.referrals.views import share_intent_redirect, share_prompt_view, share_recovery_view
 from gorefer.urls import urlpatterns as base_urlpatterns
 
 urlpatterns = [
@@ -27,6 +27,6 @@ urlpatterns = [
     path("rr/<str:value>", records_view, name="records_link"),
     path("", include("apps.accounts.urls")),
     path("share/<channel:channel>/<str:client_id>", share_intent_redirect, name="share_intent"),
-    path("share/<channel:channel>/", share_recovery_view, name="share_recovery_slash"),
-    path("share/<channel:channel>", share_recovery_view, name="share_recovery_bare"),
+    path("share/<channel:channel>/", share_prompt_view, name="share_recovery_slash"),
+    path("share/<channel:channel>", share_prompt_view, name="share_recovery_bare"),
 ]

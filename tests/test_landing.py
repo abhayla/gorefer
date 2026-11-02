@@ -93,10 +93,10 @@ def test_landing_does_not_clone_zerodha(seeded, client):
 
 
 def test_invalid_link_renders_branded_fallback_no_incentive(seeded, client):
-    resp = client.get("/r/" + "b" * 33, HTTP_USER_AGENT="Mozilla/5.0")  # T-574: >32 chars keeps the 400
+    resp = client.get("/r/" + "b" * 33, HTTP_USER_AGENT="Mozilla/5.0")  # the Kite ID pop-up since 2026-11-02
     html = resp.content.decode()
-    assert resp.status_code == 400
-    assert "isn't valid" in html
+    assert resp.status_code == 200
+    assert "Who referred you?" in html
     # Compliance still injected, but no referral-benefit panel.
     assert "AP2516003693" in html
     assert "Referral benefit" not in html
