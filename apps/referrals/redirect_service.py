@@ -26,6 +26,7 @@ from apps.events.bots import is_bot_user_agent
 from apps.events.models import Event, VisitorPII
 from apps.events.nonces import mint_nonce
 from apps.referrals.models import Partner, ProgramRedirectRule, Referral, ReferralIdentity, ReferralProgram
+from gorefer.flags import SHARE_CHANNEL_LABELS
 
 logger = logging.getLogger("gorefer.redirect")
 
@@ -345,6 +346,14 @@ _UNRESERVED = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012
 
 def is_reserved_open(value: str) -> bool:
     return (value or "").lower() == RESERVED_OPEN
+
+
+def is_channel_code(value: str) -> bool:
+    """True when `value` is a configured share-channel code (wa, yt, ...), case-insensitive.
+
+    Single source of truth: gorefer.flags.SHARE_CHANNEL_LABELS. Codes are letters-only, so
+    one can never be a real Zerodha id (those carry digits); unknown words are NOT channels."""
+    return (value or "").lower() in SHARE_CHANNEL_LABELS
 
 
 def can_pass_through(value: str) -> bool:
