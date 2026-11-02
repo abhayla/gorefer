@@ -330,3 +330,50 @@ def test_every_channel_gets_the_prompt_and_keeps_its_channel(
     assert _no_referrer_saved()
     real = _get(f"/r/{code}/AB1234", django_capture_on_commit_callbacks)
     assert real.status_code == 200 and REF_TITLE not in real.content.decode()  # real id: landing
+
+
+# --- OTP-style box length (owner decision 2026-11-02) ---------------------------------
+# "Allow only 6 characters ... like an OTP": the box stops at the partner's id length,
+# which is per-partner config. The server never shortens a long id to that length.
+
+
+def test_the_box_stops_at_six_characters_for_zerodha(seeded, django_capture_on_commit_callbacks):
+    for path in ("/r/wa/", "/share/wa/", "/zerodha/r/KITEID"):
+        body = _get(path, django_capture_on_commit_callbacks).content.decode()
+        assert 'maxlength="6"' in body, path
+        assert 'maxlength="32"' not in body, path
+
+
+def test_box_length_is_config(tenant, django_capture_on_commit_callbacks):
+    """rail E-6 spot test: the box length is a per-partner cascade key."""
+    set_tenant("client_id_length__ZMPHZC", 8, tenant_id=tenant.id)
+    body = _get("/r/wa/", django_capture_on_commit_callbacks).content.decode()
+    assert 'maxlength="8"' in body
+
+
+@pytest.mark.parametrize("value, expected", [("junk", 16), (0, 16), (2, 4), (99, 16)])
+def test_a_bad_box_length_falls_back_to_the_spec_bound(tenant, value, expected):
+    from apps.referrals.validators import resolve_client_id_length
+
+    set_tenant("client_id_length__ZMPHZC", value, tenant_id=tenant.id)
+    assert resolve_client_id_length(tenant.id, "ZMPHZC") == expected
+
+
+def test_no_length_configured_uses_the_spec_maximum(db):
+    from apps.referrals.validators import resolve_client_id_length
+
+    assert resolve_client_id_length(None, None) == 16
+
+
+def test_a_long_id_typed_into_the_url_is_rejected_not_shortened(
+    seeded, django_capture_on_commit_callbacks
+):
+    """Cutting AD1111XXXX to AD1111 could credit the wrong referrer, so the server refuses it."""
+    from django.utils.html import escape
+
+    resp = _get("/r/wa/?kite_id=AD1111XXXX", django_capture_on_commit_callbacks)
+    body = resp.content.decode()
+    assert resp.status_code == 200
+    assert escape(prefkeys.KITE_PROMPT_ERROR_SHAPE_DEFAULT) in body
+    assert not ReferralIdentity.objects.filter(client_id="AD1111").exists()
+    assert _no_referrer_saved()

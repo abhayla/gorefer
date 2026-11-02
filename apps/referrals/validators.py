@@ -219,15 +219,47 @@ def validate_client_id_for(tenant, raw: str | None) -> str:
     never become a referrer.
     """
     tenant_id = getattr(tenant, "id", None)
-    partner_code = None
-    try:
-        from apps.referrals.redirect_service import get_active_program
-
-        program = get_active_program(tenant)
-        partner_code = getattr(getattr(program, "partner", None), "code", None)
-    except Exception:
-        partner_code = None
+    partner_code = active_partner_code(tenant)
     normalized = validate_client_id(raw, pattern=resolve_client_id_pattern(tenant_id, partner_code))
     if is_placeholder_id(tenant_id, normalized):
         raise InvalidClientId("client_id is a placeholder, not a real id")
     return normalized
+
+
+def active_partner_code(tenant) -> str | None:
+    """The active program's partner code, or None — best-effort, never raises."""
+    try:
+        from apps.referrals.redirect_service import get_active_program
+
+        program = get_active_program(tenant)
+        return getattr(getattr(program, "partner", None), "code", None)
+    except Exception:
+        return None
+
+
+# --- Id length for the Kite ID input box (owner decision 2026-11-02) --------------------
+# The pop-up box stops accepting characters at the partner's id length, like an OTP box
+# (owner: "it only allows 6 digits of the OTP ... Can we do something similar?"). The
+# length is per-partner CONFIGURATION (rail E-6), seeded as `client_id_length__<CODE>`.
+# It caps only what the BOX accepts; the server never truncates an id to this length —
+# a long id is rejected by the pattern, because cutting `AD1111XXXX` to `AD1111` could
+# silently credit the wrong referrer.
+LENGTH_KEY = "client_id_length"
+ZERODHA_CLIENT_ID_LENGTH = 6
+
+
+def resolve_client_id_length(tenant_id: int | None, partner_code: str | None = None) -> int:
+    """The partner's id length for the input box. Falls back to the spec maximum (16) when
+    unset or invalid, and is clamped to the spec bound 4-16, so a bad config value can
+    never make the box refuse a valid id or accept more than the spec allows."""
+    from apps.config.cascade import resolve
+
+    keys = ([f"{LENGTH_KEY}__{partner_code}"] if partner_code else []) + [LENGTH_KEY]
+    for key in keys:
+        try:
+            value = int(resolve(key, tenant_id=tenant_id, default=0) or 0)
+        except Exception:
+            value = 0
+        if value > 0:
+            return max(MIN_CLIENT_ID_LEN, min(MAX_CLIENT_ID_LEN, value))
+    return MAX_CLIENT_ID_LEN

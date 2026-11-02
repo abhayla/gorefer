@@ -37,4 +37,27 @@ by landing_base.html below stay fully legible (compliance rule, CLAUDE.md §4).
     <p class="text-center text-[11px] text-ink-500">{{ copy.foot }}</p>
   </form>
 </section>
+{# OTP-style box (owner decision 2026-11-02): maxlength stops typing at the partner's id   #}
+{# length; this script only cleans a PASTE first, so "AB 1234" becomes AB1234 instead of   #}
+{# the browser cutting it to "AB 123". Optional: without JS the form still works and the   #}
+{# server still validates.                                                                  #}
+<script>
+(function () {
+  var box = document.getElementById("kite-id");
+  if (!box) return;
+  var max = box.maxLength > 0 ? box.maxLength : 16;
+  function clean(v) { return (v || "").replace(/[^A-Za-z0-9]/g, "").slice(0, max); }
+  box.addEventListener("paste", function (e) {
+    var data = e.clipboardData || window.clipboardData;
+    if (!data) return;
+    e.preventDefault();
+    var start = box.selectionStart || 0, end = box.selectionEnd || 0;
+    box.value = clean(box.value.slice(0, start) + data.getData("text") + box.value.slice(end));
+  });
+  box.addEventListener("input", function () {
+    var v = clean(box.value);
+    if (v !== box.value) box.value = v;
+  });
+})();
+</script>
 {% endblock %}
