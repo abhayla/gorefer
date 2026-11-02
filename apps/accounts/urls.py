@@ -15,5 +15,6 @@ urlpatterns = [
     path("login/bind", views.oauth_bind, name="referrer_oauth_bind"),
     path("login/verify-ownership", views.path_b, name="referrer_pathb"),
     path("my/referrals", views.my_referrals, name="my_referrals"),
+    path("my/referrals/preview-name", views.my_referrals_preview_name, name="my_referrals_preview_name"),
     path("my/logout", views.my_logout, name="referrer_logout"),
 ]

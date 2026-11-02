@@ -20,7 +20,10 @@ from .models import (
 
 @admin.register(Customer)
 class CustomerAdmin(admin.ModelAdmin):
-    list_display = ("client_id", "first_name", "last_name", "mobile", "status")
+    list_display = ("client_id", "first_name", "last_name", "mobile", "status",
+                    "show_name_on_preview", "preview_name", "preview_name_updated_at")
+    # Staff control for the preview-card name (owner 2026-11-03): filter + switch off here.
+    list_filter = ("show_name_on_preview",)
     search_fields = ("client_id", "mobile", "email")
 
 

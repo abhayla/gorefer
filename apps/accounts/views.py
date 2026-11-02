@@ -380,6 +380,47 @@ def my_referrals(request):
     return render(request, "dashboard/referrer_profile.html", ctx)
 
 
+@require_POST
+@_referrer_required
+def my_referrals_preview_name(request):
+    """POST my/referrals/preview-name — the referrer's own preview-card name + switch.
+
+    The row is chosen ONLY from the session's bound account: a `client_id` in the POST body
+    is ignored, so nobody can change another referrer's card. Blank name = fall back to the
+    Zoho first name. PRG on success; re-render with the error (nothing saved) on failure.
+    """
+    from django.contrib import messages
+    from django.utils import timezone
+
+    from apps.config import preferences as p
+    from apps.config.cascade import resolve as resolve_config
+    from apps.referrals import og
+
+    account = request.referrer_account
+    tenant = get_current_tenant(request)
+    tenant_id = getattr(tenant, "id", None)
+    customer = og.live_customer(tenant, account.client_id)
+    if not og.name_enabled(tenant_id) or customer is None:
+        raise Http404
+    name = (request.POST.get("preview_name") or "").strip()
+    show = request.POST.get("show_name_on_preview") in {"on", "1", "true"}
+    if name and og.valid_display_name(name) is None:
+        error = resolve_config(p.MY_PREVIEW_ERROR, tenant_id=tenant_id,
+                               default=dict((k, d) for k, _l, d in p.MY_PREVIEW_FIELDS)[p.MY_PREVIEW_ERROR])
+        ctx = selfview.my_referrals_ctx(tenant, account.client_id)
+        ctx["preview_box"] = selfview.preview_box_ctx(
+            tenant, account.client_id, error=error, name_value=name, show_value=show)
+        return render(request, "dashboard/referrer_profile.html", ctx, status=400)
+    customer.preview_name = name
+    customer.show_name_on_preview = show
+    customer.preview_name_updated_at = timezone.now()
+    customer.save(update_fields=["preview_name", "show_name_on_preview", "preview_name_updated_at"])
+    saved = resolve_config(p.MY_PREVIEW_SAVED, tenant_id=tenant_id,
+                           default=dict((k, d) for k, _l, d in p.MY_PREVIEW_FIELDS)[p.MY_PREVIEW_SAVED])
+    messages.success(request, saved)
+    return redirect("my_referrals")
+
+
 def _url(name: str) -> str:
     from django.urls import reverse
 

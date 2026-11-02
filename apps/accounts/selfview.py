@@ -153,4 +153,41 @@ def my_referrals_ctx(tenant, client_id: str) -> dict:
         # with the wa channel prefix (ADR-030/ADR-028); the §4.4 disclosure line is
         # appended by kit_message() (ADR-031/032).
         "share_text": _share_text(tenant, client_id),
+        # Preview card v2 (owner 2026-11-03): the "Your link preview" box. None unless BOTH
+        # switches are on (no dead UI); this ctx is the self view only, never the admin one.
+        "preview_box": preview_box_ctx(tenant, client_id),
+    }
+
+
+def preview_box_ctx(tenant, client_id: str, *, error: str = "", name_value: str | None = None,
+                    show_value: bool | None = None) -> dict | None:
+    """The self-view preview box, or None when either switch is off or there is no
+    Customer row to hold the choice."""
+    from apps.config import preferences as p
+    from apps.config.cascade import resolve as resolve_config
+    from apps.referrals import og
+
+    tenant_id = getattr(tenant, "id", None)
+    if not og.name_enabled(tenant_id):
+        return None
+    customer = og.live_customer(tenant, client_id)
+    if customer is None:
+        return None
+    copy = {key: resolve_config(key, tenant_id=tenant_id, default=default)
+            for key, _label, default in p.MY_PREVIEW_FIELDS}
+    first_name = og.named_first_name(tenant, client_id)
+    from django.urls import reverse
+
+    text = og.v2_card_text(tenant_id, first_name)
+    path = reverse("og_card_named", kwargs={"client_id": client_id})
+    return {
+        "image_url": f"{path}?v={og.card_version(text)}&own=1",
+        "name": name_value if name_value is not None else (og.customer_display_name(customer) or ""),
+        "show": customer.show_name_on_preview if show_value is None else show_value,
+        "error": error,
+        "heading": copy[p.MY_PREVIEW_HEADING],
+        "help": copy[p.MY_PREVIEW_HELP],
+        "name_label": copy[p.MY_PREVIEW_NAME_LABEL],
+        "switch_label": copy[p.MY_PREVIEW_SWITCH_LABEL],
+        "save": copy[p.MY_PREVIEW_SAVE],
     }
