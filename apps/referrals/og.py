@@ -222,7 +222,35 @@ def named_first_name(tenant, raw_client_id: str | None) -> str | None:
     customer = live_customer(tenant, normalized)
     if customer is None or not customer.show_name_on_preview:
         return None
+    if not is_evidenced_referrer(tenant, normalized):
+        return None
     return customer_display_name(customer)
+
+
+def is_evidenced_referrer(tenant, normalized: str) -> bool:
+    """True only if something a stranger cannot cause says this id really refers.
+
+    Why (Tier-A review, 2026-11-03): a Customer row with a real name is NOT proof of a
+    referrer. One click on `/r/<any id>` creates an identity, and the daily Zoho name sync
+    then fills that client's real first name — so a stranger could switch on a public name
+    for a client who never shared a link. The owner's rule names *referrers*; these are the
+    signals that mean one, none of which a click can create:
+      1. an ACTIVE ReferrerAccount bound to the id (they logged in: ownership proven);
+      2. a Zoho-sourced, non-reversed Conversion crediting the id (Zoho is the truth);
+      3. an ACTIVE SyncedReferrer row (the Zoho-synced referrer audience).
+    """
+    from apps.accounts.models import ReferrerAccount
+    from apps.campaigns.models import SyncedReferrer
+    from apps.integrations.models import Conversion
+
+    tenant_id = getattr(tenant, "id", tenant)
+    if ReferrerAccount.objects.for_tenant(tenant_id).filter(
+            client_id=normalized, status=ReferrerAccount.STATUS_ACTIVE).exists():
+        return True
+    if Conversion.objects.for_tenant(tenant_id).filter(
+            referrer_client_id=normalized, is_reversed=False).exists():
+        return True
+    return SyncedReferrer.objects.for_tenant(tenant_id).filter(client_id=normalized, active=True).exists()
 
 
 def v2_card_text(tenant_id: int | None, first_name: str | None = None):

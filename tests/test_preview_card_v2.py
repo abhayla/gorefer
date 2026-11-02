@@ -161,10 +161,47 @@ def _on(tenant, *, name: bool = False):
         set_tenant(p.PREVIEW_CARD_NAME_ENABLED, True, tenant_id=tenant.id)
 
 
-def _customer(tenant, client_id: str = CID, *, first_name: str = "Rahul", **fields) -> Customer:
+def _customer(tenant, client_id: str = CID, *, first_name: str = "Rahul", evidence: bool = True,
+              **fields) -> Customer:
+    """A Customer row. By default also a real-referrer signal, so a test about ANOTHER gate
+    (opted out, deleted, bad name, ...) fails on that gate, not on missing evidence."""
     program = ReferralProgram.objects.get(tenant=tenant)
-    return Customer.objects.create(tenant=tenant, program=program, partner=program.partner,
-                                   client_id=client_id, first_name=first_name, **fields)
+    customer = Customer.objects.create(tenant=tenant, program=program, partner=program.partner,
+                                       client_id=client_id, first_name=first_name, **fields)
+    if evidence:
+        _evidence(tenant, client_id)
+    return customer
+
+
+def _evidence(tenant, client_id: str = CID, kind: str = "synced", *, active: bool = True):
+    """One real-referrer signal (og.is_evidenced_referrer): synced / account / conversion."""
+    from apps.campaigns.models import SyncedReferrer
+
+    if kind == "synced":
+        SyncedReferrer.objects.get_or_create(
+            tenant=tenant, client_id=client_id,
+            defaults={"mobile": "919800000000", "record_created_at": timezone.now(), "active": active})
+    elif kind == "account":
+        from apps.accounts import service as accounts_service
+        from apps.accounts.models import ReferrerAccount
+
+        account = accounts_service.get_or_create_account(
+            tenant, client_id, bound_via=ReferrerAccount.BOUND_VIA_OTP, mobile="919800000001")
+        if not active:
+            account.status = ReferrerAccount.STATUS_DISABLED
+            account.save(update_fields=["status"])
+    elif kind == "conversion":
+        _conversion(tenant, client_id)
+
+
+def _conversion(tenant, client_id: str, *, reversed_: bool = False):
+    """A Zoho-shaped conversion row crediting `client_id` (test fixture, not a GoRefer write)."""
+    from apps.integrations.models import Conversion
+
+    return Conversion.objects.create(
+        tenant=tenant, program=ReferralProgram.objects.get(tenant=tenant),
+        referrer_client_id=client_id, opener_zerodha_account_id=f"OP{client_id}",
+        source_origin="zoho", is_reversed=reversed_)
 
 
 def _identity(tenant, client_id: str = CID) -> ReferralIdentity:
@@ -348,6 +385,7 @@ def _named_route(tenant, client_id=CID) -> bytes:
 def test_eligible_referrer_gets_the_named_card(seeded):
     _on(seeded, name=True)
     _customer(seeded)
+    _evidence(seeded)
     assert _named_route(seeded) == _named_png(seeded, "Rahul") != _generic_png(seeded)
 
 
@@ -397,6 +435,64 @@ def test_unknown_id_without_customer_gets_the_generic_card(seeded):
     assert _named_route(seeded, OTHER) == _generic_png(seeded)
 
 
+def test_a_strangers_click_plus_the_zoho_sync_never_publishes_a_name(
+        seeded, monkeypatch, django_capture_on_commit_callbacks):
+    """Tier-A review MAJOR #1 (2026-11-03), reproduced through the REAL path: a stranger
+    clicks /r/<a client's id>, the daily Zoho name sync then writes that client's real first
+    name into a Customer row — and the card must still be generic, because nothing shows
+    this client ever referred anyone."""
+    from apps.integrations.zoho import tasks
+    from apps.integrations.zoho.read import ZohoContact
+
+    class _Fake:
+        def fetch_contact_by_client_id(self, *, client_id):
+            return ZohoContact(client_id=client_id, matched=True, full_name="Priya Sharma")
+
+    _on(seeded, name=True)
+    with django_capture_on_commit_callbacks(execute=True):
+        Client().get(f"/r/{OTHER}", HTTP_USER_AGENT="Mozilla/5.0 (Android)", REMOTE_ADDR="203.0.113.10")
+    monkeypatch.setattr("apps.integrations.zoho.read.get_zoho_read_adapter", lambda: _Fake())
+    tasks.sync_referrer_names()
+    assert Customer.objects.get(client_id=OTHER).first_name == "Priya"  # the hole's precondition holds
+    assert og.named_first_name(seeded, OTHER) is None
+    assert _named_route(seeded, OTHER) == _generic_png(seeded)
+    html = Client().get(f"/r/{OTHER}", **BOT).content.decode()
+    assert "Priya" not in html and "/og/card.png?v=" in html
+
+
+@pytest.mark.parametrize("kind", ["synced", "account", "conversion"])
+def test_each_real_referrer_signal_turns_the_name_on(seeded, kind):
+    _on(seeded, name=True)
+    _customer(seeded, evidence=False)
+    assert og.named_first_name(seeded, CID) is None
+    _evidence(seeded, CID, kind)
+    assert og.named_first_name(seeded, CID) == "Rahul"
+
+
+@pytest.mark.parametrize("kind", ["synced", "account", "conversion"])
+def test_a_switched_off_signal_is_not_evidence(seeded, kind):
+    _on(seeded, name=True)
+    _customer(seeded, evidence=False)
+    if kind == "conversion":
+        _conversion(seeded, CID, reversed_=True)  # Zoho took the credit back
+    else:
+        _evidence(seeded, CID, kind, active=False)
+    assert og.named_first_name(seeded, CID) is None
+
+
+def test_another_tenants_signal_is_not_evidence(seeded):
+    from apps.tenants.models import Tenant
+
+    _on(seeded, name=True)
+    _customer(seeded, evidence=False)
+    other = Tenant.objects.create(name="Other AP", slug="other-ap")
+    from apps.campaigns.models import SyncedReferrer
+
+    SyncedReferrer.objects.create(tenant=other, client_id=CID, mobile="919800000002",
+                                  record_created_at=timezone.now())
+    assert og.named_first_name(seeded, CID) is None
+
+
 def test_empty_first_name_gets_the_generic_card(seeded):
     _on(seeded, name=True)
     _customer(seeded, first_name="")
@@ -413,6 +509,7 @@ def test_invalid_names_get_the_generic_card(seeded, bad):
 def test_preview_name_beats_the_zoho_first_name(seeded):
     _on(seeded, name=True)
     _customer(seeded, first_name="Rahul", preview_name="Priya")
+    _evidence(seeded)
     assert og.named_first_name(seeded, CID) == "Priya"
     assert _named_route(seeded) == _named_png(seeded, "Priya")
 
@@ -420,6 +517,7 @@ def test_preview_name_beats_the_zoho_first_name(seeded):
 def test_zoho_full_name_uses_the_first_word(seeded):
     _on(seeded, name=True)
     _customer(seeded, first_name="RAHUL KUMAR")
+    _evidence(seeded)
     assert og.v2_card_text(seeded.id, og.named_first_name(seeded, CID)).eyebrow == "RAHUL INVITED YOU"
     title = _meta(Client().get(f"/r/{CID}", **BOT).content.decode(), "og:title")
     assert title == "Rahul invited you — open your Zerodha account online"
@@ -429,6 +527,7 @@ def test_zoho_full_name_uses_the_first_word(seeded):
 def test_crawler_page_for_an_eligible_referrer_is_named(seeded, path):
     _on(seeded, name=True)
     _customer(seeded)
+    _evidence(seeded)
     html = Client().get(path, **BOT).content.decode()
     assert re.fullmatch(rf"https://gorefer\.in/og/card/{CID}\.png\?v=[0-9a-f]{{10}}", _meta(html, "og:image"))
     assert _meta(html, "og:title").startswith("Rahul invited you")
