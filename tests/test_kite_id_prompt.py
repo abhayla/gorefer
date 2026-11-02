@@ -54,7 +54,7 @@ def _no_referrer_saved():
 # --- which links show it ----------------------------------------------------------
 
 REFERRAL_PROMPT_PATHS = [
-    "/r/", "/r", "/r/open", "/r/wa/", "/r/wa", "/r/KITEID", "/r/wa/KITEID", "/r/YOUR_KITE_ID",
+    "/r/", "/r", "/r/wa/", "/r/wa", "/r/KITEID", "/r/wa/KITEID", "/r/YOUR_KITE_ID",
     "/r/wa/YOUR_KITE_ID", "/r/ZERODHAID", "/r/KITEID/continue", "/r/wa/KITEID/continue",
     "/r/" + "A" * 40,
 ]
@@ -88,6 +88,15 @@ def test_share_links_without_a_usable_id_show_the_sharer_prompt(
     assert SHARE_TITLE in resp.content.decode()
     assert _no_referrer_saved()
     assert not Event.objects.filter(event_type="share_intent").exists()
+
+
+@pytest.mark.parametrize("path", ["/r/open", "/zerodha/r/open", "/r/wa/open", "/zerodha/r/fb/OPEN"])
+def test_open_is_not_prompted(seeded, django_capture_on_commit_callbacks, path):
+    """/r/open is the deliberate no-referrer link (owner 2026-11-02): no pop-up, the same
+    direct 302 to the partner referral page as before."""
+    resp = _get(path, django_capture_on_commit_callbacks)
+    assert (resp.status_code, resp.headers["Location"]) == (302, REFERRAL_PAGE)
+    assert _no_referrer_saved()
 
 
 @pytest.mark.parametrize("path,location", [
@@ -142,7 +151,6 @@ def test_unknown_program_word_still_404s(seeded, django_capture_on_commit_callba
     ("/r/wa/KITEID", "AB1234", "/zerodha/r/wa/AB1234"),
     ("/r/wa/KITEID", " ab 1234 ", "/zerodha/r/wa/AB1234"),   # spaces + lowercase forgiven
     ("/r/", "AB1234", "/zerodha/r/AB1234"),
-    ("/r/open", "AB1234", "/zerodha/r/AB1234"),
     ("/r/wa/", "AB1234", "/zerodha/r/wa/AB1234"),
     ("/zerodha/r/yt/KITEID", "AB1234", "/zerodha/r/yt/AB1234"),
     ("/r/KITEID/continue", "AB1234", "/zerodha/r/AB1234"),

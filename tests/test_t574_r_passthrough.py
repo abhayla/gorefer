@@ -1,4 +1,4 @@
-"""/r/<unknown value> and /r/open — since 2026-11-02 they show the Kite ID pop-up.
+"""/r/<unknown value> shows the Kite ID pop-up since 2026-11-02; /r/open keeps its direct link.
 
 History: T-574 (owner 2026-10-22) passed a value that fails the strict Zerodha-id pattern
 through to the partner as r=<raw value>, and sent /r/open to the partner's referral page.
@@ -77,8 +77,17 @@ def test_bot_on_unknown_id_gets_preview_no_writes(seeded, client, django_capture
 
 
 @pytest.mark.parametrize("path", ["/r/open", "/r/OPEN", "/r/Open", "/r/wa/open", "/r/wa/OPEN"])
-def test_reserved_open_shows_the_prompt(seeded, client, django_capture_on_commit_callbacks, path):
-    _assert_prompt_no_writes(_get(client, path, django_capture_on_commit_callbacks))
+def test_reserved_open_goes_straight_to_empty_referral_box(
+    seeded, client, django_capture_on_commit_callbacks, path
+):
+    """Owner 2026-11-02: no pop-up on /r/open — it is the deliberate no-referrer link (the live
+    prospect-invite template uses it), so it keeps its direct 302, exactly as before."""
+    resp = _get(client, path, django_capture_on_commit_callbacks)
+    assert resp.status_code == 302
+    assert resp.headers["Location"] == REFERRAL_PAGE
+    assert ReferralIdentity.objects.count() == 0
+    assert Referral.objects.filter(source="partner_direct").count() == 1
+    assert Event.objects.filter(event_type="click").count() == 1
 
 
 @pytest.mark.parametrize("path", ["/r/open", "/r/wa/open", "/r/ZERODHAID", "/r/wa/KITEID/continue"])

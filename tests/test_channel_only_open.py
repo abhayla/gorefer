@@ -1,9 +1,9 @@
 """Channel-only links (`/r/wa/`, `/r/wa`, `/zerodha/r/wa/`, ...) behave exactly like `/r/open`.
 
 Owner decision 2026-10-29 (SPEC CHANGE to 06-API 4.1 step 1: a value equal to a configured
-channel code is no longer passed through as r=<value>). Since 2026-11-02 `/r/open` (and so
-these) shows the Kite ID pop-up; its Skip is the old 302 to the partner referral page, with
-the channel recorded on the click. `/r/{id}` with a real id and `/open` are unchanged.
+channel code is no longer passed through as r=<value>). Since 2026-11-02 these show the Kite
+ID pop-up; its Skip is the old 302 to the partner referral page (where `/r/open` itself still
+goes directly), with the channel recorded on the click. Real ids and `/open` are unchanged.
 """
 import pytest
 from django.core.management import call_command
@@ -48,11 +48,9 @@ def _state():
     ("/zerodha/r/yt/", "YouTube"),
 ])
 def test_channel_only_equals_open(seeded, django_capture_on_commit_callbacks, path, channel_meta):
-    # Shown: the pop-up, exactly like /r/open, and nothing but its view event recorded.
+    # Shown: the pop-up, and nothing but its view event recorded.
     resp = _get(path, django_capture_on_commit_callbacks)
-    ref = _get("/zerodha/r/open" if path.startswith("/zerodha") else "/r/open",
-               django_capture_on_commit_callbacks)
-    assert resp.status_code == ref.status_code == 200
+    assert resp.status_code == 200
     assert "Who referred you?" in resp.content.decode()
     assert not Event.objects.filter(event_type="click").exists()
     Event.objects.all().delete()

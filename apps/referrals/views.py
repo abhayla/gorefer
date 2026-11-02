@@ -156,8 +156,8 @@ def _landing_context(request, tenant, client_id: str, nonce: str | None):
 
 
 def _partner_referral_page_response(request, tenant, channel: str | None):
-    """The old /r/open path, now the referral pop-up's Skip: 302 to the partner's referral
-    page (empty box, partner code server-side), no identity; crawlers get the PIFS card."""
+    """/r/open, and the referral pop-up's Skip: 302 to the partner's referral page (empty
+    box, partner code server-side), no identity; crawlers get the PIFS card."""
     if is_bot_user_agent(request.META.get("HTTP_USER_AGENT", "")):
         return render_preview(request, tenant_id=getattr(tenant, "id", None))
     visitor_id, is_new = _ensure_visitor_id(request)
@@ -184,7 +184,10 @@ def referral_redirect(request, client_id: str, channel: str | None = None):
     """
     tenant = get_current_tenant(request)
     if is_reserved_open(client_id):  # /r/open - checked BEFORE validation (T-574)
-        return _kite_prompt_response(request, tenant, mode=PROMPT_REFERRAL, channel=channel)
+        # Owner 2026-11-02: NO pop-up here — /r/open is the deliberate no-referrer link
+        # (the live prospect-invite template sends people to it), so it stays a direct 302
+        # to the partner referral page, exactly as before.
+        return _partner_referral_page_response(request, tenant, channel)
     if channel is None and is_channel_code(client_id):
         # /r/wa, /r/yt (owner 2026-10-29): a bare channel code is a channel-only link, not a
         # referrer id - same as /r/{channel}/open, recording the channel.
@@ -247,7 +250,8 @@ def referral_redirect(request, client_id: str, channel: str | None = None):
 
 @require_GET
 def channel_only_redirect(request, channel: str):
-    """GET /r/{channel}/ (owner 2026-10-29) - a channel link with no client id: same as /r/open."""
+    """GET /r/{channel}/ (owner 2026-10-29) - a channel link with no client id. Since
+    2026-11-02 it shows the Kite ID pop-up (Skip = the /r/open destination)."""
     if not is_channel_code(channel):  # converter takes any 1-8 letters; only KNOWN codes act
         raise Http404("unknown channel")
     return _kite_prompt_response(request, get_current_tenant(request), mode=PROMPT_REFERRAL, channel=channel)
@@ -259,8 +263,8 @@ def referral_continue(request, client_id: str, channel: str | None = None):
     Continue-to-Zerodha 302 (reuses M2 engine). `channel` is the optional B1 path
     prefix; captured for attribution, NEVER added to the Location."""
     tenant = get_current_tenant(request)
-    if is_reserved_open(client_id):
-        return _kite_prompt_response(request, tenant, mode=PROMPT_REFERRAL, channel=channel)
+    if is_reserved_open(client_id):  # no pop-up on /r/open (owner 2026-11-02)
+        return _partner_referral_page_response(request, tenant, channel)
     try:
         # STRICT, per-partner — this path lazily creates the identity too.
         normalized = validate_client_id_for(tenant, client_id)
@@ -484,7 +488,7 @@ def privacy_policy_view(request):
 
 # ---------------------------------------------------------------------------
 # Kite ID pop-up (owner decision 2026-11-02). Every referral or share link whose id is
-# missing, malformed or an obvious placeholder (/r/wa/KITEID, /r/wa/, /r/, /r/open,
+# missing, malformed or an obvious placeholder (/r/wa/KITEID, /r/wa/, /r/,
 # /share/wa/YOUR_KITE_ID, /share/wa/ and every /{program}/ twin) renders ONE page: a
 # PIFS-branded pop-up asking for the Kite ID. It is a plain GET form posting back to the
 # SAME URL, so it works with no JavaScript and every link shape keeps its own address:
