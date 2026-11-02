@@ -23,6 +23,7 @@ from apps.referrals import links
 from apps.referrals.models import Referral, ReferralIdentity
 from apps.referrals.validators import InvalidClientId, validate_client_id_for
 from apps.tenants.resolve import get_bootstrap_tenant
+from gorefer.flags import SHARE_CHANNEL_LABELS
 
 HUMAN = {"HTTP_USER_AGENT": "Mozilla/5.0 (Android)", "REMOTE_ADDR": "203.0.113.9"}
 BOT = {"HTTP_USER_AGENT": "WhatsApp/2.23.20 A"}
@@ -296,3 +297,28 @@ def test_preferences_refuse_an_empty_placeholder_list(tenant):
 
 def test_share_path_builder(tenant):
     assert links.share_path("wa", "AB1234", tenant=tenant) == "/zerodha/share/wa/AB1234"
+
+
+# --- every share channel, not just WhatsApp -------------------------------------------
+
+ALL_CHANNELS = sorted(SHARE_CHANNEL_LABELS.items())
+
+
+@pytest.mark.parametrize("code,label", ALL_CHANNELS)
+def test_every_channel_gets_the_prompt_and_keeps_its_channel(
+    seeded, django_capture_on_commit_callbacks, code, label
+):
+    """/r/{ch}/KITEID, /r/{ch}/, /r/{ch} and the /zerodha/ twin show the pop-up for EVERY
+    configured channel (fb, x, li, tg, ig, yt, email, copy, wa); a valid entry keeps the
+    channel in the link, and Skip records it on the click."""
+    for path in (f"/r/{code}/KITEID", f"/r/{code}/", f"/r/{code}", f"/zerodha/r/{code}/YOUR_KITE_ID"):
+        resp = _get(path, django_capture_on_commit_callbacks)
+        assert resp.status_code == 200 and REF_TITLE in resp.content.decode(), path
+    resp = _get(f"/r/{code}/KITEID?kite_id=AB1234", django_capture_on_commit_callbacks)
+    assert resp.headers["Location"] == f"/zerodha/r/{code}/AB1234"
+    resp = _get(f"/r/{code}/KITEID?skip=1", django_capture_on_commit_callbacks)
+    assert resp.headers["Location"] == REFERRAL_PAGE
+    assert Event.objects.get(event_type="click").metadata == {"channel": label}
+    assert _no_referrer_saved()
+    real = _get(f"/r/{code}/AB1234", django_capture_on_commit_callbacks)
+    assert real.status_code == 200 and REF_TITLE not in real.content.decode()  # real id: landing
