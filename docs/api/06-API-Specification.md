@@ -183,6 +183,8 @@ Cache-Control: no-store
 
 **What.** `200`, a PIFS-branded page with a pop-up asking for the Kite ID, compliance block below it. On referral links the visitor is the *friend* (asked for the referrer's id); on share links it is the *referrer* (asked for their own). Every word is a cascade key (`kite_prompt_*`, Preferences → "Kite ID pop-up"). The first view records `share_recovery_viewed` (metadata `channel`, `prompt`); nothing else is written. Crawlers get the preview card and nothing is recorded.
 
+**Input box length (owner decision 2026-11-02, "allow only 6 characters ... like an OTP").** The Kite ID box stops accepting characters at the partner's id length, cascade key `client_id_length__<PARTNER_CODE>` (Zerodha `client_id_length__ZMPHZC` = 6, seeded centrally; unset or invalid → 16, clamped to the 4–16 spec bound). A paste is cleaned of spaces and symbols before the cut, so `AB 1234` enters as `AB1234` and `AD1111XXXX` as `AD1111`. This limits only the box: the server never shortens an id — a too-long `?kite_id=` (e.g. `AD1111XXXX` typed into the URL) gets the wrong-shape error, because cutting it could credit the wrong referrer.
+
 **Actions** (a GET form back to the same URL — no JavaScript needed):
 | Query | Result |
 |---|---|

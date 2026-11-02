@@ -41,7 +41,13 @@ from .redirect_service import (
     is_reserved_open,
 )
 from .share_intent_service import handle_share_intent, handle_share_without_id, is_share_channel_served
-from .validators import InvalidClientId, is_placeholder_id, validate_client_id_for
+from .validators import (
+    InvalidClientId,
+    active_partner_code,
+    is_placeholder_id,
+    resolve_client_id_length,
+    validate_client_id_for,
+)
 
 VISITOR_COOKIE = "gr_vid"
 # 60 days — matches the API spec (06 §4.1) AND Zerodha's 60-day attribution window, so
@@ -504,7 +510,10 @@ PROMPT_REFERRAL = "referral"
 PROMPT_SHARE = "share"
 KITE_ID_PARAM = "kite_id"
 SKIP_PARAM = "skip"
-KITE_ID_INPUT_MAX = 32  # matches the old pass-through abuse bound; longer input is cut
+# Server-side bound on what is ECHOED back into the box after a bad entry. It is NOT the
+# box's length: that is the partner's id length from config (resolve_client_id_length),
+# and the server never truncates an id to it — a too-long id is rejected, not shortened.
+KITE_ID_INPUT_MAX = 32
 
 
 def _kite_prompt_copy(tenant_id: int | None, mode: str, channel: str | None = None) -> dict:
@@ -624,7 +633,7 @@ def _kite_prompt_response(request, tenant, *, mode: str, channel: str | None = N
         "entered": entered,
         "kite_id_param": KITE_ID_PARAM,
         "skip_url": f"{request.path}?{SKIP_PARAM}=1",
-        "input_max": KITE_ID_INPUT_MAX,
+        "input_max": resolve_client_id_length(tenant_id, active_partner_code(tenant)),
     }
     return render(request, "kite_prompt.html", context, status=200)
 

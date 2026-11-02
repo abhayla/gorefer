@@ -37,4 +37,37 @@ by landing_base.html below stay fully legible (compliance rule, CLAUDE.md §4).
     <p class="text-center text-[11px] text-ink-500">{{ copy.foot }}</p>
   </form>
 </section>
+{# OTP-style box (owner decision 2026-11-02): maxlength stops typing at the partner's id   #}
+{# length; this script only cleans a PASTE first, so "AB 1234" becomes AB1234 instead of   #}
+{# the browser cutting it to "AB 123". Optional: without JS the form still works and the   #}
+{# server still validates.                                                                  #}
+<script>
+(function () {
+  var box = document.getElementById("kite-id");
+  if (!box) return;
+  var max = box.maxLength > 0 ? box.maxLength : 16;
+  function strip(v) { return (v || "").replace(/[^A-Za-z0-9]/g, ""); }
+  box.addEventListener("paste", function (e) {
+    var data = e.clipboardData || window.clipboardData;
+    if (!data) return;
+    e.preventDefault();
+    var start = box.selectionStart || 0, end = box.selectionEnd || 0;
+    var before = strip(box.value.slice(0, start));
+    var room = Math.max(0, max - before.length - strip(box.value.slice(end)).length);
+    var piece = strip(data.getData("text")).slice(0, room);
+    box.value = before + piece + strip(box.value.slice(end));
+    box.setSelectionRange(before.length + piece.length, before.length + piece.length);
+  });
+  // Typing is already capped by maxlength; here we only drop spaces/symbols, never cut,
+  // so an over-long value echoed back after an error is not silently shortened.
+  box.addEventListener("input", function (e) {
+    if (e.isComposing) return;
+    var v = strip(box.value);
+    if (v === box.value) return;
+    var caret = strip(box.value.slice(0, box.selectionStart || 0)).length;
+    box.value = v;
+    box.setSelectionRange(caret, caret);
+  });
+})();
+</script>
 {% endblock %}

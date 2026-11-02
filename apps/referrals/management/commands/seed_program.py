@@ -17,7 +17,12 @@ from django.db import transaction
 
 from apps.config.models import ConfigCentral
 from apps.referrals.models import Partner, ProgramRedirectRule, ReferralProgram
-from apps.referrals.validators import PATTERN_KEY, ZERODHA_CLIENT_ID_PATTERN
+from apps.referrals.validators import (
+    LENGTH_KEY,
+    PATTERN_KEY,
+    ZERODHA_CLIENT_ID_LENGTH,
+    ZERODHA_CLIENT_ID_PATTERN,
+)
 from gorefer.flags import flags
 
 BOOTSTRAP_TENANT_SLUG = "pifs"
@@ -85,6 +90,9 @@ class Command(BaseCommand):
             # spec rule (4-16 alphanumerics) accepted a leaked chatbot label `TALK` and even
             # the partner code `ZMPHZC` itself as referrers.
             f"{PATTERN_KEY}__{settings.PARTNER_CODE}": ZERODHA_CLIENT_ID_PATTERN,
+            # The Kite ID pop-up box stops at this many characters, like an OTP box
+            # (owner decision 2026-11-02). Same per-partner key shape as the pattern.
+            f"{LENGTH_KEY}__{settings.PARTNER_CODE}": ZERODHA_CLIENT_ID_LENGTH,
         }
         # Preference-screen keys (Q-M-PREF / ADR-034): central baselines so behaviour
         # is unchanged until a tenant overrides one through the Preferences screen.
