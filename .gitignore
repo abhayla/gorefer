@@ -56,3 +56,6 @@ Thumbs.db
 !.claude/agents/
 !.claude/rules/
 !.claude/commands/
+
+# Browser-automation (Playwright MCP) session logs and page snapshots — local only
+.playwright-mcp/
