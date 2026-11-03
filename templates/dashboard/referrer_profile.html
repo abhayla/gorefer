@@ -28,6 +28,28 @@
     </div>
   </div>
 </section>
+{% if preview_box %}{# Preview card v2 (owner 2026-11-03): self view only, both switches ON. #}
+<section class="bg-white border border-line rounded-2xl card p-5 space-y-3" data-test="preview-box">
+  <div class="text-[10px] uppercase tracking-wide text-ink-300 font-semibold">{{ preview_box.heading }}</div>
+  <p class="text-[12.5px] text-ink-500">{{ preview_box.help }}</p>
+  {% for message in messages %}{% if "preview-card" in message.tags %}<p class="text-[12.5px] font-semibold text-cobalt-600" data-test="preview-saved">{{ message }}</p>{% endif %}{% endfor %}
+  {% if preview_box.error %}<p class="text-[12.5px] font-semibold text-red-600" data-test="preview-error">{{ preview_box.error }}</p>{% endif %}
+  <img src="{{ preview_box.image_url }}" alt="{{ preview_box.heading }}" width="1200" height="630"
+       class="w-full max-w-md rounded-xl border border-line" data-test="preview-img">
+  <form method="post" action="{% url 'my_referrals_preview_name' %}" class="space-y-2">
+    {% csrf_token %}
+    <label for="preview_name" class="block text-[13px] font-semibold">{{ preview_box.name_label }}</label>
+    <input type="text" id="preview_name" name="preview_name" value="{{ preview_box.name }}" maxlength="15"
+           class="w-full sm:w-auto sm:min-w-[320px] rounded-lg border border-line text-[13px] px-3 py-2 bg-white">
+    <label class="flex items-center gap-2 text-[13px]">
+      <input type="checkbox" name="show_name_on_preview" value="on" {% if preview_box.show %}checked{% endif %}>
+      {{ preview_box.switch_label }}
+    </label>
+    <button type="submit"
+            class="rounded-full bg-cobalt-600 hover:bg-cobalt-500 transition-colors px-4 py-2 text-[12.5px] font-bold text-white card">{{ preview_box.save }}</button>
+  </form>
+</section>
+{% endif %}
 {% endif %}
 
 {% comment %}

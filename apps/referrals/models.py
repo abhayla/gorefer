@@ -37,6 +37,13 @@ class Customer(AuditedModel, SoftDeleteModel, TenantScopedModel):
     first_name = models.CharField(max_length=80, blank=True, default="")
     last_name = models.CharField(max_length=80, blank=True, default="")
     status = models.CharField(max_length=20, default="active")
+    # Preview card v2 (owner 2026-11-03, SPEC CHANGE to ADR-021): the referrer's first name
+    # shows on their own link preview BY DEFAULT. The referrer can switch it off or edit the
+    # name on My Referrals; staff can switch it off in admin. The Zoho name sync never
+    # writes these three fields (it owns first_name/last_name only).
+    show_name_on_preview = models.BooleanField(default=True)
+    preview_name = models.CharField(max_length=15, blank=True, default="")
+    preview_name_updated_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "customers"

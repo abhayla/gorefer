@@ -406,6 +406,27 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
       {% endfor %}
     </div>
 
+    {% comment %}
+    Link preview card v2 (owner 2026-11-03) — every word on the card friends see when a
+    referral link is shared, its preview title, and the My Referrals "Your link preview" box.
+    The legal footer is not editable here: it always shows the locked disclosure + risk text.
+    {% endcomment %}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Link preview card</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">
+      <div class="text-[11.5px] text-ink-500 mb-1">
+        Used only when the v2 preview card is switched on. Use {first_name} where the
+        referrer's first name should appear. Leave a field blank to restore its default.
+      </div>
+      {% for f in preview_card_fields %}
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 py-1.5 {% if not forloop.first %}border-t border-line{% endif %}">
+        <label for="{{ f.form_key }}" class="text-[13px] font-semibold flex-1">{{ f.label }}</label>
+        <input type="text" id="{{ f.form_key }}" name="{{ f.form_key }}" value="{{ f.value }}"
+               class="w-full sm:w-auto sm:min-w-[320px] rounded-lg border border-line text-[13px] px-3 py-2 bg-white"
+               placeholder="{{ f.default }}">
+      </div>
+      {% endfor %}
+    </div>
+
     {# ---- Login OTP channel (Q-M-OTP) — config-over-code channel switch ---- #}
     <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Login OTP</div>
     <div class="rounded-2xl bg-white border border-line card p-5 space-y-4">

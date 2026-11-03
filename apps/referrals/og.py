@@ -9,6 +9,9 @@ Copy is config-driven (CLAUDE.md §6d) so the owner can reword it without a depl
 """
 from __future__ import annotations
 
+import logging
+import re
+
 from django.shortcuts import render
 
 from apps.config.cascade import resolve
@@ -76,9 +79,24 @@ def absolute_image_url(image: str) -> str:
     return base + static(image)
 
 
-def render_preview(request, *, tenant_id: int | None = None):
+def render_preview(request, *, tenant_id: int | None = None, client_id: str | None = None,
+                   tenant=None):
     """200 with an OG card. NEVER a redirect — a crawler that follows a 302 renders the
-    partner's card, which is the whole bug this fixes."""
+    partner's card, which is the whole bug this fixes.
+
+    v2 (owner 2026-11-03): when `preview_card_v2_enabled` is on for the tenant, the card is
+    the server-rendered v2 image and v2 copy. Only `referral_redirect`'s bot branch passes
+    `client_id`, so only a referral link can get the referrer-name card; every other caller
+    gets the generic v2 card. With v2 off this is exactly the v1 output.
+    """
+    if v2_enabled(tenant_id):
+        if tenant is None and tenant_id is not None:
+            from apps.tenants.models import Tenant
+
+            tenant = Tenant.objects.filter(id=tenant_id).first()
+        ctx = v2_meta(tenant_id, tenant=tenant, client_id=client_id)
+        ctx["og_url"] = request.build_absolute_uri()
+        return render(request, "og_preview.html", ctx)
     return render(
         request,
         "og_preview.html",
@@ -90,3 +108,267 @@ def render_preview(request, *, tenant_id: int | None = None):
             "og_url": request.build_absolute_uri(),
         },
     )
+
+
+# =====================================================================================
+# Preview card v2 (owner 2026-11-03) — a server-rendered card + the referrer's first name.
+#
+# Two tenant switches, both default OFF (`preview_card_v2_enabled`,
+# `preview_card_referrer_name_enabled`). With v2 OFF nothing below runs and every public
+# output is byte-identical to the v1 card (snapshot-tested). Every word on the card is a
+# cascade key (rail E-6); the legal band always uses the LOCKED compliance values.
+# =====================================================================================
+
+logger = logging.getLogger(__name__)
+NAME_RE = re.compile(r"[A-Za-z]{2,15}")
+CARD_CACHE_PREFIX = "ogcard:v1:"
+CARD_CACHE_SECONDS = 7 * 24 * 3600
+VERSION_CHARS = 10
+
+
+def _as_bool(value) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def _switch(key: str, tenant_id: int | None) -> bool:
+    try:
+        return _as_bool(resolve(key, tenant_id=tenant_id, default=False))
+    except Exception:  # a broken config row must never turn the card ON by accident
+        return False
+
+
+def v2_enabled(tenant_id: int | None) -> bool:
+    from apps.config.preferences import PREVIEW_CARD_V2_ENABLED
+
+    return _switch(PREVIEW_CARD_V2_ENABLED, tenant_id)
+
+
+def name_enabled(tenant_id: int | None) -> bool:
+    """The name switch only counts when v2 itself is on."""
+    from apps.config.preferences import PREVIEW_CARD_NAME_ENABLED
+
+    return v2_enabled(tenant_id) and _switch(PREVIEW_CARD_NAME_ENABLED, tenant_id)
+
+
+def _text(key: str, default: str, tenant_id: int | None) -> str:
+    try:
+        value = resolve(key, tenant_id=tenant_id, default=default)
+    except Exception:
+        value = default
+    value = str(value if value is not None else "").strip()
+    return value or default
+
+
+def _locked(key: str) -> str:
+    """The SAME locked resolver every page uses (context_processors) — never a tenant key."""
+    from django.conf import settings
+
+    fallback = getattr(settings, key.upper(), "")
+    try:
+        return str(resolve(key, default=fallback) or fallback)
+    except Exception:
+        return fallback
+
+
+def valid_display_name(raw: str | None) -> str | None:
+    """`^[A-Za-z]{2,15}$` after strip, else None. ASCII letters only (no digits, accents,
+    markup): the name lands in a public image and a public meta tag."""
+    value = (raw or "").strip()
+    return value if NAME_RE.fullmatch(value) else None
+
+
+def customer_display_name(customer) -> str | None:
+    """`preview_name` when set, else the first word of the Zoho first name; None if invalid."""
+    chosen = (customer.preview_name or "").strip()
+    if not chosen:
+        parts = (customer.first_name or "").split()
+        chosen = parts[0] if parts else ""
+    return valid_display_name(chosen)
+
+
+def live_customer(tenant, normalized: str):
+    """The live Customer row for this id on an active program, or None."""
+    from apps.referrals.models import Customer
+
+    tenant_id = getattr(tenant, "id", tenant)
+    return (
+        Customer.objects.for_tenant(tenant_id)
+        .filter(client_id=normalized, deleted_at__isnull=True, program__status="active")
+        .order_by("id")
+        .first()
+    )
+
+
+def named_first_name(tenant, raw_client_id: str | None) -> str | None:
+    """The first name to show on this referrer's card, or None for the generic card.
+
+    Every gate must pass: both switches ON; the id is a valid, non-placeholder id for the
+    tenant's partner; the referrer identity is not soft-deleted; a live Customer row exists
+    with `show_name_on_preview=True`; and its display name is valid. Anything else -> None.
+    """
+    from apps.referrals.validators import InvalidClientId, is_deleted_referrer, validate_client_id_for
+
+    tenant_id = getattr(tenant, "id", None)
+    if tenant is None or not raw_client_id or not name_enabled(tenant_id):
+        return None
+    try:
+        normalized = validate_client_id_for(tenant, raw_client_id)
+    except InvalidClientId:
+        return None
+    if is_deleted_referrer(tenant, normalized):
+        return None
+    customer = live_customer(tenant, normalized)
+    if customer is None or not customer.show_name_on_preview:
+        return None
+    if not is_evidenced_referrer(tenant, normalized):
+        return None
+    return customer_display_name(customer)
+
+
+def is_evidenced_referrer(tenant, normalized: str) -> bool:
+    """True only if something a stranger cannot cause says this id really refers.
+
+    Why (Tier-A review, 2026-11-03): a Customer row with a real name is NOT proof of a
+    referrer. One click on `/r/<any id>` creates an identity, and the daily Zoho name sync
+    then fills that client's real first name — so a stranger could switch on a public name
+    for a client who never shared a link. The owner's rule names *referrers*; these are the
+    signals that mean one, none of which a click or a form submit can create:
+      1. an ACTIVE ReferrerAccount bound to the id (they logged in via an OTP to the
+         on-file channel, OAuth on-file bind, or staff approval: ownership proven);
+      2. a non-reversed Conversion crediting the id (written only by the Zoho ingest path).
+    NOT a signal: a SyncedReferrer row. It mirrors Zoho's Referrers module, which Zoho-side
+    rules fill; nothing in this repo proves a stranger's lead cannot create one there, so
+    it fails closed (Tier-A review round 3, 2026-11-03).
+    """
+    from apps.accounts.models import ReferrerAccount
+    from apps.integrations.models import Conversion
+
+    tenant_id = getattr(tenant, "id", tenant)
+    if ReferrerAccount.objects.for_tenant(tenant_id).filter(
+            client_id=normalized, status=ReferrerAccount.STATUS_ACTIVE).exists():
+        return True
+    return Conversion.objects.for_tenant(tenant_id).filter(
+        referrer_client_id=normalized, is_reversed=False).exists()
+
+
+def v2_card_text(tenant_id: int | None, first_name: str | None = None):
+    """Resolve every string the v2 card draws. `first_name` set -> the named variant."""
+    from apps.config import preferences as p
+    from apps.referrals.preview_card import CardText
+
+    if first_name:
+        eyebrow = _text(p.PREVIEW_CARD_NAMED_EYEBROW, p.PREVIEW_CARD_NAMED_EYEBROW_DEFAULT, tenant_id)
+        eyebrow = eyebrow.replace("{first_name}", first_name).upper()
+    else:
+        eyebrow = _text(p.PREVIEW_CARD_EYEBROW, p.PREVIEW_CARD_EYEBROW_DEFAULT, tenant_id)
+    return CardText(
+        eyebrow=eyebrow,
+        headline=_text(p.PREVIEW_CARD_HEADLINE, p.PREVIEW_CARD_HEADLINE_DEFAULT, tenant_id),
+        price_big=_text(p.PREVIEW_CARD_PRICE_BIG, p.PREVIEW_CARD_PRICE_BIG_DEFAULT, tenant_id),
+        price_rest=_text(p.PREVIEW_CARD_PRICE_REST, p.PREVIEW_CARD_PRICE_REST_DEFAULT, tenant_id),
+        docs=_text(p.PREVIEW_CARD_DOCS_LINE, p.PREVIEW_CARD_DOCS_LINE_DEFAULT, tenant_id),
+        cta=_text(p.PREVIEW_CARD_CTA, p.PREVIEW_CARD_CTA_DEFAULT, tenant_id),
+        legal_disclosure=_locked("ap_disclosure_block"),
+        legal_risk=_locked("market_risk_warning"),
+        named=bool(first_name),
+    )
+
+
+def card_png(card_text) -> bytes:
+    """Rendered PNG bytes, cached 7 days under the text fingerprint (DB cache)."""
+    from django.core.cache import cache
+
+    from apps.referrals.preview_card import render_card
+
+    key = CARD_CACHE_PREFIX + card_text.fingerprint()
+    try:
+        cached = cache.get(key)
+    except Exception:
+        cached = None
+    if cached:
+        return cached
+    try:
+        png = render_card(card_text).png
+    except Exception:
+        # Never a 500 from an image route: a broken image kills the whole preview. Fall
+        # back without caching, so the fixed copy shows as soon as the operator corrects it.
+        logger.error("preview card v2: render failed for %s; serving a fallback card",
+                     card_text.fingerprint()[:VERSION_CHARS], exc_info=True)
+        return _fallback_png(card_text)
+    try:
+        cache.set(key, png, timeout=CARD_CACHE_SECONDS)
+    except Exception:
+        pass  # a cache outage costs a re-render, never the image
+    return png
+
+
+def _fallback_png(card_text) -> bytes:
+    """The generic card from the shipped default copy; if even that fails (e.g. the locked
+    legal text grew too tall for the layout), the committed v1 static card."""
+    from pathlib import Path
+
+    from django.conf import settings
+
+    from apps.config import preferences as p
+    from apps.referrals.preview_card import CardText, render_card
+
+    try:
+        return render_card(CardText(
+            eyebrow=p.PREVIEW_CARD_EYEBROW_DEFAULT, headline=p.PREVIEW_CARD_HEADLINE_DEFAULT,
+            price_big=p.PREVIEW_CARD_PRICE_BIG_DEFAULT, price_rest=p.PREVIEW_CARD_PRICE_REST_DEFAULT,
+            docs=p.PREVIEW_CARD_DOCS_LINE_DEFAULT, cta=p.PREVIEW_CARD_CTA_DEFAULT,
+            legal_disclosure=card_text.legal_disclosure, legal_risk=card_text.legal_risk,
+        )).png
+    except Exception:
+        logger.error("preview card v2: default card failed too; serving the v1 static card",
+                     exc_info=True)
+        return (Path(settings.BASE_DIR) / "static" / "img" / "referral-preview-card.png").read_bytes()
+
+
+def card_version(card_text) -> str:
+    return card_text.fingerprint()[:VERSION_CHARS]
+
+
+def v2_image_url(tenant_id: int | None, *, client_id: str | None = None,
+                 first_name: str | None = None) -> str:
+    """Absolute `og:image` for the v2 card; the named route only when the name is eligible."""
+    from django.conf import settings
+    from django.urls import reverse
+
+    text = v2_card_text(tenant_id, first_name)
+    if first_name and client_id:
+        path = reverse("og_card_named", kwargs={"client_id": client_id})
+    else:
+        path = reverse("og_card")
+    base = (getattr(settings, "PUBLIC_BASE_URL", "") or "").rstrip("/")
+    return f"{base}{path}?v={card_version(text)}"
+
+
+def v2_meta(tenant_id: int | None, *, tenant=None, client_id: str | None = None) -> dict:
+    """og title/description/site/image for v2. Named only when `client_id` is eligible."""
+    from apps.config import preferences as p
+
+    try:
+        first_name = named_first_name(tenant, client_id) if client_id else None
+    except Exception:  # a lookup failure -> the generic card, never a 500 on the crawler page
+        logger.error("preview card v2: name lookup failed; serving the generic card", exc_info=True)
+        first_name = None
+    normalized = None
+    if first_name:
+        from apps.referrals.validators import validate_client_id_for
+
+        normalized = validate_client_id_for(tenant, client_id)
+        title = _text(p.PREVIEW_CARD_OG_TITLE_NAMED, p.PREVIEW_CARD_OG_TITLE_NAMED_DEFAULT, tenant_id)
+        title = title.replace("{first_name}", first_name.capitalize())
+    else:
+        title = _text(p.PREVIEW_CARD_OG_TITLE, p.PREVIEW_CARD_OG_TITLE_DEFAULT, tenant_id)
+    return {
+        "og_title": title,
+        "og_description": _text(p.PREVIEW_CARD_OG_DESCRIPTION, p.PREVIEW_CARD_OG_DESCRIPTION_DEFAULT,
+                                tenant_id),
+        "og_site_name": _text(p.PREVIEW_CARD_OG_SITE_NAME, p.PREVIEW_CARD_OG_SITE_NAME_DEFAULT, tenant_id),
+        "og_image": v2_image_url(tenant_id, client_id=normalized, first_name=first_name),
+        "og_v2": True,
+    }

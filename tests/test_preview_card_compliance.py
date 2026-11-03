@@ -99,6 +99,11 @@ def test_card_makes_no_free_account_claim():
 
     PIFS may say it charges the customer nothing for its own help; it may not describe the
     account itself as free (AMC and brokerage are the broker's, and are not zero).
+
+    SCOPE (SPEC CHANGE 2026-11-03, owner): the "no broker-pricing claim" rule applies to the
+    v1 STATIC card only. The v2 card may show "₹0 account opening" — but only as an
+    owner-reviewed cascade setting; "free demat" stays banned on v2 too
+    (tests/test_preview_card_v2.py).
     """
     body = _sidecar().lower()
     assert "free demat" not in body and "free trading" not in body
@@ -106,7 +111,12 @@ def test_card_makes_no_free_account_claim():
 
 
 def test_card_names_no_partner_trademark_beyond_the_required_disclosure():
-    """ADR-014: the partner may be NAMED in the disclosure, never used as branding."""
+    """ADR-014: the partner may be NAMED in the disclosure, never used as branding.
+
+    SCOPE (SPEC CHANGE 2026-11-03, owner): "Zerodha not in the headline" applies to the v1
+    STATIC card only. The v2 card's headline may name the broker, as an owner-reviewed
+    cascade setting (ADR-014 Consequences note).
+    """
     sidecar = _sidecar()
     headline_block = "\n".join(sidecar.splitlines()[:3])  # eyebrow, headline, subline
     assert "Zerodha" not in headline_block, (

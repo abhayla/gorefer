@@ -531,6 +531,16 @@ def _og_context(tenant_id: int | None) -> dict:
     """
     from apps.referrals import og
 
+    if og.v2_enabled(tenant_id):
+        # v2 (owner 2026-11-03): the generic v2 card, same function as the crawler page.
+        meta = og.v2_meta(tenant_id)
+        return {
+            "title": meta["og_title"],
+            "description": meta["og_description"],
+            "site_name": meta["og_site_name"],
+            "image": meta["og_image"],
+            "url": (getattr(settings, "PUBLIC_BASE_URL", "") or "").rstrip("/"),
+        }
     return {
         "title": og.cfg(og.TITLE_KEY, "OG_TITLE", tenant_id),
         "description": og.cfg(og.DESCRIPTION_KEY, "OG_DESCRIPTION", tenant_id),

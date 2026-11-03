@@ -164,6 +164,23 @@ Two caveats worth knowing before you misread a red suite:
 
 > **PostgreSQL only (M10).** PostgreSQL is the sole supported engine across dev/test/CI/prod — there is no SQLite fallback, and settings raise `ImproperlyConfigured` if the resolved DB engine isn't Postgres (a green run on any other engine would be false confidence, since GoRefer relies on JSONB / partial-unique constraints / case-sensitivity). Multi-tenancy is **single-schema `tenant_id` discriminator** isolation (not django-tenants schema-per-tenant); `apps.tenants` keeps a plain Tenant/Domain registry and isolation is enforced by tenant-scoped managers + `TenantResolutionMiddleware` + composite unique constraints. Schema-per-tenant physical isolation is deferred (backlog DF-7). See the M1 QUESTION (Q-M1-1) in `COORDINATION.md` in the private [gorefer-ops](https://github.com/abhayla/gorefer-ops) repo (pointer stub kept here).
 
+**Link preview card v2 (owner 2026-11-03) — operator note.** Two tenant switches, both
+**off** by default, so deploying the code changes nothing until they are turned on:
+`preview_card_v2_enabled` (server-rendered card at `/og/card.png`) and
+`preview_card_referrer_name_enabled` (adds the referrer's first name). Turn on per tenant
+from a Django shell after `python manage.py migrate && python manage.py seed_program`:
+
+```python
+from apps.config.cascade import set_tenant, resolve
+set_tenant("preview_card_v2_enabled", True, tenant_id=1)
+set_tenant("preview_card_referrer_name_enabled", True, tenant_id=1)
+resolve("preview_card_v2_enabled", tenant_id=1)   # -> True
+```
+
+Turning a switch back to `False` is the instant rollback (no deploy). The card's words are
+edited on the Preferences screen ("Link preview card"); the legal footer is locked. Spec:
+`docs/api/06-API-Specification.md` §4.1b.
+
 ## How to use for external LLM review
 
 To have another LLM review the design, feed it `review/GoRefer-Review-Bundle.md` in the private [gorefer-ops](https://github.com/abhayla/gorefer-ops) repo (the full concatenated spec) as context, then apply the questions and rubric in `review/09-LLM-Review-Pack.md` in the private [gorefer-ops](https://github.com/abhayla/gorefer-ops) repo.
