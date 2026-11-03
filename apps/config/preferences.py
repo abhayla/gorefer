@@ -143,6 +143,10 @@ KITE_PROMPT_FIELDS = [
 # to the v1 card. The name switch only matters when v2 is on.
 PREVIEW_CARD_V2_ENABLED = "preview_card_v2_enabled"
 PREVIEW_CARD_NAME_ENABLED = "preview_card_referrer_name_enabled"
+# Which Zoho `Account_Type` counts as "a client of this program's broker" for the name
+# rule (owner 2026-11-03: every Zoho client with a Zerodha account). Config, not code.
+PREVIEW_CARD_NAME_ACCOUNT_TYPE = "preview_card_name_account_type"
+PREVIEW_CARD_NAME_ACCOUNT_TYPE_DEFAULT = "Zerodha"
 # Every word on the card and in its preview title is a key (rail E-6). `{first_name}` is
 # substituted with a plain str.replace, so a stray brace in operator copy cannot break it.
 PREVIEW_CARD_EYEBROW = "preview_card_eyebrow"
@@ -1056,6 +1060,7 @@ def central_defaults() -> dict:
         # Link preview card v2 (owner 2026-11-03): switches OFF, copy = the approved card.
         PREVIEW_CARD_V2_ENABLED: False,
         PREVIEW_CARD_NAME_ENABLED: False,
+        PREVIEW_CARD_NAME_ACCOUNT_TYPE: PREVIEW_CARD_NAME_ACCOUNT_TYPE_DEFAULT,
         **{key: default for key, _label, default in PREVIEW_CARD_FIELDS + MY_PREVIEW_FIELDS},
         RECORDS_LINK_TTL_DAYS: RECORDS_LINK_TTL_DAYS_DEFAULT,
         RECORDS_MINT_DATE_FORMAT: RECORDS_MINT_DATE_FORMAT_DEFAULT,

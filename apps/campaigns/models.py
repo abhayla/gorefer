@@ -197,6 +197,10 @@ class SyncedReferrer(TimestampedModel, TenantScopedModel):
     # False = the sync stopped seeing this referrer (or an operator disabled the row).
     # An enqueue never considers an inactive row eligible, regardless of other config.
     active = models.BooleanField(default=True)
+    # Zoho `Account_Type` of this client (Zerodha, AngelOne, Upstox, ...). The Referrers
+    # module mixes brokers, so anything that means "a Zerodha client" filters on this
+    # (preview-card name rule, owner 2026-11-03). Blank until the first sync after 0003.
+    account_type = models.CharField(max_length=40, blank=True, default="")
 
     class Meta:
         db_table = "synced_referrers"

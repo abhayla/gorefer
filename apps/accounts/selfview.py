@@ -171,8 +171,12 @@ def preview_box_ctx(tenant, client_id: str, *, error: str = "", name_value: str 
     if not og.name_enabled(tenant_id):
         return None
     customer = og.live_customer(tenant, client_id)
-    if customer is None:
+    # Shown to every real client (owner 2026-11-03: Zoho Zerodha clients), even before a
+    # GoRefer referrer row exists — the name can show, so the switch must be reachable.
+    if customer is None and not og.is_known_client(tenant, client_id):
         return None
+    current_name = og.display_name_for(tenant, client_id, customer) or ""
+    current_show = customer.show_name_on_preview if customer is not None else True
     copy = {key: resolve_config(key, tenant_id=tenant_id, default=default)
             for key, _label, default in p.MY_PREVIEW_FIELDS}
     first_name = og.named_first_name(tenant, client_id)
@@ -182,8 +186,8 @@ def preview_box_ctx(tenant, client_id: str, *, error: str = "", name_value: str 
     path = reverse("og_card_named", kwargs={"client_id": client_id})
     return {
         "image_url": f"{path}?v={og.card_version(text)}&own=1",
-        "name": name_value if name_value is not None else (og.customer_display_name(customer) or ""),
-        "show": customer.show_name_on_preview if show_value is None else show_value,
+        "name": name_value if name_value is not None else current_name,
+        "show": current_show if show_value is None else show_value,
         "error": error,
         "heading": copy[p.MY_PREVIEW_HEADING],
         "help": copy[p.MY_PREVIEW_HELP],

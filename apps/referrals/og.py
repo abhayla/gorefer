@@ -179,12 +179,14 @@ def valid_display_name(raw: str | None) -> str | None:
     return value if NAME_RE.fullmatch(value) else None
 
 
+def _first_word(text: str | None) -> str:
+    parts = (text or "").split()
+    return parts[0] if parts else ""
+
+
 def customer_display_name(customer) -> str | None:
     """`preview_name` when set, else the first word of the Zoho first name; None if invalid."""
-    chosen = (customer.preview_name or "").strip()
-    if not chosen:
-        parts = (customer.first_name or "").split()
-        chosen = parts[0] if parts else ""
+    chosen = (customer.preview_name or "").strip() or _first_word(customer.first_name)
     return valid_display_name(chosen)
 
 
@@ -201,12 +203,43 @@ def live_customer(tenant, normalized: str):
     )
 
 
+def zoho_client_row(tenant, normalized: str):
+    """This id's ACTIVE row on the Zoho-synced client list (`SyncedReferrer`) whose Zoho
+    `Account_Type` is the program's broker (cascade key, default "Zerodha"), or None."""
+    from apps.campaigns.models import SyncedReferrer
+    from apps.config import preferences as p
+
+    tenant_id = getattr(tenant, "id", tenant)
+    broker = _text(p.PREVIEW_CARD_NAME_ACCOUNT_TYPE, p.PREVIEW_CARD_NAME_ACCOUNT_TYPE_DEFAULT, tenant_id)
+    return (
+        SyncedReferrer.objects.for_tenant(tenant_id)
+        .filter(client_id__iexact=normalized, active=True, account_type__iexact=broker)
+        .order_by("id")
+        .first()
+    )
+
+
+def display_name_for(tenant, normalized: str, customer=None, zoho_row=None) -> str | None:
+    """Name source, first valid wins: the referrer's own edit (`preview_name`), the Zoho
+    Contacts first name (`Customer.first_name`), the Zoho Referrers name (`SyncedReferrer`)."""
+    customer = customer if customer is not None else live_customer(tenant, normalized)
+    zoho_row = zoho_row if zoho_row is not None else zoho_client_row(tenant, normalized)
+    for raw in (getattr(customer, "preview_name", ""), _first_word(getattr(customer, "first_name", "")),
+                _first_word(getattr(zoho_row, "name", ""))):
+        name = valid_display_name(raw)
+        if name:
+            return name
+    return None
+
+
 def named_first_name(tenant, raw_client_id: str | None) -> str | None:
     """The first name to show on this referrer's card, or None for the generic card.
 
-    Every gate must pass: both switches ON; the id is a valid, non-placeholder id for the
-    tenant's partner; the referrer identity is not soft-deleted; a live Customer row exists
-    with `show_name_on_preview=True`; and its display name is valid. Anything else -> None.
+    Owner rule (2026-11-03): every Zoho client who has a Zerodha account gets their first
+    name, from their very first share. Every gate must pass: both switches ON; the id is a
+    valid, non-placeholder id for the tenant's partner; the identity is not soft-deleted;
+    the referrer has not switched it off (`Customer.show_name_on_preview`, when a row
+    exists); the id is a real client (`is_known_client`); and a valid first name exists.
     """
     from apps.referrals.validators import InvalidClientId, is_deleted_referrer, validate_client_id_for
 
@@ -220,27 +253,32 @@ def named_first_name(tenant, raw_client_id: str | None) -> str | None:
     if is_deleted_referrer(tenant, normalized):
         return None
     customer = live_customer(tenant, normalized)
-    if customer is None or not customer.show_name_on_preview:
+    if customer is not None and not customer.show_name_on_preview:
         return None
-    if not is_evidenced_referrer(tenant, normalized):
+    zoho_row = zoho_client_row(tenant, normalized)
+    if zoho_row is None and not is_evidenced_referrer(tenant, normalized):
         return None
-    return customer_display_name(customer)
+    return display_name_for(tenant, normalized, customer, zoho_row)
+
+
+def is_known_client(tenant, normalized: str) -> bool:
+    """On the Zoho Zerodha-client list, or otherwise proven (login / credited account)."""
+    return zoho_client_row(tenant, normalized) is not None or is_evidenced_referrer(tenant, normalized)
 
 
 def is_evidenced_referrer(tenant, normalized: str) -> bool:
-    """True only if something a stranger cannot cause says this id really refers.
+    """A real client by a signal a stranger cannot cause, besides the Zoho client list.
 
     Why (Tier-A review, 2026-11-03): a Customer row with a real name is NOT proof of a
-    referrer. One click on `/r/<any id>` creates an identity, and the daily Zoho name sync
-    then fills that client's real first name — so a stranger could switch on a public name
-    for a client who never shared a link. The owner's rule names *referrers*; these are the
-    signals that mean one, none of which a click or a form submit can create:
-      1. an ACTIVE ReferrerAccount bound to the id (they logged in via an OTP to the
-         on-file channel, OAuth on-file bind, or staff approval: ownership proven);
+    client — one click on `/r/<any id>` creates an identity, and the daily Zoho name sync
+    then fills that client's first name. These signals cannot be created by a click or a
+    form submit:
+      1. an ACTIVE ReferrerAccount bound to the id (OTP to the on-file channel, OAuth
+         on-file bind, or staff approval: ownership proven);
       2. a non-reversed Conversion crediting the id (written only by the Zoho ingest path).
-    NOT a signal: a SyncedReferrer row. It mirrors Zoho's Referrers module, which Zoho-side
-    rules fill; nothing in this repo proves a stranger's lead cannot create one there, so
-    it fails closed (Tier-A review round 3, 2026-11-03).
+    The main signal is the Zoho client list itself (`zoho_client_row`): Zoho fills its
+    Referrers module only from real client Contacts (rule `create_referrer_record`), never
+    from a GoRefer lead, and the row must carry the program's broker as `Account_Type`.
     """
     from apps.accounts.models import ReferrerAccount
     from apps.integrations.models import Conversion

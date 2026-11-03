@@ -95,7 +95,7 @@ only (guardrail #2: neither writes to Zoho or touches conversion/account status)
 **`fetch_referrer_audience()`** — decision ⑫'s READ-ONLY audience source for the T-124/T-125
 messaging-campaign engine. Sourced from the Zoho **`Referrers`** custom module (module API name
 `Referrers`, internal id `CustomModule3`), via the plain **record-LIST endpoint**
-`GET /crm/v8/Referrers` (fields `Client_Id,Mobile,Name,Created_Time`) — **not** `/search` (a full
+`GET /crm/v8/Referrers` (fields `Client_Id,Mobile,Name,Created_Time,Account_Type`) — **not** `/search` (a full
 audience needs no criteria) and **not COQL** (same reasoning as §"Conversion reconciler" below: the
 live refresh token has no COQL scope, `/crm/v8/coql` returns `OAUTH_SCOPE_MISMATCH`). Paginated,
 200/page, hard stop at 100 pages (20,000 referrers); hitting the cap sets `truncated=True` on the
@@ -110,6 +110,7 @@ result and the consuming sync task refuses to treat a partial fetch as a complet
 | `mobile` | `Mobile` (nullable live — seen blank on real rows, e.g. `FWW808`/`XJ9068`) |
 | `name` | `Name` (the module's primary field) |
 | `record_created_at` | `Created_Time` — the drip anchor (decision ⑪) |
+| `account_type` | `Account_Type` (picklist: the client's broker). **The module mixes brokers**: Zoho's `create_referrer_record` rule fills it from every broker's Contacts. Measured 2026-11-03: 609 rows = 602 `Zerodha`, 5 `AngelOne`, 2 `Upstox`. Stored on `SyncedReferrer.account_type`; the preview-card name rule names only rows whose type equals cascade key `preview_card_name_account_type` (default `Zerodha`). |
 | `language` | **always `""`** — the live module (verified via `getFields`) carries no Language
   field. Decision ⑮'s "Zoho language field, EN fallback" therefore always falls back to English
   today; the fallback itself lives in `apps.campaigns.models.MessagingCampaign.template_for`, not
@@ -128,6 +129,11 @@ a **complete** fetch is marked `active=False` (never deleted) — a **truncated*
 deactivation sweep entirely so a partial page can never look like "referrer gone". A parity check
 (synced-active count vs fetched count) logs a `PARITY MISMATCH` warning loudly on any divergence —
 the audience must never silently shrink relative to what Zoho just returned.
+`sync_referrer_audience(force=True)` skips only the frequency window (still gated on
+`ENABLE_ZOHO_READ`) — used once after a deploy that adds a synced field, so it is filled
+without waiting up to a day. Live data quirks (2026-11-03): some `Client_Id`s carry trailing
+spaces (stripped) or a stray character (e.g. `MR4371Â`, never matches a valid id), and test
+ids like `T170TEST` exist (never pass the strict id pattern, so never named).
 
 **`fetch_send_queue_counts(date_ist)`** — per-`Queue_Status` counts for one IST business date,
 grouped **referral-vs-other** (decision ⑭): the future W4 digest's messaging block. Sourced from the

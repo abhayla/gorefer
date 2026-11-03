@@ -475,15 +475,78 @@ def test_a_switched_off_signal_is_not_evidence(seeded, kind):
     assert og.named_first_name(seeded, CID) is None
 
 
-def test_a_synced_referrer_row_alone_is_not_evidence(seeded):
-    """Round-3 review: Zoho's Referrers module is filled by Zoho-side rules we cannot prove
-    a stranger's lead never triggers, so a SyncedReferrer row alone fails closed."""
+def _zoho_client(tenant, client_id=CID, *, name="Rahul Kumar", account_type="Zerodha", active=True):
+    """A row on the Zoho-synced client list (SyncedReferrer), as the audience sync writes it."""
     from apps.campaigns.models import SyncedReferrer
 
+    return SyncedReferrer.objects.create(
+        tenant=tenant, client_id=client_id, mobile="919876543210", name=name,
+        record_created_at=timezone.now(), active=active, account_type=account_type)
+
+
+def test_a_zerodha_client_on_the_zoho_list_is_named_with_no_customer_row(seeded):
+    """Owner 2026-11-03: every Zoho client with a Zerodha account gets their name, from the
+    very first share — no click, no GoRefer referrer row, no login needed."""
     _on(seeded, name=True)
-    _customer(seeded, evidence=False)
-    SyncedReferrer.objects.create(tenant=seeded, client_id=CID, mobile="919876543210",
-                                  record_created_at=timezone.now(), active=True)
+    _zoho_client(seeded)
+    assert not Customer.objects.filter(client_id=CID).exists()
+    assert og.named_first_name(seeded, CID) == "Rahul"
+    assert _named_route(seeded) == _named_png(seeded, "Rahul")
+    html = Client().get(f"/r/{CID}", **BOT).content.decode()
+    assert _meta(html, "og:title").startswith("Rahul invited you")
+
+
+@pytest.mark.parametrize("account_type", ["AngelOne", "Upstox", ""])
+def test_a_non_zerodha_or_unknown_broker_row_is_not_named(seeded, account_type):
+    _on(seeded, name=True)
+    _zoho_client(seeded, account_type=account_type)
+    assert og.named_first_name(seeded, CID) is None
+
+
+def test_the_broker_match_is_config_and_case_insensitive(seeded):
+    _on(seeded, name=True)
+    _zoho_client(seeded, account_type="zerodha")
+    assert og.named_first_name(seeded, CID) == "Rahul"
+    set_tenant(p.PREVIEW_CARD_NAME_ACCOUNT_TYPE, "AngelOne", tenant_id=seeded.id)
+    assert og.named_first_name(seeded, CID) is None
+
+
+def test_an_inactive_zoho_row_is_not_named(seeded):
+    _on(seeded, name=True)
+    _zoho_client(seeded, active=False)
+    assert og.named_first_name(seeded, CID) is None
+
+
+def test_opting_out_beats_the_zoho_list(seeded):
+    _on(seeded, name=True)
+    _zoho_client(seeded)
+    _customer(seeded, evidence=False, show_name_on_preview=False)
+    assert og.named_first_name(seeded, CID) is None
+
+
+def test_name_source_order_edit_then_contacts_then_referrers(seeded):
+    _on(seeded, name=True)
+    _zoho_client(seeded, name="Zoho Referrer")
+    assert og.named_first_name(seeded, CID) == "Zoho"
+    cust = _customer(seeded, evidence=False, first_name="Priya Demo")
+    assert og.named_first_name(seeded, CID) == "Priya"
+    cust.preview_name = "Raj"
+    cust.save(update_fields=["preview_name"])
+    assert og.named_first_name(seeded, CID) == "Raj"
+
+
+def test_an_invalid_zoho_name_gives_the_generic_card(seeded):
+    _on(seeded, name=True)
+    _zoho_client(seeded, name="Ráhul Kumar")
+    assert og.named_first_name(seeded, CID) is None
+
+
+def test_a_deleted_id_on_the_zoho_list_is_not_named(seeded):
+    _on(seeded, name=True)
+    _zoho_client(seeded)
+    ident = _identity(seeded)
+    ident.deleted_at = timezone.now()
+    ident.save(update_fields=["deleted_at"])
     assert og.named_first_name(seeded, CID) is None
 
 
@@ -651,6 +714,33 @@ def test_box_never_shows_on_the_admin_profile(seeded, django_capture_on_commit_c
     resp = admin.get(f"/admin-panel/referrer/{CID}/")
     assert resp.status_code == 200
     assert b'data-test="preview-box"' not in resp.content
+
+
+@pytestmark_login
+def test_a_zoho_listed_client_without_a_row_can_switch_the_name_off(seeded):
+    """The name shows for every Zoho Zerodha client, so every one of them must be able to
+    switch it off — even with no GoRefer referrer row yet (it is created on save)."""
+    _on(seeded, name=True)
+    _identity(seeded)
+    _zoho_client(seeded)
+    client = _login(seeded)
+    assert not Customer.objects.filter(client_id=CID).exists()
+    body = client.get("/my/referrals").content.decode()
+    assert 'data-test="preview-box"' in body and 'value="Rahul"' in body
+    resp = client.post("/my/referrals/preview-name", {"preview_name": ""})  # box unticked
+    assert resp.status_code == 302
+    row = Customer.objects.get(client_id=CID)
+    assert row.show_name_on_preview is False
+    assert og.named_first_name(seeded, CID) is None
+
+
+def test_another_tenants_zoho_row_is_not_named(seeded):
+    from apps.tenants.models import Tenant
+
+    _on(seeded, name=True)
+    other = Tenant.objects.create(name="Other AP", slug="other-ap-2")
+    _zoho_client(other)
+    assert og.named_first_name(seeded, CID) is None
 
 
 @pytestmark_login

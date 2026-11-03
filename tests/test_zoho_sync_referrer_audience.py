@@ -268,3 +268,45 @@ def test_fetch_failure_degrades_instead_of_crashing(tenant, caplog):
     assert result == {"error": "zoho fetch failed"}
     assert SyncedReferrer.objects.for_tenant(tenant).count() == 0
     assert any("fetch failed" in r.getMessage() for r in caplog.records)
+
+
+# --- account type (preview-card name rule, owner 2026-11-03) ------------------------
+
+def test_stores_the_zoho_account_type(tenant):
+    """The Referrers module mixes brokers; the sync keeps each row's `Account_Type` so the
+    preview card can name only Zerodha clients."""
+    audience = _audience([
+        ZohoReferrerRow(client_id="ZR1001", mobile="9876543210", name="Rahul Demo",
+                        record_created_at=timezone.now(), account_type="Zerodha"),
+        ZohoReferrerRow(client_id="AO2002", mobile="9876543210", name="Priya Demo",
+                        record_created_at=timezone.now(), account_type="AngelOne"),
+    ])
+    fake_port = mock.MagicMock()
+    fake_port.fetch_referrer_audience.return_value = audience
+    with mock.patch("apps.config.integration_flags.resolve_flag", return_value=True), \
+            mock.patch("apps.integrations.ports.get_crm_read_port", return_value=fake_port):
+        zoho_tasks.sync_referrer_audience(tenant=tenant)
+    rows = dict(SyncedReferrer.objects.values_list("client_id", "account_type"))
+    assert rows == {"ZR1001": "Zerodha", "AO2002": "AngelOne"}
+
+
+def test_force_skips_only_the_frequency_window(tenant):
+    now = timezone.now()
+    SyncedReferrer.objects.create(tenant=tenant, client_id="ZR1001", mobile="919876543210",
+                                  name="Rahul Demo", record_created_at=now, synced_at=now)
+    audience = _audience([
+        ZohoReferrerRow(client_id="ZR1001", mobile="9876543210", name="Rahul Demo",
+                        record_created_at=now, account_type="Zerodha"),
+    ])
+    fake_port = mock.MagicMock()
+    fake_port.fetch_referrer_audience.return_value = audience
+    with mock.patch("apps.config.integration_flags.resolve_flag", return_value=True), \
+            mock.patch("apps.integrations.ports.get_crm_read_port", return_value=fake_port):
+        result = zoho_tasks.sync_referrer_audience(tenant=tenant, force=True)
+    assert "skipped" not in result
+    assert SyncedReferrer.objects.get(client_id="ZR1001").account_type == "Zerodha"
+    with mock.patch("apps.config.integration_flags.resolve_flag", return_value=False), \
+            mock.patch("apps.integrations.ports.get_crm_read_port") as port:
+        off = zoho_tasks.sync_referrer_audience(tenant=tenant, force=True)
+    assert off == {"skipped": "ENABLE_ZOHO_READ off"}
+    port.assert_not_called()
