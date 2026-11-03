@@ -437,6 +437,10 @@ def _new_customer_row(tenant, client_id: str):
         tenant=tenant, program=program, client_id=client_id,
         defaults={"partner": program.partner},
     )
+    if customer.deleted_at is not None:
+        # A soft-deleted row would hold the choice where the name rule never reads it
+        # (it reads live rows only) — refuse rather than store an opt-out that is ignored.
+        raise Http404
     return customer
 
 

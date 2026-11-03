@@ -722,16 +722,31 @@ def test_a_zoho_listed_client_without_a_row_can_switch_the_name_off(seeded):
     switch it off — even with no GoRefer referrer row yet (it is created on save)."""
     _on(seeded, name=True)
     _identity(seeded)
-    _zoho_client(seeded)
+    _zoho_client(seeded, name="Zara Demo")
     client = _login(seeded)
     assert not Customer.objects.filter(client_id=CID).exists()
     body = client.get("/my/referrals").content.decode()
-    assert 'data-test="preview-box"' in body and 'value="Rahul"' in body
+    # "Zara" can only come from the Zoho Referrers row: no Customer row, no other name.
+    assert 'data-test="preview-box"' in body and 'value="Zara"' in body
     resp = client.post("/my/referrals/preview-name", {"preview_name": ""})  # box unticked
     assert resp.status_code == 302
     row = Customer.objects.get(client_id=CID)
     assert row.show_name_on_preview is False
     assert og.named_first_name(seeded, CID) is None
+
+
+@pytestmark_login
+def test_saving_onto_a_soft_deleted_row_is_refused(seeded):
+    """Review MINOR 2: an opt-out stored on a deleted row would be ignored by the name rule."""
+    _on(seeded, name=True)
+    _identity(seeded)
+    _zoho_client(seeded)
+    cust = _customer(seeded, evidence=False)
+    cust.deleted_at = timezone.now()
+    cust.save(update_fields=["deleted_at"])
+    resp = _login(seeded).post("/my/referrals/preview-name", {"preview_name": ""})
+    assert resp.status_code == 404
+    assert Customer.objects.get(client_id=CID).show_name_on_preview is True
 
 
 def test_another_tenants_zoho_row_is_not_named(seeded):
