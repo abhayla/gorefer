@@ -6,7 +6,6 @@ One JSON file per proven finding in `docs/reviews/failure-classes/`. See `docs/r
 | Finding | Detection | First seen |
 |---|---|---|
 | [Beacon-confirmed human clicks are rare in direct landing mode](#beacon-confirmed-human-clicks-are-rare-in-direct-landing-mode) | unguarded | 2026-11-04 |
-| [Conversion ingest can skip marking its open-date rollup day dirty](#conversion-ingest-can-skip-marking-its-open-date-rollup-day-dirty) | unguarded | 2026-11-04 |
 | [Datacenter and crawler clicks counted as human](#datacenter-and-crawler-clicks-counted-as-human) | unguarded | 2026-11-04 |
 | [Deploy copies code but never installs requirements](#deploy-copies-code-but-never-installs-requirements) | guarded | 2026-11-04 |
 | [Empty-string exclude on a GenericIPAddressField excludes every row](#empty-string-exclude-on-a-genericipaddressfield-excludes-every-row) | unguarded | 2026-11-04 |
@@ -33,34 +32,6 @@ One JSON file per proven finding in `docs/reviews/failure-classes/`. See `docs/r
 
 **Related:**
 - ADR-019
-
-## Conversion ingest can skip marking its open-date rollup day dirty
-
-`conversion-ingest-skips-rollup-dirty-mark` - detection: **unguarded**
-
-**Class (symptom):** A Conversion created through the referral-attributed ingest path can leave no DirtyPeriod row for its account_opened_at date, so DailyMetric/MonthlyMetric.accounts_opened (the dashboard accounts-opened KPI) under-counts until some other event dirties that day or a full recompute runs.
-
-**Mechanism:** apps/integrations/zoho/ingest.py _apply_upsert marks the day dirty itself only in the unattributed branch (referral is None); the attributed branch relies on _emit_conversion_events to dirty the day. The exact condition under which _emit_conversion_events skips the dirty mark is NOT yet identified.
-
-**First seen:** 2026-11-04
-- 4 Conversions created 2026-10-29 02:51-02:59 UTC (program 1) with open dates 2023-10-15, 2025-04-30, 2025-06-19 and 2025-07-03 had 0 DirtyPeriod rows for their open dates.
-- Dashboard accounts_opened read 28 while non-reversed Conversions numbered 30.
-- A full recompute_rollups, run after an unrelated history repair (61 dirty days), corrected it to 30.
-- The 5-minute recompute_rollups schedule itself was healthy: last runs OK, 0 failures, 1 unprocessed row.
-
-**Measurements:**
-- 4 Conversions with 0 DirtyPeriod rows for their open dates (2026-10-29 creation, program 1).
-- accounts_opened rollup 28 vs 30 non-reversed Conversions before the full recompute; 30 after.
-- Scheduler health: last recompute_rollups runs OK, 0 failures, 1 unprocessed row, so the miss is in marking, not in processing.
-
-**Detection:**
-- **status:** unguarded
-- **reason:** no check compares the accounts_opened rollup total with the non-reversed Conversion count
-
-**Related:**
-- apps/integrations/zoho/ingest.py _apply_upsert
-- _emit_conversion_events
-- recompute_rollups
 
 ## Datacenter and crawler clicks counted as human
 

@@ -65,6 +65,12 @@ SCHEDULES = {
     # Weekly (10080 min, ADR-019 amendment 2026-11-04): rebuild the offline datacenter
     # network table from the iptoasn.com dumps. A failed download keeps the old table.
     "network_table_refresh": ("apps.events.netranges_refresh.scheduled_refresh", 10080),
+    # Daily (1440 min, 2026-11-05; prod rollup read 28 vs 30 live conversions on 2026-11-04,
+    # cause unexplained):
+    # compare the accounts_opened rollup with the live Conversion count per program and
+    # alert the owner through the Notifier on any difference. Drains dirty days first,
+    # so only a write that skipped its dirty mark shows up.
+    "rollup_conversion_audit": ("apps.events.rollup_audit.scheduled_audit", 1440),
 }
 
 

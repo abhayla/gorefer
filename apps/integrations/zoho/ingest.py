@@ -21,6 +21,7 @@ NOTHING here is called by internal business flows — only by the webhook receiv
 """
 from __future__ import annotations
 
+import functools
 import logging
 
 from django.db import transaction
@@ -28,7 +29,7 @@ from django.utils import timezone
 
 from apps.events import vocab
 from apps.events.models import Event
-from apps.events.rollups import mark_dirty
+from apps.events.rollups import mark_dirty_ids
 from apps.integrations.models import Conversion, ZohoSyncIdempotency
 from apps.referrals.models import Referral, ReferralIdentity, ReferralProgram
 
@@ -147,6 +148,9 @@ def _apply_upsert(tenant, program, conversion, payload, account_id, zoho_lead_id
     open_dt = _parse_dt(payload.get("account_opened_at"))
     now = timezone.now()
 
+    # The open date this row held BEFORE this write: if Zoho moved it, the old day's
+    # rollup must drop the conversion, so that day is dirtied too (below).
+    previous_open_dt = conversion.account_opened_at if conversion is not None else None
     if conversion is None:
         conversion = Conversion(tenant=tenant, program=program)
     conversion.opener_zerodha_account_id = account_id
@@ -178,17 +182,18 @@ def _apply_upsert(tenant, program, conversion, payload, account_id, zoho_lead_id
             "account_opened_at", "conversion_synced_at", "status", "updated_at",
         ])
         _emit_conversion_events(tenant, referral, stage, conversion, open_dt)
-    elif stage == statusmap.TERMINAL_ACCOUNT_STAGE and open_dt:
-        # Unattributed (off-platform, no credited referrer) conversion still counts
-        # under the program's rollup on its TRUE IST open date (OQ2b, owner ruling
-        # 2026-08-01: option A). The forward path above only dirties the day when a
-        # referral was resolved, via `_emit_conversion_events` — so a conversion Zoho
-        # names no referrer for never got its day marked dirty and silently never
-        # appeared in DailyMetric/MonthlyMetric.accounts_opened, even though
-        # `_accounts_opened_for_range` itself never filtered by referral. No
-        # attribution is invented here — the conversion stays referrer-less; only its
-        # period gets recomputed so the count is not permanently missing.
-        mark_dirty(tenant=tenant, program=program, on_date=timezone.localtime(open_dt).date())
+
+    # Rollup marking is ONE structural step for EVERY conversion write — attributed or
+    # not, any stage. `rollups._accounts_opened_for_range` counts a Conversion by its own
+    # `program`, `is_reversed=False` and its open date, whatever the stage or referral,
+    # so the dirty mark must use exactly that predicate. Before 2026-11-05 it was
+    # narrower (attributed: only stage == account_opened, under `referral.program`;
+    # unattributed: only stage == account_opened; never the OLD day when the open date
+    # moved) — logic gaps shown by tests/test_conversion_rollup_dirty.py, not tied to
+    # any observed prod drift. No attribution or status is changed here — only which
+    # period gets recomputed.
+    _mark_open_day_dirty(tenant, conversion.program, open_dt)
+    _mark_open_day_dirty(tenant, conversion.program, previous_open_dt)
     return conversion
 
 
@@ -235,27 +240,36 @@ def _apply_reversal(tenant, program, conversion, payload):
                 "conversion_status", "credited_referrer", "reward_status", "account_opened_at",
                 "conversion_source", "conversion_synced_at", "status", "updated_at",
             ])
-        # Recompute the affected period off the TRUE open date, in IST.
-        #
-        # `.date()` alone is a TRAP here (P0-H). `account_opened_at` is IST midnight stored
-        # as UTC — 1 Aug 2026 IST is `2026-07-31T18:30Z` — so `.date()` yields the UTC date
-        # (31 Jul) and would mark the WRONG MONTH dirty, leaving the right month never
-        # recomputed. It happens to be correct on THIS path only because the value still
-        # carries its parsed IST offset in-memory; the moment a Conversion is re-read from
-        # the DB (the reconciler, any backfill) `.date()` flips to the UTC date. Verified by
-        # probe: in-memory `.date()` -> 2026-08-01, after `refresh_from_db()` -> 2026-07-31.
-        # `localtime()` is correct regardless of how the value was obtained.
-        if conversion.account_opened_at:
-            mark_dirty(
-                tenant=tenant, program=program,
-                on_date=timezone.localtime(conversion.account_opened_at).date(),
-            )
+    # Recompute the affected period — for EVERY reversal, attributed or not (an
+    # unattributed conversion is counted too, OQ2b), under the conversion's own program.
+    _mark_open_day_dirty(tenant, conversion.program, conversion.account_opened_at)
     return conversion
 
 
+def _mark_open_day_dirty(tenant, program, opened_at):
+    """Mark the IST day of `opened_at` dirty for `program` (no-op without either).
+
+    IST via `localtime()`, never `.date()` (P0-H): `account_opened_at` is IST midnight
+    stored as UTC — 1 Aug 2026 IST is `2026-07-31T18:30Z` — so `.date()` on a value
+    re-read from the DB yields the UTC date and marks the WRONG day (and month).
+    `mark_dirty` is get_or_create on the unprocessed row, so repeat calls add nothing.
+
+    Runs ON COMMIT (ingest_conversion is atomic): marked before commit, a recompute in
+    another session could process the row while this conversion is still invisible to
+    it, and the day would be closed without it. Only plain values are captured.
+    """
+    if program is None or opened_at is None:
+        return
+    transaction.on_commit(functools.partial(
+        mark_dirty_ids,
+        tenant_id=getattr(tenant, "pk", None), program_id=program.pk,
+        on_date=timezone.localtime(opened_at).date(),
+    ))
+
+
 def _emit_conversion_events(tenant, referral, stage, conversion, open_dt):
-    """Emit account_opened (and reward) events — source-tagged, dated to TRUE open
-    date so rollups land in the real period (no fake day-1 spike)."""
+    """Emit account_opened (and reward) events — source-tagged. The rollup day is NOT
+    marked here: `_apply_upsert` marks it for every conversion write (see there)."""
     if stage == statusmap.TERMINAL_ACCOUNT_STAGE:
         Event.objects.create(
             tenant=tenant, event_type=vocab.ACCOUNT_OPENED, source=vocab.SRC_ZOHO,
@@ -274,12 +288,6 @@ def _emit_conversion_events(tenant, referral, stage, conversion, open_dt):
                 )
             )
         )
-        if open_dt:
-            # IST date, not `.date()` — see the P0-H note in apply_conversion above.
-            mark_dirty(
-                tenant=tenant, program=referral.program,
-                on_date=timezone.localtime(open_dt).date(),
-            )
     if conversion.reward_status:  # only if Zoho supplied a reward signal
         Event.objects.create(
             tenant=tenant, event_type=vocab.REWARD_STATUS_CHANGED, source=vocab.SRC_ZOHO,

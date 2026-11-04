@@ -68,3 +68,23 @@ def _clear_wati_approval_cache():
     _clear_approval_cache()
     yield
     _clear_approval_cache()
+
+
+@pytest.fixture
+def apply_rollup_marks(django_capture_on_commit_callbacks):
+    """Context manager for `db` (never-committing) tests: run ONLY the Zoho ingest's
+    on-commit rollup marks (`mark_dirty_ids` partials) registered inside it — not other
+    on-commit side effects such as the referrer congrats enqueue."""
+    import contextlib
+
+    @contextlib.contextmanager
+    def _cm():
+        from apps.events.rollups import mark_dirty_ids
+
+        with django_capture_on_commit_callbacks() as callbacks:
+            yield
+        for cb in callbacks:
+            if getattr(cb, "func", None) is mark_dirty_ids:
+                cb()
+
+    return _cm

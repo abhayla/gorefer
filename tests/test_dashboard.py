@@ -11,9 +11,14 @@ import gorefer.urls
 
 
 @pytest.fixture
-def demo(db):
+def demo(db, apply_rollup_marks):
     call_command("seed_program")
-    call_command("seed_demo")
+    # The ingest marks conversion days dirty ON COMMIT; this test never commits.
+    with apply_rollup_marks():
+        call_command("seed_demo")
+    from apps.events.rollups import recompute_dirty as _recompute
+
+    _recompute()
 
 
 @pytest.fixture

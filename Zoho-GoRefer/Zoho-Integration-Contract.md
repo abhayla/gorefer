@@ -420,6 +420,19 @@ Unchanged: the `Conversion` row is still tombstoned rather than deleted (audit r
 Guardrail 2 is respected: this write happens inside `apps/integrations/zoho/ingest.py`, the sole
 Zoho-sourced path permitted to change account/conversion status.
 
+## Every conversion write marks its open-date rollup day dirty (2026-11-05)
+
+The accounts-opened rollup counts a `Conversion` by its own `program`, `is_reversed=False` and its
+TRUE open date — whatever the stage or referral. So **every** ingest write that touches a
+conversion with an open date (create, update, un-reversal, reversal; attributed or not; any mapped
+stage, e.g. a Contacts `Account_Status` of "Contacted") marks that IST day dirty under
+`conversion.program`, and an update that **moves** the open date also marks the old day; a
+reversal marks the day whether or not the conversion has a referral. Marks are registered with
+`transaction.on_commit`, so a recompute can never close the day before the conversion is visible.
+What is written is unchanged; only which period is recomputed. `python manage.py
+check_rollup_conversions` (daily schedule `rollup_conversion_audit`) reports any remaining
+difference and heals it by re-marking that program's conversion days.
+
 ## Conversion reconciler — the webhook is no longer the only delivery path (P0, 2026-07-26)
 
 **What went wrong.** For a month the webhook delivered **nothing**, and nobody could tell.

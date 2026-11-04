@@ -42,10 +42,24 @@ def _accounts_opened_for_range(*, tenant, program, start, end):
 
 def mark_dirty(*, tenant, program, on_date):
     """Record a day (its month derived) as needing recompute. Idempotent per day."""
-    DirtyPeriod.objects.get_or_create(
-        tenant=tenant, program=program, period_date=on_date, processed_at__isnull=True,
-        defaults={},
+    mark_dirty_ids(
+        tenant_id=getattr(tenant, "pk", tenant), program_id=getattr(program, "pk", program),
+        on_date=on_date,
     )
+
+
+def mark_dirty_ids(*, tenant_id, program_id, on_date):
+    """`mark_dirty` by primary keys (safe to capture in a `transaction.on_commit`)."""
+    try:
+        DirtyPeriod.objects.get_or_create(
+            tenant_id=tenant_id, program_id=program_id, period_date=on_date,
+            processed_at__isnull=True, defaults={},
+        )
+    except DirtyPeriod.MultipleObjectsReturned:
+        # No unique constraint, so two concurrent marks can leave duplicate unprocessed
+        # rows. Any unprocessed row for the day already guarantees the recompute, so a
+        # duplicate must never fail the caller (e.g. a Zoho ingest).
+        pass
 
 
 def _counts_for_range(*, tenant, program, start, end):
