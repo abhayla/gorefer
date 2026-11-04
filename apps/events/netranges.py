@@ -37,10 +37,18 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import vocab
+
 logger = logging.getLogger(__name__)
 
 # Event.metadata["bot_reason"] value for a click from a datacenter/crawler network.
 DATACENTER_BOT_REASON = "datacenter"
+
+# The ONLY event types a datacenter verdict ever flags - shared by the live click path
+# (redirect_service._record_event, api/click.py beacon) and the history repair
+# (reclassify.py) so the two cannot drift. Leads, redirects, shares are NEVER flagged:
+# a real person on an office VPN who submits the form keeps their lead in the funnel.
+DATACENTER_VISIT_EVENT_TYPES = frozenset({vocab.CLICK, vocab.LANDING_VIEWED, vocab.HUMAN_CONFIRMED})
 
 # --- Config keys (cascade, ADR-022; CLAUDE.md §6e / rail E-6) -------------------------
 TABLE_PATH_KEY = "network_table_path"

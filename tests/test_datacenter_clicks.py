@@ -222,6 +222,41 @@ def test_production_xff_left_most_ip_decides(seeded, table, django_capture_on_co
         assert (r.status_code, r["Location"]) == (302, "https://signup.zerodha.com/?c=ZMPHZC"), path
 
 
+def test_reclassify_never_flags_a_lead_of_a_datacenter_visit(
+    seeded, table, django_capture_on_commit_callbacks
+):
+    from apps.events import vocab
+    from apps.events.analytics import funnel_counts
+    from apps.tenants.models import Tenant
+
+    assert netranges.DATACENTER_VISIT_EVENT_TYPES == {
+        vocab.CLICK, vocab.LANDING_VIEWED, vocab.HUMAN_CONFIRMED}
+    real = netranges.table_path
+    netranges.table_path = lambda: table.parent / "absent.tsv"
+    netranges.reset_cache()
+    try:
+        vid = _visit(Client(), "/r/RJ4521", DATACENTER, django_capture_on_commit_callbacks, beacon=True)
+    finally:
+        netranges.table_path = real
+        netranges.reset_cache()
+    click = Event.objects.get(visitor_id=vid, event_type=vocab.CLICK)
+    lead = Event.objects.create(  # an office-VPN person who submitted the form in that visit
+        tenant=click.tenant, event_type=vocab.LEAD_CAPTURED, source=vocab.SRC_FORM, referral=click.referral,
+        user_type="anonymous", visitor_id=vid, metadata={})
+    tenant = Tenant.objects.get(slug="pifs")
+
+    def leads():
+        return next(r["count"] for r in funnel_counts(tenant=tenant) if r["stage"] == vocab.LEAD_CAPTURED)
+
+    assert leads() == 1
+    call_command("reclassify_datacenter_clicks", "--table", str(table), "--apply", stdout=StringIO())
+    lead.refresh_from_db()
+    assert (lead.is_bot, lead.metadata) == (False, {})
+    assert leads() == 1
+    flagged = set(Event.objects.filter(visitor_id=vid, is_bot=True).values_list("event_type", flat=True))
+    assert flagged == {vocab.CLICK, vocab.LANDING_VIEWED, vocab.HUMAN_CONFIRMED}
+
+
 def test_reclassify_refuses_without_a_table(db, tmp_path):
     from django.core.management.base import CommandError
 

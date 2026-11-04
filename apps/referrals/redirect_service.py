@@ -24,7 +24,7 @@ from apps.config.cascade import resolve
 from apps.events import vocab
 from apps.events.bots import is_bot_user_agent
 from apps.events.models import Event, VisitorPII
-from apps.events.netranges import DATACENTER_BOT_REASON, classify_ip
+from apps.events.netranges import DATACENTER_BOT_REASON, DATACENTER_VISIT_EVENT_TYPES, classify_ip
 from apps.events.nonces import mint_nonce
 from apps.referrals.models import Partner, ProgramRedirectRule, Referral, ReferralIdentity, ReferralProgram
 from gorefer.flags import SHARE_CHANNEL_LABELS
@@ -181,6 +181,8 @@ def _record_event(
     if datacenter is None:
         datacenter = _datacenter_verdict(raw_ip)
     is_datacenter, network = datacenter
+    if event_type not in DATACENTER_VISIT_EVENT_TYPES:
+        is_datacenter = False
     person_ref_id = None
     if raw_ip:
         pii = VisitorPII.objects.create(tenant=tenant, visitor_id=visitor_id or "", raw_ip=raw_ip)

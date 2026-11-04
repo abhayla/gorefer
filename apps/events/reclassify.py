@@ -12,7 +12,9 @@ Rules:
   (raw_ip NULL - filtered by `raw_ip__isnull=False`, never `raw_ip=""`, which on a
   GenericIPAddressField silently matches nothing), is SKIPPED and counted - never
   guessed from another visit's IP.
-- A datacenter visit = every is_bot=False event of the same tenant + visitor_id from
+- A datacenter visit = every is_bot=False event of a DATACENTER_VISIT_EVENT_TYPES type
+  (click, landing_viewed, human_confirmed - the same set the live path flags; leads,
+  redirects and shares are never flagged) of the same tenant + visitor_id from
   that click's timestamp up to (not including) the visitor's NEXT click. A later visit
   of the same visitor from a home IP starts at its own click and is left alone.
   A datacenter click with no visitor_id flags only itself.
@@ -29,7 +31,7 @@ from django.utils import timezone
 
 from . import vocab
 from .models import Event, VisitorPII
-from .netranges import DATACENTER_BOT_REASON, NetworkTable
+from .netranges import DATACENTER_BOT_REASON, DATACENTER_VISIT_EVENT_TYPES, NetworkTable
 from .rollups import mark_dirty
 
 PARTNER_DIRECT = "partner-direct"
@@ -54,7 +56,7 @@ def _visit_events(click: Event) -> list[Event]:
     )
     qs = Event.objects.filter(
         tenant_id=click.tenant_id, visitor_id=click.visitor_id, is_bot=False,
-        timestamp__gte=click.timestamp,
+        timestamp__gte=click.timestamp, event_type__in=DATACENTER_VISIT_EVENT_TYPES,
     ).select_related("referral")
     if next_click_ts is not None:
         qs = qs.filter(timestamp__lt=next_click_ts)
