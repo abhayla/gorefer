@@ -427,9 +427,11 @@ TRUE open date — whatever the stage or referral. So **every** ingest write tha
 conversion with an open date (create, update, un-reversal, reversal; attributed or not; any mapped
 stage, e.g. a Contacts `Account_Status` of "Contacted") marks that IST day dirty under
 `conversion.program`, and an update that **moves** the open date also marks the old day; a
-reversal marks the day whether or not the conversion has a referral. What is written is
-unchanged; only which period is recomputed. `python manage.py check_rollup_conversions` (daily schedule
-`rollup_conversion_audit`) reports any remaining difference.
+reversal marks the day whether or not the conversion has a referral. Marks are registered with
+`transaction.on_commit`, so a recompute can never close the day before the conversion is visible.
+What is written is unchanged; only which period is recomputed. `python manage.py
+check_rollup_conversions` (daily schedule `rollup_conversion_audit`) reports any remaining
+difference and heals it by re-marking that program's conversion days.
 
 ## Conversion reconciler — the webhook is no longer the only delivery path (P0, 2026-07-26)
 

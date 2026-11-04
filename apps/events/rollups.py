@@ -42,10 +42,24 @@ def _accounts_opened_for_range(*, tenant, program, start, end):
 
 def mark_dirty(*, tenant, program, on_date):
     """Record a day (its month derived) as needing recompute. Idempotent per day."""
-    DirtyPeriod.objects.get_or_create(
-        tenant=tenant, program=program, period_date=on_date, processed_at__isnull=True,
-        defaults={},
+    mark_dirty_ids(
+        tenant_id=getattr(tenant, "pk", tenant), program_id=getattr(program, "pk", program),
+        on_date=on_date,
     )
+
+
+def mark_dirty_ids(*, tenant_id, program_id, on_date):
+    """`mark_dirty` by primary keys (safe to capture in a `transaction.on_commit`)."""
+    try:
+        DirtyPeriod.objects.get_or_create(
+            tenant_id=tenant_id, program_id=program_id, period_date=on_date,
+            processed_at__isnull=True, defaults={},
+        )
+    except DirtyPeriod.MultipleObjectsReturned:
+        # No unique constraint, so two concurrent marks can leave duplicate unprocessed
+        # rows. Any unprocessed row for the day already guarantees the recompute, so a
+        # duplicate must never fail the caller (e.g. a Zoho ingest).
+        pass
 
 
 def _counts_for_range(*, tenant, program, start, end):
@@ -95,25 +109,11 @@ def recompute_dirty(limit: int | None = None) -> int:
         qs = qs[:limit]
     done = 0
     for dp in list(qs):
-        # CLAIM the row before counting, not after. `mark_dirty` is get_or_create on the
-        # UNPROCESSED row, so a conversion written while this day was being counted used
-        # to find this in-flight row, add nothing, and then be closed out with the stale
-        # count. Once claimed, a concurrent mark creates a fresh row the next run picks
-        # up. The conditional update also stops two workers recomputing the same row.
-        claimed = DirtyPeriod.objects.filter(pk=dp.pk, processed_at__isnull=True).update(
-            processed_at=timezone.now()
+        _recompute_day(tenant=dp.tenant, program=dp.program, day=dp.period_date)
+        _recompute_month(
+            tenant=dp.tenant, program=dp.program, year=dp.period_date.year, month=dp.period_date.month
         )
-        if not claimed:
-            continue
-        try:
-            _recompute_day(tenant=dp.tenant, program=dp.program, day=dp.period_date)
-            _recompute_month(
-                tenant=dp.tenant, program=dp.program,
-                year=dp.period_date.year, month=dp.period_date.month,
-            )
-        except Exception:
-            # Un-claim so the day is retried, never silently dropped.
-            DirtyPeriod.objects.filter(pk=dp.pk).update(processed_at=None)
-            raise
+        dp.processed_at = timezone.now()
+        dp.save(update_fields=["processed_at"])
         done += 1
     return done

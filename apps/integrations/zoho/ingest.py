@@ -21,6 +21,7 @@ NOTHING here is called by internal business flows — only by the webhook receiv
 """
 from __future__ import annotations
 
+import functools
 import logging
 
 from django.db import transaction
@@ -28,7 +29,7 @@ from django.utils import timezone
 
 from apps.events import vocab
 from apps.events.models import Event
-from apps.events.rollups import mark_dirty
+from apps.events.rollups import mark_dirty_ids
 from apps.integrations.models import Conversion, ZohoSyncIdempotency
 from apps.referrals.models import Referral, ReferralIdentity, ReferralProgram
 
@@ -252,10 +253,18 @@ def _mark_open_day_dirty(tenant, program, opened_at):
     stored as UTC — 1 Aug 2026 IST is `2026-07-31T18:30Z` — so `.date()` on a value
     re-read from the DB yields the UTC date and marks the WRONG day (and month).
     `mark_dirty` is get_or_create on the unprocessed row, so repeat calls add nothing.
+
+    Runs ON COMMIT (ingest_conversion is atomic): marked before commit, a recompute in
+    another session could process the row while this conversion is still invisible to
+    it, and the day would be closed without it. Only plain values are captured.
     """
     if program is None or opened_at is None:
         return
-    mark_dirty(tenant=tenant, program=program, on_date=timezone.localtime(opened_at).date())
+    transaction.on_commit(functools.partial(
+        mark_dirty_ids,
+        tenant_id=getattr(tenant, "pk", None), program_id=program.pk,
+        on_date=timezone.localtime(opened_at).date(),
+    ))
 
 
 def _emit_conversion_events(tenant, referral, stage, conversion, open_dt):
