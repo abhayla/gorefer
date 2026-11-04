@@ -257,6 +257,29 @@ def test_reclassify_never_flags_a_lead_of_a_datacenter_visit(
     assert flagged == {vocab.CLICK, vocab.LANDING_VIEWED, vocab.HUMAN_CONFIRMED}
 
 
+def test_live_path_never_flags_a_non_visit_event_type(seeded, table):
+    """Guard in redirect_service._record_event: a datacenter IP flags only the visit types."""
+    from apps.events import vocab
+    from apps.referrals import redirect_service as rs
+    from apps.tenants.models import Tenant
+
+    tenant = Tenant.objects.get(slug="pifs")
+    program = rs.get_active_program(tenant)
+    referral = rs.lazy_get_or_create_referral(tenant, program, "RJ4521")
+    assert vocab.LEAD_CAPTURED not in netranges.DATACENTER_VISIT_EVENT_TYPES
+    ev = rs._record_event(
+        tenant=tenant, referral=referral, visitor_id="v-lead", user_agent=UA, raw_ip=DATACENTER,
+        event_type=vocab.LEAD_CAPTURED, source=vocab.SRC_FORM,
+    )
+    ev.refresh_from_db()
+    assert ev.is_bot is False and "bot_reason" not in ev.metadata and "network" not in ev.metadata
+    click = rs._record_event(
+        tenant=tenant, referral=referral, visitor_id="v-lead", user_agent=UA, raw_ip=DATACENTER,
+        event_type=vocab.CLICK, source=vocab.SRC_CLICK,
+    )
+    assert click.is_bot is True  # same IP, visit type -> flagged (the table really matches)
+
+
 def test_reclassify_refuses_without_a_table(db, tmp_path):
     from django.core.management.base import CommandError
 
