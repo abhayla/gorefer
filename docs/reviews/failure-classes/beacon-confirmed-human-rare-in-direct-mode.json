@@ -1,0 +1,22 @@
+{
+  "slug": "beacon-confirmed-human-rare-in-direct-mode",
+  "title": "Beacon-confirmed human clicks are rare in direct landing mode",
+  "class_symptom": "A confirmation that depends on client-side JavaScript running on a page covers almost no real visitors when the flow redirects before any page renders.",
+  "mechanism": "With landing_mode=direct, real visitors are 302-redirected straight to the partner and never load the page that runs the JS confirmation beacon, so is_confirmed_human is set for very few real clicks.",
+  "first_seen": {
+    "date": "2026-11-04",
+    "evidence": [
+      "Referral non-bot clicks: 24 of 251 confirmed human.",
+      "Partner-direct non-bot clicks: 1 of 422 confirmed human."
+    ]
+  },
+  "measurements": [
+    "Count of is_confirmed_human clicks among non-bot clicks, per link type, measured 2026-11-04: referral 24/251, partner-direct 1/422.",
+    "Consequence: using confirmed-human as the headline human count in direct mode would show about 25 instead of about 673."
+  ],
+  "detection": {
+    "status": "unguarded",
+    "reason": "Documented limit of the design, not a defect a check can catch; any report that headlines confirmed-human clicks in direct mode must say so."
+  },
+  "related": ["ADR-019"]
+}
