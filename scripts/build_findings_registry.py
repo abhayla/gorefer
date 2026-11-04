@@ -140,7 +140,9 @@ def main(argv: list[str] | None = None) -> int:
         print("\n".join(errs), file=sys.stderr)
         return 1
     if a.check:
-        cur = a.out.read_bytes().decode("utf-8") if a.out.exists() else None
+        cur = a.out.read_bytes().decode("utf-8").replace("
+", "
+") if a.out.exists() else None
         if cur != text:
             print(f"STALE: {a.out} differs from the generated output; run "
                   "`python scripts/build_findings_registry.py`", file=sys.stderr)
