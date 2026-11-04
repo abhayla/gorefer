@@ -732,6 +732,37 @@ SHARE_KIT_MESSAGE_TEMPLATE_X_DEFAULT = (
     "documents carefully before investing."
 )
 
+# One-tap WhatsApp share link /{prefix}/share/wa/{client_id} (owner 2026-11-04) — its
+# OWN message, separate from the shared message above, so My Referrals, the share hub and
+# Telegram keep theirs. Only the one-tap WhatsApp link reads these four keys:
+#   * SHARE_ONETAP_WA_LINK  — which link the message carries: "open" = the program's plain
+#     no-referrer link (/{prefix}/open -> the partner's sign-up page, PIFS credited, the
+#     referrer NOT), "referrer" = the referrer's own link (/{prefix}/r/wa/{id}), as before.
+#   * SHARE_ONETAP_WA_MESSAGE — the English text ({link} / {program_brand} placeholders).
+#     Saving it blank on the Preferences screen resets it to the default below. The Hindi
+#     one-tap message stays the shared Hindi message (owner decision D3); only its link and
+#     disclosure line follow these keys.
+#   * SHARE_ONETAP_WA_DISCLOSURE — the disclosure tail, `{url}` = the /d/{slug} page.
+# The referrer's own opening line still replaces the text (decision D2), and the pop-up's
+# "Share without my ID" uses the same message and link (decision D1).
+SHARE_ONETAP_WA_LINK = "share_onetap_wa_link"
+SHARE_ONETAP_WA_LINK_OPEN = "open"
+SHARE_ONETAP_WA_LINK_REFERRER = "referrer"
+SHARE_ONETAP_WA_LINK_CHOICES = (SHARE_ONETAP_WA_LINK_OPEN, SHARE_ONETAP_WA_LINK_REFERRER)
+SHARE_ONETAP_WA_LINK_DEFAULT = SHARE_ONETAP_WA_LINK_OPEN
+SHARE_ONETAP_WA_MESSAGE = "share_onetap_wa_message"
+SHARE_ONETAP_WA_MESSAGE_DEFAULT = (
+    "*Open a free {program_brand} account online:*\n{link}\n\n"
+    "*Keep ready:*\nPAN, Aadhaar-linked mobile number, bank details, Cancelled Cheque or "
+    "Passbook, Picture of your Signature\n\n"
+    "*How-to-Open {program_brand} Account video:*\n"
+    "https://www.youtube.com/watch?v=JTZ-ebu2vyA\n\n"
+    "Investments in securities market are subject to market risks, read all the related "
+    "documents carefully before investing."
+)
+SHARE_ONETAP_WA_DISCLOSURE = "share_onetap_wa_disclosure"
+SHARE_ONETAP_WA_DISCLOSURE_DEFAULT = "*Disclosures:*\n{url}"
+
 # --- WhatsApp notification routing (Tier 2, admin) ---------------------------------
 # Which of the three lead-time notifications actually go out (doc-08 A6 a/b/c).
 # Routing only: turning one OFF suppresses that recipient; it never changes WHAT is
@@ -1139,6 +1170,10 @@ def central_defaults() -> dict:
         SHARE_KIT_MESSAGE_TEMPLATE: flags.SHARE_KIT_MESSAGE_TEMPLATE,
         SHARE_KIT_MESSAGE_TEMPLATE_HI: SHARE_KIT_MESSAGE_TEMPLATE_HI_DEFAULT,
         SHARE_KIT_MESSAGE_TEMPLATE_X: SHARE_KIT_MESSAGE_TEMPLATE_X_DEFAULT,
+        # One-tap WhatsApp link (owner 2026-11-04) — its own link choice, text, disclosure.
+        SHARE_ONETAP_WA_LINK: SHARE_ONETAP_WA_LINK_DEFAULT,
+        SHARE_ONETAP_WA_MESSAGE: SHARE_ONETAP_WA_MESSAGE_DEFAULT,
+        SHARE_ONETAP_WA_DISCLOSURE: SHARE_ONETAP_WA_DISCLOSURE_DEFAULT,
         # Notification routing defaults to ON for all three — this mirrors today's
         # behaviour exactly (doc-08 A6 fires all three), so adding the toggles changes
         # nothing until an admin turns one off.
@@ -1304,6 +1339,13 @@ def get_preferences(tenant_id: int | None) -> dict:
             tenant_id=tenant_id,
             default=defaults[SHARE_KIT_MESSAGE_TEMPLATE_X],
         ),
+        SHARE_ONETAP_WA_LINK: resolve_onetap_wa_link(tenant_id),
+        SHARE_ONETAP_WA_MESSAGE: resolve(
+            SHARE_ONETAP_WA_MESSAGE, tenant_id=tenant_id, default=defaults[SHARE_ONETAP_WA_MESSAGE]
+        ),
+        SHARE_ONETAP_WA_DISCLOSURE: resolve(
+            SHARE_ONETAP_WA_DISCLOSURE, tenant_id=tenant_id, default=defaults[SHARE_ONETAP_WA_DISCLOSURE]
+        ),
         SHARE_CHANNELS_ALLOWLIST: list(channels),
         # Share hub images (T-063) — resolved raw here; `apps.accounts.hub` is the one
         # place that turns a value into a same-origin render URL (or drops it).
@@ -1440,3 +1482,14 @@ def get_preferences(tenant_id: int | None) -> dict:
             default=defaults[MESSAGING_DIGEST_GREETING_NAME],
         ) or defaults[MESSAGING_DIGEST_GREETING_NAME],
     }
+
+
+def resolve_onetap_wa_link(tenant_id: int | None) -> str:
+    """Which link the one-tap WhatsApp message carries ("open" | "referrer"). An unknown
+    or unreadable value falls back to the default, never to an error."""
+    try:
+        value = resolve(SHARE_ONETAP_WA_LINK, tenant_id=tenant_id, default=SHARE_ONETAP_WA_LINK_DEFAULT)
+    except Exception:
+        value = SHARE_ONETAP_WA_LINK_DEFAULT
+    value = str(value or "").strip().lower()
+    return value if value in SHARE_ONETAP_WA_LINK_CHOICES else SHARE_ONETAP_WA_LINK_DEFAULT

@@ -74,11 +74,11 @@ def test_telegram_shares_the_link_and_the_usual_message(seeded, django_capture_o
     assert Event.objects.get(event_type="share_intent").metadata == {"channel": "Telegram"}
 
 
-def test_whatsapp_is_unchanged(seeded, django_capture_on_commit_callbacks):
+def test_whatsapp_keeps_its_own_one_tap_message(seeded, django_capture_on_commit_callbacks):
     resp = _get("/share/wa/AB1234", django_capture_on_commit_callbacks)
     text = _query(resp.headers["Location"])["text"]
     assert resp.headers["Location"].startswith("https://wa.me/?text=")
-    assert "https://gorefer.in/zerodha/r/wa/AB1234" in text
+    assert "https://gorefer.in/zerodha/open" in text  # owner 2026-11-04
     assert not text.startswith("Open a free Zerodha account with my referral link:\nhttps://gorefer.in/zerodha/r/x/")
 
 
