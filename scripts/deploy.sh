@@ -27,6 +27,9 @@
 #   2. Create a NEW release dir and stream the exact committed tree into it.
 #   3. Hash-verify the release byte-exact against the git blobs.
 #   4. Link the shared paths in.
+#   4b. pip install -r requirements.txt (no --upgrade) into the shared venv, then
+#       scripts/check_requirements_installed.py — any missing/unsatisfied requirement
+#       aborts here, before migrate and before the flip.
 #   5. createcachetable (idempotent) + migrate + collectstatic + check IN THE NEW RELEASE.
 #   6. Health-probe the new release on a throwaway localhost gunicorn — BEFORE the flip.
 #   7. Atomically flip `current`, write DEPLOYED_SHA, restart gorefer + gorefer-qcluster.
@@ -44,10 +47,12 @@
 # every filesystem step for real (create release, extract tree, hash-verify, link
 # shared, flip pointer, prune) in a temp directory, and skips exactly the steps that
 # need the box (venv, migrate, systemd, public health probe), printing them instead.
+# With DEPLOY_DRYRUN_PYTHON=<interpreter> it also runs the requirements check (4b)
+# against that interpreter, aborting before the flip exactly as a real deploy would.
 #
 # Access defaults to root@$DEPLOY_SSH_HOSTNAME with key ~/.ssh/firekaro_v6_vps. Override via
 # DEPLOY_SSH_HOST / DEPLOY_SSH_KEY / DEPLOY_SSH_USER / DEPLOY_REMOTE_DIR /
-# DEPLOY_HEALTH_URL / DEPLOY_KEEP_RELEASES / DEPLOY_PROBE_PORT.
+# DEPLOY_HEALTH_URL / DEPLOY_KEEP_RELEASES / DEPLOY_PROBE_PORT / DEPLOY_ALLOW_UPGRADE (=1 accepts version changes of installed packages).
 
 set -euo pipefail
 
@@ -124,6 +129,7 @@ KEEP_RELEASES='$KEEP_RELEASES'
 PROBE_PORT='$PROBE_PORT'
 HEALTH_HOST='$HEALTH_HOST'
 DRY_RUN='$DRY_RUN'
+ALLOW_UPGRADE='${DEPLOY_ALLOW_UPGRADE:-0}'
 EOF
 }
 
@@ -235,6 +241,77 @@ link_shared "var"          "$SHARED_DIR/var"
 link_shared ".venv"        "$ROOT/.venv"
 EOS
 } | remote_sh
+
+# ------------------------- 4b. install + verify Python requirements (BEFORE migrate)
+# WHY (2026-11-04): Pillow>=10.0 was added to requirements.txt on 2026-08-17 and never
+# reached production, because this script copied code and never ran pip. The shared
+# venv silently lacked it until a page imported it and every link preview returned 500.
+# Now every deploy installs whatever the NEW release's requirements.txt needs, then
+# proves all of it is importable-by-metadata and version-satisfied — before migrate,
+# before the pre-flip probe, and so before the flip. Any failure exits here: 'current'
+# is untouched and the old release keeps serving.
+#   - NO --upgrade: pip installs only what is missing or does not satisfy its specifier,
+#     so packages the running release already uses are not churned.
+#   - pip runs as the venv's OWNER (files it writes keep that owner); the check runs as
+#     APP_USER, the user the app itself runs as.
+#   - Shared venv: a requirement whose new specifier excludes the installed version
+#     would be changed in place under the running release. A `pip install --dry-run
+#     --report` preview refuses that (exit before the flip) unless
+#     DEPLOY_ALLOW_UPGRADE=1 is set for this deploy. Brand-new packages are allowed.
+if (( DRY_RUN )); then
+  echo "==> [dry-run] skipping: pip upgrade preview (--dry-run --report) + pip install -r requirements.txt into \$ROOT/.venv (needs the box's venv)"
+  if [ -n "${DEPLOY_DRYRUN_PYTHON:-}" ]; then
+    echo "==> [dry-run] Verifying requirements with $DEPLOY_DRYRUN_PYTHON (stands in for the box's venv)"
+    if ! "$DEPLOY_DRYRUN_PYTHON" "$RELEASE_DIR/scripts/check_requirements_installed.py" "$RELEASE_DIR/requirements.txt"; then
+      echo "ERROR: the new release's requirements are not all installed and satisfied." >&2
+      echo "       'current' was NOT flipped — prod is untouched and still on the old release." >&2
+      exit 1
+    fi
+  else
+    echo "==> [dry-run] skipping: requirements check (set DEPLOY_DRYRUN_PYTHON to run it against a local interpreter)"
+  fi
+else
+  echo "==> Installing + verifying Python requirements for the new release (before migrate)"
+  { preamble; cat <<'EOS'
+cd "$RELEASE_DIR"
+VENV="$ROOT/.venv"
+VENV_OWNER="$(stat -L -c %U "$VENV")"
+PIP_LOG="$(mktemp)"
+PIP_REPORT="$(mktemp)"
+trap 'rm -f "$PIP_LOG" "$PIP_REPORT"' EXIT
+chown "$VENV_OWNER" "$PIP_REPORT"   # pip writes the report as the venv owner
+# Preview first (needs pip >= 22.2): refuse to change an ALREADY-installed package's
+# version in the shared venv unless DEPLOY_ALLOW_UPGRADE=1. New packages are fine.
+if ! sudo -H -u "$VENV_OWNER" "$VENV/bin/python" -m pip install --dry-run --report "$PIP_REPORT" \
+     --disable-pip-version-check --no-input -r requirements.txt > "$PIP_LOG" 2>&1; then
+  echo "ERROR: pip install --dry-run (upgrade preview) failed for the new release." >&2
+  echo "       'current' was NOT flipped — prod is untouched and still on the old release." >&2
+  tail -30 "$PIP_LOG" >&2 || true
+  exit 1
+fi
+ALLOW_FLAG=""
+[ "$ALLOW_UPGRADE" = "1" ] && ALLOW_FLAG="--allow-upgrade"
+if ! sudo -u "$VENV_OWNER" "$VENV/bin/python" scripts/check_requirements_installed.py --upgrade-preview "$PIP_REPORT" $ALLOW_FLAG; then
+  echo "ERROR: this deploy would change installed package versions in the shared venv." >&2
+  echo "       'current' was NOT flipped — prod is untouched and still on the old release." >&2
+  exit 1
+fi
+if ! sudo -H -u "$VENV_OWNER" "$VENV/bin/python" -m pip install \
+     --disable-pip-version-check --no-input -r requirements.txt > "$PIP_LOG" 2>&1; then
+  echo "ERROR: pip install -r requirements.txt failed for the new release." >&2
+  echo "       'current' was NOT flipped — prod is untouched and still on the old release." >&2
+  tail -30 "$PIP_LOG" >&2 || true
+  exit 1
+fi
+tail -5 "$PIP_LOG" | sed 's/^/    pip: /'
+if ! sudo -u "$APP_USER" .venv/bin/python scripts/check_requirements_installed.py requirements.txt; then
+  echo "ERROR: the new release's requirements are not all installed and satisfied." >&2
+  echo "       'current' was NOT flipped — prod is untouched and still on the old release." >&2
+  exit 1
+fi
+EOS
+  } | remote_sh
+fi
 
 # ------------------------------- 5. cache table + migrate + collectstatic + check
 if (( DRY_RUN )); then
