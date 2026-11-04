@@ -104,6 +104,7 @@ python -m pytest tests/test_redirect.py::test_name -q  # one test
 ruff check .
 python manage.py check
 python scripts/check_architecture.py                   # rail E-3: fails only on NEW vendor leaks (baseline: scripts/architecture_import_baseline.txt)
+python -m pytest tests/test_tenant_scoping_rail.py -q        # rail E-7: every tenant filter via .for_tenant() (static, ~1 s, no DB) — run before every push
 python manage.py makemigrations --check --dry-run      # schema drift fails CI
 python scripts/check_public_hygiene.py                 # public-repo rail (§2a): no real mobiles / host addresses / dotenv files
 python -m pytest -q --cov=apps --cov=api --cov=gorefer --cov-fail-under=86   # CI's coverage FLOOR (never lower it to pass a PR)

@@ -72,9 +72,8 @@ def heal(drift: list[dict]) -> list[dict]:
     from apps.integrations.models import Conversion
 
     for row in drift:
-        opened = Conversion.objects.filter(
-            tenant_id=row["tenant_id"], program_id=row["program_id"],
-            is_reversed=False, account_opened_at__isnull=False,
+        opened = Conversion.objects.for_tenant(row["tenant_id"]).filter(
+            program_id=row["program_id"], is_reversed=False, account_opened_at__isnull=False,
         ).values_list("account_opened_at", flat=True)
         for day in {timezone.localtime(ts).date() for ts in opened}:
             mark_dirty_ids(tenant_id=row["tenant_id"], program_id=row["program_id"], on_date=day)
