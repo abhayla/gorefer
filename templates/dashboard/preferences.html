@@ -140,6 +140,41 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
       </div>
     </div>
 
+    {# ---- One-tap WhatsApp share link (owner 2026-11-04) ------------------- #}
+    <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">One-tap WhatsApp share</div>
+    <div class="rounded-2xl bg-white border border-line card p-5 space-y-3">
+      <div class="text-[11.5px] text-ink-500">
+        The message the one-tap link <code class="text-[11px] bg-ink-50 rounded px-1">gorefer.in/zerodha/share/wa/{ID}</code>
+        types into WhatsApp — the link in PIFS WhatsApp messages, the Know More menu and the
+        Kite ID pop-up. My Referrals, the share hub and Telegram use the shared message above.
+      </div>
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 py-1.5 border-t border-line">
+        <div class="flex-1">
+          <label for="share_onetap_wa_link" class="text-[13.5px] font-semibold">Link in the message</label>
+          <div class="text-[11.5px] text-ink-500 mt-0.5">The plain open link credits PIFS only, not the referrer.</div>
+        </div>
+        <select id="share_onetap_wa_link" name="share_onetap_wa_link"
+                class="w-full sm:w-auto sm:w-[260px] rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none">
+          <option value="open" {% if prefs.share_onetap_wa_link == "open" %}selected{% endif %}>Plain open link (gorefer.in/zerodha/open)</option>
+          <option value="referrer" {% if prefs.share_onetap_wa_link == "referrer" %}selected{% endif %}>Referrer's own link (gorefer.in/zerodha/r/wa/{ID})</option>
+        </select>
+      </div>
+      <div class="py-1.5 border-t border-line">
+        <label for="share_onetap_wa_message" class="text-[13.5px] font-semibold">One-tap WhatsApp message (English)</label>
+        <div class="text-[11.5px] text-ink-500 mt-0.5">Same placeholders as above. Hindi uses the shared Hindi message with this link. A referrer's own opening line still replaces this text.</div>
+        <textarea id="share_onetap_wa_message" name="share_onetap_wa_message" rows="8"
+                  class="mt-1.5 w-full rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none"
+                  >{{ prefs.share_onetap_wa_message }}</textarea>
+      </div>
+      <div class="py-1.5 border-t border-line">
+        <label for="share_onetap_wa_disclosure" class="text-[13.5px] font-semibold">One-tap WhatsApp disclosure line</label>
+        <div class="text-[11.5px] text-ink-500 mt-0.5">Added at the end of the message. <code class="text-[11px] bg-ink-50 rounded px-1">{url}</code> is the disclosures page and must stay.</div>
+        <textarea id="share_onetap_wa_disclosure" name="share_onetap_wa_disclosure" rows="2"
+                  class="mt-1.5 w-full rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none"
+                  >{{ prefs.share_onetap_wa_disclosure }}</textarea>
+      </div>
+    </div>
+
     {# ---- Personal share message (T-064) ---------------------------------- #}
     <div class="text-[10.5px] font-bold uppercase tracking-wide text-ink-300 ml-1">Personal share message</div>
     <div class="rounded-2xl bg-white border border-line card p-5 space-y-1">

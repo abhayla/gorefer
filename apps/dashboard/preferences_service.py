@@ -309,6 +309,8 @@ def save_preferences(tenant, data, *, user=None) -> list[str]:
             continue
         set_tenant(pref_key, message or defaults[pref_key], tenant_id=tenant_id, user=user)
 
+    notices.extend(_save_onetap_whatsapp(tenant_id, data, defaults, user=user))
+
     # --- Share hub images (T-063) — up to two poster-image slots, same-origin only --
     # A cross-origin value is REJECTED here (never persisted) — `resolve_share_image_url`
     # is the single same-origin check shared with render time (apps.accounts.hub), so
@@ -419,6 +421,42 @@ def _save_preview_card(tenant_id, data, *, user=None) -> list[str]:
         raw = str(data.get(key) or "").strip()
         set_tenant(key, raw or default, tenant_id=tenant_id, user=user)
     return []
+
+
+def _save_onetap_whatsapp(tenant_id, data, defaults, *, user=None) -> list[str]:
+    """The one-tap WhatsApp link's own link choice, message and disclosure (owner
+    2026-11-04). Each is touched only when submitted, so an older form or a partial save
+    never resets it. Same refusal rules as the shared message; a blank field resets to the
+    default. A disclosure line without {url} is refused — the disclosure link can't be
+    configured away."""
+    notices: list[str] = []
+    if prefkeys.SHARE_ONETAP_WA_LINK in data:
+        choice = (data.get(prefkeys.SHARE_ONETAP_WA_LINK) or "").strip().lower()
+        if choice in prefkeys.SHARE_ONETAP_WA_LINK_CHOICES:
+            set_tenant(prefkeys.SHARE_ONETAP_WA_LINK, choice, tenant_id=tenant_id, user=user)
+    if prefkeys.SHARE_ONETAP_WA_MESSAGE in data:
+        message = (data.get(prefkeys.SHARE_ONETAP_WA_MESSAGE) or "").strip()
+        problem = _share_template_problem(message) if message else ""
+        if problem:
+            notices.append(
+                f"“One-tap WhatsApp message” was not saved — {problem} Kept the previous message."
+            )
+        else:
+            set_tenant(prefkeys.SHARE_ONETAP_WA_MESSAGE,
+                       message or defaults[prefkeys.SHARE_ONETAP_WA_MESSAGE],
+                       tenant_id=tenant_id, user=user)
+    if prefkeys.SHARE_ONETAP_WA_DISCLOSURE in data:
+        line = (data.get(prefkeys.SHARE_ONETAP_WA_DISCLOSURE) or "").strip()
+        if line and "{url}" not in line:
+            notices.append(
+                "“One-tap WhatsApp disclosure line” was not saved — it must contain {url}, "
+                "where the disclosures link goes. Kept the previous line."
+            )
+        else:
+            set_tenant(prefkeys.SHARE_ONETAP_WA_DISCLOSURE,
+                       line or defaults[prefkeys.SHARE_ONETAP_WA_DISCLOSURE],
+                       tenant_id=tenant_id, user=user)
+    return notices
 
 
 def _share_template_problem(message: str) -> str:

@@ -28,7 +28,12 @@ def tenant(db, settings):
 
 
 @pytest.mark.urls("tests.urls_share_intent")
-def test_my_referrals_shares_exactly_what_the_one_tap_link_shares(tenant, django_capture_on_commit_callbacks):
+def test_my_referrals_keeps_the_shared_message_while_one_tap_has_its_own(
+    tenant, django_capture_on_commit_callbacks
+):
+    """Owner 2026-11-04: only the one-tap WhatsApp link changed (its own text and the plain
+    /zerodha/open link). My Referrals still sends the shared message with the referrer's
+    own link — the two now differ on purpose (was: identical, PR #191)."""
     from apps.accounts.selfview import my_referrals_ctx
 
     set_tenant(prefkeys.SHARE_KIT_MESSAGE_TEMPLATE, "*Open a free {program_brand} account online:*\n{link}",
@@ -37,7 +42,8 @@ def test_my_referrals_shares_exactly_what_the_one_tap_link_shares(tenant, django
         resp = Client().get(f"/share/wa/{CID}", HTTP_USER_AGENT="Mozilla/5.0 (Android)")
     one_tap = parse_qs(urlparse(resp.headers["Location"]).query)["text"][0]
     share_text = my_referrals_ctx(tenant, CID)["share_text"]
-    assert share_text == one_tap
+    assert share_text != one_tap
+    assert "https://gorefer.in/zerodha/open" in one_tap
     assert share_text.startswith("*Open a free Zerodha account online:*\nhttps://gorefer.in/zerodha/r/wa/RJ4521")
     assert share_text.endswith("Disclosures: https://gorefer.in/d/pifs")
 

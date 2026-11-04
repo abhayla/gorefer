@@ -100,6 +100,8 @@ def kit_message(
     lang: str = "en",
     opener: str | None = None,
     link: str | None = None,
+    en_template: str | None = None,
+    anchor: str | None = None,
 ) -> str:
     """The share prefill, resolved through the config cascade (CLAUDE.md §6d).
 
@@ -129,6 +131,10 @@ def kit_message(
 
     Callers that pass no `opener` (every non-web caller, and any referrer who has not
     personalized) get byte-identical output to the pre-T-064 build.
+
+    `en_template` (EN only) and `anchor` let ONE caller — the one-tap WhatsApp link — use its
+    own text and disclosure tail (owner 2026-11-04, see onetap_whatsapp_message). Every
+    other caller omits both and gets exactly the output it got before.
     """
     from apps.config.i18n import bi_text
     from apps.config.preferences import SHARE_KIT_MESSAGE_TEMPLATE_HI_DEFAULT
@@ -148,7 +154,9 @@ def kit_message(
     # A channel may carry its own English message (owner 2026-11-02: X allows 280
     # characters, so it gets a shorter one). Cascade key `share_kit_message_template__{ch}`;
     # blank/unset = the shared message above.
-    if lang == "en":
+    if lang == "en" and str(en_template or "").strip():
+        template = str(en_template)
+    elif lang == "en":
         try:
             key = f"{SHARE_KIT_MESSAGE_KEY}__{channel}"
             override = str(resolve(key, tenant_id=tenant_id, default="") or "")
@@ -159,7 +167,7 @@ def kit_message(
     # `link` overrides the sharer's own credit link — only the Kite ID pop-up's "share
     # without my ID" path passes one (the no-referrer link); every other caller omits it.
     link = link or tracked_link(channel, client_id, tenant_id=tenant_id)
-    anchor = disclosure_anchor()
+    anchor = anchor or disclosure_anchor()
 
     personal = str(opener or "").strip()
     if personal:
@@ -171,13 +179,18 @@ def kit_message(
     return message + "\n\n" + anchor
 
 
+def disclosure_url() -> str:
+    """The public disclosure page every share message points at (§4.4 / ADR-031)."""
+    return f"https://{_public_host()}/d/pifs"
+
+
 def disclosure_anchor() -> str:
     """The compliance tail line appended to every share message (§4.4 / ADR-031).
 
     Named and exported so the T-064 composition and its tests refer to ONE definition
     of "the locked tail" rather than each restating the literal.
     """
-    return f"Disclosures: https://{_public_host()}/d/pifs"
+    return f"Disclosures: {disclosure_url()}"
 
 
 def _compose_with_opener(opener: str, link: str, anchor: str) -> str:
@@ -248,6 +261,66 @@ def _opener_for(tenant_id: int | None, client_id: str) -> str:
     return get_opener(identity) if identity is not None else ""
 
 
+def onetap_whatsapp_link(tenant) -> str | None:
+    """The link the one-tap WhatsApp message carries, or None for the referrer's own link.
+
+    Owner 2026-11-04: by default the program's plain no-referrer link, /{prefix}/open — the
+    friend goes straight to the partner's sign-up page; PIFS is credited, the referrer is
+    NOT (the owner assumes the lead was registered through the referral form first).
+    Cascade key `share_onetap_wa_link` = "referrer" puts the referrer's own link back.
+    """
+    from apps.config.preferences import SHARE_ONETAP_WA_LINK_OPEN, resolve_onetap_wa_link
+
+    from .links import partner_direct_path
+
+    if resolve_onetap_wa_link(getattr(tenant, "id", None)) != SHARE_ONETAP_WA_LINK_OPEN:
+        return None
+    return f"https://{_public_host()}{partner_direct_path(tenant=tenant)}"
+
+
+def onetap_whatsapp_disclosure(tenant_id: int | None) -> str:
+    """The one-tap WhatsApp message's disclosure tail (default: bold heading, link on the
+    next line). Falls back to the standard line if the configured text has no {url} or
+    can't be filled — the disclosure link can never be configured away."""
+    from apps.config.preferences import SHARE_ONETAP_WA_DISCLOSURE, SHARE_ONETAP_WA_DISCLOSURE_DEFAULT
+
+    try:
+        raw = str(resolve(SHARE_ONETAP_WA_DISCLOSURE, tenant_id=tenant_id,
+                          default=SHARE_ONETAP_WA_DISCLOSURE_DEFAULT) or "")
+        if "{url}" in raw:
+            return raw.replace("{url}", disclosure_url())
+    except Exception:
+        pass
+    return disclosure_anchor()
+
+
+def onetap_whatsapp_message(
+    tenant, client_id: str, *, program=None, lang: str = "en", opener: str | None = None,
+    link: str | None = None,
+) -> str:
+    """THE message the one-tap WhatsApp link (/{prefix}/share/wa/{id}) pre-types (owner
+    2026-11-04). Its own English text, link and disclosure; the shared message that My
+    Referrals, the share hub and Telegram send is untouched. The referrer's own opening
+    line still replaces the text (decision D2); Hindi keeps the shared Hindi wording with
+    this link and disclosure (D3). `link` is passed only by "Share without my ID" (D1)."""
+    from apps.config.preferences import SHARE_ONETAP_WA_MESSAGE, SHARE_ONETAP_WA_MESSAGE_DEFAULT
+
+    tenant_id = getattr(tenant, "id", None)
+    # The approved text is the built-in default, so it applies even before seed_program runs.
+    try:
+        en_template = str(resolve(SHARE_ONETAP_WA_MESSAGE, tenant_id=tenant_id,
+                                  default=SHARE_ONETAP_WA_MESSAGE_DEFAULT) or "")
+    except Exception:
+        en_template = SHARE_ONETAP_WA_MESSAGE_DEFAULT
+    return kit_message(
+        "wa", client_id, tenant_id,
+        program=program if program is not None else get_active_program(tenant),
+        lang=lang, opener=opener,
+        link=link or onetap_whatsapp_link(tenant),
+        en_template=en_template, anchor=onetap_whatsapp_disclosure(tenant_id),
+    )
+
+
 def handle_share_intent(
     *, tenant, channel: str, client_id: str, user_agent: str | None, lang: str = "en"
 ):
@@ -275,8 +348,16 @@ def handle_share_intent(
     # reads the referrer's personal opener too. Resolved from the already-existing
     # identity only — this lookup never creates one, so a bot hit (handled below) and
     # a first-ever share still behave exactly as they did before.
-    message = share_message_for(tenant, channel, client_id, program=program, lang=lang)
-    link = tracked_link(channel, client_id, tenant_id=tenant_id)
+    if channel == "wa":
+        # The one-tap WhatsApp link has its own message and link (owner 2026-11-04).
+        link = onetap_whatsapp_link(tenant) or tracked_link(channel, client_id, tenant_id=tenant_id)
+        message = onetap_whatsapp_message(
+            tenant, client_id, program=program, lang=lang,
+            opener=_opener_for(tenant_id, client_id), link=link,
+        )
+    else:
+        message = share_message_for(tenant, channel, client_id, program=program, lang=lang)
+        link = tracked_link(channel, client_id, tenant_id=tenant_id)
     destination = _CHANNEL_TARGET_BUILDERS[channel](message, link)
 
     if is_bot_user_agent(user_agent):
@@ -321,8 +402,14 @@ def handle_share_without_id(*, tenant, channel: str, user_agent: str | None, lan
 
     program = get_active_program(tenant)
     tenant_id = getattr(tenant, "id", None)
-    link = f"https://{_public_host()}{referral_path(RESERVED_OPEN, tenant=tenant)}"
-    message = kit_message(channel, "", tenant_id, program=program, lang=lang, link=link)
+    if channel == "wa":
+        # Decision D1 (owner 2026-11-04): the one-tap WhatsApp message and link, as with an ID.
+        link = (onetap_whatsapp_link(tenant)
+                or f"https://{_public_host()}{referral_path(RESERVED_OPEN, tenant=tenant)}")
+        message = onetap_whatsapp_message(tenant, "", program=program, lang=lang, link=link)
+    else:
+        link = f"https://{_public_host()}{referral_path(RESERVED_OPEN, tenant=tenant)}"
+        message = kit_message(channel, "", tenant_id, program=program, lang=lang, link=link)
     destination = _CHANNEL_TARGET_BUILDERS[channel](message, link)
 
     if is_bot_user_agent(user_agent):

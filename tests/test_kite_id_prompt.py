@@ -119,10 +119,12 @@ def test_real_id_landing_is_unchanged(seeded, django_capture_on_commit_callbacks
 
 
 @pytest.mark.urls("tests.urls_share_intent")
-def test_share_with_a_real_id_is_unchanged(seeded, django_capture_on_commit_callbacks):
+def test_share_with_a_real_id_gets_the_one_tap_message(seeded, django_capture_on_commit_callbacks):
+    # Owner 2026-11-04: the one-tap WhatsApp message carries the plain /zerodha/open link.
     resp = _get("/share/wa/RJ4521", django_capture_on_commit_callbacks)
     assert resp.status_code == 302
-    assert "gorefer.in%2Fzerodha%2Fr%2Fwa%2FRJ4521" in resp.headers["Location"]
+    assert "gorefer.in%2Fzerodha%2Fopen" in resp.headers["Location"]
+    assert Event.objects.get(event_type="share_intent").referral.referral_identity.client_id == "RJ4521"
 
 
 @pytest.mark.parametrize("path", ["/r/wa/KITEID", "/r/", "/r/open", "/r/wa/"])
@@ -223,8 +225,10 @@ def test_share_skip_shares_the_no_referrer_link(seeded, django_capture_on_commit
     assert resp.status_code == 302
     text = unquote(resp.headers["Location"])
     assert resp.headers["Location"].startswith("https://wa.me/?text=")
-    assert "https://gorefer.in/zerodha/r/open" in text
-    assert "Disclosures: https://gorefer.in/d/pifs" in text  # compliance tail still appended
+    # Decision D1 (owner 2026-11-04): WhatsApp's "Share without my ID" sends the one-tap
+    # message with the plain no-referrer /zerodha/open link (was /zerodha/r/open).
+    assert "https://gorefer.in/zerodha/open" in text
+    assert text.endswith("*Disclosures:*\nhttps://gorefer.in/d/pifs")  # compliance tail still appended
     assert "KITEID" not in text and "ZMPHZC" not in text
     assert _no_referrer_saved()
     event = Event.objects.get(event_type="share_intent")

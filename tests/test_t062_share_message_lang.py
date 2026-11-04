@@ -104,7 +104,9 @@ def test_saving_new_en_message_changes_the_live_share_prefill(admin_client, seed
     assert resp.status_code == 200
 
     _identity(seeded)
-    resp2 = client.get(f"/share/wa/{CID}", **HUMAN)
+    # The shared English message feeds every share surface except the one-tap WhatsApp
+    # link (which has its own message since 2026-11-04) — Telegram's one-tap link shows it.
+    resp2 = client.get(f"/share/tg/{CID}", **HUMAN)
     text = urllib.parse.parse_qs(urllib.parse.urlparse(resp2["Location"]).query).get("text", [""])[0]
     assert text.startswith("Brand new EN copy — ")
 
@@ -206,14 +208,14 @@ def test_share_endpoint_explicit_lang_param_overrides_stored(seeded, client):
     set_tenant(prefkeys.REFERRER_LANGUAGE, "hi", tenant_id=seeded.id)
     resp = client.get(f"/share/wa/{CID}?lang=en", **HUMAN)
     text = urllib.parse.parse_qs(urllib.parse.urlparse(resp["Location"]).query).get("text", [""])[0]
-    assert text.startswith("Open a free Zerodha account")
+    assert text.startswith("*Open a free Zerodha account online:*")  # one-tap EN text, 2026-11-04
 
 
 @SHARE_URLS
 def test_share_endpoint_unset_stored_language_is_en(seeded, client):
     resp = client.get(f"/share/wa/{CID}", **HUMAN)
     text = urllib.parse.parse_qs(urllib.parse.urlparse(resp["Location"]).query).get("text", [""])[0]
-    assert text.startswith("Open a free Zerodha account")
+    assert text.startswith("*Open a free Zerodha account online:*")  # one-tap EN text, 2026-11-04
 
 
 # ------------------------------------------------------------------------ /hub/ default
@@ -273,12 +275,13 @@ def test_hub_invalid_stored_language_falls_back_to_en(seeded, client):
 def test_zero_behavior_change_default_share_prefill_is_byte_identical(seeded, client):
     """Pinned against the EXACT pre-T-062 output shape: flags.SHARE_KIT_MESSAGE_TEMPLATE
     formatted with the tracked link + program brand, followed by the disclosure anchor —
-    with no cascade override and no stored language set."""
-    resp = client.get(f"/share/wa/{CID}", **HUMAN)
+    with no cascade override and no stored language set. Checked on Telegram's one-tap link,
+    which still sends the shared message (WhatsApp's has its own since 2026-11-04)."""
+    resp = client.get(f"/share/tg/{CID}", **HUMAN)
     text = urllib.parse.parse_qs(urllib.parse.urlparse(resp["Location"]).query).get("text", [""])[0]
     # Link carries the program's link word since 2026-10-29 (owner decision).
     expected = flags.SHARE_KIT_MESSAGE_TEMPLATE.format(
-        link=f"https://gorefer.in/zerodha/r/wa/{CID}", program_brand="Zerodha"
+        link=f"https://gorefer.in/zerodha/r/tg/{CID}", program_brand="Zerodha"
     )
     assert text == expected + "\n\nDisclosures: https://gorefer.in/d/pifs"
 
