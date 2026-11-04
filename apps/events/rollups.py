@@ -95,11 +95,25 @@ def recompute_dirty(limit: int | None = None) -> int:
         qs = qs[:limit]
     done = 0
     for dp in list(qs):
-        _recompute_day(tenant=dp.tenant, program=dp.program, day=dp.period_date)
-        _recompute_month(
-            tenant=dp.tenant, program=dp.program, year=dp.period_date.year, month=dp.period_date.month
+        # CLAIM the row before counting, not after. `mark_dirty` is get_or_create on the
+        # UNPROCESSED row, so a conversion written while this day was being counted used
+        # to find this in-flight row, add nothing, and then be closed out with the stale
+        # count. Once claimed, a concurrent mark creates a fresh row the next run picks
+        # up. The conditional update also stops two workers recomputing the same row.
+        claimed = DirtyPeriod.objects.filter(pk=dp.pk, processed_at__isnull=True).update(
+            processed_at=timezone.now()
         )
-        dp.processed_at = timezone.now()
-        dp.save(update_fields=["processed_at"])
+        if not claimed:
+            continue
+        try:
+            _recompute_day(tenant=dp.tenant, program=dp.program, day=dp.period_date)
+            _recompute_month(
+                tenant=dp.tenant, program=dp.program,
+                year=dp.period_date.year, month=dp.period_date.month,
+            )
+        except Exception:
+            # Un-claim so the day is retried, never silently dropped.
+            DirtyPeriod.objects.filter(pk=dp.pk).update(processed_at=None)
+            raise
         done += 1
     return done
