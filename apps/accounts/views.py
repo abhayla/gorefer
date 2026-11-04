@@ -400,7 +400,8 @@ def my_referrals_preview_name(request):
     tenant = get_current_tenant(request)
     tenant_id = getattr(tenant, "id", None)
     customer = og.live_customer(tenant, account.client_id)
-    if not og.name_enabled(tenant_id) or customer is None:
+    known = customer is not None or og.is_known_client(tenant, account.client_id)
+    if not og.name_enabled(tenant_id) or not known:
         raise Http404
     name = (request.POST.get("preview_name") or "").strip()
     show = request.POST.get("show_name_on_preview") in {"on", "1", "true"}
@@ -411,6 +412,10 @@ def my_referrals_preview_name(request):
         ctx["preview_box"] = selfview.preview_box_ctx(
             tenant, account.client_id, error=error, name_value=name, show_value=show)
         return render(request, "dashboard/referrer_profile.html", ctx, status=400)
+    if customer is None:
+        # A Zoho-listed client with no GoRefer referrer row yet: create it now so the
+        # choice is stored (the session's own id only — never a posted one).
+        customer = _new_customer_row(tenant, account.client_id)
     customer.preview_name = name
     customer.show_name_on_preview = show
     customer.preview_name_updated_at = timezone.now()
@@ -419,6 +424,24 @@ def my_referrals_preview_name(request):
                            default=dict((k, d) for k, _l, d in p.MY_PREVIEW_FIELDS)[p.MY_PREVIEW_SAVED])
     messages.success(request, saved, extra_tags="preview-card")
     return redirect("my_referrals")
+
+
+def _new_customer_row(tenant, client_id: str):
+    from apps.referrals.models import Customer, ReferralProgram
+
+    program = (ReferralProgram.objects.for_tenant(tenant).filter(status="active")
+               .select_related("partner").order_by("id").first())
+    if program is None:
+        raise Http404
+    customer, _ = Customer.objects.get_or_create(
+        tenant=tenant, program=program, client_id=client_id,
+        defaults={"partner": program.partner},
+    )
+    if customer.deleted_at is not None:
+        # A soft-deleted row would hold the choice where the name rule never reads it
+        # (it reads live rows only) — refuse rather than store an opt-out that is ignored.
+        raise Http404
+    return customer
 
 
 def _url(name: str) -> str:

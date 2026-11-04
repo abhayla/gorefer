@@ -280,7 +280,7 @@ AUDIENCE_SYNC_FREQUENCY_HOURS_KEY = "zoho_audience_sync_frequency_hours"
 AUDIENCE_SYNC_FREQUENCY_HOURS_DEFAULT = 24.0
 
 
-def sync_referrer_audience(*, tenant=None) -> dict:
+def sync_referrer_audience(*, tenant=None, force: bool = False) -> dict:
     """Fill/update `apps.campaigns.models.SyncedReferrer` from the Zoho `Referrers`
     module — decision ⑫'s READ-ONLY audience source for the messaging-campaign
     engine (T-124/T-125). Zoho stays data-in only: this task NEVER writes to Zoho
@@ -330,7 +330,10 @@ def sync_referrer_audience(*, tenant=None) -> dict:
     last_synced_at = SyncedReferrer.objects.for_tenant(tenant).aggregate(
         last=Max("synced_at")
     )["last"]
-    if last_synced_at is not None and (now - last_synced_at) < timedelta(hours=frequency_hours):
+    # `force=True` (operator, e.g. right after a deploy that adds a synced field) skips
+    # only the frequency window; the ENABLE_ZOHO_READ gate above still applies.
+    in_window = last_synced_at is not None and (now - last_synced_at) < timedelta(hours=frequency_hours)
+    if in_window and not force:
         logger.info(
             "audience-sync: last run %s ago (< %sh window) — skipping",
             now - last_synced_at, frequency_hours,
@@ -363,7 +366,7 @@ def sync_referrer_audience(*, tenant=None) -> dict:
             defaults=dict(
                 mobile=normalize_phone(row.mobile), name=row.name, language=row.language,
                 record_created_at=row.record_created_at, source="zoho",
-                synced_at=now, active=True,
+                synced_at=now, active=True, account_type=getattr(row, "account_type", "") or "",
             ),
         )
         created_n += int(created)

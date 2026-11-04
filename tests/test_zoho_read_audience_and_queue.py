@@ -56,7 +56,9 @@ def test_live_fetch_referrer_audience_lists_referrers_module_not_search(creds):
 
     assert seen["path"] == "/crm/v8/Referrers"  # list endpoint, no "/search" suffix
     assert "criteria" not in seen["params"]
-    assert set(seen["params"]["fields"].split(",")) == {"Client_Id", "Mobile", "Name", "Created_Time"}
+    # Account_Type: the module mixes brokers; the preview-card name rule names Zerodha only.
+    expected = {"Client_Id", "Mobile", "Name", "Created_Time", "Account_Type"}
+    assert set(seen["params"]["fields"].split(",")) == expected
     assert len(audience.rows) == 1
     row = audience.rows[0]
     assert row.client_id == "RJ4521"
