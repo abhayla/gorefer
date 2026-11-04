@@ -24,6 +24,7 @@ from apps.config.cascade import resolve
 from apps.events import vocab
 from apps.events.bots import is_bot_user_agent
 from apps.events.models import Event, VisitorPII
+from apps.events.netranges import DATACENTER_BOT_REASON, DATACENTER_VISIT_EVENT_TYPES, classify_ip
 from apps.events.nonces import mint_nonce
 from apps.referrals.models import Partner, ProgramRedirectRule, Referral, ReferralIdentity, ReferralProgram
 from gorefer.flags import SHARE_CHANNEL_LABELS
@@ -148,8 +149,19 @@ def _get_or_create_partner_direct_referral(tenant, program) -> Referral:
     return referral
 
 
+def _datacenter_verdict(raw_ip) -> tuple[bool, str | None]:
+    """(is_datacenter, org) for the click's raw IP — the SAME value stored on VisitorPII.
+
+    ADR-019 amendment 2026-11-04: crawlers/link scanners that send a browser UA are
+    recognised by their network instead. Offline table lookup, no network call, fails
+    open (not datacenter) on any problem. Counting only — never changes the response.
+    """
+    return classify_ip(raw_ip) if raw_ip else (False, None)
+
+
 def _record_event(
-    *, tenant, referral, visitor_id, user_agent, raw_ip, event_type, source, share_channel=None
+    *, tenant, referral, visitor_id, user_agent, raw_ip, event_type, source, share_channel=None,
+    datacenter=None,
 ):
     """Write an immutable event + (if raw_ip) the SEPARATE erasable PII record.
 
@@ -160,12 +172,25 @@ def _record_event(
     `share_channel` (M11) is the normalized channel LABEL (e.g. "WhatsApp") from the
     `?s=` param — a non-PII attribution tag stored in metadata["channel"], reusing the
     Referral-Profile Clicks "Channel" column. None -> no channel key (renders "Direct").
+
+    `datacenter` (ADR-019 amendment 2026-11-04): an (is_datacenter, org) verdict; when
+    None it is computed from `raw_ip`. A datacenter verdict writes is_bot=True plus
+    metadata {"bot_reason": "datacenter", "network": org}. Only the COUNTING flag
+    changes — callers return the same response either way.
     """
+    if datacenter is None:
+        datacenter = _datacenter_verdict(raw_ip)
+    is_datacenter, network = datacenter
+    if event_type not in DATACENTER_VISIT_EVENT_TYPES:
+        is_datacenter = False
     person_ref_id = None
     if raw_ip:
         pii = VisitorPII.objects.create(tenant=tenant, visitor_id=visitor_id or "", raw_ip=raw_ip)
         person_ref_id = pii.pk
     metadata = {"channel": share_channel} if share_channel else {}  # NEVER PII (CI-enforced)
+    if is_datacenter:
+        metadata["bot_reason"] = DATACENTER_BOT_REASON
+        metadata["network"] = network or ""
     event = Event.objects.create(
         tenant=tenant,
         event_type=event_type,
@@ -174,12 +199,12 @@ def _record_event(
         user_type="anonymous",
         visitor_id=visitor_id,
         user_agent=user_agent or "",
-        is_bot=False,
+        is_bot=bool(is_datacenter),
         is_confirmed_human=False,  # promoted only by the JS confirmation beacon
         person_ref_id=person_ref_id,
         metadata=metadata,
     )
-    if event_type == vocab.CLICK:
+    if event_type == vocab.CLICK and not event.is_bot:
         _stamp_first_click(referral, event.timestamp)
     return event
 
@@ -203,8 +228,9 @@ def _stamp_first_click(referral, when) -> None:
     Note this is currently the ONLY `.filter(...).update(...)` on an audited model in the repo,
     so treat it as a deliberate hot-path exception rather than an established pattern.
 
-    Bot clicks can never reach here: `_record_event` writes `is_bot=False` unconditionally, and
-    bot previews are recorded by a separate path, so the stamped value is always a real click.
+    Bot clicks can never reach here: UA bot previews are never recorded at all, and a
+    datacenter-network click (is_bot=True, ADR-019 amendment 2026-11-04) is skipped by the
+    caller, so the stamped value is always a real click.
     (Verified on prod 2026-07-26: one Googlebot click exists against referral 1, and the stamp
     matches the human click 26 ms earlier — but the one-off SQL backfill took `Min(timestamp)`
     across ALL clicks, so a bot arriving first WOULD have poisoned it. Any future backfill or
@@ -243,14 +269,17 @@ def handle_landing_view(*, tenant, client_id: str, visitor_id, user_agent, raw_i
     referral = _lazy_get_or_create_referral(tenant, program, client_id)
     # The /r/ hit IS the click; the branded page render is the landing view. Emit
     # both funnel stages (click precedes landing_viewed). Raw IP recorded once. The
-    # share channel (M11) is attributed to the click event.
+    # share channel (M11) is attributed to the click event. One datacenter verdict
+    # covers both events, so a crawler's landing view is not counted either.
+    verdict = _datacenter_verdict(raw_ip)
     _record_event(
         tenant=tenant, referral=referral, visitor_id=visitor_id, user_agent=user_agent,
         raw_ip=raw_ip, event_type=vocab.CLICK, source=vocab.SRC_CLICK, share_channel=share_channel,
+        datacenter=verdict,
     )
     event = _record_event(
         tenant=tenant, referral=referral, visitor_id=visitor_id, user_agent=user_agent,
-        raw_ip=None, event_type=vocab.LANDING_VIEWED, source=vocab.SRC_CLICK,
+        raw_ip=None, event_type=vocab.LANDING_VIEWED, source=vocab.SRC_CLICK, datacenter=verdict,
     )
     nonce = mint_nonce(tenant=tenant, referral=referral, visitor_id=visitor_id or "", client_id=client_id)
     return referral, event, nonce

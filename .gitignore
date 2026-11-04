@@ -59,3 +59,6 @@ Thumbs.db
 
 # Browser-automation (Playwright MCP) session logs and page snapshots — local only
 .playwright-mcp/
+
+# Runtime state (reports, the datacenter network table) - lives in shared/var on the box
+/var/
