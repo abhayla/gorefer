@@ -23,10 +23,10 @@ HUMAN = {"HTTP_USER_AGENT": "Mozilla/5.0 (Android)", "REMOTE_ADDR": "203.0.113.9
 SHARE_URLS = pytest.mark.urls("tests.urls_share_intent")
 
 # --- APPROVED TEXTS (generated from the owner-approved file) ---
-A = "*Step 1 - Register your details*\nhttps://gorefer.in/zerodha/r/wa/DA1707\n\n*Step 2 - Open a free Zerodha account online:*\nhttps://gorefer.in/zerodha/open\n\n*Keep ready:*\nPAN, Aadhaar-linked mobile number, bank details, Cancelled Cheque or Passbook, Picture of your Signature\n\n*How-to-Open Zerodha Account video:*\nhttps://youtu.be/JFx9tzhBrjE\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
-B = "*Step 1 - Register your details*\nhttps://gorefer.in/r/wa\n\n*Step 2 - Open a free Zerodha account online:*\nhttps://gorefer.in/zerodha/open\n\n*Keep ready:*\nPAN, Aadhaar-linked mobile number, bank details, Cancelled Cheque or Passbook, Picture of your Signature\n\n*How-to-Open Zerodha Account video:*\nhttps://youtu.be/JFx9tzhBrjE\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
-C = "*स्टेप 1 - अपनी जानकारी रजिस्टर करें*\nhttps://gorefer.in/zerodha/r/wa/DA1707\n\n*स्टेप 2 - ऑनलाइन मुफ़्त Zerodha खाता खोलें:*\nhttps://gorefer.in/zerodha/open\n\n*तैयार रखें:*\nPAN, आधार से जुड़ा मोबाइल नंबर, बैंक डिटेल्स, कैंसल्ड चेक या पासबुक, आपके सिग्नेचर की फ़ोटो\n\n*Zerodha खाता कैसे खोलें - वीडियो:*\nhttps://youtu.be/JTZ-ebu2vyA\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
-D = "*स्टेप 1 - अपनी जानकारी रजिस्टर करें*\nhttps://gorefer.in/r/wa\n\n*स्टेप 2 - ऑनलाइन मुफ़्त Zerodha खाता खोलें:*\nhttps://gorefer.in/zerodha/open\n\n*तैयार रखें:*\nPAN, आधार से जुड़ा मोबाइल नंबर, बैंक डिटेल्स, कैंसल्ड चेक या पासबुक, आपके सिग्नेचर की फ़ोटो\n\n*Zerodha खाता कैसे खोलें - वीडियो:*\nhttps://youtu.be/JTZ-ebu2vyA\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
+A = "*Follow these steps to Open Zerodha Account*\n\n*Step 1 - Register your details*\nhttps://gorefer.in/zerodha/r/wa/DA1707\n\n*Step 2 - Open a free Zerodha account online:*\nhttps://gorefer.in/zerodha/open\n\n*Keep ready:*\nPAN, Aadhaar-linked mobile number, bank details, Cancelled Cheque or Passbook, Picture of your Signature\n\n*How-to-Open Zerodha Account video:*\nhttps://youtu.be/JFx9tzhBrjE\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
+B = "*Follow these steps to Open Zerodha Account*\n\n*Step 1 - Register your details*\nhttps://gorefer.in/r/wa\n\n*Step 2 - Open a free Zerodha account online:*\nhttps://gorefer.in/zerodha/open\n\n*Keep ready:*\nPAN, Aadhaar-linked mobile number, bank details, Cancelled Cheque or Passbook, Picture of your Signature\n\n*How-to-Open Zerodha Account video:*\nhttps://youtu.be/JFx9tzhBrjE\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
+C = "*Zerodha खाता खोलने के लिए ये स्टेप्स फ़ॉलो करें*\n\n*स्टेप 1 - अपनी जानकारी रजिस्टर करें*\nhttps://gorefer.in/zerodha/r/wa/DA1707\n\n*स्टेप 2 - ऑनलाइन मुफ़्त Zerodha खाता खोलें:*\nhttps://gorefer.in/zerodha/open\n\n*तैयार रखें:*\nPAN, आधार से जुड़ा मोबाइल नंबर, बैंक डिटेल्स, कैंसल्ड चेक या पासबुक, आपके सिग्नेचर की फ़ोटो\n\n*Zerodha खाता कैसे खोलें - वीडियो:*\nhttps://youtu.be/JTZ-ebu2vyA\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
+D = "*Zerodha खाता खोलने के लिए ये स्टेप्स फ़ॉलो करें*\n\n*स्टेप 1 - अपनी जानकारी रजिस्टर करें*\nhttps://gorefer.in/r/wa\n\n*स्टेप 2 - ऑनलाइन मुफ़्त Zerodha खाता खोलें:*\nhttps://gorefer.in/zerodha/open\n\n*तैयार रखें:*\nPAN, आधार से जुड़ा मोबाइल नंबर, बैंक डिटेल्स, कैंसल्ड चेक या पासबुक, आपके सिग्नेचर की फ़ोटो\n\n*Zerodha खाता कैसे खोलें - वीडियो:*\nhttps://youtu.be/JTZ-ebu2vyA\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
 
 PR197_DEFAULT = (
     "*Open a free {program_brand} account online:*\n{link}\n\n"
@@ -250,3 +250,34 @@ def test_seed_is_idempotent_and_creates_missing_keys(tenant):
     call_command("seed_program")
     assert first == {k: _central(k) for k in keys}
     assert first[prefkeys.SHARE_ONETAP_WA_MESSAGE_HI] == prefkeys.SHARE_ONETAP_WA_MESSAGE_HI_DEFAULT
+
+
+def test_seed_moves_pr199_english_default_to_the_first_line_default(tenant):
+    _set_central(prefkeys.SHARE_ONETAP_WA_MESSAGE, prefkeys.SHARE_ONETAP_WA_MESSAGE_PR199_DEFAULT)
+    call_command("seed_program")
+    assert _central(prefkeys.SHARE_ONETAP_WA_MESSAGE) == prefkeys.SHARE_ONETAP_WA_MESSAGE_DEFAULT
+    assert prefkeys.SHARE_ONETAP_WA_MESSAGE_DEFAULT.startswith(
+        "*Follow these steps to Open {program_brand} Account*\n\n*Step 1")
+
+
+def test_seed_moves_pr199_hindi_default_to_the_first_line_default(tenant):
+    _set_central(prefkeys.SHARE_ONETAP_WA_MESSAGE_HI, prefkeys.SHARE_ONETAP_WA_MESSAGE_HI_PR199_DEFAULT)
+    call_command("seed_program")
+    assert _central(prefkeys.SHARE_ONETAP_WA_MESSAGE_HI) == prefkeys.SHARE_ONETAP_WA_MESSAGE_HI_DEFAULT
+    assert prefkeys.SHARE_ONETAP_WA_MESSAGE_HI_DEFAULT.startswith(
+        "*{program_brand} खाता खोलने के लिए ये स्टेप्स फ़ॉलो करें*\n\n*स्टेप 1")
+
+
+def test_seed_leaves_edited_pr199_text_and_is_idempotent(tenant):
+    edited_en = prefkeys.SHARE_ONETAP_WA_MESSAGE_PR199_DEFAULT + " "
+    edited_hi = prefkeys.SHARE_ONETAP_WA_MESSAGE_HI_PR199_DEFAULT + " "
+    _set_central(prefkeys.SHARE_ONETAP_WA_MESSAGE, edited_en)
+    _set_central(prefkeys.SHARE_ONETAP_WA_MESSAGE_HI, edited_hi)
+    call_command("seed_program")
+    call_command("seed_program")
+    assert _central(prefkeys.SHARE_ONETAP_WA_MESSAGE) == edited_en
+    assert _central(prefkeys.SHARE_ONETAP_WA_MESSAGE_HI) == edited_hi
+    _set_central(prefkeys.SHARE_ONETAP_WA_MESSAGE, prefkeys.SHARE_ONETAP_WA_MESSAGE_PR199_DEFAULT)
+    call_command("seed_program")
+    call_command("seed_program")
+    assert _central(prefkeys.SHARE_ONETAP_WA_MESSAGE) == prefkeys.SHARE_ONETAP_WA_MESSAGE_DEFAULT

@@ -105,12 +105,23 @@ class Command(BaseCommand):
         from apps.config.preferences import (
             SHARE_ONETAP_WA_MESSAGE,
             SHARE_ONETAP_WA_MESSAGE_DEFAULT,
+            SHARE_ONETAP_WA_MESSAGE_HI,
+            SHARE_ONETAP_WA_MESSAGE_HI_DEFAULT,
+            SHARE_ONETAP_WA_MESSAGE_HI_PR199_DEFAULT,
             SHARE_ONETAP_WA_MESSAGE_PR197_DEFAULT,
+            SHARE_ONETAP_WA_MESSAGE_PR199_DEFAULT,
         )
 
         ConfigCentral.objects.filter(
             key=SHARE_ONETAP_WA_MESSAGE, value=SHARE_ONETAP_WA_MESSAGE_PR197_DEFAULT,
         ).update(value=SHARE_ONETAP_WA_MESSAGE_DEFAULT)
+        # First line added (owner 2026-11-05): same byte-equal rule for the PR #199 defaults.
+        ConfigCentral.objects.filter(
+            key=SHARE_ONETAP_WA_MESSAGE, value=SHARE_ONETAP_WA_MESSAGE_PR199_DEFAULT,
+        ).update(value=SHARE_ONETAP_WA_MESSAGE_DEFAULT)
+        ConfigCentral.objects.filter(
+            key=SHARE_ONETAP_WA_MESSAGE_HI, value=SHARE_ONETAP_WA_MESSAGE_HI_PR199_DEFAULT,
+        ).update(value=SHARE_ONETAP_WA_MESSAGE_HI_DEFAULT)
         self.stdout.write("  central config: baseline ensured")
 
     def _seed_partner(self, tenant):

@@ -8,7 +8,7 @@ One JSON file per proven finding in `docs/reviews/failure-classes/`. See `docs/r
 | [Beacon-confirmed human clicks are rare in direct landing mode](#beacon-confirmed-human-clicks-are-rare-in-direct-landing-mode) | unguarded | 2026-11-04 |
 | [Conversion ingest can skip marking its open-date rollup day dirty](#conversion-ingest-can-skip-marking-its-open-date-rollup-day-dirty) | unguarded | 2026-11-04 |
 | [Datacenter and crawler clicks counted as human](#datacenter-and-crawler-clicks-counted-as-human) | unguarded | 2026-11-04 |
-| [Deploy copies code but never installs requirements](#deploy-copies-code-but-never-installs-requirements) | unguarded | 2026-11-04 |
+| [Deploy copies code but never installs requirements](#deploy-copies-code-but-never-installs-requirements) | guarded | 2026-11-04 |
 | [Empty-string exclude on a GenericIPAddressField excludes every row](#empty-string-exclude-on-a-genericipaddressfield-excludes-every-row) | unguarded | 2026-11-04 |
 
 ## Beacon-confirmed human clicks are rare in direct landing mode
@@ -91,7 +91,7 @@ One JSON file per proven finding in `docs/reviews/failure-classes/`. See `docs/r
 
 ## Deploy copies code but never installs requirements
 
-`deploy-never-installs-requirements` - detection: **unguarded**
+`deploy-never-installs-requirements` - detection: **guarded**
 
 **Class (symptom):** A deploy that ships code without installing dependencies leaves any requirement added after the server was built missing in production, while CI (which installs requirements) stays green.
 
@@ -107,13 +107,15 @@ One JSON file per proven finding in `docs/reviews/failure-classes/`. See `docs/r
 - Installing Pillow 13.0.0 on prod removed the error.
 
 **Detection:**
-- **status:** unguarded
-- **reason:** No gate compares prod's installed packages with requirements.txt. Fix in progress on branch fix/deploy-installs-requirements; flip to guarded when that PR merges.
+- **status:** guarded
+- **check:** scripts/deploy.sh step 4b: pip install -r requirements.txt (no --upgrade; upgrade preview refuses version changes) + scripts/check_requirements_installed.py before migrate/probe/flip; tests/test_deploy_requirements_check.py (PR #201, merged 4804605)
+- **reason:** a deploy now refuses to flip to a release with a missing or unsatisfied requirement
 
 **Related:**
 - #174
 - T-158
 - branch fix/deploy-installs-requirements
+- PR #201
 
 ## Empty-string exclude on a GenericIPAddressField excludes every row
 

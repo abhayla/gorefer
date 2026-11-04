@@ -198,7 +198,7 @@ def test_share_endpoint_defaults_to_stored_language(seeded, client):
     resp = client.get(f"/share/wa/{CID}", **HUMAN)
     text = urllib.parse.parse_qs(urllib.parse.urlparse(resp["Location"]).query).get("text", [""])[0]
     # one-tap WhatsApp has its own Hindi two-step text (owner 2026-11-04)
-    assert text.startswith(f"*स्टेप 1 - अपनी जानकारी रजिस्टर करें*\nhttps://gorefer.in/zerodha/r/wa/{CID}")
+    assert text.startswith(f"*Zerodha खाता खोलने के लिए ये स्टेप्स फ़ॉलो करें*\n\n*स्टेप 1 - अपनी जानकारी रजिस्टर करें*\nhttps://gorefer.in/zerodha/r/wa/{CID}")
 
 
 @SHARE_URLS
@@ -206,14 +206,14 @@ def test_share_endpoint_explicit_lang_param_overrides_stored(seeded, client):
     set_tenant(prefkeys.REFERRER_LANGUAGE, "hi", tenant_id=seeded.id)
     resp = client.get(f"/share/wa/{CID}?lang=en", **HUMAN)
     text = urllib.parse.parse_qs(urllib.parse.urlparse(resp["Location"]).query).get("text", [""])[0]
-    assert text.startswith("*Step 1 - Register your details*\nhttps://gorefer.in/zerodha/r/wa/RJ4521")
+    assert text.startswith("*Follow these steps to Open Zerodha Account*\n\n*Step 1 - Register your details*\nhttps://gorefer.in/zerodha/r/wa/RJ4521")
 
 
 @SHARE_URLS
 def test_share_endpoint_unset_stored_language_is_en(seeded, client):
     resp = client.get(f"/share/wa/{CID}", **HUMAN)
     text = urllib.parse.parse_qs(urllib.parse.urlparse(resp["Location"]).query).get("text", [""])[0]
-    assert text.startswith("*Step 1 - Register your details*\nhttps://gorefer.in/zerodha/r/wa/RJ4521")
+    assert text.startswith("*Follow these steps to Open Zerodha Account*\n\n*Step 1 - Register your details*\nhttps://gorefer.in/zerodha/r/wa/RJ4521")
 
 
 # ------------------------------------------------------------------------ /hub/ default
