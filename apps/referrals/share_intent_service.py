@@ -370,12 +370,25 @@ def onetap_whatsapp_message(
         )
     brand = brand_for_program(program) if program is not None else brand_for_tenant_id(tenant_id)
     template = _onetap_template(tenant_id, lang)
-    message = template.format(
-        link=single or tracked_link("wa", client_id, tenant_id=tenant_id),
-        register_link=onetap_register_link(tenant, client_id),
-        open_link=onetap_open_link(tenant),
-        program_brand=brand,
-    )
+    fields = {
+        "link": single or tracked_link("wa", client_id, tenant_id=tenant_id),
+        "register_link": onetap_register_link(tenant, client_id),
+        "open_link": onetap_open_link(tenant),
+        "program_brand": brand,
+    }
+    try:
+        message = template.format(**fields)
+    except (KeyError, ValueError, IndexError):
+        # A bad value written outside the Preferences validator (e.g. Django admin) must
+        # never 500 the share link: fall back to the built-in text for this language.
+        from apps.config.preferences import (
+            SHARE_ONETAP_WA_MESSAGE_DEFAULT,
+            SHARE_ONETAP_WA_MESSAGE_HI_DEFAULT,
+        )
+
+        logger.warning("one-tap WhatsApp template not renderable; using built-in default (lang=%s)", lang)
+        default = SHARE_ONETAP_WA_MESSAGE_HI_DEFAULT if lang == "hi" else SHARE_ONETAP_WA_MESSAGE_DEFAULT
+        message = default.format(**fields)
     if anchor in message:
         return message
     return message + "\n\n" + anchor

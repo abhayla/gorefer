@@ -153,9 +153,33 @@ def test_hindi_message_is_a_cascade_key(tenant, django_capture_on_commit_callbac
 
 
 @SHARE_URLS
-def test_blank_hindi_message_falls_back_to_english_template(tenant, django_capture_on_commit_callbacks):
+def test_blank_hindi_value_in_config_falls_back_to_english_template(tenant, django_capture_on_commit_callbacks):
     set_tenant(prefkeys.SHARE_ONETAP_WA_MESSAGE_HI, "", tenant_id=tenant.id)
     assert _text(_get(f"/share/wa/{CID}?lang=hi", django_capture_on_commit_callbacks)) == A
+
+
+@SHARE_URLS
+@pytest.mark.parametrize("bad", ["*Hi {nope}*\n{register_link}","{register_link} {", "{0} {register_link}"])
+def test_unrenderable_configured_text_falls_back_to_default(tenant, django_capture_on_commit_callbacks, bad):
+    _set_central(prefkeys.SHARE_ONETAP_WA_MESSAGE, bad)
+    resp = _get(f"/share/wa/{CID}", django_capture_on_commit_callbacks)
+    assert resp.status_code == 302 and resp.headers["Location"].startswith("https://wa.me/")
+    assert _text(resp) == A
+
+
+@SHARE_URLS
+def test_unrenderable_hindi_text_falls_back_to_hindi_default(tenant, django_capture_on_commit_callbacks):
+    _set_central(prefkeys.SHARE_ONETAP_WA_MESSAGE_HI, "{nope}")
+    assert _text(_get(f"/share/wa/{CID}?lang=hi", django_capture_on_commit_callbacks)) == C
+
+
+def test_blank_hindi_save_stores_default_and_help_text_says_so(tenant, admin_client):
+    from apps.dashboard.preferences_service import save_preferences
+
+    save_preferences(tenant, {prefkeys.SHARE_ONETAP_WA_MESSAGE_HI: ""})
+    assert resolve(prefkeys.SHARE_ONETAP_WA_MESSAGE_HI, tenant_id=tenant.id) == prefkeys.SHARE_ONETAP_WA_MESSAGE_HI_DEFAULT
+    body = admin_client.get("/admin-panel/preferences").content.decode()
+    assert "Leave blank to use the default Hindi message." in body
 
 
 @SHARE_URLS
