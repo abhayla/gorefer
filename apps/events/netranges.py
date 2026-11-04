@@ -289,6 +289,17 @@ def reset_cache() -> None:
         _table, _loaded, _mtime, _checked_at, _warned_missing = None, False, None, 0.0, False
 
 
+def warm() -> bool:
+    """Load the table now (called once per worker from gorefer/wsgi.py) so the first click
+    does not pay the ~1 s parse. NEVER raises: a broken table must not stop the server
+    booting; the lazy path in `_get_table` stays the fallback. True when a table is loaded."""
+    try:
+        return _get_table() is not None
+    except Exception:
+        logger.exception("datacenter table warm-up failed; will load lazily on first click")
+        return False
+
+
 def classify_ip(ip) -> tuple[bool, str | None]:
     """(is_datacenter, org) for the request IP. FAIL OPEN on any problem."""
     if not ip:

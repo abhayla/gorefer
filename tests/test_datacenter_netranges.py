@@ -242,3 +242,45 @@ def test_weekly_refresh_is_scheduled():
 def test_click_path_module_imports_no_http_client():
     src = Path(netranges.__file__).read_text(encoding="utf-8")
     assert "urllib" not in src and "import requests" not in src
+
+
+# --- warm at worker boot ----------------------------------------------------------------
+
+
+def _write_small_table(path):
+    lines = netranges.filter_dump(DUMP_V4 + DUMP_V6, netranges.KEYWORDS_DEFAULT)
+    path.write_text("# header" + chr(10) + chr(10).join(lines) + chr(10), encoding="utf-8")
+
+
+def test_wsgi_import_loads_table_before_first_classify(use_table, monkeypatch):
+    import importlib
+
+    import gorefer.wsgi
+
+    _write_small_table(use_table)
+    netranges.reset_cache()
+    importlib.reload(gorefer.wsgi)
+    assert netranges._loaded is True and netranges._table is not None
+    # first classify_ip must not load: make any load blow up
+    monkeypatch.setattr(netranges, "load_table", lambda p: (_ for _ in ()).throw(AssertionError("lazy load")))
+    assert netranges.classify_ip("1.44.96.10") == (True, "AS16509 AMAZON-02 - Amazon.com, Inc.")
+
+
+def test_wsgi_import_with_missing_table_does_not_raise(use_table):
+    import importlib
+
+    import gorefer.wsgi
+
+    assert not use_table.exists()
+    netranges.reset_cache()
+    importlib.reload(gorefer.wsgi)  # must not raise
+    assert netranges.warm() is False
+    assert netranges.classify_ip("1.44.96.10") == (False, None)
+
+
+def test_warm_swallows_unexpected_errors(monkeypatch):
+    def boom():
+        raise RuntimeError("x")
+
+    monkeypatch.setattr(netranges, "_get_table", boom)
+    assert netranges.warm() is False
