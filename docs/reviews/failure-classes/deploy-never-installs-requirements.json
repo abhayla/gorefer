@@ -16,8 +16,14 @@
     "Installing Pillow 13.0.0 on prod removed the error."
   ],
   "detection": {
-    "status": "unguarded",
-    "reason": "No gate compares prod's installed packages with requirements.txt. Fix in progress on branch fix/deploy-installs-requirements; flip to guarded when that PR merges."
+    "status": "guarded",
+    "check": "scripts/deploy.sh step 4b: pip install -r requirements.txt (no --upgrade; upgrade preview refuses version changes) + scripts/check_requirements_installed.py before migrate/probe/flip; tests/test_deploy_requirements_check.py (PR #201, merged 4804605)",
+    "reason": "a deploy now refuses to flip to a release with a missing or unsatisfied requirement"
   },
-  "related": ["#174", "T-158", "branch fix/deploy-installs-requirements"]
+  "related": [
+    "#174",
+    "T-158",
+    "branch fix/deploy-installs-requirements",
+    "PR #201"
+  ]
 }
