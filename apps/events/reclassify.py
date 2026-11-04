@@ -49,13 +49,13 @@ def _visit_events(click: Event) -> list[Event]:
     if not click.visitor_id:
         return [click]
     next_click_ts = (
-        Event.objects.filter(
-            tenant_id=click.tenant_id, visitor_id=click.visitor_id, event_type=vocab.CLICK,
+        Event.objects.for_tenant(click.tenant).filter(
+            visitor_id=click.visitor_id, event_type=vocab.CLICK,
             timestamp__gt=click.timestamp,
         ).order_by("timestamp").values_list("timestamp", flat=True).first()
     )
-    qs = Event.objects.filter(
-        tenant_id=click.tenant_id, visitor_id=click.visitor_id, is_bot=False,
+    qs = Event.objects.for_tenant(click.tenant).filter(
+        visitor_id=click.visitor_id, is_bot=False,
         timestamp__gte=click.timestamp, event_type__in=DATACENTER_VISIT_EVENT_TYPES,
     ).select_related("referral")
     if next_click_ts is not None:
@@ -67,7 +67,7 @@ def _visit_events(click: Event) -> list[Event]:
 
 
 def reclassify_datacenter_clicks(table: NetworkTable, *, tenant=None, apply: bool = False) -> dict:
-    clicks = Event.objects.filter(event_type=vocab.CLICK, is_bot=False).select_related("referral")
+    clicks = Event.objects.filter(event_type=vocab.CLICK, is_bot=False).select_related("referral", "tenant")
     if tenant is not None:
         clicks = clicks.for_tenant(tenant)
     clicks = list(clicks.order_by("id"))
