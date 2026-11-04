@@ -161,10 +161,24 @@ for the per-tenant config cascade — LANDING_MODE is set HERE, not via a backen
       </div>
       <div class="py-1.5 border-t border-line">
         <label for="share_onetap_wa_message" class="text-[13.5px] font-semibold">One-tap WhatsApp message (English)</label>
-        <div class="text-[11.5px] text-ink-500 mt-0.5">Same placeholders as above. Hindi uses the shared Hindi message with this link. A referrer's own opening line still replaces this text.</div>
+        <div class="text-[11.5px] text-ink-500 mt-0.5">Placeholders: <code class="text-[11px] bg-ink-50 rounded px-1">{register_link}</code> (step 1, must stay), <code class="text-[11px] bg-ink-50 rounded px-1">{open_link}</code> (step 2), <code class="text-[11px] bg-ink-50 rounded px-1">{program_brand}</code>; <code class="text-[11px] bg-ink-50 rounded px-1">{link}</code> still works for the old single-link text. A referrer's own opening line still replaces this text.</div>
         <textarea id="share_onetap_wa_message" name="share_onetap_wa_message" rows="8"
                   class="mt-1.5 w-full rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none"
                   >{{ prefs.share_onetap_wa_message }}</textarea>
+      </div>
+      <div class="py-1.5 border-t border-line">
+        <label for="share_onetap_wa_message_hi" class="text-[13.5px] font-semibold">One-tap WhatsApp message (Hindi)</label>
+        <div class="text-[11.5px] text-ink-500 mt-0.5">Same placeholders. The risk line and the disclosure stay in English on purpose. Blank = the English message.</div>
+        <textarea id="share_onetap_wa_message_hi" name="share_onetap_wa_message_hi" rows="8"
+                  class="mt-1.5 w-full rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none"
+                  >{{ prefs.share_onetap_wa_message_hi }}</textarea>
+      </div>
+      <div class="py-1.5 border-t border-line">
+        <label for="share_onetap_wa_register_path" class="text-[13.5px] font-semibold">"Share without my ID": step 1 link path</label>
+        <div class="text-[11.5px] text-ink-500 mt-0.5">Used as {register_link} when the sharer has no Kite ID. Default <code class="text-[11px] bg-ink-50 rounded px-1">/r/wa</code>.</div>
+        <input id="share_onetap_wa_register_path" name="share_onetap_wa_register_path" type="text"
+               value="{{ prefs.share_onetap_wa_register_path }}"
+               class="mt-1.5 w-full sm:w-[260px] rounded-lg border border-line px-2.5 py-2 text-[13px] focus:border-cobalt-500 focus:outline-none">
       </div>
       <div class="py-1.5 border-t border-line">
         <label for="share_onetap_wa_disclosure" class="text-[13.5px] font-semibold">One-tap WhatsApp disclosure line</label>

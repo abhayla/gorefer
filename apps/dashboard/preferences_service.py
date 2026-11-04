@@ -434,16 +434,26 @@ def _save_onetap_whatsapp(tenant_id, data, defaults, *, user=None) -> list[str]:
         choice = (data.get(prefkeys.SHARE_ONETAP_WA_LINK) or "").strip().lower()
         if choice in prefkeys.SHARE_ONETAP_WA_LINK_CHOICES:
             set_tenant(prefkeys.SHARE_ONETAP_WA_LINK, choice, tenant_id=tenant_id, user=user)
-    if prefkeys.SHARE_ONETAP_WA_MESSAGE in data:
-        message = (data.get(prefkeys.SHARE_ONETAP_WA_MESSAGE) or "").strip()
-        problem = _share_template_problem(message) if message else ""
+    for key, label in ((prefkeys.SHARE_ONETAP_WA_MESSAGE, "One-tap WhatsApp message"),
+                       (prefkeys.SHARE_ONETAP_WA_MESSAGE_HI, "One-tap WhatsApp message (Hindi)")):
+        if key not in data:
+            continue
+        message = (data.get(key) or "").strip()
+        problem = _onetap_template_problem(message) if message else ""
         if problem:
+            notices.append(f"“{label}” was not saved — {problem} Kept the previous message.")
+        else:
+            set_tenant(key, message or defaults[key], tenant_id=tenant_id, user=user)
+    if prefkeys.SHARE_ONETAP_WA_REGISTER_PATH in data:
+        path = (data.get(prefkeys.SHARE_ONETAP_WA_REGISTER_PATH) or "").strip()
+        if path and (not path.startswith("/") or any(c.isspace() for c in path) or "//" in path):
             notices.append(
-                f"“One-tap WhatsApp message” was not saved — {problem} Kept the previous message."
+                "“One-tap WhatsApp ‘without my ID’ link path” was not saved — "
+                "it must start with / and have no spaces (for example /r/wa). Kept the previous path."
             )
         else:
-            set_tenant(prefkeys.SHARE_ONETAP_WA_MESSAGE,
-                       message or defaults[prefkeys.SHARE_ONETAP_WA_MESSAGE],
+            set_tenant(prefkeys.SHARE_ONETAP_WA_REGISTER_PATH,
+                       path or defaults[prefkeys.SHARE_ONETAP_WA_REGISTER_PATH],
                        tenant_id=tenant_id, user=user)
     if prefkeys.SHARE_ONETAP_WA_DISCLOSURE in data:
         line = (data.get(prefkeys.SHARE_ONETAP_WA_DISCLOSURE) or "").strip()
@@ -457,6 +467,19 @@ def _save_onetap_whatsapp(tenant_id, data, defaults, *, user=None) -> list[str]:
                        line or defaults[prefkeys.SHARE_ONETAP_WA_DISCLOSURE],
                        tenant_id=tenant_id, user=user)
     return notices
+
+
+def _onetap_template_problem(message: str) -> str:
+    """Why a one-tap WhatsApp text can't be saved, or "" when it is fine. It must carry the
+    register link (or the legacy {link}); only the four known placeholders are allowed."""
+    if "{register_link}" not in message and "{link}" not in message:
+        return "it must contain {register_link} (or {link}), where the referral link goes."
+    try:
+        message.format(link="", register_link="", open_link="", program_brand="")
+    except (KeyError, IndexError, ValueError):
+        return ("only {register_link}, {open_link}, {link} and {program_brand} "
+                "can be used inside curly brackets.")
+    return ""
 
 
 def _share_template_problem(message: str) -> str:
