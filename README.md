@@ -181,6 +181,16 @@ Turning a switch back to `False` is the instant rollback (no deploy). The card's
 edited on the Preferences screen ("Link preview card"); the legal footer is locked. Spec:
 `docs/api/06-API-Specification.md` §4.1b.
 
+**Deploys install requirements before the flip (2026-11-04).** `scripts/deploy.sh` runs
+`pip install -r requirements.txt` (no `--upgrade`: only missing or unsatisfied packages
+change) into the shared venv, then `scripts/check_requirements_installed.py`, for the NEW
+release — before `migrate`, before the pre-flip health probe, and so before `current`
+moves. A missing or version-unsatisfied requirement aborts the deploy with one line per
+problem (`MISSING Pillow>=10.0`) and the old release keeps serving. Adding a line to
+`requirements.txt` is therefore enough to ship a new dependency; no manual pip step on the
+host. Why: Pillow was added on 2026-08-17 and never installed on production, so the v2
+link-preview card returned 500 when switched on. Host details: `docs/deploy/DEPLOY-TARGET.md`.
+
 ## How to use for external LLM review
 
 To have another LLM review the design, feed it `review/GoRefer-Review-Bundle.md` in the private [gorefer-ops](https://github.com/abhayla/gorefer-ops) repo (the full concatenated spec) as context, then apply the questions and rubric in `review/09-LLM-Review-Pack.md` in the private [gorefer-ops](https://github.com/abhayla/gorefer-ops) repo.
