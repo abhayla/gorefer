@@ -15,6 +15,7 @@ No database needed: plain functions + a subprocess, so no django_db marker.
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
 import subprocess
 import sys
@@ -161,12 +162,99 @@ def test_deploy_installs_and_checks_before_migrate_probe_and_flip():
     assert pip_at < check_at < migrate_at < probe_at < flip_at
 
 
-def test_deploy_pip_step_does_not_upgrade_and_aborts_on_failure():
+def _real_step_block() -> str:
+    """The NON-dry-run 4b heredoc that runs on the box."""
     text = _real_deploy_body()
-    start = text.find("-m pip install")
-    pip_cmd = text[start : text.find("\n", text.find("-r requirements.txt", start))]
-    assert "--upgrade" not in pip_cmd and " -U" not in pip_cmd
-    assert "-r requirements.txt" in pip_cmd
-    # Both the pip and the check failure paths exit non-zero before the flip.
-    block = text[text.find("4b. install + verify") : text.find("# ------------------------------- 5.")]
-    assert len(re.findall(r"exit 1", block)) >= 3, "pip / check failures must abort"
+    start = text.find('echo "==> Installing + verifying Python requirements')
+    assert start != -1, "deploy.sh lost the real requirements step"
+    end = text.find("} | remote_sh", start)
+    return text[start:end]
+
+
+def _if_statements(block: str):
+    """(condition, then-body) for every `if ! ...; then ... fi` in the block."""
+    return re.findall(r"^if ! (.*?)then\n(.*?)^fi$", block, flags=re.S | re.M)
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        r"-m pip install --dry-run --report",  # upgrade preview
+        r"--upgrade-preview",  # preview verdict
+        r"-m pip install \\\n",  # the real install (continues on the next line)
+        r"scripts/check_requirements_installed\.py requirements\.txt",  # final check
+    ],
+)
+def test_each_real_step_is_guarded_and_aborts(marker):
+    stmts = [(c, b) for c, b in _if_statements(_real_step_block()) if re.search(marker, c)]
+    assert len(stmts) == 1, f"step {marker!r} is not inside its own `if ! ...; then` guard"
+    cond, body = stmts[0]
+    assert not re.search(r"\|\|", cond), f"step {marker!r} has its failure swallowed: {cond!r}"
+    assert re.search(r"^\s*exit 1\s*$", body, flags=re.M), f"step {marker!r} no longer aborts"
+
+
+def test_real_pip_commands_never_upgrade():
+    for cond, _body in _if_statements(_real_step_block()):
+        if "-m pip install" in cond:
+            assert "--upgrade" not in cond and " -U" not in cond
+            assert "-r requirements.txt" in cond
+
+
+def test_real_step_uses_mktemp_not_a_fixed_tmp_path():
+    block = _real_step_block()
+    assert 'PIP_LOG="$(mktemp)"' in block and 'PIP_REPORT="$(mktemp)"' in block
+    assert re.search(r"trap 'rm -f \"\$PIP_LOG\" \"\$PIP_REPORT\"' EXIT", block)
+    assert "/tmp/" not in block
+
+
+# ------------------------------------------------------------ upgrade preview
+
+
+def _report(tmp_path: Path, items: list[tuple[str, str]]) -> Path:
+    import json
+
+    data = {"version": "1", "install": [{"metadata": {"name": n, "version": v}} for n, v in items]}
+    return _write(tmp_path, json.dumps(data), "report.json")
+
+
+def test_upgrade_preview_allows_new_installs_only(tmp_path, monkeypatch):
+    monkeypatch.delenv("DEPLOY_ALLOW_UPGRADE", raising=False)
+    path = _report(tmp_path, [(MISSING_PKG, "1.0"), ("Django", metadata.version("Django"))])
+    assert checker.upgrade_preview(path, allow=False) == 0
+
+
+def test_upgrade_preview_refuses_a_changed_installed_version(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("DEPLOY_ALLOW_UPGRADE", raising=False)
+    old = metadata.version("Django")
+    path = _report(tmp_path, [("Django", "99.0"), (MISSING_PKG, "1.0")])
+    assert checker.upgrade_preview(path, allow=False) == 1
+    out = capsys.readouterr().out
+    assert f"UPGRADE Django {old} -> 99.0" in out
+    assert MISSING_PKG not in out
+
+
+def test_upgrade_preview_allowed_by_env_or_flag(tmp_path, monkeypatch):
+    path = _report(tmp_path, [("Django", "99.0")])
+    monkeypatch.setenv("DEPLOY_ALLOW_UPGRADE", "1")
+    assert checker.upgrade_preview(path, allow=False) == 0
+    monkeypatch.delenv("DEPLOY_ALLOW_UPGRADE")
+    assert checker.upgrade_preview(path, allow=True) == 0
+
+
+def test_upgrade_preview_fails_closed_on_bad_report(tmp_path, monkeypatch):
+    monkeypatch.delenv("DEPLOY_ALLOW_UPGRADE", raising=False)
+    assert checker.upgrade_preview(_write(tmp_path, "not json", "r.json"), allow=False) == 1
+    bad = _write(tmp_path, '{"install": [{"metadata": {}}]}', "r2.json")
+    assert checker.upgrade_preview(bad, allow=False) == 1
+
+
+def test_upgrade_preview_cli(tmp_path):
+    path = _report(tmp_path, [("Django", "99.0")])
+    result = subprocess.run(
+        [sys.executable, str(CHECKER), "--upgrade-preview", str(path)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env={**os.environ, "DEPLOY_ALLOW_UPGRADE": "0"},
+    )
+    assert result.returncode == 1 and "UPGRADE Django" in result.stdout

@@ -2,6 +2,7 @@
 """Verify that every requirement in a requirements file is installed AND satisfied.
 
     python scripts/check_requirements_installed.py [requirements.txt]
+    python scripts/check_requirements_installed.py --upgrade-preview REPORT.json [--allow-upgrade]
 
 Exit 0 when every applicable requirement is met. Exit 1 with one line per problem:
 
@@ -165,7 +166,54 @@ def check_file(path: Path) -> list[str]:
     return problems
 
 
+def upgrade_changes(report: dict) -> list[str]:
+    """From a `pip install --dry-run --report` JSON, list ALREADY-installed packages
+    whose version the install would change ("name old -> new"). New installs (not yet
+    present) are not listed: they cannot affect the release that is running now."""
+    changes = []
+    for item in report.get("install") or []:
+        meta = item.get("metadata") or {}
+        name, new = meta.get("name"), meta.get("version")
+        if not name or not new:
+            changes.append(f"UNREADABLE report entry: {item!r:.120}")  # fail closed
+            continue
+        old = _installed_version(name)
+        if old is not None and old != new:
+            changes.append(f"{name} {old} -> {new}")
+    return changes
+
+
+def upgrade_preview(report_path: Path, allow: bool) -> int:
+    """Exit 1 when the install would change an installed package, unless allowed.
+
+    Why: the venv is SHARED with the release that is serving right now; an in-place
+    version change happens before the flip and stays even if the deploy aborts."""
+    import json
+    import os
+
+    allow = allow or os.environ.get("DEPLOY_ALLOW_UPGRADE") == "1"
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        print(f"FAIL: cannot read pip install report {report_path}: {exc}")
+        return 1
+    changes = upgrade_changes(report)
+    for line in changes:
+        print(f"UPGRADE {line}")
+    if changes and not allow:
+        print(
+            f"FAIL: {len(changes)} installed package(s) would change version in the shared "
+            "venv the running release uses. Re-run with DEPLOY_ALLOW_UPGRADE=1 to accept."
+        )
+        return 1
+    print(f"OK: upgrade preview — {len(changes)} installed package(s) change"
+          + (" (allowed by DEPLOY_ALLOW_UPGRADE=1)" if changes else ""))
+    return 0
+
+
 def main(argv: list[str]) -> int:
+    if len(argv) > 2 and argv[1] == "--upgrade-preview":
+        return upgrade_preview(Path(argv[2]), "--allow-upgrade" in argv[3:])
     path = Path(argv[1]) if len(argv) > 1 else Path("requirements.txt")
     problems = check_file(path)
     for line in problems:
