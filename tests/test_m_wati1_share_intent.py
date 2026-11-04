@@ -48,7 +48,7 @@ def test_share_intent_redirects_to_wa_me_with_tracked_link(seeded, client):
     decoded = unquote(location.split("?text=", 1)[1])
     # Owner 2026-11-04 (two steps): the one-tap WhatsApp message carries the referrer's own
     # tracked link as Step 1 (/zerodha/r/wa/{ID}) and the plain open link as Step 2.
-    assert decoded.startswith("*Step 1 - Register your details*\nhttps://gorefer.in/zerodha/r/wa/RJ4521")
+    assert decoded.startswith("*Follow these steps to Open Zerodha Account*\n\n*Step 1 - Register your details*\nhttps://gorefer.in/zerodha/r/wa/RJ4521")
     # The links must be FULL https URLs (scheme-less links aren't linkified by every
     # client), and they must come BEFORE the video and the disclosure URL: WhatsApp builds
     # the message's preview card from the first full URL, and the preview must be a GoRefer

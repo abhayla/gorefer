@@ -124,7 +124,7 @@ def test_referrer_opener_keeps_its_place_with_the_new_link(tenant, django_captur
 def test_hindi_uses_its_own_two_step_text(tenant, django_capture_on_commit_callbacks):
     """Row J3.2: Hindi has its own two-step text (replaces D3 for the one-tap message)."""
     text = _text(_get(f"/share/wa/{CID}?lang=hi", django_capture_on_commit_callbacks))
-    assert text.startswith("*स्टेप 1 - अपनी जानकारी रजिस्टर करें*\n")
+    assert text.startswith("*Zerodha खाता खोलने के लिए ये स्टेप्स फ़ॉलो करें*\n\n*स्टेप 1 - अपनी जानकारी रजिस्टर करें*\n")
     assert text.endswith(_TAIL)
 
 

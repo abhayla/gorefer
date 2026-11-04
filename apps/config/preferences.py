@@ -769,7 +769,25 @@ SHARE_ONETAP_WA_MESSAGE_PR197_DEFAULT = (
 # Two-step text (owner 2026-11-04): {register_link} = step 1 (the referrer's own wa link, or
 # the no-ID register link), {open_link} = step 2 (the program's plain open link). {link}
 # still works for a rollback to the PR #197 text. The risk line stays English in Hindi.
+# The PR #199 defaults (no first line). Kept ONLY so seed_program can tell an untouched
+# central row from an operator edit; never used to build a message.
+SHARE_ONETAP_WA_MESSAGE_PR199_DEFAULT = (
+    "*Step 1 - Register your details*\n{register_link}\n\n"
+    "*Step 2 - Open a free {program_brand} account online:*\n{open_link}\n\n"
+    "*Keep ready:*\nPAN, Aadhaar-linked mobile number, bank details, Cancelled Cheque or Passbook, Picture of your Signature\n\n"  # noqa: E501
+    "*How-to-Open {program_brand} Account video:*\nhttps://youtu.be/JFx9tzhBrjE\n\n"
+    "Investments in securities market are subject to market risks, read all the related documents carefully before investing."  # noqa: E501
+)
+SHARE_ONETAP_WA_MESSAGE_HI_PR199_DEFAULT = (
+    "*स्टेप 1 - अपनी जानकारी रजिस्टर करें*\n{register_link}\n\n"
+    "*स्टेप 2 - ऑनलाइन मुफ़्त {program_brand} खाता खोलें:*\n{open_link}\n\n"
+    "*तैयार रखें:*\nPAN, आधार से जुड़ा मोबाइल नंबर, बैंक डिटेल्स, कैंसल्ड चेक या पासबुक, आपके सिग्नेचर की फ़ोटो\n\n"
+    "*{program_brand} खाता कैसे खोलें - वीडियो:*\nhttps://youtu.be/JTZ-ebu2vyA\n\n"
+    "Investments in securities market are subject to market risks, read all the related documents carefully before investing."  # noqa: E501
+)
+# First line added (owner 2026-11-05): bold title + blank line before step 1, EN and HI.
 SHARE_ONETAP_WA_MESSAGE_DEFAULT = (
+    "*Follow these steps to Open {program_brand} Account*\n\n"
     "*Step 1 - Register your details*\n{register_link}\n\n"
     "*Step 2 - Open a free {program_brand} account online:*\n{open_link}\n\n"
     "*Keep ready:*\nPAN, Aadhaar-linked mobile number, bank details, Cancelled Cheque or Passbook, Picture of your Signature\n\n"  # noqa: E501
@@ -777,6 +795,7 @@ SHARE_ONETAP_WA_MESSAGE_DEFAULT = (
     "Investments in securities market are subject to market risks, read all the related documents carefully before investing."  # noqa: E501
 )
 SHARE_ONETAP_WA_MESSAGE_HI_DEFAULT = (
+    "*{program_brand} खाता खोलने के लिए ये स्टेप्स फ़ॉलो करें*\n\n"
     "*स्टेप 1 - अपनी जानकारी रजिस्टर करें*\n{register_link}\n\n"
     "*स्टेप 2 - ऑनलाइन मुफ़्त {program_brand} खाता खोलें:*\n{open_link}\n\n"
     "*तैयार रखें:*\nPAN, आधार से जुड़ा मोबाइल नंबर, बैंक डिटेल्स, कैंसल्ड चेक या पासबुक, आपके सिग्नेचर की फ़ोटो\n\n"
