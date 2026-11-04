@@ -16,8 +16,9 @@
     "Split by link type: partner-direct 220/422 datacenter, referral 86/251 datacenter."
   ],
   "detection": {
-    "status": "guarded",
-    "check": "PR #198: apps/events/netranges.py classifies datacenter ranges on the live click path, and the reclassify_datacenter_clicks command repairs stored rows. Merged as 844e3f8."
+    "status": "unguarded",
+    "check": "Context, the fix (not a recurrence detector): PR #198 apps/events/netranges.py classifies known datacenter ranges on the live click path, and the reclassify_datacenter_clicks command repairs stored rows. Merged as 844e3f8.",
+    "reason": "fix covers known networks; no detector flags a new crawler network passing as human (e.g. a periodic report of non-bot clicks from hosting ASNs not in the table)"
   },
   "related": ["PR #198", "commit 844e3f8", "ADR-019 amendment"]
 }

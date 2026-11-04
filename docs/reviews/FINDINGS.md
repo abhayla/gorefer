@@ -6,7 +6,7 @@ One JSON file per proven finding in `docs/reviews/failure-classes/`. See `docs/r
 | Finding | Detection | First seen |
 |---|---|---|
 | [Beacon-confirmed human clicks are rare in direct landing mode](#beacon-confirmed-human-clicks-are-rare-in-direct-landing-mode) | unguarded | 2026-11-04 |
-| [Datacenter and crawler clicks counted as human](#datacenter-and-crawler-clicks-counted-as-human) | guarded | 2026-11-04 |
+| [Datacenter and crawler clicks counted as human](#datacenter-and-crawler-clicks-counted-as-human) | unguarded | 2026-11-04 |
 | [Deploy copies code but never installs requirements](#deploy-copies-code-but-never-installs-requirements) | unguarded | 2026-11-04 |
 | [Empty-string exclude on a GenericIPAddressField excludes every row](#empty-string-exclude-on-a-genericipaddressfield-excludes-every-row) | unguarded | 2026-11-04 |
 
@@ -35,7 +35,7 @@ One JSON file per proven finding in `docs/reviews/failure-classes/`. See `docs/r
 
 ## Datacenter and crawler clicks counted as human
 
-`datacenter-clicks-counted-as-human` - detection: **guarded**
+`datacenter-clicks-counted-as-human` - detection: **unguarded**
 
 **Class (symptom):** A bot filter that looks only at the User-Agent counts every crawler or link scanner that sends a browser User-Agent as a human click.
 
@@ -51,8 +51,9 @@ One JSON file per proven finding in `docs/reviews/failure-classes/`. See `docs/r
 - Split by link type: partner-direct 220/422 datacenter, referral 86/251 datacenter.
 
 **Detection:**
-- **status:** guarded
-- **check:** PR #198: apps/events/netranges.py classifies datacenter ranges on the live click path, and the reclassify_datacenter_clicks command repairs stored rows. Merged as 844e3f8.
+- **status:** unguarded
+- **check:** Context, the fix (not a recurrence detector): PR #198 apps/events/netranges.py classifies known datacenter ranges on the live click path, and the reclassify_datacenter_clicks command repairs stored rows. Merged as 844e3f8.
+- **reason:** fix covers known networks; no detector flags a new crawler network passing as human (e.g. a periodic report of non-bot clicks from hosting ASNs not in the table)
 
 **Related:**
 - PR #198
