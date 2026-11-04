@@ -10,11 +10,15 @@ on:
       # template name it lists still resolves) — a doc-only edit here can break the
       # suite, so it must never be silently skipped by the blanket docs/** ignore.
       - "!docs/integrations/WhatsApp-Template-Coverage-Matrix.md"
+      # The findings registry is checked by build_findings_registry.py --check in CI;
+      # a registry-only PR must not be skipped by the blanket docs/** ignore.
+      - "!docs/reviews/**"
   pull_request:
     paths-ignore:
       - "**/*.md"
       - "docs/**"
       - "!docs/integrations/WhatsApp-Template-Coverage-Matrix.md"
+      - "!docs/reviews/**"
 
 # Cancel a superseded run on the same ref (e.g. a PR branch re-pushed before its
 # previous CI finished) instead of letting both run to completion — free-tier
@@ -113,6 +117,9 @@ jobs:
 
       - name: Architecture boundary gate (rail E-3 — fails only on NEW vendor leaks)
         run: python scripts/check_architecture.py
+
+      - name: Findings registry is current (docs/reviews/FINDINGS.md)
+        run: python scripts/build_findings_registry.py --check
 
       - name: Migration drift check
         run: python manage.py makemigrations --check --dry-run

@@ -1,0 +1,23 @@
+{
+  "slug": "deploy-never-installs-requirements",
+  "title": "Deploy copies code but never installs requirements",
+  "class_symptom": "A deploy that ships code without installing dependencies leaves any requirement added after the server was built missing in production, while CI (which installs requirements) stays green.",
+  "mechanism": "scripts/deploy.sh copies the release but never runs pip install, so the server's virtualenv only holds what was installed when the box was first built.",
+  "first_seen": {
+    "date": "2026-11-04",
+    "evidence": [
+      "Pillow>=10.0 has been in requirements.txt since T-158 (#174, 2026-08-17) but was absent on prod until 2026-11-04.",
+      "Switching preview_card_v2 on returned HTTP 500 on every crawler preview (6 requests in about 1 minute) with ModuleNotFoundError: No module named 'PIL' at apps/referrals/preview_card.py:31.",
+      "apps/accounts/service.py:184 (Path-B evidence upload) imports the same module; 0 uploads were ever recorded."
+    ]
+  },
+  "measurements": [
+    "6 crawler-preview requests returned HTTP 500 in about 1 minute after the flag was switched on; the traceback names the missing module.",
+    "Installing Pillow 13.0.0 on prod removed the error."
+  ],
+  "detection": {
+    "status": "unguarded",
+    "reason": "No gate compares prod's installed packages with requirements.txt. Fix in progress on branch fix/deploy-installs-requirements; flip to guarded when that PR merges."
+  },
+  "related": ["#174", "T-158", "branch fix/deploy-installs-requirements"]
+}

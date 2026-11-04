@@ -1,0 +1,25 @@
+{
+  "slug": "conversion-ingest-skips-rollup-dirty-mark",
+  "title": "Conversion ingest can skip marking its open-date rollup day dirty",
+  "class_symptom": "A Conversion created through the referral-attributed ingest path can leave no DirtyPeriod row for its account_opened_at date, so DailyMetric/MonthlyMetric.accounts_opened (the dashboard accounts-opened KPI) under-counts until some other event dirties that day or a full recompute runs.",
+  "mechanism": "apps/integrations/zoho/ingest.py _apply_upsert marks the day dirty itself only in the unattributed branch (referral is None); the attributed branch relies on _emit_conversion_events to dirty the day. The exact condition under which _emit_conversion_events skips the dirty mark is NOT yet identified.",
+  "first_seen": {
+    "date": "2026-11-04",
+    "evidence": [
+      "4 Conversions created 2026-10-29 02:51-02:59 UTC (program 1) with open dates 2023-10-15, 2025-04-30, 2025-06-19 and 2025-07-03 had 0 DirtyPeriod rows for their open dates.",
+      "Dashboard accounts_opened read 28 while non-reversed Conversions numbered 30.",
+      "A full recompute_rollups, run after an unrelated history repair (61 dirty days), corrected it to 30.",
+      "The 5-minute recompute_rollups schedule itself was healthy: last runs OK, 0 failures, 1 unprocessed row."
+    ]
+  },
+  "measurements": [
+    "4 Conversions with 0 DirtyPeriod rows for their open dates (2026-10-29 creation, program 1).",
+    "accounts_opened rollup 28 vs 30 non-reversed Conversions before the full recompute; 30 after.",
+    "Scheduler health: last recompute_rollups runs OK, 0 failures, 1 unprocessed row, so the miss is in marking, not in processing."
+  ],
+  "detection": {
+    "status": "unguarded",
+    "reason": "no check compares the accounts_opened rollup total with the non-reversed Conversion count"
+  },
+  "related": ["apps/integrations/zoho/ingest.py _apply_upsert", "_emit_conversion_events", "recompute_rollups"]
+}

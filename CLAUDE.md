@@ -39,6 +39,7 @@ Document map (start at `README.md` for the index):
 | `docs/architecture/16-Configurable-Platform-Architecture-Review.md` | **Ratified config-platform review (Phase 0)** — ADR-042…044, enforcement rails E-1…E-6 + D-1 compliance rail; grounds §6e and the CI architecture gate. |
 | `docs/sprint2/` | Sprint-2 specs + goal contracts (share amplification, Wati referral amplification, referral UX/disclosure, independent test brief, M13 login contract). |
 | **`gorefer-ops/COORDINATION.md`** (PRIVATE repo) | **DA ⇆ Engineer coordination log** — the async channel between the Design Authority (Cowork planning session) and the Engineer (Claude Code). Read it before each mission; append a STATUS entry when you open a PR; log any surfaced inconsistency as a QUESTION and pause rather than guess. **Write the entry in the `gorefer-ops` clone, not here** (§2a). |
+| `docs/reviews/FINDINGS.md` | **Findings registry** — proven, class-level findings, one JSON per finding in `docs/reviews/failure-classes/`; aggregate is generated (`scripts/build_findings_registry.py`, `--check` in CI). Read before answering why-does-it-behave-this-way questions; add a finding the turn it is proven (`docs/reviews/README.md`). |
 | **`gorefer-ops/review/`** (PRIVATE repo) | LLM review pack (`09`), review bundle, verification reports, runbooks, deferred-features backlog. |
 | **`gorefer-ops/_source-archive/`** (PRIVATE repo) | Historical source-of-truth captures (context only). |
 
