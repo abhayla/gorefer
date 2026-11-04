@@ -742,10 +742,10 @@ SHARE_KIT_MESSAGE_TEMPLATE_X_DEFAULT = (
 #   * SHARE_ONETAP_WA_LINK  — which link the message carries: "open" = the program's plain
 #     no-referrer link (/{prefix}/open -> the partner's sign-up page, PIFS credited, the
 #     referrer NOT), "referrer" = the referrer's own link (/{prefix}/r/wa/{id}), as before.
-#   * SHARE_ONETAP_WA_MESSAGE — the English text ({link} / {program_brand} placeholders).
-#     Saving it blank on the Preferences screen resets it to the default below. The Hindi
-#     one-tap message stays the shared Hindi message (owner decision D3); only its link and
-#     disclosure line follow these keys.
+#   * SHARE_ONETAP_WA_MESSAGE / _HI — the English / Hindi two-step text ({register_link},
+#     {open_link}, {program_brand}; {link} still works for a rollback). Saving either blank
+#     resets it to the default below. A blank Hindi value falls back to the English text.
+#   * SHARE_ONETAP_WA_REGISTER_PATH — the step-1 path when "Share without my ID" (no referrer).
 #   * SHARE_ONETAP_WA_DISCLOSURE — the disclosure tail, `{url}` = the /d/{slug} page.
 # The referrer's own opening line still replaces the text (decision D2), and the pop-up's
 # "Share without my ID" uses the same message and link (decision D1).
@@ -755,7 +755,9 @@ SHARE_ONETAP_WA_LINK_REFERRER = "referrer"
 SHARE_ONETAP_WA_LINK_CHOICES = (SHARE_ONETAP_WA_LINK_OPEN, SHARE_ONETAP_WA_LINK_REFERRER)
 SHARE_ONETAP_WA_LINK_DEFAULT = SHARE_ONETAP_WA_LINK_OPEN
 SHARE_ONETAP_WA_MESSAGE = "share_onetap_wa_message"
-SHARE_ONETAP_WA_MESSAGE_DEFAULT = (
+# The PR #197 default (single /zerodha/open link). Kept ONLY so seed_program can tell an
+# untouched central row from an operator edit; it is never used to build a message.
+SHARE_ONETAP_WA_MESSAGE_PR197_DEFAULT = (
     "*Open a free {program_brand} account online:*\n{link}\n\n"
     "*Keep ready:*\nPAN, Aadhaar-linked mobile number, bank details, Cancelled Cheque or "
     "Passbook, Picture of your Signature\n\n"
@@ -764,6 +766,26 @@ SHARE_ONETAP_WA_MESSAGE_DEFAULT = (
     "Investments in securities market are subject to market risks, read all the related "
     "documents carefully before investing."
 )
+# Two-step text (owner 2026-11-04): {register_link} = step 1 (the referrer's own wa link, or
+# the no-ID register link), {open_link} = step 2 (the program's plain open link). {link}
+# still works for a rollback to the PR #197 text. The risk line stays English in Hindi.
+SHARE_ONETAP_WA_MESSAGE_DEFAULT = (
+    "*Step 1 - Register your details*\n{register_link}\n\n"
+    "*Step 2 - Open a free {program_brand} account online:*\n{open_link}\n\n"
+    "*Keep ready:*\nPAN, Aadhaar-linked mobile number, bank details, Cancelled Cheque or Passbook, Picture of your Signature\n\n"  # noqa: E501
+    "*How-to-Open {program_brand} Account video:*\nhttps://youtu.be/JFx9tzhBrjE\n\n"
+    "Investments in securities market are subject to market risks, read all the related documents carefully before investing."  # noqa: E501
+)
+SHARE_ONETAP_WA_MESSAGE_HI_DEFAULT = (
+    "*स्टेप 1 - अपनी जानकारी रजिस्टर करें*\n{register_link}\n\n"
+    "*स्टेप 2 - ऑनलाइन मुफ़्त {program_brand} खाता खोलें:*\n{open_link}\n\n"
+    "*तैयार रखें:*\nPAN, आधार से जुड़ा मोबाइल नंबर, बैंक डिटेल्स, कैंसल्ड चेक या पासबुक, आपके सिग्नेचर की फ़ोटो\n\n"
+    "*{program_brand} खाता कैसे खोलें - वीडियो:*\nhttps://youtu.be/JTZ-ebu2vyA\n\n"
+    "Investments in securities market are subject to market risks, read all the related documents carefully before investing."  # noqa: E501
+)
+SHARE_ONETAP_WA_MESSAGE_HI = "share_onetap_wa_message_hi"
+SHARE_ONETAP_WA_REGISTER_PATH = "share_onetap_wa_register_path"
+SHARE_ONETAP_WA_REGISTER_PATH_DEFAULT = "/r/wa"
 SHARE_ONETAP_WA_DISCLOSURE = "share_onetap_wa_disclosure"
 SHARE_ONETAP_WA_DISCLOSURE_DEFAULT = "*Disclosures:*\n{url}"
 
@@ -1178,6 +1200,8 @@ def central_defaults() -> dict:
         # One-tap WhatsApp link (owner 2026-11-04) — its own link choice, text, disclosure.
         SHARE_ONETAP_WA_LINK: SHARE_ONETAP_WA_LINK_DEFAULT,
         SHARE_ONETAP_WA_MESSAGE: SHARE_ONETAP_WA_MESSAGE_DEFAULT,
+        SHARE_ONETAP_WA_MESSAGE_HI: SHARE_ONETAP_WA_MESSAGE_HI_DEFAULT,
+        SHARE_ONETAP_WA_REGISTER_PATH: SHARE_ONETAP_WA_REGISTER_PATH_DEFAULT,
         SHARE_ONETAP_WA_DISCLOSURE: SHARE_ONETAP_WA_DISCLOSURE_DEFAULT,
         # Notification routing defaults to ON for all three — this mirrors today's
         # behaviour exactly (doc-08 A6 fires all three), so adding the toggles changes
@@ -1347,6 +1371,13 @@ def get_preferences(tenant_id: int | None) -> dict:
         SHARE_ONETAP_WA_LINK: resolve_onetap_wa_link(tenant_id),
         SHARE_ONETAP_WA_MESSAGE: resolve(
             SHARE_ONETAP_WA_MESSAGE, tenant_id=tenant_id, default=defaults[SHARE_ONETAP_WA_MESSAGE]
+        ),
+        SHARE_ONETAP_WA_MESSAGE_HI: resolve(
+            SHARE_ONETAP_WA_MESSAGE_HI, tenant_id=tenant_id, default=defaults[SHARE_ONETAP_WA_MESSAGE_HI]
+        ),
+        SHARE_ONETAP_WA_REGISTER_PATH: resolve(
+            SHARE_ONETAP_WA_REGISTER_PATH, tenant_id=tenant_id,
+            default=defaults[SHARE_ONETAP_WA_REGISTER_PATH],
         ),
         SHARE_ONETAP_WA_DISCLOSURE: resolve(
             SHARE_ONETAP_WA_DISCLOSURE, tenant_id=tenant_id, default=defaults[SHARE_ONETAP_WA_DISCLOSURE]

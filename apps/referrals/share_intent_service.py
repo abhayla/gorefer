@@ -294,31 +294,104 @@ def onetap_whatsapp_disclosure(tenant_id: int | None) -> str:
     return disclosure_anchor()
 
 
+def _onetap_template(tenant_id: int | None, lang: str) -> str:
+    """The configured one-tap text for `lang`. Hindi uses its own key; a blank or missing
+    Hindi value falls back to the English text (the apps.config.i18n contract)."""
+    from apps.config.preferences import (
+        SHARE_ONETAP_WA_MESSAGE,
+        SHARE_ONETAP_WA_MESSAGE_DEFAULT,
+        SHARE_ONETAP_WA_MESSAGE_HI,
+        SHARE_ONETAP_WA_MESSAGE_HI_DEFAULT,
+    )
+
+    # The approved text is the built-in default, so it applies even before seed_program runs.
+    def _get(key, default):
+        try:
+            return str(resolve(key, tenant_id=tenant_id, default=default) or "")
+        except Exception:
+            return default
+
+    if lang == "hi":
+        hi = _get(SHARE_ONETAP_WA_MESSAGE_HI, SHARE_ONETAP_WA_MESSAGE_HI_DEFAULT)
+        if hi.strip():
+            return hi
+    return _get(SHARE_ONETAP_WA_MESSAGE, SHARE_ONETAP_WA_MESSAGE_DEFAULT) or SHARE_ONETAP_WA_MESSAGE_DEFAULT
+
+
+def onetap_register_link(tenant, client_id: str) -> str:
+    """Step 1 of the one-tap message: the referrer's own wa link, or (no ID, "Share without
+    my ID") the no-referrer register link whose path is the cascade key
+    `share_onetap_wa_register_path` (default /r/wa)."""
+    from apps.config.preferences import SHARE_ONETAP_WA_REGISTER_PATH, SHARE_ONETAP_WA_REGISTER_PATH_DEFAULT
+
+    tenant_id = getattr(tenant, "id", None)
+    if client_id:
+        return tracked_link("wa", client_id, tenant_id=tenant_id)
+    try:
+        path = str(resolve(SHARE_ONETAP_WA_REGISTER_PATH, tenant_id=tenant_id,
+                           default=SHARE_ONETAP_WA_REGISTER_PATH_DEFAULT) or "").strip()
+    except Exception:
+        path = ""
+    path = path or SHARE_ONETAP_WA_REGISTER_PATH_DEFAULT
+    if not path.startswith("/"):
+        path = "/" + path
+    return f"https://{_public_host()}{path}"
+
+
+def onetap_open_link(tenant) -> str:
+    """Step 2 of the one-tap message: the program's plain partner-direct link."""
+    from .links import partner_direct_path
+
+    return f"https://{_public_host()}{partner_direct_path(tenant=tenant)}"
+
+
 def onetap_whatsapp_message(
     tenant, client_id: str, *, program=None, lang: str = "en", opener: str | None = None,
     link: str | None = None,
 ) -> str:
     """THE message the one-tap WhatsApp link (/{prefix}/share/wa/{id}) pre-types (owner
-    2026-11-04). Its own English text, link and disclosure; the shared message that My
-    Referrals, the share hub and Telegram send is untouched. The referrer's own opening
-    line still replaces the text (decision D2); Hindi keeps the shared Hindi wording with
-    this link and disclosure (D3). `link` is passed only by "Share without my ID" (D1)."""
-    from apps.config.preferences import SHARE_ONETAP_WA_MESSAGE, SHARE_ONETAP_WA_MESSAGE_DEFAULT
+    2026-11-04, two steps): step 1 = the register link, step 2 = the open link, then the
+    risk line and the disclosure tail. English and Hindi have their own cascade texts; the
+    shared message that My Referrals, the share hub and Telegram send is untouched. The
+    referrer's own opening line still replaces the text (decision D2). `{link}` keeps
+    working for a rollback to the single-link text: it is `link`, else the open link
+    (or the referrer's own link when share_onetap_wa_link = "referrer"). An empty
+    `client_id` is "Share without my ID"."""
+    from .branding import brand_for_program, brand_for_tenant_id
 
     tenant_id = getattr(tenant, "id", None)
-    # The approved text is the built-in default, so it applies even before seed_program runs.
+    program = program if program is not None else get_active_program(tenant)
+    anchor = onetap_whatsapp_disclosure(tenant_id)
+    single = link or onetap_whatsapp_link(tenant)
+    if opener is not None and str(opener).strip():
+        return kit_message(
+            "wa", client_id, tenant_id, program=program, lang=lang, opener=opener,
+            link=single, anchor=anchor,
+        )
+    brand = brand_for_program(program) if program is not None else brand_for_tenant_id(tenant_id)
+    template = _onetap_template(tenant_id, lang)
+    fields = {
+        "link": single or tracked_link("wa", client_id, tenant_id=tenant_id),
+        "register_link": onetap_register_link(tenant, client_id),
+        "open_link": onetap_open_link(tenant),
+        "program_brand": brand,
+    }
     try:
-        en_template = str(resolve(SHARE_ONETAP_WA_MESSAGE, tenant_id=tenant_id,
-                                  default=SHARE_ONETAP_WA_MESSAGE_DEFAULT) or "")
-    except Exception:
-        en_template = SHARE_ONETAP_WA_MESSAGE_DEFAULT
-    return kit_message(
-        "wa", client_id, tenant_id,
-        program=program if program is not None else get_active_program(tenant),
-        lang=lang, opener=opener,
-        link=link or onetap_whatsapp_link(tenant),
-        en_template=en_template, anchor=onetap_whatsapp_disclosure(tenant_id),
-    )
+        message = template.format(**fields)
+    except (KeyError, ValueError, IndexError):
+        # A bad value written outside the Preferences validator (e.g. Django admin) must
+        # never 500 the share link: fall back to the built-in text for this language.
+        from apps.config.preferences import (
+            SHARE_ONETAP_WA_MESSAGE_DEFAULT,
+            SHARE_ONETAP_WA_MESSAGE_HI_DEFAULT,
+        )
+
+        logger.warning("one-tap WhatsApp template not renderable; using built-in default (lang=%s)", lang)
+        default = SHARE_ONETAP_WA_MESSAGE_HI_DEFAULT if lang == "hi" else SHARE_ONETAP_WA_MESSAGE_DEFAULT
+        message = default.format(**fields)
+    if anchor in message:
+        return message
+    return message + "\n\n" + anchor
 
 
 def handle_share_intent(
