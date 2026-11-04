@@ -206,7 +206,7 @@ def upgrade_preview(report_path: Path, allow: bool) -> int:
             "venv the running release uses. Re-run with DEPLOY_ALLOW_UPGRADE=1 to accept."
         )
         return 1
-    print(f"OK: upgrade preview — {len(changes)} installed package(s) change"
+    print(f"OK: upgrade preview: {len(changes)} installed package(s) change"
           + (" (allowed by DEPLOY_ALLOW_UPGRADE=1)" if changes else ""))
     return 0
 
