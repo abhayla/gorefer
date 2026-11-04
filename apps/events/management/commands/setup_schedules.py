@@ -62,6 +62,9 @@ SCHEDULES = {
     # often can only fire a breach once, never spam. Inert unless
     # `messaging_digest_alerts_enabled` is on for the tenant.
     "funnel_digest_alerts": ("apps.campaigns.digest.run_instant_alerts", 15),
+    # Weekly (10080 min, ADR-019 amendment 2026-11-04): rebuild the offline datacenter
+    # network table from the iptoasn.com dumps. A failed download keeps the old table.
+    "network_table_refresh": ("apps.events.netranges_refresh.scheduled_refresh", 10080),
 }
 
 

@@ -24,6 +24,7 @@ from apps.common.ratelimit import RateLimited, check_rate, client_ip
 from apps.events import vocab
 from apps.events.bots import is_bot_user_agent
 from apps.events.models import Event
+from apps.events.netranges import DATACENTER_BOT_REASON
 from apps.events.nonces import consume_nonce, peek_nonce
 from apps.referrals.models import Customer
 from apps.referrals.validators import InvalidClientId, validate_client_id
@@ -62,9 +63,23 @@ def confirm_click(request, payload: ConfirmIn):
     # explicit human_confirmed event (source: beacon) for the funnel/timeline.
     visitor_id = payload.visitor_id or row.visitor_id
     if visitor_id:
+        # is_bot=False in the filter: a datacenter-network click (is_bot=True, ADR-019
+        # amendment 2026-11-04) is NEVER promoted back to human by a beacon — a headless
+        # crawler can run JS. Its human_confirmed row inherits the bot verdict too, so it
+        # does not count as a unique visitor either.
         Event.objects.filter(
             visitor_id=visitor_id, is_confirmed_human=False, is_bot=False
         ).update(is_confirmed_human=True)
+        # The verdict comes from this visitor's LATEST click on the nonce's referral (the
+        # click the nonce was minted for), so a person once seen on a VPN is not flagged
+        # forever.
+        last_click = (
+            Event.objects.filter(visitor_id=visitor_id, referral=row.referral, event_type=vocab.CLICK)
+            .order_by("-id").values_list("is_bot", "metadata").first()
+        )
+        dc_meta = {}
+        if last_click and last_click[0] and (last_click[1] or {}).get("bot_reason") == DATACENTER_BOT_REASON:
+            dc_meta = {"bot_reason": DATACENTER_BOT_REASON, "network": last_click[1].get("network", "")}
         Event.objects.create(
             tenant=row.tenant,
             event_type=vocab.HUMAN_CONFIRMED,
@@ -72,8 +87,9 @@ def confirm_click(request, payload: ConfirmIn):
             referral=row.referral,
             user_type="anonymous",
             visitor_id=visitor_id,
-            is_confirmed_human=True,
-            metadata={},
+            is_bot=bool(dc_meta),
+            is_confirmed_human=not dc_meta,
+            metadata=dc_meta,
         )
     return {"confirmed": True}
 

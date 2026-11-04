@@ -169,6 +169,7 @@ Gaps that span personas — reward truth, dates, timers, identity, delivery, sha
 - **Title:** Link-preview bots and crawlers inflate click counts.
 - **Decision (what GoRefer does):** Maintain a **UA bot-list** (WhatsApp, `facebookexternalhit`, Telegrambot, Slackbot, Twitterbot, LinkedInBot, Googlebot, prefetchers). Bot hits are **logged but EXCLUDED** from click / unique / journey counts. A **JS-confirmation beacon** marks a **"confirmed human click"** (bots don't run JS). A **bot preview never creates a journey and never counts as a redirect.**
 - **Rationale / notes:** WhatsApp/Facebook/Telegram fetch a URL to render a preview the instant a link is shared, so without filtering every shared link would show phantom clicks and fake uniques. Logging-but-excluding preserves auditability while keeping counts honest; the JS beacon is a reliable human signal because preview bots don't execute JavaScript. Encoded in **ADR-019**. Feeds the best-effort counts in Gap 11.
+- **2026-11-04: datacenter/crawler networks are also bots; response unchanged, only counting.** 306 of 673 prod "human" clicks (partner-direct 220 of 422, referral 86 of 251) came from hosting/crawler networks with a browser UA. A click from an IP in the offline datacenter network table is logged with `is_bot=True` (`bot_reason: datacenter`) and excluded from counts; the visitor still gets the identical page/302. Full text: ADR-019 amendment 2026-11-04.
 
 ---
 
