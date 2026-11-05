@@ -8,6 +8,7 @@ One JSON file per proven finding in `docs/reviews/failure-classes/`. See `docs/r
 | [Beacon-confirmed human clicks are rare in direct landing mode](#beacon-confirmed-human-clicks-are-rare-in-direct-landing-mode) | unguarded | 2026-11-04 |
 | [Datacenter and crawler clicks counted as human](#datacenter-and-crawler-clicks-counted-as-human) | unguarded | 2026-11-04 |
 | [Deploy copies code but never installs requirements](#deploy-copies-code-but-never-installs-requirements) | guarded | 2026-11-04 |
+| [Dirty-mark re-uses the row a worker is about to close, so the mark is lost](#dirty-mark-re-uses-the-row-a-worker-is-about-to-close-so-the-mark-is-lost) | guarded | 2026-11-05 |
 | [Empty-string exclude on a GenericIPAddressField excludes every row](#empty-string-exclude-on-a-genericipaddressfield-excludes-every-row) | unguarded | 2026-11-04 |
 
 ## Beacon-confirmed human clicks are rare in direct landing mode
@@ -87,6 +88,31 @@ One JSON file per proven finding in `docs/reviews/failure-classes/`. See `docs/r
 - T-158
 - branch fix/deploy-installs-requirements
 - PR #201
+
+## Dirty-mark re-uses the row a worker is about to close, so the mark is lost
+
+`dirty-mark-lost-during-recompute` - detection: **guarded**
+
+**Class (symptom):** A worker that reads a shared work row, does the work, then closes that same row loses any request that re-used the row in between: the request is marked done without ever having been processed, and the derived data stays stale until a slower repair job runs.
+
+**Mechanism:** mark_dirty_ids did get_or_create on the unprocessed DirtyPeriod row, so a mark arriving between recompute_dirty counting a day and saving processed_at attached to the row the worker had already loaded; the worker then closed it, and the new conversion/event for that day was never counted.
+
+**First seen:** 2026-11-05
+- apps/events/rollups.py:54 (get_or_create of the unprocessed row) vs apps/events/rollups.py:117 (dp.save(update_fields=['processed_at'])) on main 5f647bb; no lock or snapshot between them.
+- Every producer shares the path: apps/events/signals.py (each event save), apps/integrations/zoho/ingest.py (on_commit marks), apps/events/reclassify.py, apps/events/rollup_audit.py heal.
+- Reproduced deterministically by tests/test_conversion_rollup_dirty.py::test_mark_arriving_mid_recompute_is_not_closed_uncounted (a conversion + mark made right after the day was counted).
+
+**Measurements:**
+- RED on main 5f647bb: 4 failed, 1 passed (the five new tests); the race test failed because no unprocessed DirtyPeriod survived the run and accounts_opened stayed 1 instead of 2.
+- GREEN with the fix (always-insert mark, snapshot-and-close-only-snapshot-ids recompute): see the test run recorded in the PR; the race test asserts exactly 1 surviving unprocessed row, accounts_opened 1 then 2.
+
+**Detection:**
+- **status:** guarded
+- **check:** tests/test_conversion_rollup_dirty.py::test_mark_arriving_mid_recompute_is_not_closed_uncounted
+- **reason:** the race test simulates a concurrent writer between the count and the close on the real functions and fails if the mark is swallowed; the daily rollup audit remains the backstop
+
+**Related:**
+- PR #204
 
 ## Empty-string exclude on a GenericIPAddressField excludes every row
 

@@ -41,7 +41,10 @@ def _accounts_opened_for_range(*, tenant, program, start, end):
 
 
 def mark_dirty(*, tenant, program, on_date):
-    """Record a day (its month derived) as needing recompute. Idempotent per day."""
+    """Record a day (its month derived) as needing recompute.
+
+    Every call inserts a NEW unprocessed row. Duplicates for the same day are expected
+    and harmless: `recompute_dirty` collapses them (one recompute per distinct day)."""
     mark_dirty_ids(
         tenant_id=getattr(tenant, "pk", tenant), program_id=getattr(program, "pk", program),
         on_date=on_date,
@@ -49,17 +52,16 @@ def mark_dirty(*, tenant, program, on_date):
 
 
 def mark_dirty_ids(*, tenant_id, program_id, on_date):
-    """`mark_dirty` by primary keys (safe to capture in a `transaction.on_commit`)."""
-    try:
-        DirtyPeriod.objects.get_or_create(
-            tenant_id=tenant_id, program_id=program_id, period_date=on_date,
-            processed_at__isnull=True, defaults={},
-        )
-    except DirtyPeriod.MultipleObjectsReturned:
-        # No unique constraint, so two concurrent marks can leave duplicate unprocessed
-        # rows. Any unprocessed row for the day already guarantees the recompute, so a
-        # duplicate must never fail the caller (e.g. a Zoho ingest).
-        pass
+    """`mark_dirty` by primary keys (safe to capture in a `transaction.on_commit`).
+
+    Always INSERTS a fresh row, never reuses an existing unprocessed one: a mark that
+    arrives while `recompute_dirty` is between counting the day and closing its rows
+    would otherwise ride on a row the worker is about to close, and be lost. The worker
+    closes only the ids it snapshotted before counting, so this new row survives to the
+    next run. There is no unique constraint, so duplicates are normal."""
+    DirtyPeriod.objects.create(
+        tenant_id=tenant_id, program_id=program_id, period_date=on_date,
+    )
 
 
 def _counts_for_range(*, tenant, program, start, end):
@@ -103,17 +105,32 @@ def _recompute_month(*, tenant, program, year, month):
 
 
 def recompute_dirty(limit: int | None = None) -> int:
-    """Recompute all unprocessed dirty periods (day + its month). Returns count done."""
-    qs = DirtyPeriod.objects.filter(processed_at__isnull=True).order_by("id")
+    """Recompute unprocessed dirty periods (day + its month). Returns rows closed.
+
+    Snapshot the unprocessed row ids FIRST (limit applies to rows), recompute each
+    distinct day and each distinct month once, then close ONLY the snapshot ids. A mark
+    inserted after the snapshot is a new row, left unprocessed for the next run, so it
+    can never be closed without having been counted."""
+    qs = (
+        DirtyPeriod.objects.filter(processed_at__isnull=True)
+        .select_related("tenant", "program").order_by("id")
+    )
     if limit:
         qs = qs[:limit]
-    done = 0
-    for dp in list(qs):
-        _recompute_day(tenant=dp.tenant, program=dp.program, day=dp.period_date)
-        _recompute_month(
-            tenant=dp.tenant, program=dp.program, year=dp.period_date.year, month=dp.period_date.month
-        )
-        dp.processed_at = timezone.now()
-        dp.save(update_fields=["processed_at"])
-        done += 1
-    return done
+    rows = list(qs)
+    if not rows:
+        return 0
+    days = {}
+    months = {}
+    for dp in rows:
+        days.setdefault((dp.tenant_id, dp.program_id, dp.period_date), dp)
+        d = dp.period_date
+        months.setdefault((dp.tenant_id, dp.program_id, d.year, d.month), dp)
+    for (_t, _p, day), dp in days.items():
+        _recompute_day(tenant=dp.tenant, program=dp.program, day=day)
+    for (_t, _p, year, month), dp in months.items():
+        _recompute_month(tenant=dp.tenant, program=dp.program, year=year, month=month)
+    DirtyPeriod.objects.filter(id__in=[dp.id for dp in rows]).update(
+        processed_at=timezone.now()
+    )
+    return len(rows)

@@ -252,7 +252,7 @@ def _mark_open_day_dirty(tenant, program, opened_at):
     IST via `localtime()`, never `.date()` (P0-H): `account_opened_at` is IST midnight
     stored as UTC — 1 Aug 2026 IST is `2026-07-31T18:30Z` — so `.date()` on a value
     re-read from the DB yields the UTC date and marks the WRONG day (and month).
-    `mark_dirty` is get_or_create on the unprocessed row, so repeat calls add nothing.
+    `mark_dirty` always inserts a new row; repeat calls add duplicates that recompute collapses.
 
     Runs ON COMMIT (ingest_conversion is atomic): marked before commit, a recompute in
     another session could process the row while this conversion is still invisible to

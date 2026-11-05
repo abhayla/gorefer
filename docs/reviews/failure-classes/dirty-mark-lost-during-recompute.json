@@ -1,0 +1,26 @@
+{
+  "slug": "dirty-mark-lost-during-recompute",
+  "title": "Dirty-mark re-uses the row a worker is about to close, so the mark is lost",
+  "class_symptom": "A worker that reads a shared work row, does the work, then closes that same row loses any request that re-used the row in between: the request is marked done without ever having been processed, and the derived data stays stale until a slower repair job runs.",
+  "mechanism": "mark_dirty_ids did get_or_create on the unprocessed DirtyPeriod row, so a mark arriving between recompute_dirty counting a day and saving processed_at attached to the row the worker had already loaded; the worker then closed it, and the new conversion/event for that day was never counted.",
+  "first_seen": {
+    "date": "2026-11-05",
+    "evidence": [
+      "apps/events/rollups.py:54 (get_or_create of the unprocessed row) vs apps/events/rollups.py:117 (dp.save(update_fields=['processed_at'])) on main 5f647bb; no lock or snapshot between them.",
+      "Every producer shares the path: apps/events/signals.py (each event save), apps/integrations/zoho/ingest.py (on_commit marks), apps/events/reclassify.py, apps/events/rollup_audit.py heal.",
+      "Reproduced deterministically by tests/test_conversion_rollup_dirty.py::test_mark_arriving_mid_recompute_is_not_closed_uncounted (a conversion + mark made right after the day was counted)."
+    ]
+  },
+  "measurements": [
+    "RED on main 5f647bb: 4 failed, 1 passed (the five new tests); the race test failed because no unprocessed DirtyPeriod survived the run and accounts_opened stayed 1 instead of 2.",
+    "GREEN with the fix (always-insert mark, snapshot-and-close-only-snapshot-ids recompute): see the test run recorded in the PR; the race test asserts exactly 1 surviving unprocessed row, accounts_opened 1 then 2."
+  ],
+  "detection": {
+    "status": "guarded",
+    "check": "tests/test_conversion_rollup_dirty.py::test_mark_arriving_mid_recompute_is_not_closed_uncounted",
+    "reason": "the race test simulates a concurrent writer between the count and the close on the real functions and fails if the mark is swallowed; the daily rollup audit remains the backstop"
+  },
+  "related": [
+    "PR #204"
+  ]
+}
