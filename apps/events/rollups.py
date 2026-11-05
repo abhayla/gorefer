@@ -10,6 +10,7 @@ processes the dirty set. account_opened stays source-only (0 until Zoho, M6).
 """
 from __future__ import annotations
 
+from django.db import connection, transaction
 from django.db.models import Count
 from django.utils import timezone
 
@@ -104,13 +105,38 @@ def _recompute_month(*, tenant, program, year, month):
     )
 
 
-def recompute_dirty(limit: int | None = None) -> int:
+#: Postgres advisory-lock key serialising every `recompute_dirty` run (arbitrary constant).
+RECOMPUTE_LOCK_KEY = 0x67526F6C
+
+
+def _acquire_recompute_lock(*, wait: bool) -> bool:
+    """Transaction-scoped advisory lock: True when held. `wait=False` never blocks."""
+    fn = "pg_advisory_xact_lock" if wait else "pg_try_advisory_xact_lock"
+    with connection.cursor() as cur:
+        cur.execute(f"SELECT {fn}(%s)", [RECOMPUTE_LOCK_KEY])
+        row = cur.fetchone()
+    return True if wait else bool(row[0])
+
+
+def recompute_dirty(limit: int | None = None, *, wait: bool = True) -> int:
     """Recompute unprocessed dirty periods (day + its month). Returns rows closed.
 
     Snapshot the unprocessed row ids FIRST (limit applies to rows), recompute each
     distinct day and each distinct month once, then close ONLY the snapshot ids. A mark
     inserted after the snapshot is a new row, left unprocessed for the next run, so it
-    can never be closed without having been counted."""
+    can never be closed without having been counted.
+
+    Runs are SERIALISED by an advisory lock: two overlapping runs (the 5-minute job and a
+    dashboard page-load) could otherwise count, then write, in the wrong order and leave
+    the older count as final. `wait=False` (dashboard page-load) skips and returns 0 when
+    another run holds the lock; its rows stay for that run or the next."""
+    with transaction.atomic():
+        if not _acquire_recompute_lock(wait=wait):
+            return 0
+        return _recompute_snapshot(limit)
+
+
+def _recompute_snapshot(limit: int | None) -> int:
     qs = (
         DirtyPeriod.objects.filter(processed_at__isnull=True)
         .select_related("tenant", "program").order_by("id")

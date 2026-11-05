@@ -365,3 +365,44 @@ def test_three_alerts_have_distinct_dedupe_keys(program, monkeypatch):
         ("P1", f"rollup-drift-still-{today}"),
         ("P1", f"rollup-audit-failed-{today}"),
     ]
+
+
+# --- overlapping runs are serialised (PR #205 review MAJOR) ---------------------------
+
+def _hold_lock_in_other_session():
+    """A second, real Postgres session holding the recompute advisory lock."""
+    import psycopg2
+    from django.db import connection
+
+    from apps.events.rollups import RECOMPUTE_LOCK_KEY
+
+    sd = connection.settings_dict
+    other = psycopg2.connect(
+        dbname=sd["NAME"], user=sd["USER"], password=sd["PASSWORD"],
+        host=sd["HOST"] or "localhost", port=sd["PORT"] or 5432,
+    )
+    other.autocommit = True
+    with other.cursor() as cur:
+        cur.execute("SELECT pg_advisory_lock(%s)", [RECOMPUTE_LOCK_KEY])
+    return other
+
+
+def test_recompute_skips_without_closing_when_another_run_holds_the_lock(program):
+    day = dt.date(2025, 6, 6)
+    mark_dirty(tenant=program.tenant, program=program, on_date=day)
+    other = _hold_lock_in_other_session()
+    try:
+        assert recompute_dirty(wait=False) == 0
+        assert DirtyPeriod.objects.filter(period_date=day, processed_at__isnull=True).count() == 1
+    finally:
+        other.close()  # releases the session lock
+    assert recompute_dirty(wait=False) == 1
+    assert DirtyPeriod.objects.filter(period_date=day, processed_at__isnull=True).count() == 0
+
+
+def test_dashboard_page_load_never_blocks_on_the_recompute_lock():
+    import inspect
+
+    from apps.dashboard import queries
+
+    assert "wait=False" in inspect.getsource(queries)
