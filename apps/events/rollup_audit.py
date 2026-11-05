@@ -17,6 +17,7 @@ schedule (Notifier: P2 "healed", P1 "still drifting" or "audit failed").
 """
 from __future__ import annotations
 
+import datetime as dt
 import logging
 
 from django.db.models import Count, Sum
@@ -68,6 +69,7 @@ def heal(drift: list[dict]) -> list[dict]:
     dirty, recompute, and return the drift that remains (empty = healed)."""
     from django.utils import timezone
 
+    from apps.events.models import DailyMetric, MonthlyMetric
     from apps.events.rollups import mark_dirty_ids, recompute_dirty
     from apps.integrations.models import Conversion
 
@@ -76,6 +78,19 @@ def heal(drift: list[dict]) -> list[dict]:
             program_id=row["program_id"], is_reversed=False, account_opened_at__isnull=False,
         ).values_list("account_opened_at", flat=True)
         for day in {timezone.localtime(ts).date() for ts in opened}:
+            mark_dirty_ids(tenant_id=row["tenant_id"], program_id=row["program_id"], on_date=day)
+        # Drift can also be too HIGH (a rollup day/month with no live conversion behind
+        # it): mark every day / month-start that currently claims accounts_opened > 0.
+        stale_days = set(
+            DailyMetric.objects.for_tenant(row["tenant_id"]).filter(
+                program_id=row["program_id"], accounts_opened__gt=0,
+            ).values_list("metric_date", flat=True)
+        )
+        for y, m in MonthlyMetric.objects.for_tenant(row["tenant_id"]).filter(
+            program_id=row["program_id"], accounts_opened__gt=0,
+        ).values_list("year", "month"):
+            stale_days.add(dt.date(y, m, 1))
+        for day in stale_days:
             mark_dirty_ids(tenant_id=row["tenant_id"], program_id=row["program_id"], on_date=day)
     recompute_dirty()
     return find_drift(recompute=False)
@@ -98,14 +113,14 @@ def format_drift(drift: list[dict]) -> str:
     )
 
 
-def _notify(severity: str, title: str, body: str) -> dict:
+def _notify(kind: str, severity: str, title: str, body: str) -> dict:
     from django.utils import timezone
 
     from apps.common.notify_owner import notify
 
     return notify(
         project="gorefer", severity=severity, title=title, body=body, type="error",
-        dedupeKey=f"rollup-drift-{severity}-{timezone.localdate().isoformat()}",
+        dedupeKey=f"rollup-{kind}-{timezone.localdate().isoformat()}",
     )
 
 
@@ -121,17 +136,18 @@ def scheduled_audit() -> dict:
             body += "\nAfter heal: all tenants/programs match."
             logger.warning("rollup audit HEALED drift:\n%s", body)
             result["notify"] = _notify(
-                "P2", "GoRefer: accounts-opened rollup drift found and healed", body)
+                "drift-healed", "P2", "GoRefer: accounts-opened rollup drift found and healed", body)
         else:
             body += "\nAfter heal (still drifting):\n" + format_drift(result["after"])
             logger.error("rollup audit STILL DRIFTING:\n%s", body)
             result["notify"] = _notify(
-                "P1", "GoRefer: accounts-opened rollup still differs after heal", body)
+                "drift-still", "P1", "GoRefer: accounts-opened rollup still differs after heal", body)
         return result
     except Exception as exc:
         logger.exception("rollup audit failed")
         try:
-            _notify("P1", f"GoRefer: rollup audit failed: {type(exc).__name__}", str(exc)[:500])
+            _notify("audit-failed", "P1",
+                    f"GoRefer: rollup audit failed: {type(exc).__name__}", str(exc)[:500])
         except Exception:
             logger.exception("rollup audit: failure alert also failed")
         return {"error": type(exc).__name__}
