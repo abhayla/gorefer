@@ -13,12 +13,13 @@
   },
   "measurements": [
     "RED on main 5f647bb: 4 failed, 1 passed (the five new tests); the race test failed because no unprocessed DirtyPeriod survived the run and accounts_opened stayed 1 instead of 2.",
-    "GREEN with the fix (always-insert mark, snapshot-and-close-only-snapshot-ids recompute): see the test run recorded in the PR; the race test asserts exactly 1 surviving unprocessed row, accounts_opened 1 then 2."
+    "GREEN with the fix (always-insert mark, snapshot-and-close-only-snapshot-ids recompute): see the test run recorded in the PR; the race test asserts exactly 1 surviving unprocessed row, accounts_opened 1 then 2.",
+    "Second shape, same class (PR #205 review, MAJOR, pre-existing): two overlapping recompute runs (5-minute job + dashboard page-load recompute_dirty(limit=200)) could count in one order and write in the other, leaving the older count final. Closed by a transaction-scoped Postgres advisory lock around recompute_dirty (dashboard: wait=False, never blocks); test test_recompute_skips_without_closing_when_another_run_holds_the_lock holds the lock from a real second session."
   ],
   "detection": {
     "status": "guarded",
     "check": "tests/test_conversion_rollup_dirty.py::test_mark_arriving_mid_recompute_is_not_closed_uncounted",
-    "reason": "the race test simulates a concurrent writer between the count and the close on the real functions and fails if the mark is swallowed; the daily rollup audit remains the backstop"
+    "reason": "the race test simulates a concurrent writer between the count and the close on the real functions and fails if the mark is swallowed; the daily rollup audit remains the backstop Concurrent-run shape guarded by test_recompute_skips_without_closing_when_another_run_holds_the_lock; the daily rollup_conversion_audit stays as the second layer for accounts_opened."
   },
   "related": [
     "PR #204"
