@@ -155,6 +155,10 @@ if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_SHARE_HUB", False):
 # The M7 admin dashboard (custom, built from the mockups) + Django admin base,
 # both gated by the feature flag (no dead UI when off).
 if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_ADMIN_DASHBOARD", True):
+    from apps.tenants.access import is_super_admin
+
+    # S2-06: Django admin is super-admin only too (stock check is just is_staff).
+    admin.site.has_permission = lambda request: is_super_admin(request.user)
     urlpatterns.append(path("django-admin/", admin.site.urls))
     urlpatterns.append(path("admin-panel/", include("apps.dashboard.urls")))
     # Messaging-campaign config CRUD (T-124 W1) — same gate, own sub-app so the

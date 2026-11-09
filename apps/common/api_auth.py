@@ -30,8 +30,11 @@ class StaffSessionAuth(SessionAuth):
     """Allow only an authenticated staff user; CSRF-checked on unsafe methods."""
 
     def authenticate(self, request: HttpRequest, key: Optional[str]) -> Optional[Any]:
+        from apps.tenants.access import is_super_admin
+
         user = getattr(request, "user", None)
-        if user is not None and user.is_authenticated and user.is_staff:
+        # S2-06: super-admin only (the one shared resolver); an AP admin is refused.
+        if user is not None and is_super_admin(user):
             return user
         return None
 

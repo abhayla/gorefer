@@ -90,7 +90,9 @@ def test_login_locks_out_after_max_failures(settings, seeded):
     settings.RATELIMIT_ENABLED = True
     settings.RATELIMIT_LOGIN_MAX = 3
     settings.RATELIMIT_LOGIN_WINDOW = 900
-    get_user_model().objects.create_user(username="admin@pifs.in", password="rightpw123!", is_staff=True)
+    get_user_model().objects.create_user(
+        username="admin@pifs.in", password="rightpw123!", is_staff=True, is_superuser=True
+    )
     c = Client()
     # 3 wrong attempts fill the counter; the 4th is locked (429).
     for _ in range(3):
@@ -109,7 +111,9 @@ def test_login_counter_resets_on_success(settings, seeded):
 
     settings.RATELIMIT_ENABLED = True
     settings.RATELIMIT_LOGIN_MAX = 5
-    get_user_model().objects.create_user(username="admin@pifs.in", password="rightpw123!", is_staff=True)
+    get_user_model().objects.create_user(
+        username="admin@pifs.in", password="rightpw123!", is_staff=True, is_superuser=True
+    )
     c = Client()
     c.post("/admin-panel/login/", {"username": "admin@pifs.in", "password": "wrong"})
     ok = c.post("/admin-panel/login/", {"username": "admin@pifs.in", "password": "rightpw123!"})
