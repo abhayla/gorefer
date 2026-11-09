@@ -708,7 +708,7 @@ def test_box_never_shows_on_the_admin_profile(seeded, django_capture_on_commit_c
     with django_capture_on_commit_callbacks(execute=True):
         Client().get(f"/r/{CID}", HTTP_USER_AGENT="Mozilla/5.0 (Android)", REMOTE_ADDR="203.0.113.9")
     get_user_model().objects.create_user(username="staff@pifs.in", email="staff@pifs.in",
-                                         password="pw12345!", is_staff=True)
+                                         password="pw12345!", is_staff=True, is_superuser=True)
     admin = Client()
     admin.login(username="staff@pifs.in", password="pw12345!")
     resp = admin.get(f"/admin-panel/referrer/{CID}/")

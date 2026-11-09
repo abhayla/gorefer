@@ -1,0 +1,104 @@
+{% extends "dashboard/base.html" %}
+{% block title %}GoRefer Admin — Daily referrals{% endblock %}
+{% block content %}
+<section class="rounded-2xl bg-white border border-line card p-5" data-test="daily-report">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+    <div>
+      <h2 class="text-[13px] font-bold text-ink-900">Daily referrals</h2>
+      <p class="text-[11px] text-ink-500">{{ scope_name }} · {{ start|date:"d M Y" }} – {{ end|date:"d M Y" }} (IST)</p>
+    </div>
+    <a href="?{{ qs }}{% if qs %}&amp;{% endif %}format=csv" data-test="csv-link"
+       class="rounded-full border border-line px-3.5 py-1.5 text-[12px] font-semibold text-cobalt-600 hover:bg-cobalt-50">Export CSV</a>
+  </div>
+
+  <form method="get" class="flex flex-wrap items-center gap-2 text-[12px] mb-4">
+    <select name="preset" class="rounded-full border border-line px-3 py-1.5 bg-white">
+      {% for value, label in presets %}
+        <option value="{{ value }}" {% if value == preset %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <label class="text-ink-500">From <input type="date" name="from" value="{% if not preset %}{{ start|date:'Y-m-d' }}{% endif %}" class="rounded-full border border-line px-3 py-1.5"></label>
+    <label class="text-ink-500">To <input type="date" name="to" value="{% if not preset %}{{ end|date:'Y-m-d' }}{% endif %}" class="rounded-full border border-line px-3 py-1.5"></label>
+    {% if is_super_admin %}
+    <select name="ap" class="rounded-full border border-line px-3 py-1.5 bg-white" data-test="ap-filter">
+      <option value="">All APs</option>
+      {% for t in ap_choices %}
+        <option value="{{ t.id }}" {% if ap_selected == t.id|stringformat:"s" %}selected{% endif %}>{{ t.name }}</option>
+      {% endfor %}
+    </select>
+    <label class="text-ink-500"><input type="checkbox" name="split" value="1" {% if split %}checked{% endif %}> Split by AP</label>
+    {% endif %}
+    <input type="text" name="referrer" value="{{ referrer }}" placeholder="Referrer id or name…"
+      class="rounded-full border border-line px-3.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-cobalt-500/30 focus:border-cobalt-500" />
+    <select name="source" class="rounded-full border border-line px-3 py-1.5 bg-white">
+      <option value="">All sources</option>
+      {% for value, label in sources %}<option value="{{ value }}" {% if value == source %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    <select name="channel" class="rounded-full border border-line px-3 py-1.5 bg-white">
+      <option value="">All channels</option>
+      {% for value, label in channels %}<option value="{{ value }}" {% if value == channel %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    <select name="stage" class="rounded-full border border-line px-3 py-1.5 bg-white">
+      <option value="">Any stage reached</option>
+      {% for value, label in stages %}<option value="{{ value }}" {% if value == stage %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    <label class="text-ink-500">Leads ≥ <input type="number" min="0" name="min_leads" value="{{ min_leads }}" class="w-16 rounded-full border border-line px-3 py-1.5"></label>
+    <select name="group" class="rounded-full border border-line px-3 py-1.5 bg-white">
+      {% for g in groups %}<option value="{{ g }}" {% if g == group %}selected{% endif %}>By {{ g }}</option>{% endfor %}
+    </select>
+    <button class="rounded-full bg-cobalt-600 text-white px-4 py-1.5 font-semibold hover:bg-cobalt-500">Filter</button>
+  </form>
+
+  <div class="overflow-x-auto">
+    <table class="w-full text-[12px] min-w-[720px]" data-test="daily-table">
+      <thead>
+        <tr class="text-left text-[10px] uppercase tracking-wide text-ink-300 border-b border-line bg-cobalt-50/40">
+          {% for key, label, numeric in cols %}
+          <th class="py-2.5 px-3 font-semibold{% if numeric %} text-right{% endif %}">
+            <a href="?{{ qs }}{% if qs %}&amp;{% endif %}sort={{ key }}&amp;dir={% if sort == key %}{% if dir == 'desc' %}asc{% else %}desc{% endif %}{% elif numeric %}desc{% else %}asc{% endif %}"
+               class="hover:underline" title="Sort by {{ label }}">{{ label }}{% if sort == key %}&nbsp;{% if dir == 'asc' %}&#9650;{% else %}&#9660;{% endif %}{% endif %}</a>
+          </th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-line">
+        {% for period, cells in rows %}
+          <tr class="hover:bg-cobalt-50/40 transition-colors" data-test="daily-row">
+            {% for c in cells %}
+              {% if forloop.first %}
+                <td class="py-2.5 px-3 whitespace-nowrap">
+                  {% if group == 'day' %}<a href="{% url 'dashboard_daily_detail' period|date:'Y-m-d' %}?{{ qs }}" class="text-cobalt-600 hover:underline">{{ period|date:"D d M Y" }}</a>
+                  {% elif group == 'week' %}Week of {{ period|date:"d M Y" }}{% else %}{{ period|date:"M Y" }}{% endif %}
+                </td>
+              {% elif show_ap and forloop.counter == 2 %}
+                <td class="py-2.5 px-3 text-ink-700">{{ c }}</td>
+              {% else %}
+                <td class="py-2.5 px-3 text-right tabular-nums text-ink-500">{% if c == "" %}—{% else %}{{ c }}{% endif %}</td>
+              {% endif %}
+            {% endfor %}
+          </tr>
+        {% empty %}
+          <tr><td colspan="{{ cols|length }}" class="py-6 text-center text-[11px] text-ink-300">No days match these filters.</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="border-t-2 border-line font-semibold" data-test="daily-total">
+          {% for c in total_cells %}
+            <td class="py-2.5 px-3{% if not forloop.first and not show_ap or forloop.counter > 2 %} text-right tabular-nums{% endif %}">{% if c == "" %}{% if forloop.counter > 1 %}—{% endif %}{% else %}{{ c }}{% endif %}</td>
+          {% endfor %}
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  <p class="mt-3 text-[10.5px] text-ink-300">Clicks exclude bots and test traffic. Accounts are counted on the true Zoho opening date. Active referrers in the total row are distinct over the whole range.</p>
+  {% if total_pages > 1 %}
+  <div class="flex items-center justify-between gap-3 mt-4 text-[12px] text-ink-500">
+    <span>Page {{ page }} of {{ total_pages }} &middot; {{ total_rows }} row{{ total_rows|pluralize }}</span>
+    <div class="flex items-center gap-2">
+      {% if page > 1 %}<a href="?{{ qs }}&amp;sort={{ sort }}&amp;dir={{ dir }}&amp;page={{ page|add:'-1' }}" class="rounded-full border border-line px-3 py-1.5 hover:bg-cobalt-50/40">Previous</a>{% endif %}
+      {% if page < total_pages %}<a href="?{{ qs }}&amp;sort={{ sort }}&amp;dir={{ dir }}&amp;page={{ page|add:'1' }}" class="rounded-full border border-line px-3 py-1.5 hover:bg-cobalt-50/40">Next</a>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

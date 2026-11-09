@@ -50,7 +50,7 @@ def seeded(db, settings):
 
 def _staff_user(username="csrf-tester"):
     U = get_user_model()
-    u = U.objects.create(username=username, is_staff=True, is_active=True)
+    u = U.objects.create(username=username, is_staff=True, is_superuser=True, is_active=True)
     u.set_password("x")
     u.save()
     return u

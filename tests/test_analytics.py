@@ -77,7 +77,7 @@ def _staff_client():
     from django.contrib.auth import get_user_model
 
     U = get_user_model()
-    u = U.objects.create(username="analytics-tester", is_staff=True, is_active=True)
+    u = U.objects.create(username="analytics-tester", is_staff=True, is_superuser=True, is_active=True)
     u.set_password("x")
     u.save()
     c = Client()

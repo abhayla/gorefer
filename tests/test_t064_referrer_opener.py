@@ -58,7 +58,7 @@ def seeded(db):
 def admin_client(seeded):
     User = get_user_model()
     User.objects.create_user(
-        username="admin@pifs.in", email="admin@pifs.in", password="pw12345!", is_staff=True
+        username="admin@pifs.in", email="admin@pifs.in", password="pw12345!", is_staff=True, is_superuser=True
     )
     c = Client()
     c.login(username="admin@pifs.in", password="pw12345!")

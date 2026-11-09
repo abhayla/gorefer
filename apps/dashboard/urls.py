@@ -22,6 +22,9 @@ urlpatterns = [
         views.referrer_opener_reset,
         name="dashboard_referrer_opener_reset",
     ),
+    # S2-06 daily referrals report (super-admin: all APs; AP admin: own AP only).
+    path("daily/", views.daily_report, name="dashboard_daily"),
+    path("daily/<str:day>/", views.daily_detail, name="dashboard_daily_detail"),
     # Preferences / Settings screen (Q-M-PREF / ADR-034).
     path("preferences", views.preferences, name="dashboard_preferences"),
     path(

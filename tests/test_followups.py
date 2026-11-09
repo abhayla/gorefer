@@ -499,7 +499,7 @@ def test_live_adapter_session_send_accepted_when_allowlisted(monkeypatch):
 @pytest.fixture
 def staff_client(seeded):
     user = get_user_model().objects.create_user(
-        username="admin", password="x", is_staff=True
+        username="admin", password="x", is_staff=True, is_superuser=True
     )
     c = Client()
     c.force_login(user)
