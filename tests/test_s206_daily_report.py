@@ -214,6 +214,74 @@ def test_detail_person_on_every_day_they_acted(world):
                         {"ap": str(world["a"].id), "tab": "clicks", "format": "csv"}))
     assert [(r[0], r[4], r[5], r[6]) for r in clicks[1:]] == [
         ("10:00", "WhatsApp", "Nagpur", "Mobile"), ("23:30", "Direct", "", "Mobile")]
+    # Pre-RDR-6 day: Asha's lead has no lead event with a visitor id -> all clicks + the note.
+    html = c.get("/admin-panel/daily/2026-11-01/",
+                 {"ap": str(world["a"].id), "tab": "clicks"}).content.decode()
+    assert 'data-test="clicks-note"' in html and "Clicks with no form" not in html
+
+
+def test_lead_submit_stamps_visitor_and_clicks_tab_excludes_it(db, django_capture_on_commit_callbacks):
+    """RDR-6 on the real submit path: gr_vid -> lead event visitor_id -> click excluded."""
+    import json
+
+    from apps.dashboard.daily import day_detail
+    from apps.referrals.views import VISITOR_COOKIE
+
+    t, _prog, ref = _ap("pifs", "RJ4521", "Ravi", "Kumar")
+    today = dt.datetime.now(IST).date()
+    _event(t, ref, dt.datetime.now(IST) - dt.timedelta(seconds=20), vid="vid-formed")
+    _event(t, ref, dt.datetime.now(IST) - dt.timedelta(seconds=10), vid="vid-browsing")
+    c = Client()
+    c.cookies[VISITOR_COOKIE] = "vid-formed"
+    with django_capture_on_commit_callbacks(execute=True):
+        resp = c.post("/api/leads/", data=json.dumps({
+            "client_id": "RJ4521", "name": "Rahul", "mobile": "9876543210", "consent": True}),
+            content_type="application/json")
+    assert resp.status_code == 201, resp.content
+    ev = Event.objects.get(event_type="lead_captured")
+    assert ev.visitor_id == "vid-formed" and "vid-formed" not in json.dumps(ev.metadata)
+    if today == dt.datetime.now(IST).date():  # guard the IST-midnight edge
+        d = day_detail(t, day=today)
+        assert d["clicks_exact"] is True
+        assert len(d["clicks"]) == 1  # only vid-browsing: the formed visitor is excluded
+        su = _client(_user("su", superuser=True))
+        html = su.get(f"/admin-panel/daily/{today}/", {"tab": "clicks"}).content.decode()
+        assert "Clicks with no form (1)" in html and 'data-test="clicks-note"' not in html
+
+
+def test_lead_without_cookie_leaves_visitor_null(db, django_capture_on_commit_callbacks):
+    from apps.referrals.lead_service import capture_lead
+
+    t, _prog, ref = _ap("pifs", "RJ4521", "Ravi", "Kumar")
+    with django_capture_on_commit_callbacks(execute=True):
+        capture_lead(tenant=t, referral=ref, name="N", mobile="9876543210", email="", city="",
+                     consent=True)
+    assert Event.objects.get(event_type="lead_captured").visitor_id is None
+
+
+def test_detail_stage_filter_honours_every_offered_stage(world):
+    from apps.dashboard.daily import STAGES, day_detail
+
+    a = world["a"]
+    got = {s: (len(day_detail(a, day=D1, stage=s)["people"]), len(day_detail(a, day=D1, stage=s)["clicks"]))
+           for s, _label in STAGES}
+    # D1: Asha (lead, later account) + 2 clicks. "account" keeps Asha (her account is real).
+    assert got == {"clicked": (1, 2), "landing": (1, 0), "lead": (1, 0), "account": (1, 0)}
+
+
+def test_channel_list_covers_every_configured_channel():
+    from apps.dashboard.daily import CHANNELS
+    from gorefer.flags import SHARE_CHANNEL_LABELS
+
+    assert [v for v, _ in CHANNELS] == list(SHARE_CHANNEL_LABELS.values()) + ["none"]
+
+
+def test_channel_filter_for_leads_uses_in_period_clicks_only(world):
+    from apps.dashboard.daily import report
+
+    # AP A's only WhatsApp click is on D1: a D2-only range must not tag D2's account WhatsApp.
+    assert report(world["a"], start=D2, end=D3, channel="WhatsApp")["total"]["accounts"] == 0
+    assert report(world["a"], start=D1, end=D1, channel="WhatsApp")["total"]["leads"] == 1
 
 
 # --- every pre-existing staff surface is super-admin only -------------------------
@@ -223,42 +291,75 @@ def _sample(pattern):
     return re.sub(r"<(?:str:)?[^>]+>", "AB1234", out)
 
 
+#: Ninja routers that are deliberately NOT staff-authed (public capture, signed webhooks,
+#: key-authed server-to-server). Any other router must carry StaffSessionAuth.
+_PUBLIC_API_PREFIXES = {"", "/click", "/leads", "/share", "/records-tokens", "/zoho", "/wati",
+                        "/callback-request"}
+_REPORT_NAMES = {"dashboard_login", "dashboard_logout", "dashboard_daily", "dashboard_daily_detail"}
+
+
+@pytest.fixture
+def all_flags_routed(settings):
+    """Mount every flag-gated admin route (verification pages need ENABLE_CUSTOMER_LOGIN)."""
+    import importlib
+
+    from django.urls import clear_url_caches
+
+    import apps.dashboard.urls
+    import gorefer.urls
+
+    def remount():
+        importlib.reload(apps.dashboard.urls)
+        importlib.reload(gorefer.urls)
+        clear_url_caches()
+
+    old = settings.FEATURE_FLAGS
+    settings.FEATURE_FLAGS = {**old, "ENABLE_CUSTOMER_LOGIN": True, "ENABLE_ADMIN_DASHBOARD": True}
+    remount()
+    yield
+    settings.FEATURE_FLAGS = old
+    remount()
+
+
 def _page_urls():
-    from apps.campaigns import urls as campaign_urls
-    from apps.dashboard import urls as dash_urls
+    """Every routed URL under /admin-panel/ from the ROOT urlconf (so a new page is caught)."""
+    from django.urls import get_resolver
 
     def walk(patterns, prefix):
         for p in patterns:
             if isinstance(p, URLResolver):
                 yield from walk(p.url_patterns, prefix + str(p.pattern))
             elif isinstance(p, URLPattern):
-                if p.name in ("dashboard_login", "dashboard_logout", "dashboard_daily",
-                              "dashboard_daily_detail"):
-                    continue
-                yield prefix + _sample(str(p.pattern))
+                full = prefix + str(p.pattern)
+                if full.startswith("admin-panel/") and p.name not in _REPORT_NAMES:
+                    yield "/" + _sample(full)
 
-    urls = list(walk(dash_urls.urlpatterns, "/admin-panel/"))
-    urls += list(walk(campaign_urls.urlpatterns, "/admin-panel/campaigns/"))
-    urls += ["/django-admin/", "/django-admin/tenants/stafftenantbinding/"]
-    return urls
+    urls = sorted(set(walk(get_resolver().url_patterns, "")))
+    # Django admin: one choke point (admin.site.has_permission) — index + our model page.
+    return urls + ["/django-admin/", "/django-admin/tenants/stafftenantbinding/"]
 
 
 def _api_urls():
     from api.router import api
     from apps.common.api_auth import StaffSessionAuth
 
-    out = []
+    out, unauthed = [], []
     for prefix, router in api._routers:
+        staff = isinstance(router.auth, StaffSessionAuth)
+        if prefix not in _PUBLIC_API_PREFIXES and not staff:
+            unauthed.append(prefix)
         for path, pv in router.path_operations.items():
             for op in pv.operations:
-                auths = list(op.auth_callbacks or []) + [router.auth]
-                if any(isinstance(a, StaffSessionAuth) for a in auths if a is not None):
+                if staff or any(isinstance(a, StaffSessionAuth) for a in (op.auth_callbacks or [])):
                     out.append((op.methods[0], "/api" + prefix + re.sub(r"\{[^}]+\}", "1", path)))
+    assert unauthed == [], f"staff-looking Ninja router(s) with no StaffSessionAuth: {unauthed}"
     return out
 
 
-def test_url_lists_are_not_empty():
-    assert len(_page_urls()) >= 12
+def test_url_lists_are_not_empty(all_flags_routed):
+    urls = _page_urls()
+    assert len(urls) >= 15
+    assert "/admin-panel/verifications/" in urls and "/admin-panel/campaigns/" in urls
     assert {u for _m, u in _api_urls()} >= {"/api/analytics/funnel", "/api/followups/rules"}
 
 
@@ -271,7 +372,7 @@ def _refused(c, method, url):
     )
 
 
-def test_ap_admin_and_no_role_staff_refused_on_every_existing_surface(world):
+def test_ap_admin_and_no_role_staff_refused_on_every_existing_surface(world, all_flags_routed):
     inactive = Tenant.objects.create(name="Gone", slug="gone", is_active=False)
     users = [
         _user("apa", tenant=world["a"]),

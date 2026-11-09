@@ -27,6 +27,7 @@ from apps.events.models import Event, VisitorPII
 from apps.integrations.models import Conversion
 from apps.referrals.models import Customer, Lead
 from apps.tenants.models import Tenant
+from gorefer.flags import SHARE_CHANNEL_LABELS
 
 IST = ZoneInfo(settings.TIME_ZONE)
 
@@ -37,13 +38,15 @@ SOURCES = (
     ("zoho_import", "Off-platform"),
 )
 #: Channel filter values: the stored `Event.metadata["channel"]` labels + "none" (no tag).
-CHANNELS = (("WhatsApp", "WhatsApp"), ("Telegram", "Telegram"), ("X", "X"), ("none", "None / direct"))
+#: Built from the one channel registry, so a newly configured channel is filterable at once.
+CHANNELS = tuple((label, label) for label in SHARE_CHANNEL_LABELS.values()) + (("none", "None / direct"),)
 STAGES = (
     ("clicked", "Link clicked"),
     ("landing", "Landing opened"),
     ("lead", "Lead captured"),
     ("account", "Account opened"),
 )
+_STAGE_RANK = {"clicked": 1, "landing": 2, "lead": 3, "account": 4}
 _STAGE_COLUMN = {"clicked": "clicks", "landing": "landing", "lead": "leads", "account": "accounts"}
 SORT_KEYS = ("period", "ap", "clicks", "landing", "leads", "accounts", "active_referrers", "lead_rate")
 
@@ -133,12 +136,14 @@ def _channel_q(channel: str, prefix: str = "") -> Q:
     return Q(**{f"{prefix}metadata__channel": channel})
 
 
-def _referral_clicked_on(channel: str):
-    """Leads/accounts carry no channel: attribute them to a referral link with >=1 click on
-    that channel (best effort — the link, not the person, is what is tagged)."""
+def _referral_clicked_on(channel: str, lo, hi):
+    """Leads/accounts carry no channel: attribute them to a referral link with >=1 counted
+    click on that channel INSIDE the selected period (the link, not the person, is tagged)."""
     return Exists(
-        Event.objects.filter(referral=OuterRef("referral"), event_type="click", is_bot=False)
-        .filter(_channel_q(channel))
+        Event.objects.filter(
+            referral=OuterRef("referral"), event_type="click", is_bot=False,
+            timestamp__gte=lo, timestamp__lt=hi,
+        ).exclude(synthetic_ua_q()).filter(_channel_q(channel))
     )
 
 
@@ -171,7 +176,7 @@ def _filtered(kind: str, tenant, *, lo, hi, referrer="", source="", channel=""):
         qs = qs.filter(Q(**{f"{cid}__icontains": referrer}) | Q(**{f"{cid}__in": names}))
     if channel:
         qs = qs.filter(_channel_q(channel)) if kind in ("click", "landing") else qs.filter(
-            _referral_clicked_on(channel)
+            _referral_clicked_on(channel, lo, hi)
         )
     return qs, cid
 
@@ -283,7 +288,8 @@ def day_detail(tenant=None, *, day: dt.date, referrer="", source="", channel="",
             "client_id": ident.client_id if ident else "",
             "name": ld.prospect.name, "mobile": ld.prospect.mobile, "city": ld.prospect.city,
             "source": ld.referral.source, "happened": ["Lead"],
-            "stage": "account" if ld.zoho_lead_id in converted or ld.account_opened_at else "lead",
+            # The account stage comes ONLY from a non-reversed Conversion (Zoho), never a Lead field.
+            "stage": "account" if ld.zoho_lead_id in converted else "lead",
             "zoho_status": ld.status, "referral_id": ld.referral_id,
         }
     for c in convs:
@@ -302,9 +308,9 @@ def day_detail(tenant=None, *, day: dt.date, referrer="", source="", channel="",
             "happened": ["Account opened"], "stage": "account", "zoho_status": c.status,
             "referral_id": c.referral_id,
         }
-    rows = sorted(people.values(), key=lambda r: r["t"])
-    if stage == "account":
-        rows = [r for r in rows if r["stage"] == "account"]
+    # Stage filter = "reached at least": every offered stage is honoured, none ignored.
+    want = _STAGE_RANK.get(stage, 0)
+    rows = [r for r in sorted(people.values(), key=lambda r: r["t"]) if _STAGE_RANK[r["stage"]] >= want]
     names = _names(tenant, [r["client_id"] for r in rows])
     for r in rows:
         r["referrer_name"] = names.get(r["client_id"], "")
@@ -313,6 +319,22 @@ def day_detail(tenant=None, *, day: dt.date, referrer="", source="", channel="",
 
     clicks_qs, _ = _filtered("click", tenant, lo=lo, hi=hi, **flt)
     clicks = list(clicks_qs.select_related("referral__referral_identity", "tenant").order_by("timestamp"))
+    # RDR-6: exact "clicks with no form" only when every browser-form lead that day has its
+    # visitor id on a lead event; otherwise (pre-RDR-6 days) all clicks, with a note.
+    lead_events = _scoped(Event.objects.filter(event_type="lead_captured"), tenant)
+    linked = set(
+        lead_events.filter(timestamp__gte=lo, timestamp__lt=hi, visitor_id__isnull=False)
+        .exclude(visitor_id="").values_list("referral_id", "person_ref_id")
+    )
+    day_leads = _scoped(Lead.objects.filter(deleted_at__isnull=True, created_at__gte=lo,
+                                            created_at__lt=hi, lead_source="landing"), tenant)
+    exact = all((r, p) in linked for r, p in day_leads.values_list("referral_id", "prospect_id"))
+    if exact:
+        formed = set(lead_events.filter(visitor_id__isnull=False).exclude(visitor_id="")
+                     .values_list("visitor_id", flat=True))
+        clicks = [e for e in clicks if not e.visitor_id or e.visitor_id not in formed]
+    if want > _STAGE_RANK["clicked"]:
+        clicks = []  # a click row never reaches a later stage
     vids = {e.visitor_id for e in clicks if e.visitor_id}
     city = {}
     if vids:
@@ -332,4 +354,4 @@ def day_detail(tenant=None, *, day: dt.date, referrer="", source="", channel="",
             "channel": (e.metadata or {}).get("channel") or "Direct",
             "city": city.get(e.visitor_id, "") or "", "device": _device_and_ua(e.user_agent)[0],
         })
-    return {"people": rows, "clicks": click_rows}
+    return {"people": rows, "clicks": click_rows, "clicks_exact": exact}

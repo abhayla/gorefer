@@ -31,7 +31,8 @@ logger = logging.getLogger("gorefer.leads")
 
 @transaction.atomic
 def capture_lead(*, tenant, referral: Referral, name: str, mobile: str, email: str, city: str,
-                 consent: bool, submitted_by: str = "friend", lead_source: str = "landing") -> Lead:
+                 consent: bool, submitted_by: str = "friend", lead_source: str = "landing",
+                 visitor_id: str | None = None) -> Lead:
     """Persist the prospect + lead in GoRefer (capture-first), emit lead_captured.
 
     Idempotent-ish: an existing live lead for the same (referral, normalized mobile)
@@ -41,7 +42,12 @@ def capture_lead(*, tenant, referral: Referral, name: str, mobile: str, email: s
     'whatsapp_assisted' (B4). For the assisted branch `consent=True` records the
     referrer-obtained DPDP consent, stamped with consent_captured_at. NEVER a
     password — name/mobile/email only.
+
+    `visitor_id` (S2-06 RDR-6) is the submitting browser's first-party `gr_vid` cookie,
+    stamped on the lead event so a click can be matched to its form. Not PII (ADR-018).
+    None when there is no browser (WhatsApp-assisted, smoke) or no cookie — never invented.
     """
+    visitor_id = (visitor_id or "").strip()[:64] or None
     canonical_mobile = normalize_phone(mobile)
 
     prospect, created = Prospect.objects.get_or_create(
@@ -74,6 +80,7 @@ def capture_lead(*, tenant, referral: Referral, name: str, mobile: str, email: s
                     referral=referral,
                     user_type="prospect",
                     person_ref_id=prospect.pk,
+                    visitor_id=visitor_id,
                     # No PII (Round-2 #16) — ids only.
                     metadata={"duplicate_of_lead": existing.pk,
                               "already_captured_on_referral": existing.referral_id},
@@ -102,6 +109,7 @@ def capture_lead(*, tenant, referral: Referral, name: str, mobile: str, email: s
             referral=referral,
             user_type="prospect",
             person_ref_id=prospect.pk,
+            visitor_id=visitor_id,
             metadata={},
         )
     )

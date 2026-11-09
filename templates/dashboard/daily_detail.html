@@ -16,7 +16,7 @@
     <a href="?{{ qs }}{% if qs %}&amp;{% endif %}tab=people"
        class="px-3 py-1.5 rounded-full {% if tab == 'people' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Leads &amp; accounts ({{ n_people }})</a>
     <a href="?{{ qs }}{% if qs %}&amp;{% endif %}tab=clicks"
-       class="px-3 py-1.5 rounded-full {% if tab == 'clicks' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Clicks ({{ n_clicks }})</a>
+       class="px-3 py-1.5 rounded-full {% if tab == 'clicks' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}" data-test="clicks-tab">{% if clicks_exact %}Clicks with no form{% else %}Clicks{% endif %} ({{ n_clicks }})</a>
   </div>
 
   <div class="overflow-x-auto">
@@ -42,6 +42,7 @@
     </table>
   </div>
   {% if tab == 'clicks' %}
+  {% if not clicks_exact %}<p class="mt-3 text-[11px] text-amber-700" data-test="clicks-note">Some leads this day were saved before GoRefer linked forms to clicks, so this list shows all clicks.</p>{% endif %}
   <p class="mt-3 text-[10.5px] text-ink-300">Clicks carry no name: a person is named only once they fill the form.</p>
   {% endif %}
 </section>

@@ -690,6 +690,7 @@ def daily_detail(request, day: str):
     ctx = {
         **f, "day": the_day, "tab": tab, "header": header, "table": list(zip(table, links)),
         "n_people": len(detail["people"]), "n_clicks": len(detail["clicks"]),
+        "clicks_exact": detail["clicks_exact"],
         "show_ap": show_ap, "is_super_admin": role.is_super_admin, "is_ap_admin": role.is_ap_admin,
         "scope_name": scope.name if scope is not None else "All APs",
         "qs": _filter_qs(request), "sync_health": _sync_health(scope), "nav_active": "daily",
