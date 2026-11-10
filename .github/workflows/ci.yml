@@ -10,6 +10,8 @@ on:
       # template name it lists still resolves) — a doc-only edit here can break the
       # suite, so it must never be silently skipped by the blanket docs/** ignore.
       - "!docs/integrations/WhatsApp-Template-Coverage-Matrix.md"
+      # tests/test_link_matrix_rail.py compares the link surface with this snapshot.
+      - "!docs/links/public-link-surface.txt"
       # The findings registry is checked by build_findings_registry.py --check in CI;
       # a registry-only PR must not be skipped by the blanket docs/** ignore.
       - "!docs/reviews/**"
@@ -18,6 +20,8 @@ on:
       - "**/*.md"
       - "docs/**"
       - "!docs/integrations/WhatsApp-Template-Coverage-Matrix.md"
+      # tests/test_link_matrix_rail.py compares the link surface with this snapshot.
+      - "!docs/links/public-link-surface.txt"
       - "!docs/reviews/**"
 
 # Cancel a superseded run on the same ref (e.g. a PR branch re-pushed before its
