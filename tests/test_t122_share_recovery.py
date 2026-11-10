@@ -29,6 +29,7 @@ from django.core.management import call_command
 from django.test import Client
 
 from apps.events.models import Event
+from tests.link_fallback_helpers import fell_back
 
 HUMAN = {"HTTP_USER_AGENT": "Mozilla/5.0 (Android)", "REMOTE_ADDR": "203.0.113.7"}
 BOT = {"HTTP_USER_AGENT": "WhatsApp/2.23.1", "REMOTE_ADDR": "203.0.113.7"}
@@ -97,13 +98,13 @@ def test_share_channel_recovery_records_channel_in_metadata(seeded, client):
     assert event.metadata.get("channel") == "WhatsApp"
 
 
-def test_share_channel_recovery_404s_when_flag_off(seeded, client):
+def test_share_channel_recovery_falls_back_when_flag_off(seeded, client):
     """No @pytest.mark.urls override here — exercises the REAL prod urlconf, where
     ENABLE_SHARE_INTENT defaults False, so the whole /share/ surface must not exist
     (Constitution §4: no route at all when a flag is off, not a 404 rendered page
     that happens to say 404 — the URLconf itself must not register it)."""
     resp = client.get("/share/wa/", **HUMAN)
-    assert resp.status_code == 404
+    assert fell_back(resp)
 
 
 # --- Content / compliance / CTA ---------------------------------------------

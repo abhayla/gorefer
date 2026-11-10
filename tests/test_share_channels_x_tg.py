@@ -19,6 +19,7 @@ from apps.events.models import Event
 from apps.referrals.models import ReferralIdentity
 from apps.referrals.share_intent_service import build_facebook_target
 from apps.tenants.resolve import get_bootstrap_tenant
+from tests.link_fallback_helpers import fell_back
 
 pytestmark = pytest.mark.urls("tests.urls_share_intent")
 
@@ -113,8 +114,8 @@ def test_share_without_id_uses_the_no_referrer_link(seeded, django_capture_on_co
 
 
 def test_facebook_is_held(seeded, django_capture_on_commit_callbacks):
-    assert _get("/share/fb/AB1234", django_capture_on_commit_callbacks).status_code == 404
-    assert _get("/zerodha/share/fb/AB1234", django_capture_on_commit_callbacks).status_code == 404
+    assert fell_back(_get("/share/fb/AB1234", django_capture_on_commit_callbacks))
+    assert fell_back(_get("/zerodha/share/fb/AB1234", django_capture_on_commit_callbacks))
     assert "wa.me/" in _get("/share/fb/", django_capture_on_commit_callbacks).content.decode()  # help page
     # The builder is ready for when it is switched on: link only, as Facebook requires.
     assert build_facebook_target("ignored", "https://gorefer.in/zerodha/r/fb/AB1234") == (

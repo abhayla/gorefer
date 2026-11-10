@@ -1562,3 +1562,7 @@ LINK_LANGUAGE_LABELS_DEFAULT = {
     "or": "Odia", "as": "Assamese", "ur": "Urdu", "bho": "Bhojpuri",
 }
 LINK_LANGUAGE_OTHER = "Other"
+
+# A broken public link redirects to the default account-opening link instead of showing
+# an error page (owner 2026-11-10; apps.referrals.link_fallback). False = plain 404s.
+LINK_FALLBACK_ENABLED = "link_fallback_enabled"

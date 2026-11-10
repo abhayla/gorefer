@@ -15,6 +15,7 @@ from apps.dashboard import queries
 from apps.events.models import Event
 from apps.referrals.models import Referral
 from apps.tenants.models import Tenant
+from tests.link_fallback_helpers import fell_back
 
 HUMAN = "Mozilla/5.0 (Android)"
 BOT = "facebookexternalhit/1.1"
@@ -79,8 +80,8 @@ def test_crawler_on_tagged_link_writes_nothing(seeded):
     assert not Referral.objects.filter(source="partner_direct").exists()
 
 
-def test_unknown_program_prefix_is_404(seeded):
-    assert _open("/notaprogram/open/yt/hi").status_code == 404
+def test_unknown_program_prefix_falls_back(seeded):
+    assert fell_back(_open("/notaprogram/open/yt/hi"))
 
 
 @pytest.mark.django_db(transaction=True)

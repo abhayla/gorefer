@@ -140,6 +140,8 @@ MIDDLEWARE = [
     # Resolves the active tenant (Sprint 1: the single bootstrap tenant PIFS) and
     # stashes it on the request for tenant-scoped writes.
     "apps.tenants.middleware.TenantResolutionMiddleware",
+    # A broken public link goes to the default account-opening link, never an error page.
+    "apps.referrals.link_fallback.LinkFallbackMiddleware",
 ]
 
 ROOT_URLCONF = "gorefer.urls"

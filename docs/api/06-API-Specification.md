@@ -259,6 +259,17 @@ Both routes are public (no login), rate-limited (`check_rate("og_card", client_i
 - The bare forms (`/open/yt/hi`) and the program-prefixed forms (`/zerodha/open/yt/hi`) behave identically (§4.2a).
 - **Clicks only.** An opened account arrives from the CRM with no channel or language, so per-language *account* counts do not exist; the admin dashboard card "Partner link clicks by source" reports clicks and approximate visitors per (channel, language) and claims no conversion.
 
+### 4.2-fallback Broken links never show an error page (owner decision 2026-11-10, SPEC CHANGE)
+
+**Rule.** Any public `GET` that would answer `404` is redirected (`302`) to the default account-opening link — `/{program}/open`, or bare `/open` when the program has no link word — which then behaves exactly as §4.2 (click recorded on the partner-direct journey, visitor sent to the partner). This **supersedes every "→ 404" stated for a public link elsewhere in this document**: an unknown program word, an unknown or unserved channel, a share route that is not registered, a mistyped path.
+
+- **Repair first.** If the path as typed matches no route, the same path lower-cased and without a trailing slash is tried; when that is a route the visitor is redirected there instead, so `/Zerodha/Open/YT/HI/` reaches `/zerodha/open/yt/hi` and keeps its tags (§4.2-tags). The query string is preserved on a repair and dropped on a fallback.
+- **The fallback itself writes nothing** and builds no partner URL; it only redirects to the default link.
+- **Still a real `404`:** non-`GET` requests; paths under `api`, `admin-panel`, `django-admin`, `static`, `media`, `og`, `d`, `privacy`, `login`, `my`, `hub`, `rr`; and file-like paths whose last segment contains a dot (`/wp-login.php`, `/.env`, `/favicon.ico`) so scanners are not counted as link clicks.
+- **Not covered:** the Kite ID pop-up (§4.1a, a page, not an error), `429` rate limiting, the `503 PARTNER_UNAVAILABLE` page (no program is configured, so there is no destination to fall back to) and a server `500`.
+- **Switch:** cascade key `link_fallback_enabled` (default `true`); `false` restores plain `404`s.
+- A fallback click is counted as an untagged ("Direct") partner-link click; each one is logged with the broken path (`gorefer.redirect`, "broken link … -> …").
+
 ### 4.2a Program-prefixed twins — `GET /{program}/open`, `GET /{program}/r/...`, `GET /{program}/share/...` (owner decision 2026-10-29)
 
 Every public link in §4.1–§4.2 also answers under the program's link word, so a shared link names the partner (GoRefer is not Zerodha-only):
