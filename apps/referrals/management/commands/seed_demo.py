@@ -73,8 +73,19 @@ FEATURED_CLICKS = [
 class Command(BaseCommand):
     help = "Seed demo journeys + events + rollups (no conversions — Zoho-only). Demo only."
 
-    @transaction.atomic
     def handle(self, *args, **options):
+        seeded = self._seed()
+        if seeded is None:
+            return
+        # After the commit: the ingest marks conversion days dirty on commit.
+        recomputed = recompute_dirty()
+        self.stdout.write(self.style.SUCCESS(
+            f"Demo seeded: {len(DEMO_REFERRERS)} referrers + partner-direct; "
+            f"{seeded} Zoho-sourced conversion(s); {recomputed} rollup period(s)."
+        ))
+
+    @transaction.atomic
+    def _seed(self):
         tenant = get_bootstrap_tenant()
         program = ReferralProgram.objects.for_tenant(tenant).filter(status="active").first()
         if program is None:
@@ -86,12 +97,7 @@ class Command(BaseCommand):
             self._seed_journey(tenant, program, client_id, clicks, landing, redirect, lead)
 
         self._seed_partner_direct(tenant, program)
-        conversions = self._seed_conversions(tenant)
-        recomputed = recompute_dirty()
-        self.stdout.write(self.style.SUCCESS(
-            f"Demo seeded: {len(DEMO_REFERRERS)} referrers + partner-direct; "
-            f"{conversions} Zoho-sourced conversion(s); {recomputed} rollup period(s)."
-        ))
+        return self._seed_conversions(tenant)
 
     def _seed_conversions(self, tenant):
         """Seed demo conversions THROUGH the Zoho ingest path (never an internal

@@ -11,16 +11,21 @@ import gorefer.urls
 
 
 @pytest.fixture
-def demo(db):
+def demo(db, apply_rollup_marks):
     call_command("seed_program")
-    call_command("seed_demo")
+    # The ingest marks conversion days dirty ON COMMIT; this test never commits.
+    with apply_rollup_marks():
+        call_command("seed_demo")
+    from apps.events.rollups import recompute_dirty as _recompute
+
+    _recompute()
 
 
 @pytest.fixture
 def admin_client(demo):
     User = get_user_model()
     User.objects.create_user(
-        username="admin@pifs.in", email="admin@pifs.in", password="pw12345!", is_staff=True
+        username="admin@pifs.in", email="admin@pifs.in", password="pw12345!", is_staff=True, is_superuser=True
     )
     c = Client()
     c.login(username="admin@pifs.in", password="pw12345!")
@@ -169,7 +174,7 @@ def test_explorer_referrer_column_shows_name_when_known():
                   "last_name": "Kumar", "mobile": "9998887777"},
     )
     User = get_user_model()
-    User.objects.create_user(username="a@b.in", password="pw12345!", is_staff=True)
+    User.objects.create_user(username="a@b.in", password="pw12345!", is_staff=True, is_superuser=True)
     c = Client()
     c.login(username="a@b.in", password="pw12345!")
     html = c.get("/admin-panel/explorer/?source=referral_link").content.decode()
@@ -339,7 +344,7 @@ def test_journey_detail_shows_timeline_and_conversion(admin_client):
 def test_recent_leads_mask_mobile():
     call_command("seed_program")
     User = get_user_model()
-    User.objects.create_user(username="a@b.in", password="pw12345!", is_staff=True)
+    User.objects.create_user(username="a@b.in", password="pw12345!", is_staff=True, is_superuser=True)
     c = Client()
     # capture a lead so it appears in recent leads
     c.get("/r/RJ4521", HTTP_USER_AGENT="Mozilla/5.0")
@@ -404,7 +409,7 @@ def test_login_page_does_not_loop_for_authenticated_non_staff(program):
 def test_login_page_still_redirects_authenticated_staff(program):
     User = get_user_model()
     User.objects.create_user(
-        username="admin@pifs.in", email="admin@pifs.in", password="pw12345!", is_staff=True
+        username="admin@pifs.in", email="admin@pifs.in", password="pw12345!", is_staff=True, is_superuser=True
     )
     c = Client()
     c.login(username="admin@pifs.in", password="pw12345!")

@@ -65,7 +65,7 @@ def refresh_and_freshness(tenant=None):
 
     from apps.events.rollups import recompute_dirty
 
-    recompute_dirty(limit=DASHBOARD_RECOMPUTE_LIMIT)
+    recompute_dirty(limit=DASHBOARD_RECOMPUTE_LIMIT, wait=False)  # never block a page-load
     qs = DailyMetric.objects.all()
     if tenant is not None:
         qs = qs.for_tenant(tenant)

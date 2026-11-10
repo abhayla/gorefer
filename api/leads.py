@@ -16,6 +16,7 @@ from apps.common.ratelimit import RateLimited, check_rate, client_ip
 from apps.referrals.lead_service import capture_lead
 from apps.referrals.models import ReferralIdentity
 from apps.referrals.validators import InvalidClientId, validate_client_id
+from apps.referrals.views import VISITOR_COOKIE
 from apps.tenants.resolve import get_current_tenant
 
 router = Router()
@@ -83,6 +84,8 @@ def create_lead(request, payload: LeadIn):
         city=(payload.city or "").strip(),
         consent=payload.consent,
         submitted_by=payload.submitted_by,
+        # S2-06 RDR-6: link the form to the browser's clicks (missing cookie -> None).
+        visitor_id=request.COOKIES.get(VISITOR_COOKIE),
     )
     # The page follows continue_url to trigger the server-side 302 (M2 engine).
     return {"lead_id": lead.pk, "status": lead.status, "continue_url": f"/r/{client_id}/continue"}

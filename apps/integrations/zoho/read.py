@@ -171,6 +171,10 @@ class ZohoReferrerRow:
     name: str = ""
     language: str = ""
     record_created_at: datetime | None = None
+    # The client's broker on this Zoho record (`Account_Type`: Zerodha, AngelOne,
+    # Upstox, ...). Zoho fills the Referrers module from EVERY broker's Contacts, so the
+    # preview card's name rule filters on this (owner 2026-11-03). Blank = unknown.
+    account_type: str = ""
 
 
 @dataclass
@@ -408,7 +412,7 @@ class LiveZohoReadAdapter:
             resp = self.http.get(
                 "/crm/v8/Referrers",
                 params={
-                    "fields": "Client_Id,Mobile,Name,Created_Time",
+                    "fields": "Client_Id,Mobile,Name,Created_Time,Account_Type",
                     "per_page": _REFERRERS_PAGE_SIZE,
                     "page": page,
                     "sort_by": "Created_Time",
@@ -428,6 +432,7 @@ class LiveZohoReadAdapter:
                         name=(raw.get("Name") or "").strip(),
                         language="",  # no Language field on this module today
                         record_created_at=_parse_zoho_datetime(created),
+                        account_type=(raw.get("Account_Type") or "").strip(),
                     )
                 )
             info = (resp or {}).get("info") or {}
@@ -586,17 +591,17 @@ _DEMO_REFERRED = {
 _DEMO_REFERRER_AUDIENCE = [
     {
         "client_id": "RJ4521", "mobile": "9876504321", "name": "Rajesh Joshi",
-        "language": "", "record_created_at": datetime(2026, 3, 12, 10, 0, 0),
+        "language": "", "account_type": "Zerodha", "record_created_at": datetime(2026, 3, 12, 10, 0, 0),
     },
     {
         "client_id": "DA1707", "mobile": "9876504322", "name": "Amit Deshpande",
-        "language": "", "record_created_at": datetime(2026, 6, 1, 9, 30, 0),
+        "language": "", "account_type": "Zerodha", "record_created_at": datetime(2026, 6, 1, 9, 30, 0),
     },
     {
         # A real-shape edge case: Mobile blank on the Zoho side (seen live on
         # FWW808/XJ9068) — the sync must still upsert the row, just unmessageable.
         "client_id": "FWW808", "mobile": "", "name": "FWW808",
-        "language": "", "record_created_at": datetime(2026, 7, 26, 20, 55, 16),
+        "language": "", "account_type": "Zerodha", "record_created_at": datetime(2026, 7, 26, 20, 55, 16),
     },
 ]
 

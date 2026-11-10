@@ -1,4 +1,7 @@
-"""One-tap WhatsApp share link carries the plain open link (owner 2026-11-04).
+"""One-tap WhatsApp share link: PR #197 rules that still hold (owner 2026-11-04).
+
+The message text itself is now the two-step text; see test_onetap_whatsapp_two_step.py for
+the byte-exact A-D tests. This file keeps the surrounding behaviour pinned.
 
 Only `/{prefix}/share/wa/{client_id}` (and bare `/share/wa/{client_id}`) changed. Its
 message now has its own English text, the program's plain no-referrer link
@@ -31,19 +34,21 @@ SHARE_URLS = pytest.mark.urls("tests.urls_share_intent")
 
 OPEN_LINK = "https://gorefer.in/zerodha/open"
 DISCLOSURE = "*Disclosures:*\nhttps://gorefer.in/d/pifs"
-EXPECTED_EN = (
-    "*Open a free Zerodha account online:*\n"
-    "https://gorefer.in/zerodha/open\n\n"
-    "*Keep ready:*\n"
-    "PAN, Aadhaar-linked mobile number, bank details, Cancelled Cheque or Passbook, "
-    "Picture of your Signature\n\n"
-    "*How-to-Open Zerodha Account video:*\n"
-    "https://www.youtube.com/watch?v=JTZ-ebu2vyA\n\n"
-    "Investments in securities market are subject to market risks, read all the related "
-    "documents carefully before investing.\n\n"
-    "*Disclosures:*\n"
-    "https://gorefer.in/d/pifs"
-)
+_TAIL = "\n\n" + DISCLOSURE
+
+
+def _expected(register_link: str) -> str:
+    """The approved English two-step text for a given step-1 link."""
+    return (
+        prefkeys.SHARE_ONETAP_WA_MESSAGE_DEFAULT.format(
+            register_link=register_link, open_link=OPEN_LINK, program_brand="Zerodha", link=OPEN_LINK
+        )
+        + _TAIL
+    )
+
+
+EXPECTED_EN = _expected(f"https://gorefer.in/zerodha/r/wa/{CID}")
+EXPECTED_NOID = _expected("https://gorefer.in/r/wa")
 
 
 @pytest.fixture
@@ -75,13 +80,13 @@ def _identity(tenant, client_id=CID):
 @SHARE_URLS
 @pytest.mark.parametrize("path", [f"/share/wa/{CID}", f"/zerodha/share/wa/{CID}"])
 def test_one_tap_whatsapp_message_is_the_approved_text(tenant, django_capture_on_commit_callbacks, path):
-    """Rows J1.1 / J3.3: exact approved message, plain open link, no referrer id in it."""
+    """Rows J1.1 / J3.3: the approved two-step message with the referrer's own register link."""
     resp = _get(path, django_capture_on_commit_callbacks)
     assert resp.status_code == 302
     assert resp.headers["Location"].startswith("https://wa.me/?text=")
     text = _text(resp)
     assert text == EXPECTED_EN
-    assert CID not in text and "ZMPHZC" not in text
+    assert "ZMPHZC" not in text
 
 
 @SHARE_URLS
@@ -116,18 +121,19 @@ def test_referrer_opener_keeps_its_place_with_the_new_link(tenant, django_captur
 
 
 @SHARE_URLS
-def test_hindi_keeps_its_wording_with_the_new_link_and_disclosure(tenant, django_capture_on_commit_callbacks):
-    """Row J3.2 / decision D3."""
+def test_hindi_uses_its_own_two_step_text(tenant, django_capture_on_commit_callbacks):
+    """Row J3.2: Hindi has its own two-step text (replaces D3 for the one-tap message)."""
     text = _text(_get(f"/share/wa/{CID}?lang=hi", django_capture_on_commit_callbacks))
-    assert text == f"एक मुफ़्त Zerodha खाता खोलें — मेरा रेफ़रल लिंक:\n{OPEN_LINK}\n\n{DISCLOSURE}"
+    assert text.startswith("*Zerodha खाता खोलने के लिए ये स्टेप्स फ़ॉलो करें*\n\n*स्टेप 1 - अपनी जानकारी रजिस्टर करें*\n")
+    assert text.endswith(_TAIL)
 
 
 @SHARE_URLS
 @pytest.mark.parametrize("path", ["/share/wa/KITEID?skip=1", "/zerodha/share/wa/?skip=1"])
-def test_share_without_my_id_sends_the_same_message(tenant, django_capture_on_commit_callbacks, path):
-    """Row J3.7 / decision D1: same text and link; nobody credited; no referrer created."""
+def test_share_without_my_id_uses_no_id_register_link(tenant, django_capture_on_commit_callbacks, path):
+    """Row J3.7 / decision D1: same message; step 1 is /r/wa; nobody credited; no referrer created."""
     text = _text(_get(path, django_capture_on_commit_callbacks))
-    assert text == EXPECTED_EN
+    assert text == EXPECTED_NOID
     event = Event.objects.get(event_type="share_intent")
     assert event.referral.referral_identity is None
     assert event.metadata == {"channel": "WhatsApp", "without_id": True}
@@ -139,7 +145,9 @@ def test_kite_id_typed_in_the_pop_up_leads_to_the_new_message(tenant, django_cap
     """Row J3.6."""
     resp = _get("/share/wa/KITEID?kite_id=AB1234", django_capture_on_commit_callbacks)
     assert resp.headers["Location"] == "/zerodha/share/wa/AB1234"
-    assert _text(_get("/zerodha/share/wa/AB1234", django_capture_on_commit_callbacks)) == EXPECTED_EN
+    assert _text(_get("/zerodha/share/wa/AB1234", django_capture_on_commit_callbacks)) == _expected(
+        "https://gorefer.in/zerodha/r/wa/AB1234"
+    )
 
 
 @SHARE_URLS
@@ -156,9 +164,11 @@ def test_a_preview_bot_gets_the_target_and_nothing_is_recorded(tenant, django_ca
 
 @SHARE_URLS
 def test_switch_back_to_the_referrer_link_without_a_deploy(tenant, django_capture_on_commit_callbacks):
+    """Rollback path: with the old single-{link} text pasted back, the link choice still works."""
+    set_tenant(prefkeys.SHARE_ONETAP_WA_MESSAGE, "Join: {link}", tenant_id=tenant.id)
     set_tenant(prefkeys.SHARE_ONETAP_WA_LINK, "referrer", tenant_id=tenant.id)
     text = _text(_get(f"/share/wa/{CID}", django_capture_on_commit_callbacks))
-    assert text == EXPECTED_EN.replace(OPEN_LINK, f"https://gorefer.in/zerodha/r/wa/{CID}")
+    assert text == f"Join: https://gorefer.in/zerodha/r/wa/{CID}\n\n{DISCLOSURE}"
 
 
 @SHARE_URLS
@@ -180,7 +190,7 @@ def test_disclosure_without_its_link_falls_back(tenant, django_capture_on_commit
 def test_seeded_defaults_are_the_approved_values(tenant):
     assert resolve(prefkeys.SHARE_ONETAP_WA_LINK, tenant_id=tenant.id) == "open"
     assert resolve(prefkeys.SHARE_ONETAP_WA_DISCLOSURE, tenant_id=tenant.id) == "*Disclosures:*\n{url}"
-    assert "{link}" in resolve(prefkeys.SHARE_ONETAP_WA_MESSAGE, tenant_id=tenant.id)
+    assert "{register_link}" in resolve(prefkeys.SHARE_ONETAP_WA_MESSAGE, tenant_id=tenant.id)
 
 
 def test_preferences_screen_saves_and_refuses_like_the_shared_message(tenant):
@@ -192,9 +202,9 @@ def test_preferences_screen_saves_and_refuses_like_the_shared_message(tenant):
         prefkeys.SHARE_ONETAP_WA_DISCLOSURE: "Missing the url",
     })
     assert resolve(prefkeys.SHARE_ONETAP_WA_LINK, tenant_id=tenant.id) == "referrer"
-    assert any("One-tap WhatsApp message" in n and "{link}" in n for n in notices)
+    assert any("One-tap WhatsApp message" in n and "{register_link}" in n for n in notices)
     assert any("One-tap WhatsApp disclosure line" in n and "{url}" in n for n in notices)
-    assert "{link}" in resolve(prefkeys.SHARE_ONETAP_WA_MESSAGE, tenant_id=tenant.id)
+    assert "{register_link}" in resolve(prefkeys.SHARE_ONETAP_WA_MESSAGE, tenant_id=tenant.id)
     assert "{url}" in resolve(prefkeys.SHARE_ONETAP_WA_DISCLOSURE, tenant_id=tenant.id)
 
     save_preferences(tenant, {prefkeys.SHARE_ONETAP_WA_LINK: "open",

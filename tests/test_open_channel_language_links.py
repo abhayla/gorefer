@@ -92,7 +92,9 @@ def test_dashboard_splits_partner_link_clicks_by_channel_and_language(seeded):
     rows = {(r["channel"], r["language"]): r["clicks"] for r in found}
     assert rows == {("YouTube", "Hindi"): 2, ("YouTube", "Marathi"): 1, ("Direct", ""): 1}
 
-    get_user_model().objects.create_user(username="a@pifs.in", password="pw12345!", is_staff=True)
+    get_user_model().objects.create_user(
+        username="a@pifs.in", password="pw12345!", is_staff=True, is_superuser=True
+    )
     c = Client()
     c.login(username="a@pifs.in", password="pw12345!")
     html = c.get("/admin-panel/").content.decode()

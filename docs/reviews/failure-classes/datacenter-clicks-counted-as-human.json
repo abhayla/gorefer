@@ -1,0 +1,24 @@
+{
+  "slug": "datacenter-clicks-counted-as-human",
+  "title": "Datacenter and crawler clicks counted as human",
+  "class_symptom": "A bot filter that looks only at the User-Agent counts every crawler or link scanner that sends a browser User-Agent as a human click.",
+  "mechanism": "ADR-019 classifies bots by UA string alone; scanners and preview fetchers on datacenter networks present ordinary browser UAs, so they pass as non-bot visitors.",
+  "first_seen": {
+    "date": "2026-11-04",
+    "evidence": [
+      "Offline ASN lookup of stored click IPs on prod: 306 of 673 non-bot clicks came from datacenter or crawler networks.",
+      "Partner-direct: 220 of 422. Referral: 86 of 251. India home/mobile networks: 326.",
+      "Top networks: Facebook, Hetzner, WHG, Apple AS714, OVH, Hostinger, Google Cloud, Brandwatch."
+    ]
+  },
+  "measurements": [
+    "673 non-bot clicks classified by ASN of the stored click IP: 306 datacenter/crawler, 326 India home/mobile (remainder unclassified).",
+    "Split by link type: partner-direct 220/422 datacenter, referral 86/251 datacenter."
+  ],
+  "detection": {
+    "status": "unguarded",
+    "check": "Context, the fix (not a recurrence detector): PR #198 apps/events/netranges.py classifies known datacenter ranges on the live click path, and the reclassify_datacenter_clicks command repairs stored rows. Merged as 844e3f8.",
+    "reason": "fix covers known networks; no detector flags a new crawler network passing as human (e.g. a periodic report of non-bot clicks from hosting ASNs not in the table)"
+  },
+  "related": ["PR #198", "commit 844e3f8", "ADR-019 amendment"]
+}

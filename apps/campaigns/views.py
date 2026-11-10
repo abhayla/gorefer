@@ -11,13 +11,13 @@ logic, and no import from `apps/integrations/**`.
 """
 from __future__ import annotations
 
-from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_http_methods
 
+from apps.tenants.access import super_admin_required
 from apps.tenants.resolve import get_current_tenant
 
 from .models import (
@@ -28,15 +28,8 @@ from .models import (
     days_mask_from_codes,
 )
 
-
-def _staff_required(view):
-    """Gate a view behind login + is_staff — mirrors apps.dashboard.views._staff_required
-    (kept local rather than imported to avoid a dashboard<->campaigns import coupling
-    for a two-line helper)."""
-    return login_required(
-        user_passes_test(lambda u: u.is_staff, login_url="dashboard_login")(view),
-        login_url="dashboard_login",
-    )
+#: S2-06: super-admin only — the same shared gate as every admin page.
+_staff_required = super_admin_required
 
 
 def _campaign_or_404(tenant, campaign_id: int) -> MessagingCampaign:

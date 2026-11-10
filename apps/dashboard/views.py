@@ -7,14 +7,15 @@ Zerodha URL / partner code in any response (#3). PII (mobile) masked for display
 from __future__ import annotations
 
 from django.conf import settings
-from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.views import LoginView
 from django.http import Http404
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_GET, require_http_methods
 
 from apps.referrals.models import Referral
 from apps.referrals.validators import InvalidClientId, validate_client_id
+from apps.tenants.access import report_access_required, resolve_role, super_admin_required
 from apps.tenants.resolve import get_current_tenant
 
 from . import preferences_service, profile, queries
@@ -24,12 +25,10 @@ from . import preferences_service, profile, queries
 _EVIDENCE_EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 
 
-def _staff_required(view):
-    """Gate a view behind login + is_staff (admin-only, Sprint 1)."""
-    return login_required(
-        user_passes_test(lambda u: u.is_staff, login_url="dashboard_login")(view),
-        login_url="dashboard_login",
-    )
+#: S2-06: every pre-existing admin page is SUPER-ADMIN only (the one shared gate,
+#: apps.tenants.access) — these pages resolve the tenant from the domain, so an AP admin
+#: here could read another AP's data.
+_staff_required = super_admin_required
 
 
 class DashboardLoginView(LoginView):
@@ -51,7 +50,7 @@ class DashboardLoginView(LoginView):
     template_name = "dashboard/login.html"
 
     def dispatch(self, request, *args, **kwargs):
-        if request.user.is_authenticated and request.user.is_staff:
+        if request.user.is_authenticated and resolve_role(request.user).kind != "denied":
             redirect_to = self.get_success_url()
             if redirect_to == request.path:
                 # Same guard stock LoginView.dispatch uses — an infinite loop here
@@ -66,8 +65,20 @@ class DashboardLoginView(LoginView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         user = self.request.user
-        ctx["signed_in_non_staff"] = user.is_authenticated and not user.is_staff
+        ctx["signed_in_non_staff"] = (
+            user.is_authenticated and resolve_role(user).kind == "denied"
+        )
         return ctx
+
+    def get_success_url(self):
+        # S2-06: an AP admin can open only the daily report — land there, never on a
+        # super-admin page (which would bounce back here: a redirect loop).
+        url = super().get_success_url()
+        if resolve_role(self.request.user).is_ap_admin and not url.startswith(
+            reverse("dashboard_daily")
+        ):
+            return reverse("dashboard_daily")
+        return url
 
     def _lock_key(self):
         from apps.common.ratelimit import client_ip
@@ -485,3 +496,204 @@ def preferences_partnership(request):
 
 # Expose whether the dashboard is enabled (feature flag) to urls.
 DASHBOARD_ENABLED = getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_ADMIN_DASHBOARD", True)
+
+
+# ---------------------------------------------------------------- S2-06 daily report
+_DAILY_KEEP = ("preset", "from", "to", "ap", "split", "referrer", "source", "channel", "stage",
+               "min_leads", "group")
+
+
+def _daily_scope(request, role):
+    """(tenant scope, AP choices, selected AP id, split). For an AP admin the request is
+    NEVER read for scope: the binding is the whole answer."""
+    from apps.tenants.models import Tenant
+
+    if role.is_ap_admin:
+        return role.tenant, [], "", False
+    tenants = list(Tenant.objects.order_by("name"))
+    ap = request.GET.get("ap", "")
+    chosen = next((t for t in tenants if str(t.id) == ap), None)
+    return chosen, tenants, (str(chosen.id) if chosen else ""), request.GET.get("split") == "1"
+
+
+def _daily_filters(request, scope):
+    import datetime as dt
+
+    from . import daily
+
+    g = request.GET
+    presets = daily.presets(scope)
+    preset = g.get("preset", "")
+
+    def _d(v):
+        try:
+            return dt.date.fromisoformat(v)
+        except (TypeError, ValueError):
+            return None
+
+    start, end = _d(g.get("from")), _d(g.get("to"))
+    if start and end:
+        preset = ""
+        start, end = min(start, end), max(start, end)
+    else:
+        preset = preset if preset in presets else daily.default_preset(scope)
+        start, end = daily.preset_range(preset)
+    try:
+        min_leads = max(0, int(g.get("min_leads") or 0))
+    except ValueError:
+        min_leads = 0
+
+    def pick(name, allowed):
+        v = g.get(name, "")
+        return v if v in allowed else ""
+
+    return {
+        "preset": preset, "presets": [(p, daily.PRESET_LABELS[p]) for p in presets],
+        "start": start, "end": end, "min_leads": min_leads,
+        "referrer": g.get("referrer", "")[:64],
+        "source": pick("source", dict(daily.SOURCES)),
+        "channel": pick("channel", dict(daily.CHANNELS)),
+        "stage": pick("stage", dict(daily.STAGES)),
+        "group": pick("group", daily.GROUPS) or "day",
+    }
+
+
+def _csv_cell(v):
+    """CSV-injection guard: a cell a spreadsheet would run as a formula is quoted as text."""
+    s = "" if v is None else str(v)
+    return "'" + s if s[:1] in ("=", "+", "-", "@", "\t", "\r") else s
+
+
+def _csv_response(filename, header, rows):
+    import csv
+
+    from django.http import HttpResponse
+
+    resp = HttpResponse(content_type="text/csv; charset=utf-8")
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+    w = csv.writer(resp)
+    w.writerow(header)
+    for r in rows:
+        w.writerow([_csv_cell(c) for c in r])
+    return resp
+
+
+def _filter_qs(request, drop=()):
+    q = request.GET.copy()
+    for k in list(q.keys()):
+        if k not in _DAILY_KEEP or k in drop:
+            del q[k]
+    return q.urlencode()
+
+
+@report_access_required
+@require_GET
+def daily_report(request):
+    from . import daily
+
+    role = request.admin_role
+    scope, ap_choices, ap_selected, split = _daily_scope(request, role)
+    f = _daily_filters(request, scope)
+    sort = request.GET.get("sort", "period")
+    sort = sort if sort in daily.SORT_KEYS and (sort != "ap" or split) else "period"
+    direction = "asc" if request.GET.get("dir") == "asc" else "desc"
+    result = daily.report(
+        scope, start=f["start"], end=f["end"], group=f["group"], split_by_ap=split,
+        referrer=f["referrer"], source=f["source"], channel=f["channel"], stage=f["stage"],
+        min_leads=f["min_leads"], sort=sort, direction=direction,
+    )
+    show_ap = role.is_super_admin and split
+    cols = [("period", "Period", False)] + ([("ap", "AP", False)] if show_ap else []) + [
+        ("clicks", "Clicks", True), ("landing", "Landing opens", True), ("leads", "Leads", True),
+        ("accounts", "Accounts opened", True), ("active_referrers", "Active referrers", True),
+        ("lead_rate", "Lead rate %", True),
+    ]
+    keys = [c[0] for c in cols]
+    tot = result["total"]
+    total_cells = ["Total"] + ([""] if show_ap else []) + [
+        "" if tot[k] is None else tot[k] for k in keys[2 if show_ap else 1:]
+    ]
+    if request.GET.get("format") == "csv":
+        body = [["" if r[k] is None else r[k] for k in keys] for r in result["rows"]]
+        return _csv_response(
+            f"referrals-{f['start']}-to-{f['end']}.csv", [c[1] for c in cols], body + [total_cells]
+        )
+    rows = result["rows"]
+    size = daily.page_size(scope)
+    try:
+        page = max(1, int(request.GET.get("page", 1)))
+    except ValueError:
+        page = 1
+    total_pages = max(1, -(-len(rows) // size)) if size > 0 else 1
+    page = min(page, total_pages)
+    shown = rows[(page - 1) * size: page * size] if size > 0 else rows
+    ctx = {
+        **f, "cols": cols, "show_ap": show_ap, "total_cells": total_cells,
+        "rows": [(r["period"], ["" if r[k] is None else r[k] for k in keys]) for r in shown],
+        "is_super_admin": role.is_super_admin, "is_ap_admin": role.is_ap_admin,
+        "scope_name": scope.name if scope is not None else "All APs",
+        "ap_choices": ap_choices, "ap_selected": ap_selected, "split": split,
+        "sources": daily.SOURCES, "channels": daily.CHANNELS, "stages": daily.STAGES,
+        "groups": daily.GROUPS, "sort": sort, "dir": direction,
+        "page": page, "total_pages": total_pages, "total_rows": len(rows),
+        "qs": _filter_qs(request), "sync_health": _sync_health(scope), "nav_active": "daily",
+    }
+    return render(request, "dashboard/daily.html", ctx)
+
+
+@report_access_required
+@require_GET
+def daily_detail(request, day: str):
+    import datetime as dt
+
+    from . import daily
+
+    try:
+        the_day = dt.date.fromisoformat(day)
+    except ValueError:
+        raise Http404("bad date") from None
+    role = request.admin_role
+    scope, ap_choices, ap_selected, _split = _daily_scope(request, role)
+    f = _daily_filters(request, scope)
+    detail = daily.day_detail(
+        scope, day=the_day, referrer=f["referrer"], source=f["source"],
+        channel=f["channel"], stage=f["stage"],
+    )
+    tab = "clicks" if request.GET.get("tab") == "clicks" else "people"
+    show_ap = role.is_super_admin
+    source_label = dict(daily.SOURCES)
+    stage_label = {"lead": "Lead", "account": "Account opened"}
+    ap = (lambda r: [r["ap"]]) if show_ap else (lambda r: [])
+    if tab == "people":
+        header = ["Time"] + (["AP"] if show_ap else []) + [
+            "Referrer ID", "Referrer name", "Name", "Mobile", "City", "Source",
+            "What happened", "Furthest stage", "Zoho status"]
+        table = [
+            [r["t"].strftime("%H:%M")] + ap(r) + [
+                r["client_id"], r["referrer_name"], r["name"], r["mobile"], r["city"],
+                source_label.get(r["source"], r["source"]), r["happened"],
+                stage_label.get(r["stage"], r["stage"]), r["zoho_status"]]
+            for r in detail["people"]
+        ]
+        # The journey page is super-admin only: link it only for a super-admin (no dead link).
+        links = [r["referral_id"] if show_ap else None for r in detail["people"]]
+    else:
+        header = ["Time"] + (["AP"] if show_ap else []) + [
+            "Referrer ID", "Referrer name", "Channel", "City", "Device"]
+        table = [
+            [r["t"].strftime("%H:%M")] + ap(r) + [
+                r["client_id"], r["referrer_name"], r["channel"], r["city"], r["device"]]
+            for r in detail["clicks"]
+        ]
+        links = [None] * len(table)
+    if request.GET.get("format") == "csv":
+        return _csv_response(f"referrals-{the_day}-{tab}.csv", header, table)
+    ctx = {
+        **f, "day": the_day, "tab": tab, "header": header, "table": list(zip(table, links)),
+        "n_people": len(detail["people"]), "n_clicks": len(detail["clicks"]),
+        "clicks_exact": detail["clicks_exact"],
+        "show_ap": show_ap, "is_super_admin": role.is_super_admin, "is_ap_admin": role.is_ap_admin,
+        "scope_name": scope.name if scope is not None else "All APs",
+        "qs": _filter_qs(request), "sync_health": _sync_health(scope), "nav_active": "daily",
+    }
+    return render(request, "dashboard/daily_detail.html", ctx)

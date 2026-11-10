@@ -12,9 +12,14 @@ from apps.referrals.models import Referral, ReferralProgram
 
 
 @pytest.fixture
-def demo(db):
+def demo(db, apply_rollup_marks):
     call_command("seed_program")
-    call_command("seed_demo")
+    # The ingest marks conversion days dirty ON COMMIT; this test never commits.
+    with apply_rollup_marks():
+        call_command("seed_demo")
+    from apps.events.rollups import recompute_dirty as _recompute
+
+    _recompute()
 
 
 def _tenant():
@@ -72,7 +77,7 @@ def _staff_client():
     from django.contrib.auth import get_user_model
 
     U = get_user_model()
-    u = U.objects.create(username="analytics-tester", is_staff=True, is_active=True)
+    u = U.objects.create(username="analytics-tester", is_staff=True, is_superuser=True, is_active=True)
     u.set_password("x")
     u.save()
     c = Client()
@@ -231,7 +236,7 @@ def test_conversion_opened_on_the_1st_ist_counts_in_that_month(demo):
 
 # --- OQ2b (owner ruling 2026-08-01, option A): unattributed conversions still roll up ---
 
-def test_unattributed_conversion_counts_under_the_program_on_its_true_date(demo):
+def test_unattributed_conversion_counts_under_the_program_on_its_true_date(demo, apply_rollup_marks):
     """A Zoho conversion that names no referrer (off-platform, referral=None) must
     still count in DailyMetric.accounts_opened for the tenant's program, on its TRUE
     IST account-opening date — never invented attribution, just counted.
@@ -254,16 +259,17 @@ def test_unattributed_conversion_counts_under_the_program_on_its_true_date(demo)
     ist = dt.timezone(dt.timedelta(hours=5, minutes=30))
     opened_ist = dt.datetime(2026, 7, 29, 0, 0, tzinfo=ist)  # exactly IST midnight
 
-    conv = ingest_conversion(
-        tenant=tenant,
-        payload={
-            "event_id": "oq2b-unattributed-1",
-            "opener_zerodha_account_id": "OQ2BNOREF1",
-            "referrer_client_id": "",  # Zoho names no referrer — never guess (ADR-013/016)
-            "status": "Account Opened",
-            "account_opened_at": opened_ist.isoformat(),
-        },
-    )
+    with apply_rollup_marks():
+        conv = ingest_conversion(
+            tenant=tenant,
+            payload={
+                "event_id": "oq2b-unattributed-1",
+                "opener_zerodha_account_id": "OQ2BNOREF1",
+                "referrer_client_id": "",  # Zoho names no referrer — never guess (ADR-013/016)
+                "status": "Account Opened",
+                "account_opened_at": opened_ist.isoformat(),
+            },
+        )
     assert conv is not None and conv.referral is None, "conversion must stay referrer-less"
     assert conv.account_opened_at.astimezone(dt.timezone.utc) == dt.datetime(
         2026, 7, 28, 18, 30, tzinfo=dt.timezone.utc
@@ -279,7 +285,7 @@ def test_unattributed_conversion_counts_under_the_program_on_its_true_date(demo)
     )
 
 
-def test_credited_conversion_is_not_double_counted(demo):
+def test_credited_conversion_is_not_double_counted(demo, apply_rollup_marks):
     """A normally-credited conversion (referral resolved) must still count exactly
     once — the new referral-less branch in `_apply_upsert` must never also fire for a
     conversion that DID resolve a referral."""
@@ -293,16 +299,17 @@ def test_credited_conversion_is_not_double_counted(demo):
     ist = dt.timezone(dt.timedelta(hours=5, minutes=30))
     opened_ist = dt.datetime(2026, 7, 29, 10, 0, tzinfo=ist)
 
-    conv = ingest_conversion(
-        tenant=tenant,
-        payload={
-            "event_id": "oq2b-credited-1",
-            "opener_zerodha_account_id": "OQ2BCREDIT1",
-            "referrer_client_id": "RJ4521",
-            "status": "Account Opened",
-            "account_opened_at": opened_ist.isoformat(),
-        },
-    )
+    with apply_rollup_marks():
+        conv = ingest_conversion(
+            tenant=tenant,
+            payload={
+                "event_id": "oq2b-credited-1",
+                "opener_zerodha_account_id": "OQ2BCREDIT1",
+                "referrer_client_id": "RJ4521",
+                "status": "Account Opened",
+                "account_opened_at": opened_ist.isoformat(),
+            },
+        )
     assert conv is not None and conv.referral is not None
 
     recompute_dirty()

@@ -11,6 +11,7 @@ physical isolation is deferred to backlog DF-7.
 """
 from __future__ import annotations
 
+from django.conf import settings
 from django.db import models
 
 
@@ -41,3 +42,23 @@ class Domain(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.domain
+
+
+class StaffTenantBinding(models.Model):
+    """S2-06: binds one staff user to one tenant (AP) — that user is an AP admin.
+
+    One-to-one: an AP admin sees exactly one AP. The role is resolved ONLY by
+    `apps.tenants.access.resolve_role`; never read this table to decide access directly.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="staff_tenant_binding"
+    )
+    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="staff_bindings")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "staff_tenant_bindings"
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"{self.user} -> {self.tenant}"

@@ -46,14 +46,16 @@ def test_share_intent_redirects_to_wa_me_with_tracked_link(seeded, client):
     location = resp.headers["Location"]
     assert location.startswith("https://wa.me/?text=")
     decoded = unquote(location.split("?text=", 1)[1])
-    # Owner 2026-11-04: the one-tap WhatsApp message carries the plain /zerodha/open link.
-    assert decoded.startswith("*Open a free Zerodha account online:*")
-    # The link must be a FULL https URL (scheme-less links aren't linkified by every
-    # client), and it must be the FIRST URL, before the video and the disclosure URL:
-    # WhatsApp builds the message's preview card from the first full URL, and the preview
-    # must be a GoRefer page — never the disclosures page (live defect 2026-07-28).
+    # Owner 2026-11-04 (two steps): the one-tap WhatsApp message carries the referrer's own
+    # tracked link as Step 1 (/zerodha/r/wa/{ID}) and the plain open link as Step 2.
+    assert decoded.startswith("*Follow these steps to Open Zerodha Account*\n\n*Step 1 - Register your details*\nhttps://gorefer.in/zerodha/r/wa/RJ4521")
+    # The links must be FULL https URLs (scheme-less links aren't linkified by every
+    # client), and they must come BEFORE the video and the disclosure URL: WhatsApp builds
+    # the message's preview card from the first full URL, and the preview must be a GoRefer
+    # page - never the disclosures page (live defect 2026-07-28).
     assert "https://gorefer.in/zerodha/open" in decoded
-    assert decoded.index("https://gorefer.in/zerodha/open") < decoded.index("https://www.youtube.com")
+    assert decoded.index("https://gorefer.in/zerodha/r/wa/RJ4521") < decoded.index("https://youtu.be")
+    assert decoded.index("https://gorefer.in/zerodha/open") < decoded.index("https://youtu.be")
     assert decoded.index("https://gorefer.in/zerodha/open") < decoded.index("https://gorefer.in/d/pifs")
 
 

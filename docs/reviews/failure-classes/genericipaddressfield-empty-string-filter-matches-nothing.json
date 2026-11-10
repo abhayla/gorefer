@@ -1,0 +1,20 @@
+{
+  "slug": "genericipaddressfield-empty-string-filter-matches-nothing",
+  "title": "Empty-string exclude on a GenericIPAddressField excludes every row",
+  "class_symptom": "Filtering a Django GenericIPAddressField against the empty string (for example exclude(field=\"\")) silently matches or excludes the wrong rows, so a query meant to keep rows with a value returns none.",
+  "mechanism": "A GenericIPAddressField stores a missing value as NULL, never as an empty string, so a comparison to \"\" does not behave like a presence test; the correct presence test is field__isnull=False.",
+  "first_seen": {
+    "date": "2026-11-04",
+    "evidence": [
+      "VisitorPII had 659 rows with an IP; .exclude(raw_ip=\"\") returned 0 rows."
+    ]
+  },
+  "measurements": [
+    "Same table, same session: 659 rows with an IP present, 0 returned by the empty-string exclude; raw_ip__isnull=False is the presence filter to use."
+  ],
+  "detection": {
+    "status": "unguarded",
+    "reason": "No lint or test flags empty-string comparisons on IP fields; reviewers must catch it. Use raw_ip__isnull=False."
+  },
+  "related": ["VisitorPII.raw_ip"]
+}
