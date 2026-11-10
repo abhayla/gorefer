@@ -39,6 +39,7 @@ Document map (start at `README.md` for the index):
 | `docs/architecture/16-Configurable-Platform-Architecture-Review.md` | **Ratified config-platform review (Phase 0)** — ADR-042…044, enforcement rails E-1…E-6 + D-1 compliance rail; grounds §6e and the CI architecture gate. |
 | `docs/sprint2/` | Sprint-2 specs + goal contracts (share amplification, Wati referral amplification, referral UX/disclosure, independent test brief, M13 login contract). |
 | **`gorefer-ops/COORDINATION.md`** (PRIVATE repo) | **DA ⇆ Engineer coordination log** — the async channel between the Design Authority (Cowork planning session) and the Engineer (Claude Code). Read it before each mission; append a STATUS entry when you open a PR; log any surfaced inconsistency as a QUESTION and pause rather than guess. **Write the entry in the `gorefer-ops` clone, not here** (§2a). |
+| **GoRefer Link Matrix** (published artifact, [Lky5h29z](https://claude.ai/artifact/Lky5h29zPXZVa3psft1zoV)) + `docs/links/public-link-surface.txt` | **Every public link and button, row by row**: what it does, what is recorded, who gets credit. Must be updated in the same turn as any link change — §6g; `tests/test_link_matrix_rail.py` fails the build until the snapshot is regenerated. |
 | `docs/reviews/FINDINGS.md` | **Findings registry** — proven, class-level findings, one JSON per finding in `docs/reviews/failure-classes/`; aggregate is generated (`scripts/build_findings_registry.py`, `--check` in CI). Read before answering why-does-it-behave-this-way questions; add a finding the turn it is proven (`docs/reviews/README.md`). |
 | **`gorefer-ops/review/`** (PRIVATE repo) | LLM review pack (`09`), review bundle, verification reports, runbooks, deferred-features backlog. |
 | **`gorefer-ops/_source-archive/`** (PRIVATE repo) | Historical source-of-truth captures (context only). |
@@ -105,6 +106,7 @@ ruff check .
 python manage.py check
 python scripts/check_architecture.py                   # rail E-3: fails only on NEW vendor leaks (baseline: scripts/architecture_import_baseline.txt)
 python -m pytest tests/test_tenant_scoping_rail.py -q        # rail E-7: every tenant filter via .for_tenant() (static, ~1 s, no DB) — run before every push
+python -m pytest tests/test_link_matrix_rail.py -q           # Link Matrix rail (§6g): the public link surface matches the snapshot (static, ~1 s, no DB)
 python manage.py makemigrations --check --dry-run      # schema drift fails CI
 python scripts/check_public_hygiene.py                 # public-repo rail (§2a): no real mobiles / host addresses / dotenv files
 python -m pytest -q --cov=apps --cov=api --cov=gorefer --cov-fail-under=86   # CI's coverage FLOOR (never lower it to pass a PR)
@@ -143,7 +145,7 @@ CI (`.github/workflows/ci.yml`, Python 3.13, Postgres 16 service): contract-doc 
 - `apps/tenants/` — Tenant/Domain registry + `TenantResolutionMiddleware`; single-schema isolation via tenant-scoped managers + composite unique constraints.
 - `apps/config/` — ADR-022 config cascade: `cascade.resolve(key)` walks user → tenant-global → central → default; **compliance-locked keys resolve from central only** (lower tiers can't weaken a claim). Also integration-flag persistence and the Preferences screen backend.
   - **Flag truth is two-layered — read this before ever judging a flag's state.** `flags.py` holds the **env default**; the *effective* value of the integration flags (`ENABLE_WATI_SEND`, `ENABLE_ZOHO_WRITE`, `ENABLE_ZOHO_READ`) is whatever `apps/config/integration_flags.py:resolve_flag(key)` returns — a DB override beats env. **Prod `.env` says `false` for all three while the live overrides are ON.** Never conclude "the integration is off" from `.env` or `flags.py`; resolve it (verify-live command in `gorefer-ops/CURRENT-STATE.md`). Per-tenant behaviour keys (`followups_enabled`, `followup_quiet_start_hour`/`_end_hour`, `followup_min_gap_minutes`, `followup_referrer_nudge_on`, `followup_poll_watch_mobiles`) live only in the cascade — they are **not** in `flags.py`.
-- `apps/referrals/` — core domain: `redirect_service.py` (lazy referrer/journey creation + 302), `lead_service.py` (save lead first, then redirect), `landing_mode.py`, `validators.py` (client_id format check), views, and the seed/smoke management commands.
+- `apps/referrals/` — core domain: `redirect_service.py` (lazy referrer/journey creation + 302), `link_fallback.py` (middleware: a broken public link redirects to the default open link, never an error page — switch `link_fallback_enabled`), `lead_service.py` (save lead first, then redirect), `landing_mode.py`, `validators.py` (client_id format check), views, and the seed/smoke management commands.
 - `apps/events/` — immutable event stream (PII excluded by design), `bots.py` (preview/bot UA filter — a bot never creates a journey), `analytics.py` + `rollups.py` (dirty-day daily/monthly recompute).
 - `apps/integrations/` — the vendor boundary (doc 17, ADR-045…048). **Domain code imports only the vendor-neutral top level — never `.wati.*` / `.zoho.*` directly**; the E-3 architecture gate (`scripts/check_architecture.py`) enforces this with an **EMPTY baseline**, so any NEW vendor import outside this package now fails CI outright, not just a tracked regression. The boundary's front door: `ports.py` (Protocols `MessagingPort` / `CrmPort` / `CrmReadPort` + factories `get_messaging_port()` / `get_crm_port()` / `get_crm_read_port()`, which resolve to live-vs-log-only adapters by flag — factory bodies import vendor modules lazily, but the dataclass re-exports at module top are eager), `services.py` (thin task-level facade — `queue_lead_notifications`, `enqueue_lead_upsert`, `record_inbound`, `ingest_conversion`, `MAX_SYNC_ATTEMPTS` — no logic of its own), `delivery_status.py` (vendor-neutral `is_terminal` / `is_delivered` / `classify_failure`), `router.py` (aggregates the vendor webhook routers for `api/router.py` to mount), and `schedules.py` (the boundary's `INTEGRATION_SCHEDULES` fragment that `setup_schedules` aggregates, ADR-047). Inside the boundary: `wati/` (adapter, `notify.py`, `engagement.py` WA report, terminal-status polling, `api.py` — the moved webhook router, queue tasks) and `zoho/` (adapter, client, `ingest.py` — **the only code path that writes account status**, `statusmap.py`, `waxseal.py` HMAC, `api.py` — the moved webhook router, `read.py` enrichment). `wati/engagement.py` and the transport half of `wati/notify.py` deliberately stay whole inside the boundary (ADR-048; eviction tracked as `gorefer-ops/review/Deferred-Features-Backlog.md` DF-PORTS-1). Live vs log-only adapters swap by flag, so demo mode works with everything off. **Any change here must update `Wati-GoRefer/` / `Zoho-GoRefer/` contract docs — CI-enforced (§6b).**
 - `apps/otp/` — pluggable OTP delivery port (behind `ENABLE_OTP_LOGIN`); codes stored hashed + peppered, never plaintext. When the flag is OFF the DemoOtpAdapter logs instead of sending.
@@ -367,6 +369,43 @@ here. When you add a behavior key, add its spot test in the same PR; that is how
   rich media, and link minting live **in-session** after that tap (no category, no cap) — never in
   a UTILITY body or header image.
 
+## 6g. Link changes update the Link Matrix artifact in the SAME turn (owner rule, 2026-11-10)
+
+> *"Whenever some links are changed or updated, that artifact should also get updated."* — owner, 2026-11-10
+
+The published artifact **"GoRefer Link Matrix"**
+([artifact Lky5h29z](https://claude.ai/artifact/Lky5h29zPXZVa3psft1zoV)) lists every link and
+button a referrer, a friend or PIFS can tap — the link, what happens, what GoRefer records and
+who gets credit. The owner reads it instead of the code, so a stale row is a wrong answer.
+
+**A link change is not done until the matrix shows it.** "Link change" means any of:
+- a public route added, removed or re-shaped in `gorefer/urls.py`;
+- a posting code (`SHARE_CHANNEL_LABELS`), a served one-tap channel (`SHARE_INTENT_CHANNELS`) or
+  a language code (`link_language_labels`) added or removed;
+- a change to **where a link lands** or **what it records** — a destination template, the Kite ID
+  pop-up, the broken-link fallback (`apps/referrals/link_fallback.py`), a share message's link;
+- a link added to, or removed from, a WhatsApp template or chatbot reply (also §6c).
+
+**Ordering, every time:**
+1. Make the code change.
+2. Read the artifact (`Artifact` tool, `action: "read"` with the URL above), then add or edit the
+   rows: new links get their own rows; rows whose outcome changed are corrected, never left
+   describing the old behaviour. Update the "Last updated" line and say whether the change is
+   merged only or deployed. Republish to the **same URL**.
+3. Regenerate the snapshot and commit it with the code:
+   `UPDATE_LINK_SNAPSHOT=1 python -m pytest tests/test_link_matrix_rail.py -q`.
+
+**What is enforced and what is not.** `tests/test_link_matrix_rail.py` pins the routes in
+`gorefer/urls.py` plus the posting, one-tap and language codes against
+`docs/links/public-link-surface.txt`; any difference fails CI with a message pointing here. It
+**cannot** see a behaviour change that keeps the same routes (a new destination, a new fallback
+rule) and it cannot open the artifact to check you edited it — regenerating the snapshot without
+updating the matrix defeats the rail. Those cases depend on this section being followed, as §6e
+does for behavior literals.
+
+**Not in this public repo:** the matrix itself. It carries example client IDs and template
+names, so it lives only as the private artifact; this repo holds the URL and the snapshot.
+
 ## 7. Definition of Done + expectations
 
 Reference `implementation/10-Claude-Code-Implementation-Guide.md` (§3 standards, §6 tests, §7 git, §8 migrations, §9 DoD, §10 demo mode). A mission is **done** only when all hold:
@@ -382,6 +421,7 @@ Reference `implementation/10-Claude-Code-Implementation-Guide.md` (§3 standards
 - **Compliance surfaces** (disclosure block, risk warning, single swappable 10% claim) present on every user-facing asset touched.
 - **Demo mode still works end-to-end** with `ENABLE_WATI_SEND` / `ENABLE_ZOHO_WRITE` off (adapters log intended calls instead of sending).
 - WATI send tests assert on **terminal delivery status**, not HTTP 200.
+- **Any link change is reflected in the GoRefer Link Matrix artifact** and the link-surface snapshot is regenerated (§6g).
 - PR opened per mission with a summary, deferrals, and any surfaced inconsistency; README/docs updated for anything an operator must run.
 
 ---
