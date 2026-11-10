@@ -11,6 +11,7 @@ from django.test import Client
 
 from apps.events.models import Event
 from apps.referrals.models import Referral, ReferralIdentity
+from tests.link_fallback_helpers import fell_back
 
 HUMAN = {"HTTP_USER_AGENT": "Mozilla/5.0 (Android)", "REMOTE_ADDR": "203.0.113.9"}
 BOT = {"HTTP_USER_AGENT": "WhatsApp/2.23.20 A"}
@@ -72,9 +73,9 @@ def test_bot_behaves_like_open_bot(seeded, django_capture_on_commit_callbacks, p
     assert ReferralIdentity.objects.count() == 0
 
 
-def test_wrong_prefix_404s_without_writes(seeded, django_capture_on_commit_callbacks):
+def test_wrong_prefix_falls_back_without_writes(seeded, django_capture_on_commit_callbacks):
     for p in ("/groww/r/wa/", "/groww/r/wa"):
-        assert _get(p, django_capture_on_commit_callbacks).status_code == 404
+        assert fell_back(_get(p, django_capture_on_commit_callbacks))
     assert (Referral.objects.count(), Event.objects.count()) == (0, 0)
 
 
@@ -102,6 +103,6 @@ def test_channel_referral_with_real_id_unchanged(seeded, django_capture_on_commi
 
 
 @pytest.mark.parametrize("path", ["/r/abc/", "/r/foo/", "/r/open/", "/zerodha/r/abc/", "/zerodha/r/open/"])
-def test_unknown_channel_slash_is_404_unknown_no_writes(seeded, django_capture_on_commit_callbacks, path):
-    assert _get(path, django_capture_on_commit_callbacks).status_code == 404
+def test_unknown_channel_slash_falls_back_no_writes(seeded, django_capture_on_commit_callbacks, path):
+    assert fell_back(_get(path, django_capture_on_commit_callbacks))
     assert (Referral.objects.count(), Event.objects.count(), ReferralIdentity.objects.count()) == (0, 0, 0)

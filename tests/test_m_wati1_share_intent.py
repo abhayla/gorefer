@@ -24,6 +24,7 @@ from django.test import Client
 
 from apps.events.models import Event, VisitorPII
 from apps.referrals.models import Referral, ReferralIdentity
+from tests.link_fallback_helpers import fell_back
 
 pytestmark = pytest.mark.urls("tests.urls_share_intent")
 
@@ -77,10 +78,10 @@ def test_share_intent_lazily_creates_the_journey(seeded, client, django_capture_
     assert Referral.objects.filter(source="referral_link").exists()
 
 
-def test_unsupported_channel_404s_with_no_event(seeded, client, django_capture_on_commit_callbacks):
+def test_unsupported_channel_falls_back_with_no_event(seeded, client, django_capture_on_commit_callbacks):
     with django_capture_on_commit_callbacks(execute=True):
         resp = client.get("/share/li/RJ4521", **HUMAN)  # tg is served since 2026-11-02; li is not
-    assert resp.status_code == 404
+    assert fell_back(resp)
     assert Event.objects.count() == 0
 
 

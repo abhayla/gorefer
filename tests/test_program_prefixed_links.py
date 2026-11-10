@@ -18,6 +18,7 @@ from apps.referrals import recipient_identity as ri
 from apps.referrals.models import Referral, ReferralIdentity, ReferralProgram
 from apps.referrals.share_intent_service import kit_message, tracked_link
 from apps.tenants.models import Tenant
+from tests.link_fallback_helpers import fell_back
 
 HUMAN = {"HTTP_USER_AGENT": "Mozilla/5.0 (Android)", "REMOTE_ADDR": "203.0.113.9"}
 BOT = {"HTTP_USER_AGENT": "WhatsApp/2.23.20 A"}
@@ -137,15 +138,17 @@ def test_bot_on_prefixed_link_gets_preview_and_writes_nothing(
 @pytest.mark.parametrize("path", [
     "/groww/open", f"/groww/r/{CID}", "/groww/r/open", f"/groww/r/wa/{CID}", "/groww/r/",
 ])
-def test_unknown_prefix_is_404_and_writes_nothing(seeded, client, django_capture_on_commit_callbacks, path):
-    assert _get(client, path, django_capture_on_commit_callbacks).status_code == 404
+def test_unknown_prefix_falls_back_and_writes_nothing(
+    seeded, client, django_capture_on_commit_callbacks, path
+):
+    assert fell_back(_get(client, path, django_capture_on_commit_callbacks))
     assert _writes() == (0, [], [])
 
 
 def test_blank_prefix_means_no_prefixed_links(tenant, client, django_capture_on_commit_callbacks):
     ReferralProgram.objects.filter(tenant=tenant).update(url_prefix="")
-    assert _get(client, "/zerodha/open", django_capture_on_commit_callbacks).status_code == 404
-    assert _get(client, f"/zerodha/r/{CID}", django_capture_on_commit_callbacks).status_code == 404
+    assert fell_back(_get(client, "/zerodha/open", django_capture_on_commit_callbacks))
+    assert fell_back(_get(client, f"/zerodha/r/{CID}", django_capture_on_commit_callbacks))
     # bare links are unaffected
     assert _get(client, "/open", django_capture_on_commit_callbacks).status_code == 302
 
@@ -154,7 +157,7 @@ def test_prefix_word_is_data_not_a_route_literal(tenant, client, django_capture_
     """Rename the word in data -> the new word works, the old one 404s. No code change."""
     ReferralProgram.objects.filter(tenant=tenant).update(url_prefix="zd")
     assert _get(client, "/zd/open", django_capture_on_commit_callbacks).status_code == 302
-    assert _get(client, "/zerodha/open", django_capture_on_commit_callbacks).status_code == 404
+    assert fell_back(_get(client, "/zerodha/open", django_capture_on_commit_callbacks))
 
 
 def test_post_to_prefixed_link_is_405(seeded, client):
@@ -254,10 +257,10 @@ def test_prefixed_share_prefix_is_case_insensitive(seeded, django_capture_on_com
 
 @pytest.mark.urls("tests.urls_share_intent")
 @pytest.mark.parametrize("path", [f"/groww/share/wa/{CID}", "/groww/share/wa/", "/groww/share/wa"])
-def test_prefixed_share_unknown_prefix_is_404_and_writes_nothing(
+def test_prefixed_share_unknown_prefix_falls_back_and_writes_nothing(
     seeded, django_capture_on_commit_callbacks, path
 ):
-    assert _get(Client(), path, django_capture_on_commit_callbacks).status_code == 404
+    assert fell_back(_get(Client(), path, django_capture_on_commit_callbacks))
     assert _writes() == (0, [], [])
 
 
@@ -268,5 +271,5 @@ def test_prefixed_share_post_is_405(seeded):
 
 def test_prefixed_share_routes_absent_when_flag_off(seeded, client, django_capture_on_commit_callbacks):
     """Default urlconf = flag off (ENABLE_SHARE_INTENT defaults False): no bare, no prefixed share route."""
-    assert _get(client, f"/share/wa/{CID}", django_capture_on_commit_callbacks).status_code == 404
-    assert _get(client, f"/zerodha/share/wa/{CID}", django_capture_on_commit_callbacks).status_code == 404
+    assert fell_back(_get(client, f"/share/wa/{CID}", django_capture_on_commit_callbacks))
+    assert fell_back(_get(client, f"/zerodha/share/wa/{CID}", django_capture_on_commit_callbacks))

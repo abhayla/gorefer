@@ -156,6 +156,7 @@ def dashboard(request):
         "funnel": queries.funnel(tenant),
         "top_referrers": queries.top_referrers(tenant),
         "recent_leads": queries.recent_leads(tenant),
+        "partner_link_clicks": queries.partner_link_clicks(tenant),
         "sync_health": _sync_health(tenant),
         "confirmed_clicks": queries.confirmed_clicks(tenant),
         "counts_as_of": counts_as_of,

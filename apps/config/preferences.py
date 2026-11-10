@@ -1548,3 +1548,21 @@ def resolve_onetap_wa_link(tenant_id: int | None) -> str:
         value = SHARE_ONETAP_WA_LINK_DEFAULT
     value = str(value or "").strip().lower()
     return value if value in SHARE_ONETAP_WA_LINK_CHOICES else SHARE_ONETAP_WA_LINK_DEFAULT
+
+
+# Language tag on a video/content link — /open/{channel}/{language} (owner 2026-11-10).
+# Maps the short code in the link to the label shown in "Link clicks by source". A code
+# missing from this map is recorded as LINK_LANGUAGE_OTHER; the link still works, so a
+# typo in a video description never breaks it. Add a language here (or as a tenant
+# override) before publishing its link.
+LINK_LANGUAGE_LABELS = "link_language_labels"
+LINK_LANGUAGE_LABELS_DEFAULT = {
+    "en": "English", "hi": "Hindi", "mr": "Marathi", "gu": "Gujarati", "bn": "Bengali",
+    "ta": "Tamil", "te": "Telugu", "kn": "Kannada", "ml": "Malayalam", "pa": "Punjabi",
+    "or": "Odia", "as": "Assamese", "ur": "Urdu", "bho": "Bhojpuri",
+}
+LINK_LANGUAGE_OTHER = "Other"
+
+# A broken public link redirects to the default account-opening link instead of showing
+# an error page (owner 2026-11-10; apps.referrals.link_fallback). False = plain 404s.
+LINK_FALLBACK_ENABLED = "link_fallback_enabled"

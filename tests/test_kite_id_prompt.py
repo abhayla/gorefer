@@ -24,6 +24,7 @@ from apps.referrals.models import Referral, ReferralIdentity
 from apps.referrals.validators import InvalidClientId, validate_client_id_for
 from apps.tenants.resolve import get_bootstrap_tenant
 from gorefer.flags import SHARE_CHANNEL_LABELS
+from tests.link_fallback_helpers import fell_back
 
 HUMAN = {"HTTP_USER_AGENT": "Mozilla/5.0 (Android)", "REMOTE_ADDR": "203.0.113.9"}
 BOT = {"HTTP_USER_AGENT": "WhatsApp/2.23.20 A"}
@@ -137,14 +138,14 @@ def test_crawlers_get_the_preview_card_not_the_prompt(seeded, django_capture_on_
 
 @pytest.mark.urls("tests.urls_share_intent")
 def test_unsupported_share_channel_is_unchanged(seeded, django_capture_on_commit_callbacks):
-    assert _get("/share/xx/KITEID", django_capture_on_commit_callbacks).status_code == 404
+    assert fell_back(_get("/share/xx/KITEID", django_capture_on_commit_callbacks))
     body = _get("/share/xx/", django_capture_on_commit_callbacks).content.decode()
     assert SHARE_TITLE not in body and "wa.me/" in body  # the T-122 help page
 
 
-def test_unknown_program_word_still_404s(seeded, django_capture_on_commit_callbacks):
+def test_unknown_program_word_falls_back(seeded, django_capture_on_commit_callbacks):
     for path in ("/groww/r/wa/KITEID", "/groww/r/", "/groww/r/open"):
-        assert _get(path, django_capture_on_commit_callbacks).status_code == 404
+        assert fell_back(_get(path, django_capture_on_commit_callbacks))
 
 
 # --- entering an id -----------------------------------------------------------------

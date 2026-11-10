@@ -6,6 +6,8 @@ Wires: the server-rendered home page, the Django Ninja API mount, the Django adm
   - GET /r/{channel}/{client_id}           -> same, channel carried as a PATH PREFIX
     (B1/ADR-028) so a WhatsApp dynamic URL button can keep the client_id LAST
   - GET /open                              -> partner-direct redirect (302, no r=)
+  - GET /open/{channel}[/{language}]       -> same, tagged for attribution (a video
+    link: /open/yt/hi = YouTube, Hindi); the tags never reach the partner
   - GET /{program}/open, /{program}/r/...  -> program-prefixed twins of the above
     (e.g. /zerodha/r/RJ4521); `{program}` is ReferralProgram.url_prefix — DATA, so
     no partner-named route exists. Registered LAST (see the block at the bottom).
@@ -58,6 +60,8 @@ if "channel" not in get_converters():
 urlpatterns = [
     path("", TemplateView.as_view(template_name="home.html"), name="home"),
     path("open", partner_direct_redirect, name="partner_direct"),
+    path("open/<channel:channel>", partner_direct_redirect, name="partner_direct_channel"),
+    path("open/<channel:channel>/<slug:lang>", partner_direct_redirect, name="partner_direct_channel_lang"),
     # Preview card v2 images (owner 2026-11-03) — public; 404 while the v2 switch is off.
     path("og/card.png", og_card, name="og_card"),
     path("og/card/<str:client_id>.png", og_card_named, name="og_card_named"),
@@ -179,6 +183,10 @@ if getattr(settings, "FEATURE_FLAGS", {}).get("ENABLE_CUSTOMER_LOGIN", False):
 # existing link changes behaviour. Same ordering rules as the bare /r/ block above.
 urlpatterns += [
     path("<slug:program_prefix>/open", prefixed_partner_direct_redirect, name="partner_direct_prefixed"),
+    path("<slug:program_prefix>/open/<channel:channel>", prefixed_partner_direct_redirect,
+         name="partner_direct_channel_prefixed"),
+    path("<slug:program_prefix>/open/<channel:channel>/<slug:lang>", prefixed_partner_direct_redirect,
+         name="partner_direct_channel_lang_prefixed"),
     path(
         "<slug:program_prefix>/r/<channel:channel>/<str:client_id>/continue",
         prefixed_referral_continue, name="referral_continue_channel_prefixed",

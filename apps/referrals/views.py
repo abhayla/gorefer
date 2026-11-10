@@ -39,6 +39,7 @@ from .redirect_service import (
     handle_partner_referral_page_redirect,
     is_channel_code,
     is_reserved_open,
+    normalize_link_language,
 )
 from .share_intent_service import handle_share_intent, handle_share_without_id, is_share_channel_served
 from .validators import (
@@ -380,8 +381,10 @@ def share_intent_redirect(request, channel: str, client_id: str):
 
 
 @require_GET
-def partner_direct_redirect(request):
-    """GET /open — partner-direct 302 (no r=); stays a direct redirect (no landing)."""
+def partner_direct_redirect(request, channel: str | None = None, lang: str | None = None):
+    """GET /open[/{channel}[/{language}]] — partner-direct 302 (no r=); stays a direct
+    redirect (no landing). The optional tags (e.g. /open/yt/hi = a Hindi YouTube video)
+    are recorded on the click and never reach the partner."""
     tenant = get_current_tenant(request)
     # D2 — crawlers get the PIFS card here too; /open is shared as often as a referral link.
     if is_bot_user_agent(request.META.get("HTTP_USER_AGENT", "")):
@@ -393,7 +396,8 @@ def partner_direct_redirect(request):
             visitor_id=visitor_id,
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
             raw_ip=_client_ip(request),
-            share_channel=_share_channel(request),
+            share_channel=_share_channel(request, channel),
+            share_language=normalize_link_language(lang, tenant_id=getattr(tenant, "id", None)),
         )
     except PartnerUnavailable:
         return _partner_unavailable(request)
@@ -685,9 +689,10 @@ def _require_program_prefix(request, program_prefix: str) -> None:
 
 
 @require_GET
-def prefixed_partner_direct_redirect(request, program_prefix: str):
+def prefixed_partner_direct_redirect(request, program_prefix: str, channel: str | None = None,
+                                     lang: str | None = None):
     _require_program_prefix(request, program_prefix)
-    return partner_direct_redirect(request)
+    return partner_direct_redirect(request, channel=channel, lang=lang)
 
 
 @require_GET
