@@ -92,6 +92,40 @@
   </div>
 </section>
 
+{# Partner-link clicks by the tags in the link (/open/{channel}/{language}) — clicks only #}
+<section class="rounded-2xl bg-white border border-line card p-5">
+  <div class="mb-3">
+    <h2 class="text-[13px] font-bold">Partner link clicks by source</h2>
+    <div class="text-[11px] text-ink-500 mt-0.5">Clicks on the no-referrer link, split by where it was posted and the language of the video. Clicks only — an opened account carries no source. Visitors are approximate.</div>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-[12px] min-w-[560px]">
+      <thead>
+        <tr class="text-left text-[10px] uppercase tracking-wide text-ink-300 border-b border-line bg-cobalt-50/40">
+          <th class="py-2.5 px-2 font-semibold">Posted on</th>
+          <th class="py-2.5 px-2 font-semibold">Language</th>
+          <th class="py-2.5 px-2 font-semibold text-right">Clicks</th>
+          <th class="py-2.5 px-2 font-semibold text-right">Visitors</th>
+          <th class="py-2.5 px-2 font-semibold text-right">Last click</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-line">
+        {% for c in partner_link_clicks %}
+          <tr class="hover:bg-cobalt-50/40">
+            <td class="py-2.5 px-2 font-semibold text-ink-900">{{ c.channel }}</td>
+            <td class="py-2.5 px-2 text-ink-500">{{ c.language|default:"—" }}</td>
+            <td class="py-2.5 px-2 text-right tabular-nums font-bold text-ink-900">{{ c.clicks }}</td>
+            <td class="py-2.5 px-2 text-right tabular-nums text-ink-500">{{ c.visitors }}</td>
+            <td class="py-2.5 px-2 text-right text-[11px] text-ink-300 whitespace-nowrap">{{ c.last_click|date:"d M, g:i A" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="py-4 text-center text-[11px] text-ink-300">No partner-link clicks yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
 {# Recent leads — mobile MASKED (admin PII minimization) #}
 <section class="rounded-2xl bg-white border border-line card p-5">
   <div class="flex items-center justify-between mb-3">

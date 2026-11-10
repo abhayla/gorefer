@@ -238,6 +238,23 @@ Both routes are public (no login), rate-limited (`check_rate("og_card", client_i
 
 **Notes.** A partner-direct journey can still convert: the Zoho sync (§7) will attribute it **referrer-level-only / PIFS-only** since there is no referrer to credit (Gaps 2, 3).
 
+### 4.2-tags Tagged partner links — `GET /open/{channel}` and `GET /open/{channel}/{language}` (owner decision 2026-11-10)
+
+**Purpose.** Count clicks on the partner link separately for each place it is posted and each language of the content it sits under — e.g. one account-opening video per language on YouTube. Same handler, same destination and same partner-direct journey as §4.2; the two path segments are attribution tags only.
+
+| Link | Recorded on the click |
+|---|---|
+| `/{program}/open` | no tags (shown as "Direct") |
+| `/{program}/open/yt` | `metadata.channel = "YouTube"` |
+| `/{program}/open/yt/hi` | `metadata.channel = "YouTube"`, `metadata.language = "Hindi"` |
+
+- `{channel}` is a share-channel code (§4.1, `SHARE_CHANNEL_LABELS`); an unknown code is recorded as `other`.
+- `{language}` is a code from the cascade key **`link_language_labels`** (code → label; default covers `en hi mr gu bn ta te kn ml pa or as ur bho`). A code missing from the map is recorded as `Other` and the link **still redirects** — a typo in a published description never breaks the link. Add a language to the map before publishing its link.
+- The tags are never sent to the partner: the `302` Location is byte-identical to plain `/open`.
+- Crawlers get the preview card and write nothing, exactly as §4.2.
+- The bare forms (`/open/yt/hi`) and the program-prefixed forms (`/zerodha/open/yt/hi`) behave identically (§4.2a).
+- **Clicks only.** An opened account arrives from the CRM with no channel or language, so per-language *account* counts do not exist; the admin dashboard card "Partner link clicks by source" reports clicks and approximate visitors per (channel, language) and claims no conversion.
+
 ### 4.2a Program-prefixed twins — `GET /{program}/open`, `GET /{program}/r/...`, `GET /{program}/share/...` (owner decision 2026-10-29)
 
 Every public link in §4.1–§4.2 also answers under the program's link word, so a shared link names the partner (GoRefer is not Zerodha-only):

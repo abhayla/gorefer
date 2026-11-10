@@ -430,3 +430,34 @@ def journey_detail(referral) -> dict:
 
 def confirmed_clicks(tenant=None) -> int:
     return confirmed_human_clicks(tenant=tenant)
+
+
+def partner_link_clicks(tenant=None) -> list[dict]:
+    """Human clicks on the no-referrer partner link, grouped by the tags in the link
+    (/open/{channel}/{language}) - one row per distinct link, busiest first.
+
+    Clicks only: an opened account carries no channel or language (it comes from the CRM),
+    so nothing here claims a conversion. Bot/preview hits never write a click event."""
+    from apps.events import vocab
+    from apps.events.models import Event
+
+    qs = Event.objects.filter(
+        event_type=vocab.CLICK, is_bot=False, referral__source="partner_direct",
+    ).exclude(synthetic_ua_q())
+    if tenant is not None:
+        qs = qs.for_tenant(tenant)
+    rows = (
+        qs.values("metadata__channel", "metadata__language")
+        .annotate(clicks=Count("id"), visitors=Count("visitor_id", distinct=True), last=Max("timestamp"))
+        .order_by("-clicks")
+    )
+    return [
+        {
+            "channel": r["metadata__channel"] or "Direct",
+            "language": r["metadata__language"] or "",
+            "clicks": r["clicks"],
+            "visitors": r["visitors"],  # approximate: one per browser cookie
+            "last_click": r["last"],
+        }
+        for r in rows
+    ]

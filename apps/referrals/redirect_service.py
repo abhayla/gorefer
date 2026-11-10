@@ -20,6 +20,7 @@ import logging
 
 from django.db import transaction
 
+from apps.config import preferences as prefkeys
 from apps.config.cascade import resolve
 from apps.events import vocab
 from apps.events.bots import is_bot_user_agent
@@ -149,7 +150,8 @@ def _get_or_create_partner_direct_referral(tenant, program) -> Referral:
 
 
 def _record_event(
-    *, tenant, referral, visitor_id, user_agent, raw_ip, event_type, source, share_channel=None
+    *, tenant, referral, visitor_id, user_agent, raw_ip, event_type, source, share_channel=None,
+    share_language=None,
 ):
     """Write an immutable event + (if raw_ip) the SEPARATE erasable PII record.
 
@@ -160,12 +162,16 @@ def _record_event(
     `share_channel` (M11) is the normalized channel LABEL (e.g. "WhatsApp") from the
     `?s=` param — a non-PII attribution tag stored in metadata["channel"], reusing the
     Referral-Profile Clicks "Channel" column. None -> no channel key (renders "Direct").
+    `share_language` is the language LABEL (e.g. "Hindi") of the video/content the link
+    sat under (/open/{channel}/{language}) -> metadata["language"]; None -> no key.
     """
     person_ref_id = None
     if raw_ip:
         pii = VisitorPII.objects.create(tenant=tenant, visitor_id=visitor_id or "", raw_ip=raw_ip)
         person_ref_id = pii.pk
     metadata = {"channel": share_channel} if share_channel else {}  # NEVER PII (CI-enforced)
+    if share_language:
+        metadata["language"] = share_language
     event = Event.objects.create(
         tenant=tenant,
         event_type=event_type,
@@ -306,8 +312,27 @@ def build_continue_redirect(*, tenant, client_id: str, referral, share_channel=N
     return destination
 
 
-def handle_partner_direct(*, tenant, visitor_id, user_agent, raw_ip, share_channel=None):
+def normalize_link_language(raw: str | None, *, tenant_id: int | None = None) -> str | None:
+    """Map the language code in /open/{channel}/{language} to its label (config-driven).
+
+    None for an absent/blank code, the mapped label for a known one, "Other" for an
+    unknown one - the link keeps working either way. Case-insensitive."""
+    code = (raw or "").strip().lower()
+    if not code:
+        return None
+    labels = resolve(prefkeys.LINK_LANGUAGE_LABELS, tenant_id=tenant_id,
+                     default=prefkeys.LINK_LANGUAGE_LABELS_DEFAULT)
+    if not isinstance(labels, dict):
+        labels = prefkeys.LINK_LANGUAGE_LABELS_DEFAULT
+    return str(labels.get(code) or prefkeys.LINK_LANGUAGE_OTHER)
+
+
+def handle_partner_direct(*, tenant, visitor_id, user_agent, raw_ip, share_channel=None,
+                          share_language=None):
     """Resolve a /open hit. Returns (destination_url, is_human_click).
+
+    `share_language` (the /open/{channel}/{language} tag) rides on the click exactly like
+    the channel: recorded for attribution, never sent to the partner.
 
     The assembled destination is built from the program template (no request params),
     so the `?s=` param is inherently absent from the 302 Location — it is captured for
@@ -326,6 +351,7 @@ def handle_partner_direct(*, tenant, visitor_id, user_agent, raw_ip, share_chann
         lambda: _record_event(
             tenant=tenant, referral=referral, visitor_id=visitor_id, user_agent=user_agent,
             raw_ip=raw_ip, event_type=vocab.CLICK, source=vocab.SRC_CLICK, share_channel=share_channel,
+            share_language=share_language,
         )
     )
     return destination, True
