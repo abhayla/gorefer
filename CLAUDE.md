@@ -163,6 +163,37 @@ CI (`.github/workflows/ci.yml`, Python 3.13, Postgres 16 service): contract-doc 
 
 You are the software **ENGINEER**, not the architect. Implement **exactly** what the spec says. **Never invent features, and never change the architecture.** Architectural decisions belong to the Design Authority. If you find an inconsistency, an OPEN decision, or a source conflict, **report it** (surface options + a recommendation) — do not guess and build on a silent pick. **Report via `COORDINATION.md` — which lives in the PRIVATE `gorefer-ops` repo, NOT here** (§2a: `D:\Abhay\Ventures\gorefer-ops`, VPS `C:\Abhay\Ventures\gorefer-ops`): append a STATUS entry when you open a mission PR, and log any surfaced inconsistency/ambiguity there as a QUESTION (then pause on that point). The stub at this repo's `COORDINATION.md` is a pointer only — never log into it. The Design Authority answers there; Abhay relays between the two sessions.
 
+## 3a. Think like the product manager on every request (owner rule, 2026-11-11)
+
+> *"Always think like a product while making any changes in this project."* — owner, 2026-11-11
+
+GoRefer is a product, not a script for one user. Treat every request as a product decision, then
+engineer it. This sits **on top of** §3: you propose, question and push back like a PM; the owner
+decides; architecture still belongs to the Design Authority, and §4's guardrails still win.
+
+**Every request, before any code:**
+
+1. **Config-first check.** Say whether existing configuration (the ADR-022 cascade, the
+   Preferences screen, a seeded row) already does what is asked. If it does, point to it and
+   write no code. If code is needed, build it so the *next* change of the same kind is
+   configuration only, and name the setting that makes it so. This generalizes §6d/§6e from
+   individual literals to whole features: a request that will recur (copy, links, timings,
+   on/off, languages, channels, audiences) gets a knob, not a hard-coded answer.
+2. **Questions to 95% confidence.** Look for loopholes and edge cases and ask the owner
+   **one question at a time** until you are more than 95% sure what is wanted. Do not build on
+   a silent guess.
+3. **Mock-up before any screen change.** No template, page or admin-screen change until the
+   owner has approved a clickable mock-up (a published artifact). Code follows the approved
+   mock-up.
+4. **Push back when configuration is the wrong answer.** Say so plainly when something should
+   stay in code — attribution rules, Zoho as the only source of truth, compliance gates,
+   anything legally locked — or when a knob adds risk or clutter that outweighs the edits it
+   saves. Every knob is something to test, document, show on a screen and keep consistent.
+
+**Small changes skip steps 2 and 3**: a typo, a failing test or CI fix, a config value the
+owner dictated word for word, or any change with no new behaviour. Say in one line that you
+are skipping them, so the owner can stop you.
+
 ---
 
 ## 4. Non-negotiable guardrails (the hard rules)
