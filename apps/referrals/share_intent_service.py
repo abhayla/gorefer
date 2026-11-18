@@ -321,7 +321,8 @@ def _onetap_template(tenant_id: int | None, lang: str) -> str:
 def onetap_register_link(tenant, client_id: str) -> str:
     """Step 1 of the one-tap message: the referrer's own wa link, or (no ID, "Share without
     my ID") the no-referrer register link whose path is the cascade key
-    `share_onetap_wa_register_path` (default /r/wa)."""
+    `share_onetap_wa_register_path` (default /r/wa), given the program's link word like every
+    other generated link (/zerodha/r/wa; owner finding 2026-11-18)."""
     from apps.config.preferences import SHARE_ONETAP_WA_REGISTER_PATH, SHARE_ONETAP_WA_REGISTER_PATH_DEFAULT
 
     tenant_id = getattr(tenant, "id", None)
@@ -335,7 +336,19 @@ def onetap_register_link(tenant, client_id: str) -> str:
     path = path or SHARE_ONETAP_WA_REGISTER_PATH_DEFAULT
     if not path.startswith("/"):
         path = "/" + path
-    return f"https://{_public_host()}{path}"
+    return f"https://{_public_host()}{_with_program_prefix(path, tenant)}"
+
+
+def _with_program_prefix(path: str, tenant) -> str:
+    """Give a configured link path the program's link word, like every other link GoRefer
+    builds (/r/wa -> /zerodha/r/wa). A path that already starts with the word (an operator
+    who typed /zerodha/r/wa) is left alone, so it never doubles to /zerodha/zerodha/r/wa."""
+    from .links import matches_program_prefix, program_url_prefix
+
+    first_segment = path.lstrip("/").split("/", 1)[0]
+    if not program_url_prefix(tenant) or matches_program_prefix(tenant, first_segment):
+        return path
+    return f"/{program_url_prefix(tenant)}{path}"
 
 
 def onetap_open_link(tenant) -> str:

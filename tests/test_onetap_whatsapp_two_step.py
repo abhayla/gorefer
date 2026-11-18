@@ -24,9 +24,9 @@ SHARE_URLS = pytest.mark.urls("tests.urls_share_intent")
 
 # --- APPROVED TEXTS (generated from the owner-approved file) ---
 A = "*Follow these steps to Open Zerodha Account*\n\n*Step 1 - Register your details*\nhttps://gorefer.in/zerodha/r/wa/DA1707\n\n*Step 2 - Open a free Zerodha account online:*\nhttps://gorefer.in/zerodha/open\n\n*Keep ready:*\nPAN, Aadhaar-linked mobile number, bank details, Cancelled Cheque or Passbook, Picture of your Signature\n\n*How-to-Open Zerodha Account video:*\nhttps://youtu.be/JFx9tzhBrjE\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
-B = "*Follow these steps to Open Zerodha Account*\n\n*Step 1 - Register your details*\nhttps://gorefer.in/r/wa\n\n*Step 2 - Open a free Zerodha account online:*\nhttps://gorefer.in/zerodha/open\n\n*Keep ready:*\nPAN, Aadhaar-linked mobile number, bank details, Cancelled Cheque or Passbook, Picture of your Signature\n\n*How-to-Open Zerodha Account video:*\nhttps://youtu.be/JFx9tzhBrjE\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
+B = "*Follow these steps to Open Zerodha Account*\n\n*Step 1 - Register your details*\nhttps://gorefer.in/zerodha/r/wa\n\n*Step 2 - Open a free Zerodha account online:*\nhttps://gorefer.in/zerodha/open\n\n*Keep ready:*\nPAN, Aadhaar-linked mobile number, bank details, Cancelled Cheque or Passbook, Picture of your Signature\n\n*How-to-Open Zerodha Account video:*\nhttps://youtu.be/JFx9tzhBrjE\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
 C = "*Zerodha खाता खोलने के लिए ये स्टेप्स फ़ॉलो करें*\n\n*स्टेप 1 - अपनी जानकारी रजिस्टर करें*\nhttps://gorefer.in/zerodha/r/wa/DA1707\n\n*स्टेप 2 - ऑनलाइन मुफ़्त Zerodha खाता खोलें:*\nhttps://gorefer.in/zerodha/open\n\n*तैयार रखें:*\nPAN, आधार से जुड़ा मोबाइल नंबर, बैंक डिटेल्स, कैंसल्ड चेक या पासबुक, आपके सिग्नेचर की फ़ोटो\n\n*Zerodha खाता कैसे खोलें - वीडियो:*\nhttps://youtu.be/JTZ-ebu2vyA\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
-D = "*Zerodha खाता खोलने के लिए ये स्टेप्स फ़ॉलो करें*\n\n*स्टेप 1 - अपनी जानकारी रजिस्टर करें*\nhttps://gorefer.in/r/wa\n\n*स्टेप 2 - ऑनलाइन मुफ़्त Zerodha खाता खोलें:*\nhttps://gorefer.in/zerodha/open\n\n*तैयार रखें:*\nPAN, आधार से जुड़ा मोबाइल नंबर, बैंक डिटेल्स, कैंसल्ड चेक या पासबुक, आपके सिग्नेचर की फ़ोटो\n\n*Zerodha खाता कैसे खोलें - वीडियो:*\nhttps://youtu.be/JTZ-ebu2vyA\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
+D = "*Zerodha खाता खोलने के लिए ये स्टेप्स फ़ॉलो करें*\n\n*स्टेप 1 - अपनी जानकारी रजिस्टर करें*\nhttps://gorefer.in/zerodha/r/wa\n\n*स्टेप 2 - ऑनलाइन मुफ़्त Zerodha खाता खोलें:*\nhttps://gorefer.in/zerodha/open\n\n*तैयार रखें:*\nPAN, आधार से जुड़ा मोबाइल नंबर, बैंक डिटेल्स, कैंसल्ड चेक या पासबुक, आपके सिग्नेचर की फ़ोटो\n\n*Zerodha खाता कैसे खोलें - वीडियो:*\nhttps://youtu.be/JTZ-ebu2vyA\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
 
 PR197_DEFAULT = (
     "*Open a free {program_brand} account online:*\n{link}\n\n"
@@ -186,7 +186,36 @@ def test_blank_hindi_save_stores_default_and_help_text_says_so(tenant, admin_cli
 def test_no_id_register_path_is_a_cascade_key(tenant, django_capture_on_commit_callbacks):
     set_tenant(prefkeys.SHARE_ONETAP_WA_REGISTER_PATH, "/r/open", tenant_id=tenant.id)
     text = _text(_get("/share/wa/KITEID?skip=1", django_capture_on_commit_callbacks))
-    assert text == B.replace("https://gorefer.in/r/wa", "https://gorefer.in/r/open")
+    assert text == B.replace("https://gorefer.in/zerodha/r/wa", "https://gorefer.in/zerodha/r/open")
+
+
+# --- the no-ID step-1 link carries the program's link word (owner finding 2026-11-18) ---
+
+
+@SHARE_URLS
+@pytest.mark.parametrize("path", [
+    "/share/wa?skip=1", "/share/wa/?skip=1", "/zerodha/share/wa?skip=1", "/zerodha/share/wa/?skip=1",
+])
+def test_no_id_in_link_then_skip_gives_prefixed_register_link(tenant, django_capture_on_commit_callbacks, path):
+    """Scenario 1: the link has no Kite ID at all; the sharer taps "proceed without ID"."""
+    assert _text(_get(path, django_capture_on_commit_callbacks)) == B
+
+
+@SHARE_URLS
+def test_configured_path_already_prefixed_is_not_doubled(tenant, django_capture_on_commit_callbacks):
+    set_tenant(prefkeys.SHARE_ONETAP_WA_REGISTER_PATH, "/zerodha/r/wa", tenant_id=tenant.id)
+    text = _text(_get("/share/wa/KITEID?skip=1", django_capture_on_commit_callbacks))
+    assert text == B
+    assert "/zerodha/zerodha/" not in text
+
+
+@SHARE_URLS
+def test_program_without_link_word_keeps_the_bare_path(tenant, django_capture_on_commit_callbacks):
+    from apps.referrals.models import ReferralProgram
+
+    ReferralProgram.objects.update(url_prefix="")
+    text = _text(_get("/share/wa/KITEID?skip=1", django_capture_on_commit_callbacks))
+    assert "*Step 1 - Register your details*\nhttps://gorefer.in/r/wa\n" in text
 
 
 def test_new_keys_have_the_approved_defaults(tenant):
