@@ -131,7 +131,9 @@ def test_hindi_uses_its_own_two_step_text(tenant, django_capture_on_commit_callb
 @SHARE_URLS
 @pytest.mark.parametrize("path", ["/share/wa/KITEID?skip=1", "/zerodha/share/wa/?skip=1"])
 def test_share_without_my_id_uses_no_id_register_link(tenant, django_capture_on_commit_callbacks, path):
-    """Row J3.7 / decision D1: same message; step 1 is /zerodha/r/wa (program word added, owner 2026-11-18); nobody credited; no referrer created."""
+    """Row J3.7 / decision D1: same message; step 1 is /zerodha/r/wa (owner 2026-11-18).
+
+    Nobody credited; no referrer created."""
     text = _text(_get(path, django_capture_on_commit_callbacks))
     assert text == EXPECTED_NOID
     event = Event.objects.get(event_type="share_intent")
