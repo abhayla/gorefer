@@ -134,6 +134,7 @@ python manage.py sweep_name_drift           # report-only: Customer name vs Zoho
 python manage.py backfill_first_click_at    # idempotent: Referral.first_click_at from earliest non-bot click
 python manage.py refresh_network_table      # rebuild var/network-ranges.tsv (datacenter/crawler IP table, iptoasn.com); also weekly via setup_schedules
 python manage.py reclassify_datacenter_clicks [--apply]   # history repair: past datacenter-IP clicks -> is_bot=True (dry-run by default)
+python scripts/probe_public_links.py https://gorefer.in   # read-only: every public link once (70), after any deploy; exit 1 on a 5xx or bare /r/wa Step 1
 ```
 
 CI (`.github/workflows/ci.yml`, Python 3.13, Postgres 16 service): contract-doc drift gate → Tailwind freshness → ruff → `manage.py check` → architecture boundary gate (`scripts/check_architecture.py`, rail E-3) → migration drift → migrate → pytest with an 86% coverage floor. A second workflow, `public-hygiene.yml`, runs `check_public_hygiene.py` + gitleaks.
