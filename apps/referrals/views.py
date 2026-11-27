@@ -40,6 +40,7 @@ from .redirect_service import (
     is_channel_code,
     is_reserved_open,
     normalize_link_language,
+    record_visit_event,
 )
 from .share_intent_service import handle_share_intent, handle_share_without_id, is_share_channel_served
 from .validators import (
@@ -173,7 +174,8 @@ def _landing_context(request, tenant, client_id: str, nonce: str | None):
     return ctx
 
 
-def _partner_referral_page_response(request, tenant, channel: str | None):
+def _partner_referral_page_response(request, tenant, channel: str | None, *,
+                                    origin: str = vocab.ORIGIN_R_OPEN):
     """/r/open, and the referral pop-up's Skip: 302 to the partner's referral page (empty
     box, partner code server-side), no identity; crawlers get the PIFS card."""
     if is_bot_user_agent(request.META.get("HTTP_USER_AGENT", "")):
@@ -184,6 +186,7 @@ def _partner_referral_page_response(request, tenant, channel: str | None):
             tenant=tenant, visitor_id=visitor_id,
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
             raw_ip=_client_ip(request), share_channel=_share_channel(request, channel),
+            origin=origin,
         )
     except PartnerUnavailable:
         return _partner_unavailable(request)
@@ -314,8 +317,8 @@ def disclosure_page(request, slug: str):
     Composes each active partner's regulator-mandated disclosure block for the tenant
     identified by `slug` (e.g. /d/pifs), in regulator order (SEBI/NSE → IRDAI → RBI).
     The canonical §4.4 host: a light WhatsApp message / `direct` bypass link points
-    here for the full disclosures. NO PII; NO partner code / raw Zerodha URL; creates
-    no event, so a crawler hit is inherently excluded from human counts.
+    here for the full disclosures. NO PII; NO partner code / raw Zerodha URL; records
+    a PII-free `disclosure_viewed` event for humans only (a preview bot writes nothing).
     """
     from apps.referrals.disclosure_service import compose_disclosures, resolve_tenant_by_slug
 
@@ -328,7 +331,17 @@ def disclosure_page(request, slug: str):
         "sub_broker_name": tenant.name,
         "disclosure_blocks": blocks,
     }
-    return render(request, "disclosure.html", context)
+    response = render(request, "disclosure.html", context)
+    user_agent = request.META.get("HTTP_USER_AGENT", "")
+    if not is_bot_user_agent(user_agent):
+        # T-link-tracking: a PII-free view count (the IP only classifies the network).
+        visitor_id, is_new = _ensure_visitor_id(request)
+        record_visit_event(
+            tenant=tenant, event_type=vocab.DISCLOSURE_VIEWED, source=vocab.SRC_SYSTEM,
+            visitor_id=visitor_id, user_agent=user_agent, raw_ip=_client_ip(request),
+        )
+        _set_visitor_cookie(response, visitor_id, is_new)
+    return response
 
 
 @require_GET
@@ -372,12 +385,22 @@ def share_intent_redirect(request, channel: str, client_id: str):
             client_id=normalized,
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
             lang=lang,
+            raw_ip=_client_ip(request),
         )
     except Http404:
         return HttpResponseNotFound()
     except PartnerUnavailable:
         return _partner_unavailable(request)
     return HttpResponseRedirect(destination)
+
+
+def _partner_direct_origin(request) -> str:
+    """`fallback` when the broken-link middleware sent the visitor here, else `open`."""
+    from .link_fallback import FALLBACK_PARAM, FALLBACK_VALUE
+
+    if request.GET.get(FALLBACK_PARAM) == FALLBACK_VALUE:
+        return vocab.ORIGIN_FALLBACK
+    return vocab.ORIGIN_OPEN
 
 
 @require_GET
@@ -398,6 +421,7 @@ def partner_direct_redirect(request, channel: str | None = None, lang: str | Non
             raw_ip=_client_ip(request),
             share_channel=_share_channel(request, channel),
             share_language=normalize_link_language(lang, tenant_id=getattr(tenant, "id", None)),
+            origin=_partner_direct_origin(request),
         )
     except PartnerUnavailable:
         return _partner_unavailable(request)
@@ -579,7 +603,12 @@ def _kite_prompt_copy(tenant_id: int | None, mode: str, channel: str | None = No
 
 
 def _kite_prompt_response(request, tenant, *, mode: str, channel: str | None = None):
-    """Render (or act on) the Kite ID pop-up for a link whose id is unusable."""
+    """Render (or act on) the Kite ID pop-up for a link whose id is unusable.
+
+    T-link-tracking: every human use is recorded PII-free — the view itself
+    (`share_recovery_viewed`, now with the visitor cookie so the digest can count unique
+    visitors) and each button (`kite_prompt_action`: entered + the validated public id,
+    skip, or wrong + a reason — the typed text of a wrong entry is NEVER stored)."""
     from django.conf import settings
     from django.http import HttpResponse, HttpResponseNotFound
 
@@ -588,11 +617,26 @@ def _kite_prompt_response(request, tenant, *, mode: str, channel: str | None = N
     if is_bot_user_agent(user_agent):  # preview fetch: the PIFS card, never the pop-up
         return render_preview(request, tenant_id=tenant_id)
 
+    visitor_id, is_new = _ensure_visitor_id(request)
+    channel_label = normalize_share_channel(channel) if channel else ""
+
+    def record(event_type, **extra):
+        record_visit_event(
+            tenant=tenant, event_type=event_type, source=vocab.SRC_SYSTEM,
+            visitor_id=visitor_id, user_agent=user_agent, raw_ip=_client_ip(request),
+            metadata={"channel": channel_label, "prompt": mode, **extra},
+        )
+
+    def with_cookie(response):
+        _set_visitor_cookie(response, visitor_id, is_new)
+        return response
+
     if SKIP_PARAM in request.GET:
         if mode == PROMPT_REFERRAL:
             # Exactly the old /r/open path: partner referral page, empty box, partner code
             # injected server-side, click on the partner-direct journey, no referrer.
-            return _partner_referral_page_response(request, tenant, channel)
+            record(vocab.KITE_PROMPT_ACTION, action=vocab.PROMPT_ACTION_SKIP)
+            return _partner_referral_page_response(request, tenant, channel, origin=vocab.ORIGIN_POPUP_SKIP)
         try:
             check_rate("share", client_ip(request),
                        limit=settings.RATELIMIT_SHARE_MAX, window=settings.RATELIMIT_API_WINDOW)
@@ -603,49 +647,48 @@ def _kite_prompt_response(request, tenant, *, mode: str, channel: str | None = N
         try:
             destination = handle_share_without_id(
                 tenant=tenant, channel=channel or "", user_agent=user_agent,
-                lang=resolve_lang_or_stored(request, tenant_id),
+                lang=resolve_lang_or_stored(request, tenant_id), raw_ip=_client_ip(request),
             )
         except Http404:
             return HttpResponseNotFound()
         except PartnerUnavailable:
             return _partner_unavailable(request)
-        return HttpResponseRedirect(destination)
+        record(vocab.KITE_PROMPT_ACTION, action=vocab.PROMPT_ACTION_SKIP)
+        return with_cookie(HttpResponseRedirect(destination))
 
     copy = _kite_prompt_copy(tenant_id, mode, channel)
     error = ""
     entered = ""
     if KITE_ID_PARAM in request.GET:
         entered = "".join((request.GET.get(KITE_ID_PARAM) or "").split())[:KITE_ID_INPUT_MAX]
+        reason = ""
         if not entered:
-            error = copy["error_empty"]
+            error, reason = copy["error_empty"], vocab.PROMPT_WRONG_EMPTY
         else:
             try:
                 normalized = validate_link_client_id(tenant, entered)
             except DeletedClientId:
                 # A soft-deleted (junk/test) id: same message as a placeholder word.
-                error = copy["error_placeholder"]
+                error, reason = copy["error_placeholder"], vocab.PROMPT_WRONG_DELETED
             except InvalidClientId:
                 cleaned = "".join(ch for ch in entered if ch.isalnum()).upper()
                 placeholder = is_placeholder_id(tenant_id, cleaned)
                 error = copy["error_placeholder"] if placeholder else copy["error_shape"]
+                reason = vocab.PROMPT_WRONG_PLACEHOLDER if placeholder else vocab.PROMPT_WRONG_SHAPE
             else:
+                record(vocab.KITE_PROMPT_ACTION, action=vocab.PROMPT_ACTION_ENTERED, client_id=normalized)
                 if mode == PROMPT_SHARE:
-                    return HttpResponseRedirect(share_path(channel, normalized, tenant=tenant))
-                return HttpResponseRedirect(referral_path(normalized, channel=channel, tenant=tenant))
+                    return with_cookie(HttpResponseRedirect(share_path(channel, normalized, tenant=tenant)))
+                return with_cookie(
+                    HttpResponseRedirect(referral_path(normalized, channel=channel, tenant=tenant))
+                )
+        # Only the reason — the typed text may be a mobile number (PII, #16).
+        record(vocab.KITE_PROMPT_ACTION, action=vocab.PROMPT_ACTION_WRONG, reason=reason)
     else:
-        # First view only (not each retry). Reuses the T-122 recovery event, which the
-        # daily digest counts: this pop-up is now where an id-less link lands.
-        Event.objects.create(
-            tenant=tenant,
-            event_type=vocab.SHARE_RECOVERY_VIEWED,
-            source=vocab.SRC_SYSTEM,
-            referral=None,
-            user_type="anonymous",
-            user_agent=user_agent,
-            is_bot=False,
-            person_ref_id=None,
-            metadata={"channel": normalize_share_channel(channel) if channel else "", "prompt": mode},
-        )
+        # Each view (reloads included); the digest counts unique visitor_ids. Reuses the
+        # T-122 recovery event, which the daily digest counts: this pop-up is now where an
+        # id-less link lands.
+        record(vocab.SHARE_RECOVERY_VIEWED)
     context = {
         "copy": copy,
         "mode": mode,
@@ -656,7 +699,7 @@ def _kite_prompt_response(request, tenant, *, mode: str, channel: str | None = N
         "skip_url": f"{request.path}?{SKIP_PARAM}=1",
         "input_max": resolve_client_id_length(tenant_id, active_partner_code(tenant)),
     }
-    return render(request, "kite_prompt.html", context, status=200)
+    return with_cookie(render(request, "kite_prompt.html", context, status=200))
 
 
 @require_GET

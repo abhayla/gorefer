@@ -806,6 +806,13 @@ SHARE_ONETAP_WA_MESSAGE_HI = "share_onetap_wa_message_hi"
 SHARE_ONETAP_WA_REGISTER_PATH = "share_onetap_wa_register_path"
 SHARE_ONETAP_WA_REGISTER_PATH_DEFAULT = "/r/wa"
 SHARE_ONETAP_WA_DISCLOSURE = "share_onetap_wa_disclosure"
+# Step 2 / the "open" link of the one-tap message (owner 2026-11-27, T-link-tracking): the
+# path is given the program's link word like every other generated link (/open/wa ->
+# /zerodha/open/wa). The /wa tag lands on the SAME partner page as /open (tags never reach
+# the partner) but lets the daily digest count friends tapping Step 2 apart from the plain
+# /open link PIFS posts itself. Set "/open" to send the untagged link again (no deploy).
+SHARE_ONETAP_WA_OPEN_PATH = "share_onetap_wa_open_path"
+SHARE_ONETAP_WA_OPEN_PATH_DEFAULT = "/open/wa"
 SHARE_ONETAP_WA_DISCLOSURE_DEFAULT = "*Disclosures:*\n{url}"
 
 # --- WhatsApp notification routing (Tier 2, admin) ---------------------------------

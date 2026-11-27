@@ -59,7 +59,11 @@ def test_channel_only_equals_open(seeded, django_capture_on_commit_callbacks, pa
     resp = _get(path + "?skip=1", django_capture_on_commit_callbacks)
     assert resp.status_code == 302
     assert resp.headers["Location"] == REFERRAL_PAGE
-    assert _state() == (0, 1, 1, ("click", {"channel": channel_meta}))
+    # T-link-tracking: the Skip tap is recorded (no id text), then the tagged click.
+    assert _state()[:2] == (0, 1)
+    assert Event.objects.get(event_type="click").metadata == {"channel": channel_meta, "origin": "popup_skip"}
+    action = Event.objects.get(event_type="kite_prompt_action")
+    assert action.metadata == {"channel": channel_meta, "prompt": "referral", "action": "skip"}
 
 
 @pytest.mark.parametrize("path", ["/r/wa/", "/r/wa", "/zerodha/r/wa/", "/zerodha/r/wa"])

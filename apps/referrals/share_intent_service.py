@@ -27,11 +27,10 @@ from django.http import Http404
 from apps.config.cascade import resolve
 from apps.events import vocab
 from apps.events.bots import is_bot_user_agent
-from apps.events.models import Event
 from gorefer.flags import SHARE_CHANNEL_OTHER, SHARE_INTENT_CHANNELS, flags, normalize_share_channel
 
 from .links import referral_path
-from .redirect_service import get_active_program, lazy_get_or_create_referral
+from .redirect_service import get_active_program, lazy_get_or_create_referral, record_visit_event
 
 logger = logging.getLogger("gorefer.share_intent")
 
@@ -271,11 +270,9 @@ def onetap_whatsapp_link(tenant) -> str | None:
     """
     from apps.config.preferences import SHARE_ONETAP_WA_LINK_OPEN, resolve_onetap_wa_link
 
-    from .links import partner_direct_path
-
     if resolve_onetap_wa_link(getattr(tenant, "id", None)) != SHARE_ONETAP_WA_LINK_OPEN:
         return None
-    return f"https://{_public_host()}{partner_direct_path(tenant=tenant)}"
+    return onetap_open_link(tenant)
 
 
 def onetap_whatsapp_disclosure(tenant_id: int | None) -> str:
@@ -352,10 +349,22 @@ def _with_program_prefix(path: str, tenant) -> str:
 
 
 def onetap_open_link(tenant) -> str:
-    """Step 2 of the one-tap message: the program's plain partner-direct link."""
+    """Step 2 of the one-tap message: the program's partner-direct link, tagged by the
+    cascade key `share_onetap_wa_open_path` (default /open/wa -> /zerodha/open/wa; owner
+    2026-11-27). Same partner page as /open; the tag only makes Step-2 taps countable.
+    A blank or malformed value falls back to the plain /open link."""
+    from apps.config.preferences import SHARE_ONETAP_WA_OPEN_PATH, SHARE_ONETAP_WA_OPEN_PATH_DEFAULT
+
     from .links import partner_direct_path
 
-    return f"https://{_public_host()}{partner_direct_path(tenant=tenant)}"
+    try:
+        path = str(resolve(SHARE_ONETAP_WA_OPEN_PATH, tenant_id=getattr(tenant, "id", None),
+                           default=SHARE_ONETAP_WA_OPEN_PATH_DEFAULT) or "").strip()
+    except Exception:
+        path = SHARE_ONETAP_WA_OPEN_PATH_DEFAULT
+    if not path.startswith("/") or any(c.isspace() for c in path) or "//" in path:
+        return f"https://{_public_host()}{partner_direct_path(tenant=tenant)}"
+    return f"https://{_public_host()}{_with_program_prefix(path, tenant)}"
 
 
 def onetap_whatsapp_message(
@@ -408,7 +417,8 @@ def onetap_whatsapp_message(
 
 
 def handle_share_intent(
-    *, tenant, channel: str, client_id: str, user_agent: str | None, lang: str = "en"
+    *, tenant, channel: str, client_id: str, user_agent: str | None, lang: str = "en",
+    raw_ip: str | None = None,
 ):
     """Resolve a /share/{channel}/{client_id} hit. Returns the destination URL.
 
@@ -423,6 +433,8 @@ def handle_share_intent(
     as before. The view resolves the effective language (explicit `?lang=` else the
     referrer's stored language) and passes it in — this function does no resolution
     of its own.
+
+    `raw_ip` (T-link-tracking) is used only to mark a datacenter hit is_bot (never stored).
     """
     if channel not in SHARE_INTENT_CHANNELS or channel not in _CHANNEL_TARGET_BUILDERS:
         raise Http404(f"unsupported share channel: {channel!r}")
@@ -451,17 +463,12 @@ def handle_share_intent(
         return destination
 
     referral = lazy_get_or_create_referral(tenant, program, client_id)
+    metadata = {"channel": normalize_share_channel(channel) or SHARE_CHANNEL_OTHER}
     transaction.on_commit(
-        lambda: Event.objects.create(
-            tenant=tenant,
-            event_type=vocab.SHARE_INTENT,
-            source=vocab.SRC_WATI,
-            referral=referral,
-            user_type="anonymous",
-            user_agent=user_agent or "",
-            is_bot=False,
-            person_ref_id=None,  # PII-FREE — no VisitorPII write for this endpoint
-            metadata={"channel": normalize_share_channel(channel) or SHARE_CHANNEL_OTHER},
+        # PII-FREE — the IP only classifies the network; no VisitorPII write here.
+        lambda: record_visit_event(
+            tenant=tenant, event_type=vocab.SHARE_INTENT, source=vocab.SRC_WATI,
+            referral=referral, user_agent=user_agent, raw_ip=raw_ip, metadata=metadata,
         )
     )
     return destination
@@ -472,7 +479,8 @@ def is_share_channel_served(channel: str) -> bool:
     return channel in SHARE_INTENT_CHANNELS and channel in _CHANNEL_TARGET_BUILDERS
 
 
-def handle_share_without_id(*, tenant, channel: str, user_agent: str | None, lang: str = "en"):
+def handle_share_without_id(*, tenant, channel: str, user_agent: str | None, lang: str = "en",
+                            raw_ip: str | None = None):
     """The Kite ID pop-up's "Share without my ID" (owner 2026-11-02). Returns the destination.
 
     Same share message as /share/{channel}/{client_id}, but the link inside is the
@@ -502,17 +510,11 @@ def handle_share_without_id(*, tenant, channel: str, user_agent: str | None, lan
         return destination
 
     referral = _get_or_create_partner_direct_referral(tenant, program)
+    metadata = {"channel": normalize_share_channel(channel) or SHARE_CHANNEL_OTHER, "without_id": True}
     transaction.on_commit(
-        lambda: Event.objects.create(
-            tenant=tenant,
-            event_type=vocab.SHARE_INTENT,
-            source=vocab.SRC_WATI,
-            referral=referral,
-            user_type="anonymous",
-            user_agent=user_agent or "",
-            is_bot=False,
-            person_ref_id=None,
-            metadata={"channel": normalize_share_channel(channel) or SHARE_CHANNEL_OTHER, "without_id": True},
+        lambda: record_visit_event(
+            tenant=tenant, event_type=vocab.SHARE_INTENT, source=vocab.SRC_WATI,
+            referral=referral, user_agent=user_agent, raw_ip=raw_ip, metadata=metadata,
         )
     )
     return destination

@@ -331,7 +331,7 @@ def test_every_channel_gets_the_prompt_and_keeps_its_channel(
     assert resp.headers["Location"] == f"/zerodha/r/{code}/AB1234"
     resp = _get(f"/r/{code}/KITEID?skip=1", django_capture_on_commit_callbacks)
     assert resp.headers["Location"] == REFERRAL_PAGE
-    assert Event.objects.get(event_type="click").metadata == {"channel": label}
+    assert Event.objects.get(event_type="click").metadata == {"channel": label, "origin": "popup_skip"}
     assert _no_referrer_saved()
     real = _get(f"/r/{code}/AB1234", django_capture_on_commit_callbacks)
     assert real.status_code == 200 and REF_TITLE not in real.content.decode()  # real id: landing

@@ -32,7 +32,7 @@ HUMAN = {"HTTP_USER_AGENT": "Mozilla/5.0 (Android)", "REMOTE_ADDR": "203.0.113.9
 BOT = {"HTTP_USER_AGENT": "WhatsApp/2.23.20 A"}
 SHARE_URLS = pytest.mark.urls("tests.urls_share_intent")
 
-OPEN_LINK = "https://gorefer.in/zerodha/open"
+OPEN_LINK = "https://gorefer.in/zerodha/open/wa"
 DISCLOSURE = "*Disclosures:*\nhttps://gorefer.in/d/pifs"
 _TAIL = "\n\n" + DISCLOSURE
 

@@ -256,7 +256,7 @@ def test_one_tap_share_endpoint_uses_the_same_personalized_message(seeded, clien
     text = urllib.parse.parse_qs(urllib.parse.urlparse(resp["Location"]).query)["text"][0]
     # Decision D2 (owner 2026-11-04): the opener stays, followed by the one-tap link
     # (/zerodha/open) and the one-tap disclosure tail — still in that locked order.
-    assert text == "My own words.\nhttps://gorefer.in/zerodha/open\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
+    assert text == "My own words.\nhttps://gorefer.in/zerodha/open/wa\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
 
 
 @HUB_URLS

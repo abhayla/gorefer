@@ -23,10 +23,10 @@ HUMAN = {"HTTP_USER_AGENT": "Mozilla/5.0 (Android)", "REMOTE_ADDR": "203.0.113.9
 SHARE_URLS = pytest.mark.urls("tests.urls_share_intent")
 
 # --- APPROVED TEXTS (generated from the owner-approved file) ---
-A = "*Follow these steps to Open Zerodha Account*\n\n*Step 1 - Register your details*\nhttps://gorefer.in/zerodha/r/wa/DA1707\n\n*Step 2 - Open a free Zerodha account online:*\nhttps://gorefer.in/zerodha/open\n\n*Keep ready:*\nPAN, Aadhaar-linked mobile number, bank details, Cancelled Cheque or Passbook, Picture of your Signature\n\n*How-to-Open Zerodha Account video:*\nhttps://youtu.be/JFx9tzhBrjE\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
-B = "*Follow these steps to Open Zerodha Account*\n\n*Step 1 - Register your details*\nhttps://gorefer.in/zerodha/r/wa\n\n*Step 2 - Open a free Zerodha account online:*\nhttps://gorefer.in/zerodha/open\n\n*Keep ready:*\nPAN, Aadhaar-linked mobile number, bank details, Cancelled Cheque or Passbook, Picture of your Signature\n\n*How-to-Open Zerodha Account video:*\nhttps://youtu.be/JFx9tzhBrjE\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
-C = "*Zerodha खाता खोलने के लिए ये स्टेप्स फ़ॉलो करें*\n\n*स्टेप 1 - अपनी जानकारी रजिस्टर करें*\nhttps://gorefer.in/zerodha/r/wa/DA1707\n\n*स्टेप 2 - ऑनलाइन मुफ़्त Zerodha खाता खोलें:*\nhttps://gorefer.in/zerodha/open\n\n*तैयार रखें:*\nPAN, आधार से जुड़ा मोबाइल नंबर, बैंक डिटेल्स, कैंसल्ड चेक या पासबुक, आपके सिग्नेचर की फ़ोटो\n\n*Zerodha खाता कैसे खोलें - वीडियो:*\nhttps://youtu.be/JTZ-ebu2vyA\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
-D = "*Zerodha खाता खोलने के लिए ये स्टेप्स फ़ॉलो करें*\n\n*स्टेप 1 - अपनी जानकारी रजिस्टर करें*\nhttps://gorefer.in/zerodha/r/wa\n\n*स्टेप 2 - ऑनलाइन मुफ़्त Zerodha खाता खोलें:*\nhttps://gorefer.in/zerodha/open\n\n*तैयार रखें:*\nPAN, आधार से जुड़ा मोबाइल नंबर, बैंक डिटेल्स, कैंसल्ड चेक या पासबुक, आपके सिग्नेचर की फ़ोटो\n\n*Zerodha खाता कैसे खोलें - वीडियो:*\nhttps://youtu.be/JTZ-ebu2vyA\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
+A = "*Follow these steps to Open Zerodha Account*\n\n*Step 1 - Register your details*\nhttps://gorefer.in/zerodha/r/wa/DA1707\n\n*Step 2 - Open a free Zerodha account online:*\nhttps://gorefer.in/zerodha/open/wa\n\n*Keep ready:*\nPAN, Aadhaar-linked mobile number, bank details, Cancelled Cheque or Passbook, Picture of your Signature\n\n*How-to-Open Zerodha Account video:*\nhttps://youtu.be/JFx9tzhBrjE\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
+B = "*Follow these steps to Open Zerodha Account*\n\n*Step 1 - Register your details*\nhttps://gorefer.in/zerodha/r/wa\n\n*Step 2 - Open a free Zerodha account online:*\nhttps://gorefer.in/zerodha/open/wa\n\n*Keep ready:*\nPAN, Aadhaar-linked mobile number, bank details, Cancelled Cheque or Passbook, Picture of your Signature\n\n*How-to-Open Zerodha Account video:*\nhttps://youtu.be/JFx9tzhBrjE\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
+C = "*Zerodha खाता खोलने के लिए ये स्टेप्स फ़ॉलो करें*\n\n*स्टेप 1 - अपनी जानकारी रजिस्टर करें*\nhttps://gorefer.in/zerodha/r/wa/DA1707\n\n*स्टेप 2 - ऑनलाइन मुफ़्त Zerodha खाता खोलें:*\nhttps://gorefer.in/zerodha/open/wa\n\n*तैयार रखें:*\nPAN, आधार से जुड़ा मोबाइल नंबर, बैंक डिटेल्स, कैंसल्ड चेक या पासबुक, आपके सिग्नेचर की फ़ोटो\n\n*Zerodha खाता कैसे खोलें - वीडियो:*\nhttps://youtu.be/JTZ-ebu2vyA\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
+D = "*Zerodha खाता खोलने के लिए ये स्टेप्स फ़ॉलो करें*\n\n*स्टेप 1 - अपनी जानकारी रजिस्टर करें*\nhttps://gorefer.in/zerodha/r/wa\n\n*स्टेप 2 - ऑनलाइन मुफ़्त Zerodha खाता खोलें:*\nhttps://gorefer.in/zerodha/open/wa\n\n*तैयार रखें:*\nPAN, आधार से जुड़ा मोबाइल नंबर, बैंक डिटेल्स, कैंसल्ड चेक या पासबुक, आपके सिग्नेचर की फ़ोटो\n\n*Zerodha खाता कैसे खोलें - वीडियो:*\nhttps://youtu.be/JTZ-ebu2vyA\n\nInvestments in securities market are subject to market risks, read all the related documents carefully before investing.\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs"
 
 PR197_DEFAULT = (
     "*Open a free {program_brand} account online:*\n{link}\n\n"
@@ -111,7 +111,7 @@ def test_referrer_opener_still_replaces_the_text(tenant, django_capture_on_commi
         tenant=tenant, program=program, partner=program.partner, client_id=CID)
     opener_service.set_opener(identity, "My own words.")
     text = _text(_get(f"/share/wa/{CID}", django_capture_on_commit_callbacks))
-    assert text == ("My own words.\nhttps://gorefer.in/zerodha/open\n\n"
+    assert text == ("My own words.\nhttps://gorefer.in/zerodha/open/wa\n\n"
                     "*Disclosures:*\nhttps://gorefer.in/d/pifs")
 
 
@@ -136,7 +136,7 @@ def test_old_link_placeholder_still_works_for_rollback(tenant, django_capture_on
     """An operator pastes the PR #197 text back: {link} = the open link, as before."""
     set_tenant(prefkeys.SHARE_ONETAP_WA_MESSAGE, PR197_DEFAULT, tenant_id=tenant.id)
     text = _text(_get(f"/share/wa/{CID}", django_capture_on_commit_callbacks))
-    assert text.startswith("*Open a free Zerodha account online:*\nhttps://gorefer.in/zerodha/open\n\n")
+    assert text.startswith("*Open a free Zerodha account online:*\nhttps://gorefer.in/zerodha/open/wa\n\n")
     assert text.endswith("*Disclosures:*\nhttps://gorefer.in/d/pifs")
 
 
@@ -148,7 +148,7 @@ def test_hindi_message_is_a_cascade_key(tenant, django_capture_on_commit_callbac
     set_tenant(prefkeys.SHARE_ONETAP_WA_MESSAGE_HI, "हिंदी {register_link} {open_link}",
                tenant_id=tenant.id)
     text = _text(_get(f"/share/wa/{CID}?lang=hi", django_capture_on_commit_callbacks))
-    assert text == ("हिंदी https://gorefer.in/zerodha/r/wa/DA1707 https://gorefer.in/zerodha/open"
+    assert text == ("हिंदी https://gorefer.in/zerodha/r/wa/DA1707 https://gorefer.in/zerodha/open/wa"
                     "\n\n*Disclosures:*\nhttps://gorefer.in/d/pifs")
 
 

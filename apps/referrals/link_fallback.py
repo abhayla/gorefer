@@ -18,6 +18,11 @@ What stays a real 404 (structural, not behaviour):
     and redirecting them would count as partner-link clicks.
 
 Switch: cascade key `link_fallback_enabled` (default on).
+
+A redirect to the DEFAULT link carries `?from=fallback` (T-link-tracking, owner
+2026-11-27) so the /open click it lands on is recorded with origin "fallback" and the
+daily digest's "Open link" count means the link people were actually given. The marker
+never reaches the partner: /open builds its destination from the program template.
 """
 from __future__ import annotations
 
@@ -33,6 +38,9 @@ from apps.tenants.resolve import get_current_tenant
 from .links import partner_direct_path
 
 logger = logging.getLogger("gorefer.redirect")
+
+FALLBACK_PARAM = "from"
+FALLBACK_VALUE = "fallback"
 
 EXCLUDED_PREFIXES = (
     "api", "admin-panel", "django-admin", "static", "media", "og", "d", "privacy",
@@ -87,8 +95,11 @@ class LinkFallbackMiddleware:
             if query:
                 target = f"{target}?{query}"
         else:
-            target = partner_direct_path(tenant=tenant)
-        if target == request.path:  # the default link itself is missing: nothing to fall back to
+            default = partner_direct_path(tenant=tenant)
+            if default == request.path:  # the default link itself is missing: nothing to fall back to
+                return response
+            target = f"{default}?{FALLBACK_PARAM}={FALLBACK_VALUE}"
+        if target == request.path:
             return response
         logger.warning("broken link %s -> %s", request.path, target)
         return HttpResponseRedirect(target)
