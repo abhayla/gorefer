@@ -62,7 +62,9 @@ def _mentions_gate_file(text: str) -> str | None:
 def _staged_commit() -> str:
     """A throwaway commit object of the index, so `git commit` is checked BEFORE it happens."""
     def git(*a):
-        return subprocess.run(["git", *a], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip()
+        //return subprocess.run(["git", *a], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip()
+        out = subprocess.run(["git", *a], cwd=ROOT, check=True, capture_output=True, text=True)
+        return out.stdout.strip()
     return git("commit-tree", git("write-tree"), "-p", "HEAD", "-m", "frozen-links guard probe")
 
 
