@@ -6,7 +6,23 @@
       "Bash(git push -f:*)",
       "Bash(git push --no-verify:*)",
       "Bash(git commit --no-verify:*)",
-      "Bash(git commit -n:*)"
+      "Bash(git commit -n:*)",
+      "Edit(/docs/links/frozen-links.json)",
+      "Write(/docs/links/frozen-links.json)",
+      "Edit(/tests/test_frozen_links.py)",
+      "Write(/tests/test_frozen_links.py)",
+      "Edit(/tests/urls_frozen_prod.py)",
+      "Write(/tests/urls_frozen_prod.py)",
+      "Edit(/apps/referrals/frozen_links.py)",
+      "Write(/apps/referrals/frozen_links.py)",
+      "Edit(/scripts/check_frozen_links_approval.py)",
+      "Write(/scripts/check_frozen_links_approval.py)",
+      "Edit(/.github/workflows/frozen-links.yml)",
+      "Write(/.github/workflows/frozen-links.yml)",
+      "Edit(/.claude/hooks/guard_frozen_links.py)",
+      "Write(/.claude/hooks/guard_frozen_links.py)",
+      "Edit(/.claude/settings.json)",
+      "Write(/.claude/settings.json)"
     ]
   },
   "enabledPlugins": {
@@ -18,5 +34,19 @@
     "prompt-auto-enhance@claude-best-practices": true,
     "fable-operating-manual@claude-best-practices": true,
     "cbp-python-stack@claude-best-practices": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard_frozen_links.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
   }
 }

@@ -437,6 +437,53 @@ does for behavior literals.
 **Not in this public repo:** the matrix itself. It carries example client IDs and template
 names, so it lives only as the private artifact; this repo holds the URL and the snapshot.
 
+## 6h. Shared links never break — the frozen-link gate (owner rule, 2026-11-27, STRICT)
+
+> *"All the links that were working previously that have been shared with the users should never
+> break. ... the previous links should never be removed, deleted or updated."* — owner, 2026-11-27
+
+Every link a customer may hold (short `/open`, `/r/{ID}` forms included) keeps landing where it
+did, under **any** change, code or settings, until the owner explicitly approves that change.
+New links may always be added.
+
+**The register** `docs/links/frozen-links.json`: one entry per link form, `AB1234` standing for
+every referrer's ID, with what it must keep doing. `redirect` is the exact final address (partner
+code + referrer ID). `share` is the share target plus the exact gorefer.in links inside the
+message; the wording may change. `page` is the kind of page (template + pop-up mode); its wording
+and design may change. `status` is the code. It also records production's link settings
+(`prod_settings`) and flags (`prod_flags`) the outcomes hold under.
+
+**The layers. Each covers what the others can't:**
+1. `tests/test_frozen_links.py` (CI `test` job) runs every entry through the real URLconf with
+   production's flags and settings. It fails on any different outcome, on a share message carrying
+   an unfrozen link, and on a public route in `gorefer/urls.py` with no entry.
+2. `.github/workflows/frozen-links.yml` → `scripts/check_frozen_links_approval.py`, the required
+   check `frozen-links`. Additions pass. Changing or removing an entry, changing
+   `prod_settings`/`prod_flags`, or touching any gate file needs the label `link-change-approved`,
+   **added by the owner by hand on github.com** (not via an app, so never by Claude) **after the
+   PR's latest commit**. It runs on `pull_request_target`, so a PR cannot edit its own gate.
+3. GitHub ruleset on `main`: required checks `test` + `frozen-links`, no bypass, no force-push.
+   Owner setup steps: `docs/links/FROZEN-LINKS-SETUP.md`. Without it, 1–2 only warn.
+4. Claude Code: committed `.claude/settings.json` deny rules plus the PreToolUse hook
+   `.claude/hooks/guard_frozen_links.py`. Claude never edits a gate file, never adds the label,
+   never uses `--no-verify`. A commit or push that changes a frozen entry stops for a human
+   permission prompt.
+5. Settings: a Preferences save that would move a frozen link needs an explicit "I approve these
+   link changes" (planned; mock-up first per §3a).
+
+**Adding a link (no approval):**
+`FROZEN_LINKS_ADD="/new/path|human,/new/path|bot" python -m pytest tests/test_frozen_links.py -q`.
+It observes and **appends**; it never rewrites an entry. Do it in the same PR as the new route,
+and update the Link Matrix (§6g).
+
+**If the test fails:** fix the change, never the register. Only if the owner says the link SHOULD
+change: edit the entry by hand (Claude can't; the owner or a human does), and the owner adds the
+label.
+
+**Not covered:** old templates with raw `signup.zerodha.com` links bypass GoRefer (Link Matrix
+J11.17). Env feature flags and prod-only settings can't be seen by CI: keep `prod_flags` /
+`prod_settings` true to production.
+
 ## 7. Definition of Done + expectations
 
 Reference `implementation/10-Claude-Code-Implementation-Guide.md` (§3 standards, §6 tests, §7 git, §8 migrations, §9 DoD, §10 demo mode). A mission is **done** only when all hold:
@@ -453,6 +500,7 @@ Reference `implementation/10-Claude-Code-Implementation-Guide.md` (§3 standards
 - **Demo mode still works end-to-end** with `ENABLE_WATI_SEND` / `ENABLE_ZOHO_WRITE` off (adapters log intended calls instead of sending).
 - WATI send tests assert on **terminal delivery status**, not HTTP 200.
 - **Any link change is reflected in the GoRefer Link Matrix artifact** and the link-surface snapshot is regenerated (§6g).
+- **No frozen shared link changes outcome** (`tests/test_frozen_links.py` green). Every new public link is added to `docs/links/frozen-links.json` in the same PR (§6h).
 - PR opened per mission with a summary, deferrals, and any surfaced inconsistency; README/docs updated for anything an operator must run.
 
 ---

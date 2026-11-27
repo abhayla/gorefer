@@ -56,6 +56,8 @@ Thumbs.db
 !.claude/agents/
 !.claude/rules/
 !.claude/commands/
+# The frozen-link guard hook (CLAUDE.md §6h) must reach every session, cloud included.
+!.claude/hooks/
 
 # Browser-automation (Playwright MCP) session logs and page snapshots — local only
 .playwright-mcp/

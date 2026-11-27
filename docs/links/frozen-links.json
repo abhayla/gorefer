@@ -1,0 +1,1310 @@
+{
+  "about": "Frozen shared links (CLAUDE.md §6h). Every entry must keep its outcome under any code or settings change until the owner approves the change with the PR label `link-change-approved`. Add entries only through FROZEN_LINKS_ADD (see tests/test_frozen_links.py); never edit or delete an entry by hand. AB1234 stands for every referrer's Kite ID.",
+  "public_host": "gorefer.in",
+  "prod_flags": {
+    "ENABLE_SHARE_INTENT": true,
+    "ENABLE_RECORDS_LINK": true,
+    "ENABLE_SHARE_HUB": true,
+    "ENABLE_CUSTOMER_LOGIN": true,
+    "ENABLE_ADMIN_DASHBOARD": true
+  },
+  "prod_settings": {
+    "landing_mode": "direct",
+    "share_onetap_wa_register_path": "/zerodha/r/wa"
+  },
+  "links": [
+    {
+      "path": "/open",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/open/wa",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/open/yt",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/open/yt/hi",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/open/ig/hi",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/open/yt/xx",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/open/zz/hi",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/r/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/r/wa/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/r/tg/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/r/x/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/r/yt/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/r/fb/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/r/li/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/r/ig/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/r/email/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/r/copy/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/r/AB1234/continue",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/r/wa/AB1234/continue",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/r/open",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/r/wa/ab1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/r",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#referral"
+      }
+    },
+    {
+      "path": "/r/",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#referral"
+      }
+    },
+    {
+      "path": "/r/wa",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#referral"
+      }
+    },
+    {
+      "path": "/r/wa/",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#referral"
+      }
+    },
+    {
+      "path": "/r/KITEID",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#referral"
+      }
+    },
+    {
+      "path": "/r/wa/KITEID",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#referral"
+      }
+    },
+    {
+      "path": "/r/wa/YOUR_KITE_ID",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#referral"
+      }
+    },
+    {
+      "path": "/r/KITEID/continue",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#referral"
+      }
+    },
+    {
+      "path": "/r/wa/KITEID?kite_id=AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/r/wa/KITEID?skip=1",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/r/wa/KITEID?kite_id=AB12",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#referral"
+      }
+    },
+    {
+      "path": "/r/?kite_id=AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/share/wa/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "wa.me",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/open/wa",
+          "/zerodha/r/wa/AB1234"
+        ]
+      }
+    },
+    {
+      "path": "/share/wa/KITEID",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/share/wa",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/share/wa/",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/share/wa/KITEID?kite_id=AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "wa.me",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/open/wa",
+          "/zerodha/r/wa/AB1234"
+        ]
+      }
+    },
+    {
+      "path": "/share/wa/KITEID?skip=1",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "wa.me",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/open/wa",
+          "/zerodha/r/wa"
+        ]
+      }
+    },
+    {
+      "path": "/share/tg/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "t.me",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/r/tg/AB1234"
+        ]
+      }
+    },
+    {
+      "path": "/share/tg/KITEID",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/share/tg",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/share/tg/",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/share/tg/KITEID?kite_id=AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "t.me",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/r/tg/AB1234"
+        ]
+      }
+    },
+    {
+      "path": "/share/tg/KITEID?skip=1",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "t.me",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/r/open"
+        ]
+      }
+    },
+    {
+      "path": "/share/x/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "x.com",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/r/x/AB1234"
+        ]
+      }
+    },
+    {
+      "path": "/share/x/KITEID",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/share/x",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/share/x/",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/share/x/KITEID?kite_id=AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "x.com",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/r/x/AB1234"
+        ]
+      }
+    },
+    {
+      "path": "/share/x/KITEID?skip=1",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "x.com",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/r/open"
+        ]
+      }
+    },
+    {
+      "path": "/share/wa/AB1234?lang=hi",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "wa.me",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/open/wa",
+          "/zerodha/r/wa/AB1234"
+        ]
+      }
+    },
+    {
+      "path": "/share/wa/YOUR_KITE_ID",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/share/fb/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/share/li/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/share/fb/",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "share_recovery.html"
+      }
+    },
+    {
+      "path": "/share/wa/KITEID?kite_id=AB12",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/zerodha/open",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/zerodha/open/wa",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/zerodha/open/yt",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/zerodha/open/yt/hi",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/zerodha/open/ig/hi",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/zerodha/open/yt/xx",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/zerodha/open/zz/hi",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/zerodha/r/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/zerodha/r/wa/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/zerodha/r/tg/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/zerodha/r/x/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/zerodha/r/yt/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/zerodha/r/fb/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/zerodha/r/li/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/zerodha/r/ig/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/zerodha/r/email/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/zerodha/r/copy/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/zerodha/r/AB1234/continue",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/zerodha/r/wa/AB1234/continue",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/zerodha/r/open",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/zerodha/r/wa/ab1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/zerodha/r",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#referral"
+      }
+    },
+    {
+      "path": "/zerodha/r/",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#referral"
+      }
+    },
+    {
+      "path": "/zerodha/r/wa",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#referral"
+      }
+    },
+    {
+      "path": "/zerodha/r/wa/",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#referral"
+      }
+    },
+    {
+      "path": "/zerodha/r/KITEID",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#referral"
+      }
+    },
+    {
+      "path": "/zerodha/r/wa/KITEID",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#referral"
+      }
+    },
+    {
+      "path": "/zerodha/r/wa/YOUR_KITE_ID",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#referral"
+      }
+    },
+    {
+      "path": "/zerodha/r/KITEID/continue",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#referral"
+      }
+    },
+    {
+      "path": "/zerodha/r/wa/KITEID?kite_id=AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/zerodha/r/wa/KITEID?skip=1",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/zerodha/r/wa/KITEID?kite_id=AB12",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#referral"
+      }
+    },
+    {
+      "path": "/zerodha/r/?kite_id=AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/api/lead/?c=ZMPHZC&r=AB1234"
+      }
+    },
+    {
+      "path": "/zerodha/share/wa/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "wa.me",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/open/wa",
+          "/zerodha/r/wa/AB1234"
+        ]
+      }
+    },
+    {
+      "path": "/zerodha/share/wa/KITEID",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/zerodha/share/wa",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/zerodha/share/wa/",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/zerodha/share/wa/KITEID?kite_id=AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "wa.me",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/open/wa",
+          "/zerodha/r/wa/AB1234"
+        ]
+      }
+    },
+    {
+      "path": "/zerodha/share/wa/KITEID?skip=1",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "wa.me",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/open/wa",
+          "/zerodha/r/wa"
+        ]
+      }
+    },
+    {
+      "path": "/zerodha/share/tg/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "t.me",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/r/tg/AB1234"
+        ]
+      }
+    },
+    {
+      "path": "/zerodha/share/tg/KITEID",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/zerodha/share/tg",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/zerodha/share/tg/",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/zerodha/share/tg/KITEID?kite_id=AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "t.me",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/r/tg/AB1234"
+        ]
+      }
+    },
+    {
+      "path": "/zerodha/share/tg/KITEID?skip=1",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "t.me",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/r/open"
+        ]
+      }
+    },
+    {
+      "path": "/zerodha/share/x/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "x.com",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/r/x/AB1234"
+        ]
+      }
+    },
+    {
+      "path": "/zerodha/share/x/KITEID",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/zerodha/share/x",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/zerodha/share/x/",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/zerodha/share/x/KITEID?kite_id=AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "x.com",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/r/x/AB1234"
+        ]
+      }
+    },
+    {
+      "path": "/zerodha/share/x/KITEID?skip=1",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "x.com",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/r/open"
+        ]
+      }
+    },
+    {
+      "path": "/zerodha/share/wa/AB1234?lang=hi",
+      "ua": "human",
+      "expect": {
+        "kind": "share",
+        "target": "wa.me",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/open/wa",
+          "/zerodha/r/wa/AB1234"
+        ]
+      }
+    },
+    {
+      "path": "/zerodha/share/wa/YOUR_KITE_ID",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/zerodha/share/fb/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/zerodha/share/li/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/zerodha/share/fb/",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "share_recovery.html"
+      }
+    },
+    {
+      "path": "/zerodha/share/wa/KITEID?kite_id=AB12",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#share"
+      }
+    },
+    {
+      "path": "/",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "home.html"
+      }
+    },
+    {
+      "path": "/d/pifs",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "disclosure.html"
+      }
+    },
+    {
+      "path": "/d/nosuchbroker",
+      "ua": "human",
+      "expect": {
+        "kind": "status",
+        "status": 404
+      }
+    },
+    {
+      "path": "/privacy",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "privacy_policy.html"
+      }
+    },
+    {
+      "path": "/og/card.png",
+      "ua": "human",
+      "expect": {
+        "kind": "status",
+        "status": 404
+      }
+    },
+    {
+      "path": "/og/card/AB1234.png",
+      "ua": "human",
+      "expect": {
+        "kind": "status",
+        "status": 404
+      }
+    },
+    {
+      "path": "/rr/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "accounts/records.html"
+      }
+    },
+    {
+      "path": "/rr",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "share_recovery.html"
+      }
+    },
+    {
+      "path": "/rr/",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "share_recovery.html"
+      }
+    },
+    {
+      "path": "/hub",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "accounts/login.html"
+      }
+    },
+    {
+      "path": "/hub/not-a-real-token",
+      "ua": "human",
+      "expect": {
+        "kind": "status",
+        "status": 404
+      }
+    },
+    {
+      "path": "/login/",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "accounts/login.html"
+      }
+    },
+    {
+      "path": "/my/referrals",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "accounts/login.html"
+      }
+    },
+    {
+      "path": "/r/WA",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "kite_prompt.html#referral"
+      }
+    },
+    {
+      "path": "/Zerodha/Open/YT/HI",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/zerodha/open/yt/hi/",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/zeroda/open",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/anything/at/all",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/zerodha/open/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/groww/r/AB1234",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/zerodha/opn/yt/hi",
+      "ua": "human",
+      "expect": {
+        "kind": "redirect",
+        "location": "https://signup.zerodha.com/?c=ZMPHZC"
+      }
+    },
+    {
+      "path": "/wp-login.php",
+      "ua": "human",
+      "expect": {
+        "kind": "status",
+        "status": 404
+      }
+    },
+    {
+      "path": "/my/nope",
+      "ua": "human",
+      "expect": {
+        "kind": "status",
+        "status": 404
+      }
+    },
+    {
+      "path": "/r/AB1234",
+      "ua": "bot",
+      "expect": {
+        "kind": "page",
+        "page": "og_preview.html"
+      }
+    },
+    {
+      "path": "/zerodha/r/AB1234",
+      "ua": "bot",
+      "expect": {
+        "kind": "page",
+        "page": "og_preview.html"
+      }
+    },
+    {
+      "path": "/zerodha/r/wa/AB1234",
+      "ua": "bot",
+      "expect": {
+        "kind": "page",
+        "page": "og_preview.html"
+      }
+    },
+    {
+      "path": "/open",
+      "ua": "bot",
+      "expect": {
+        "kind": "page",
+        "page": "og_preview.html"
+      }
+    },
+    {
+      "path": "/zerodha/open",
+      "ua": "bot",
+      "expect": {
+        "kind": "page",
+        "page": "og_preview.html"
+      }
+    },
+    {
+      "path": "/zerodha/open/yt/hi",
+      "ua": "bot",
+      "expect": {
+        "kind": "page",
+        "page": "og_preview.html"
+      }
+    },
+    {
+      "path": "/zerodha/share/wa/AB1234",
+      "ua": "bot",
+      "expect": {
+        "kind": "share",
+        "target": "wa.me",
+        "gorefer_links": [
+          "/d/pifs",
+          "/zerodha/open/wa",
+          "/zerodha/r/wa/AB1234"
+        ]
+      }
+    },
+    {
+      "path": "/zerodha/r/wa/KITEID",
+      "ua": "bot",
+      "expect": {
+        "kind": "page",
+        "page": "og_preview.html"
+      }
+    },
+    {
+      "path": "/zerodha/share/wa/KITEID",
+      "ua": "bot",
+      "expect": {
+        "kind": "page",
+        "page": "og_preview.html"
+      }
+    },
+    {
+      "path": "/d/pifs",
+      "ua": "bot",
+      "expect": {
+        "kind": "page",
+        "page": "disclosure.html"
+      }
+    },
+    {
+      "path": "/r/open",
+      "ua": "bot",
+      "expect": {
+        "kind": "page",
+        "page": "og_preview.html"
+      }
+    },
+    {
+      "path": "/hub/{records_token}",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "accounts/share_hub.html"
+      }
+    },
+    {
+      "path": "/rr/{records_token}",
+      "ua": "human",
+      "expect": {
+        "kind": "page",
+        "page": "accounts/records.html"
+      }
+    }
+  ]
+}
