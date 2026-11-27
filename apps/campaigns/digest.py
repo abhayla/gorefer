@@ -59,12 +59,21 @@ from apps.config.preferences import (
     MESSAGING_DIGEST_ALERTS_ENABLED_DEFAULT,
     MESSAGING_DIGEST_GREETING_NAME,
     MESSAGING_DIGEST_GREETING_NAME_DEFAULT,
+    MESSAGING_DIGEST_LAYOUT,
+    MESSAGING_DIGEST_LAYOUT_DEFAULT,
+    MESSAGING_DIGEST_LAYOUT_V2,
+    MESSAGING_DIGEST_PARAMS_BUDGET,
+    MESSAGING_DIGEST_PARAMS_BUDGET_DEFAULT,
     MESSAGING_DIGEST_RECIPIENTS,
     MESSAGING_DIGEST_RECIPIENTS_DEFAULT,
     MESSAGING_DIGEST_SEND_HOUR_IST,
     MESSAGING_DIGEST_SEND_HOUR_IST_DEFAULT,
     MESSAGING_DIGEST_TEMPLATE_EN,
     MESSAGING_DIGEST_TEMPLATE_EN_DEFAULT,
+    MESSAGING_DIGEST_TEMPLATE_EN_V2,
+    MESSAGING_DIGEST_TEMPLATE_EN_V2_DEFAULT,
+    MESSAGING_DIGEST_TOP_IDS_CAP,
+    MESSAGING_DIGEST_TOP_IDS_CAP_DEFAULT,
 )
 from apps.events import vocab
 from apps.events.bots import exclude_synthetic
@@ -166,6 +175,30 @@ def _digest_template(tenant_id: int | None) -> str:
                 default=MESSAGING_DIGEST_TEMPLATE_EN_DEFAULT)
     ).strip()
     return value or MESSAGING_DIGEST_TEMPLATE_EN_DEFAULT
+
+
+def _digest_layout(tenant_id: int | None) -> str:
+    value = str(
+        resolve(MESSAGING_DIGEST_LAYOUT, tenant_id=tenant_id, default=MESSAGING_DIGEST_LAYOUT_DEFAULT) or ""
+    ).strip().lower()
+    if value == MESSAGING_DIGEST_LAYOUT_V2:
+        return MESSAGING_DIGEST_LAYOUT_V2
+    return MESSAGING_DIGEST_LAYOUT_DEFAULT
+
+
+def _digest_template_v2(tenant_id: int | None) -> str:
+    value = str(
+        resolve(MESSAGING_DIGEST_TEMPLATE_EN_V2, tenant_id=tenant_id,
+                default=MESSAGING_DIGEST_TEMPLATE_EN_V2_DEFAULT) or ""
+    ).strip()
+    return value or MESSAGING_DIGEST_TEMPLATE_EN_V2_DEFAULT
+
+
+def _int_key(key: str, default: int, tenant_id: int | None, lo: int = 0) -> int:
+    try:
+        return max(int(resolve(key, tenant_id=tenant_id, default=default)), lo)
+    except (TypeError, ValueError):
+        return default
 
 
 # --------------------------------------------------------------------------- counts
@@ -376,11 +409,25 @@ def run_digest_for_tenant(tenant, *, day: date | None = None) -> dict:
     if not recipients:
         return {"skipped": True, "reason": "no digest recipients configured"}
 
-    template = _digest_template(tenant_id)
     greeting_name = _digest_greeting_name(tenant_id)
     zoho = zoho_queue_summary(tenant, target_day)
-    goref = goref_counts(tenant, target_day)
-    slots = build_slots(target_day, zoho, goref, greeting_name)
+    layout = _digest_layout(tenant_id)
+    if layout == MESSAGING_DIGEST_LAYOUT_V2:
+        # T-link-tracking: the 21-slot link report (its own approved template).
+        from . import digest_links
+
+        template = _digest_template_v2(tenant_id)
+        slots = digest_links.fit_slots_v2(
+            target_day, zoho, digest_links.link_counts(tenant, target_day),
+            digest_links.seven_day_average(tenant, target_day), greeting_name,
+            cap=_int_key(MESSAGING_DIGEST_TOP_IDS_CAP, MESSAGING_DIGEST_TOP_IDS_CAP_DEFAULT, tenant_id),
+            budget=_int_key(MESSAGING_DIGEST_PARAMS_BUDGET, MESSAGING_DIGEST_PARAMS_BUDGET_DEFAULT,
+                            tenant_id, lo=1),
+        )
+    else:
+        template = _digest_template(tenant_id)
+        goref = goref_counts(tenant, target_day)
+        slots = build_slots(target_day, zoho, goref, greeting_name)
 
     results = []
     for mobile in recipients:
@@ -395,7 +442,8 @@ def run_digest_for_tenant(tenant, *, day: date | None = None) -> dict:
             logger.warning("digest send failed for masked=%s", mask_mobile(mobile), exc_info=True)
             results.append({"outcome": "failed", "reason": "exception", "mobile": mask_mobile(mobile)})
 
-    return {"skipped": False, "date": target_day.isoformat(), "template": template, "results": results}
+    return {"skipped": False, "date": target_day.isoformat(), "template": template, "layout": layout,
+            "results": results}
 
 
 def _current_ist_hour(now_utc) -> int:
@@ -452,13 +500,31 @@ def _check_failure_ratio(tenant, day: date, tenant_id: int | None) -> str | None
     )
 
 
+def _share_prompt_people(tenant, day: date) -> int:
+    """Distinct visitors who saw the SHARE Kite ID pop-up on `day` (owner 2026-11-27).
+
+    Was raw page views (reloads counted, and the referral pop-up mixed in): a referrer
+    whose share link has no ID is what this alert exists to catch, once per person."""
+    start, end = _ist_day_bounds_utc(day)
+    return (
+        exclude_synthetic(
+            Event.objects.for_tenant(tenant).filter(
+                event_type=vocab.SHARE_RECOVERY_VIEWED, is_bot=False, metadata__prompt="share",
+                timestamp__gte=start, timestamp__lt=end,
+            )
+        )
+        .exclude(visitor_id__isnull=True).exclude(visitor_id="")
+        .values("visitor_id").distinct().count()
+    )
+
+
 def _check_recovery_hits(tenant, day: date, tenant_id: int | None) -> str | None:
-    goref = goref_counts(tenant, day)
+    people = _share_prompt_people(tenant, day)
     threshold = _alert_recovery_hits(tenant_id)
-    if goref["recovery_saves"] <= threshold:
+    if people <= threshold:
         return None
     return (
-        f"GoRefer alert: {goref['recovery_saves']} share-recovery page hits "
+        f"GoRefer alert: {people} people saw the share Kite ID pop-up "
         f"(threshold {threshold}) for {day.isoformat()} so far."
     )
 

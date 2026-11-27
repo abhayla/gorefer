@@ -160,10 +160,39 @@ def _datacenter_verdict(raw_ip) -> tuple[bool, str | None]:
     return classify_ip(raw_ip) if raw_ip else (False, None)
 
 
+def record_visit_event(*, tenant, event_type, source, referral=None, visitor_id=None,
+                       user_agent="", raw_ip=None, metadata=None, user_type="anonymous"):
+    """Write a PII-free visit event with the datacenter verdict applied (T-link-tracking).
+
+    For pages that are not referral clicks (disclosure page, Kite ID pop-up, one-tap share):
+    the raw IP is used ONLY to classify the network and is never stored — no VisitorPII
+    row, no IP in metadata. A datacenter address writes is_bot=True plus bot_reason, the
+    same counting rule clicks use, so a cloud crawler is excluded from every count."""
+    is_datacenter, network = _datacenter_verdict(raw_ip)
+    meta = dict(metadata or {})
+    if is_datacenter:
+        meta["bot_reason"] = DATACENTER_BOT_REASON
+        meta["network"] = network or ""
+    return Event.objects.create(
+        tenant=tenant,
+        event_type=event_type,
+        source=source,
+        referral=referral,
+        user_type=user_type,
+        visitor_id=visitor_id,
+        user_agent=user_agent or "",
+        is_bot=bool(is_datacenter),
+        is_confirmed_human=False,
+        person_ref_id=None,
+        metadata=meta,
+    )
+
+
 def _record_event(
     *, tenant, referral, visitor_id, user_agent, raw_ip, event_type, source, share_channel=None,
     datacenter=None,
     share_language=None,
+    origin=None,
 ):
     """Write an immutable event + (if raw_ip) the SEPARATE erasable PII record.
 
@@ -197,6 +226,8 @@ def _record_event(
         metadata["network"] = network or ""
     if share_language:
         metadata["language"] = share_language
+    if origin:
+        metadata["origin"] = origin
     event = Event.objects.create(
         tenant=tenant,
         event_type=event_type,
@@ -357,7 +388,7 @@ def normalize_link_language(raw: str | None, *, tenant_id: int | None = None) ->
 
 
 def handle_partner_direct(*, tenant, visitor_id, user_agent, raw_ip, share_channel=None,
-                          share_language=None):
+                          share_language=None, origin=vocab.ORIGIN_OPEN):
     """Resolve a /open hit. Returns (destination_url, is_human_click).
 
     `share_language` (the /open/{channel}/{language} tag) rides on the click exactly like
@@ -380,7 +411,7 @@ def handle_partner_direct(*, tenant, visitor_id, user_agent, raw_ip, share_chann
         lambda: _record_event(
             tenant=tenant, referral=referral, visitor_id=visitor_id, user_agent=user_agent,
             raw_ip=raw_ip, event_type=vocab.CLICK, source=vocab.SRC_CLICK, share_channel=share_channel,
-            share_language=share_language,
+            share_language=share_language, origin=origin,
         )
     )
     return destination, True
@@ -433,7 +464,8 @@ def partner_referral_page_destination(program: ReferralProgram, *, tenant_id: in
         return default.format(partner_code=program.partner.code, client_id="")
 
 
-def handle_partner_referral_page_redirect(*, tenant, visitor_id, user_agent, raw_ip, share_channel=None):
+def handle_partner_referral_page_redirect(*, tenant, visitor_id, user_agent, raw_ip, share_channel=None,
+                                          origin=vocab.ORIGIN_R_OPEN):
     """Resolve /r/open's destination (the Kite ID pop-up's Skip on a referral link).
 
     Returns (destination_url, is_human_click): the partner's referral page with an empty
@@ -448,6 +480,7 @@ def handle_partner_referral_page_redirect(*, tenant, visitor_id, user_agent, raw
         lambda: _record_event(
             tenant=tenant, referral=referral, visitor_id=visitor_id, user_agent=user_agent,
             raw_ip=raw_ip, event_type=vocab.CLICK, source=vocab.SRC_CLICK, share_channel=share_channel,
+            origin=origin,
         )
     )
     return destination, True

@@ -402,11 +402,18 @@ def test_recovery_alert_fires_once_per_day(tenant, monkeypatch):
     # UTC 18:30-23:59 is already the NEXT IST day, so a naive UTC date flakes in
     # that window even though the event and the "today" arg are both real-time.
     today = (timezone.now() + IST_OFFSET).date()
-    for _ in range(3):
+    # T-link-tracking (owner 2026-11-27): the alert counts distinct PEOPLE on the share
+    # pop-up — reloads by one visitor and the referral pop-up no longer add to it.
+    for visitor in ("v1", "v2", "v2"):
         Event.objects.create(
             tenant=tenant, event_type=vocab.SHARE_RECOVERY_VIEWED, referral=referral, is_bot=False,
-            timestamp=timezone.now(),
+            visitor_id=visitor, metadata={"prompt": "share"}, timestamp=timezone.now(),
         )
+    Event.objects.create(
+        tenant=tenant, event_type=vocab.SHARE_RECOVERY_VIEWED, is_bot=False,
+        visitor_id="v3", metadata={"prompt": "referral"}, timestamp=timezone.now(),
+    )
+    assert digest._share_prompt_people(tenant, today) == 2
 
     fake_crm = _FakeCrmRead(SendQueueCounts(date_ist="x", referral={}, other={}))
     fake_messaging = _FakeMessaging()

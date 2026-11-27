@@ -35,7 +35,9 @@ def _get(path):
 ])
 def test_broken_link_goes_to_the_default_open_link(seeded, path):
     resp = _get(path)
-    assert (resp.status_code, resp.headers["Location"]) == (302, "/zerodha/open")
+    # T-link-tracking: the default-link redirect carries a marker so the click it lands
+    # on is counted as a fallback, not as the plain open link.
+    assert (resp.status_code, resp.headers["Location"]) == (302, "/zerodha/open?from=fallback")
     assert Event.objects.count() == 0  # the fallback itself records nothing
 
 
@@ -47,6 +49,8 @@ def test_following_the_fallback_reaches_the_partner_and_counts_one_click(seeded)
     assert final.status_code == 302
     assert final.headers["Location"] == _get("/zerodha/open").headers["Location"]
     assert Event.objects.filter(event_type="click", referral__source="partner_direct").count() == 2
+    origins = sorted(e.metadata.get("origin") for e in Event.objects.filter(event_type="click"))
+    assert origins == ["fallback", "open"]
 
 
 @pytest.mark.django_db(transaction=True)
@@ -56,13 +60,15 @@ def test_wrong_case_or_trailing_slash_keeps_the_tags(seeded, path):
     resp = client.get(path, **HUMAN)
     assert (resp.status_code, resp.headers["Location"]) == (302, "/zerodha/open/yt/hi")
     client.get(resp.headers["Location"], **HUMAN)
-    assert Event.objects.get(event_type="click").metadata == {"channel": "YouTube", "language": "Hindi"}
+    assert Event.objects.get(event_type="click").metadata == {
+        "channel": "YouTube", "language": "Hindi", "origin": "open",
+    }
 
 
 def test_no_program_prefix_falls_back_to_the_bare_link(seeded):
     ReferralProgram.objects.update(url_prefix="")
     resp = _get("/zerodha/open")
-    assert (resp.status_code, resp.headers["Location"]) == (302, "/open")
+    assert (resp.status_code, resp.headers["Location"]) == (302, "/open?from=fallback")
 
 
 @pytest.mark.parametrize("path", [
@@ -72,7 +78,7 @@ def test_no_program_prefix_falls_back_to_the_bare_link(seeded):
 def test_private_and_file_paths_keep_their_404(seeded, path):
     assert _get(path).status_code in (404, 302)
     resp = _get(path)
-    assert resp.headers.get("Location", "") not in ("/zerodha/open", "/open")
+    assert not resp.headers.get("Location", "").startswith(("/zerodha/open", "/open"))
 
 
 def test_non_get_is_not_redirected(seeded):

@@ -42,7 +42,7 @@ def test_tagged_link_records_channel_and_language(seeded, path):
     assert resp.status_code == 302
     assert resp.headers["Location"] == plain.headers["Location"]  # same destination, no tags leaked
     click = _clicks()[-1]
-    assert click.metadata == {"channel": "YouTube", "language": "Hindi"}
+    assert click.metadata == {"channel": "YouTube", "language": "Hindi", "origin": "open"}
     assert click.referral.source == "partner_direct"
     assert click.referral.referral_identity is None  # never a synthetic referrer
 
@@ -52,15 +52,17 @@ def test_channel_only_and_plain_links_carry_no_language(seeded):
     _open("/zerodha/open/yt")
     _open("/zerodha/open")
     yt, plain = _clicks()
-    assert yt.metadata == {"channel": "YouTube"}
-    assert plain.metadata == {}
+    assert yt.metadata == {"channel": "YouTube", "origin": "open"}
+    assert plain.metadata == {"origin": "open"}
 
 
 @pytest.mark.django_db(transaction=True)
 def test_unknown_language_still_redirects_and_is_recorded_as_other(seeded):
     resp = _open("/zerodha/open/yt/xx")
     assert resp.status_code == 302
-    assert _clicks()[-1].metadata == {"channel": "YouTube", "language": prefkeys.LINK_LANGUAGE_OTHER}
+    assert _clicks()[-1].metadata == {
+        "channel": "YouTube", "language": prefkeys.LINK_LANGUAGE_OTHER, "origin": "open",
+    }
 
 
 @pytest.mark.django_db(transaction=True)

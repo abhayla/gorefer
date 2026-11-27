@@ -16,7 +16,30 @@ REDIRECT_COMPLETED = "redirect_completed"  # user tapped Continue -> 302 to Zero
 SHARE_CLICKED = "share_clicked"        # referrer shared the link on a channel
 SHARE_INTENT = "share_intent"          # one-tap share endpoint hit (M-WATI-1)
 SHARE_RECOVERY_VIEWED = "share_recovery_viewed"  # soft-landing recovery page viewed (T-122)
+DISCLOSURE_VIEWED = "disclosure_viewed"  # public /d/{slug} disclosure page viewed (T-link-tracking)
+KITE_PROMPT_ACTION = "kite_prompt_action"  # a button on the Kite ID pop-up was used (T-link-tracking)
 NOTIFICATION = "notification"          # a WATI transactional message reached a terminal status
+
+# Kite ID pop-up: which mode it ran in (metadata["prompt"]) and what the person did
+# (metadata["action"]). A WRONG entry records only its reason, never the typed text
+# (it may be a mobile number — PII, #16); an ENTERED one records the validated, public
+# client_id (ADR-001: the id is already public).
+PROMPT_MODE_SHARE = "share"
+PROMPT_MODE_REFERRAL = "referral"
+PROMPT_ACTION_ENTERED = "entered"
+PROMPT_ACTION_SKIP = "skip"
+PROMPT_ACTION_WRONG = "wrong"
+PROMPT_WRONG_EMPTY = "empty"
+PROMPT_WRONG_SHAPE = "shape"
+PROMPT_WRONG_PLACEHOLDER = "placeholder"
+PROMPT_WRONG_DELETED = "deleted"
+
+# Where a partner-direct (no-referrer) click came from — metadata["origin"]. Every one of
+# these lands on the same partner-direct referral row, so only this tag tells them apart.
+ORIGIN_OPEN = "open"              # /open, /open/{channel}[/{lang}]
+ORIGIN_R_OPEN = "r_open"          # /r/open — the reserved no-referrer link
+ORIGIN_POPUP_SKIP = "popup_skip"  # "I don't have one, continue" on the referral pop-up
+ORIGIN_FALLBACK = "fallback"      # a broken public link redirected to the default open link
 
 # Downstream events — ONLY ever produced from Zoho (M6). Never fabricated here.
 ACCOUNT_OPENED = "account_opened"

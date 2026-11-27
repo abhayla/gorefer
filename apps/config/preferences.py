@@ -806,6 +806,13 @@ SHARE_ONETAP_WA_MESSAGE_HI = "share_onetap_wa_message_hi"
 SHARE_ONETAP_WA_REGISTER_PATH = "share_onetap_wa_register_path"
 SHARE_ONETAP_WA_REGISTER_PATH_DEFAULT = "/r/wa"
 SHARE_ONETAP_WA_DISCLOSURE = "share_onetap_wa_disclosure"
+# Step 2 / the "open" link of the one-tap message (owner 2026-11-27, T-link-tracking): the
+# path is given the program's link word like every other generated link (/open/wa ->
+# /zerodha/open/wa). The /wa tag lands on the SAME partner page as /open (tags never reach
+# the partner) but lets the daily digest count friends tapping Step 2 apart from the plain
+# /open link PIFS posts itself. Set "/open" to send the untagged link again (no deploy).
+SHARE_ONETAP_WA_OPEN_PATH = "share_onetap_wa_open_path"
+SHARE_ONETAP_WA_OPEN_PATH_DEFAULT = "/open/wa"
 SHARE_ONETAP_WA_DISCLOSURE_DEFAULT = "*Disclosures:*\n{url}"
 
 # --- WhatsApp notification routing (Tier 2, admin) ---------------------------------
@@ -971,6 +978,25 @@ MESSAGING_DIGEST_TEMPLATE_EN_DEFAULT = "gr_platform_gorefer_funnel_report_en_202
 # which the operator does not want. Default is the owner's own name.
 MESSAGING_DIGEST_GREETING_NAME = "messaging_digest_greeting_name"
 MESSAGING_DIGEST_GREETING_NAME_DEFAULT = "Abhay"
+
+# T-link-tracking (owner 2026-11-27) — the link-report layout of the daily digest.
+# `messaging_digest_layout` picks the slot set: "v1" = the 15-slot funnel report (the
+# template above, unchanged), "v2" = the 21-slot link report sent with
+# `messaging_digest_template_en_v2`. v1 stays the default until Meta approves v2, and
+# setting "v1" again is the rollback (both builders are kept). The cap is how many Kite
+# IDs each list shows before "+N more"; the budget is the most characters the variable
+# values may add to the body, so the rendered message stays under WhatsApp's 1024 (the
+# lists shrink first, totals are never dropped). Cascade-only for now (no screen field).
+MESSAGING_DIGEST_LAYOUT = "messaging_digest_layout"
+MESSAGING_DIGEST_LAYOUT_V1 = "v1"
+MESSAGING_DIGEST_LAYOUT_V2 = "v2"
+MESSAGING_DIGEST_LAYOUT_DEFAULT = MESSAGING_DIGEST_LAYOUT_V1
+MESSAGING_DIGEST_TEMPLATE_EN_V2 = "messaging_digest_template_en_v2"
+MESSAGING_DIGEST_TEMPLATE_EN_V2_DEFAULT = "gr_platform_gorefer_link_report_en_2026_11_27"
+MESSAGING_DIGEST_TOP_IDS_CAP = "messaging_digest_top_ids_cap"
+MESSAGING_DIGEST_TOP_IDS_CAP_DEFAULT = 5
+MESSAGING_DIGEST_PARAMS_BUDGET = "messaging_digest_params_budget"
+MESSAGING_DIGEST_PARAMS_BUDGET_DEFAULT = 520
 
 # --- WhatsApp opt-out keywords (T-149) ----------------------------------------------
 # The inbound-text words that withdraw WhatsApp consent, per language. A cascade key

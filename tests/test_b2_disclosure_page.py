@@ -80,11 +80,19 @@ def test_disclosure_no_pii(seeded, client):
 
 # --- the page creates no event (crawler-safe by construction) --------------
 
-def test_disclosure_page_creates_no_event(seeded, client):
+def test_disclosure_view_is_counted_for_humans_only(seeded, client):
+    """T-link-tracking (owner 2026-11-27): a human view writes ONE PII-free
+    disclosure_viewed event; a preview bot writes nothing; neither is a click."""
     before = Event.objects.count()
     client.get("/d/pifs", HTTP_USER_AGENT="facebookexternalhit/1.1")
-    client.get("/d/pifs", HTTP_USER_AGENT="Mozilla/5.0 (Android)")
-    assert Event.objects.count() == before  # a disclosure view is not a click
+    assert Event.objects.count() == before
+    client.get("/d/pifs", HTTP_USER_AGENT="Mozilla/5.0 (Android)", REMOTE_ADDR="203.0.113.7")
+    views = Event.objects.filter(event_type="disclosure_viewed")
+    assert views.count() == 1 and Event.objects.count() == before + 1
+    view = views.get()
+    assert view.visitor_id and view.person_ref_id is None and view.is_bot is False
+    assert "203.0.113.7" not in str(view.metadata)
+    assert not Event.objects.filter(event_type="click").exists()
 
 
 # --- unknown slug -> branded 404 -------------------------------------------

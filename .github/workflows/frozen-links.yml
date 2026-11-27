@@ -1,0 +1,58 @@
+# Frozen shared links — owner-approval gate (CLAUDE.md §6h, owner rule 2026-11-27).
+#
+# Links already shared with customers must keep working exactly as before. The frozen
+# register docs/links/frozen-links.json may grow freely; changing or removing an entry,
+# or touching any file of this gate, needs the label `link-change-approved` added BY
+# HAND on github.com by the owner after the PR's latest commit.
+#
+# No paths-ignore, on purpose: ci.yml skips docs-only PRs, and a PR that only edits the
+# register is exactly what this must see. Label events re-run it. It needs no database:
+# whether each link still behaves as frozen is checked by tests/test_frozen_links.py in
+# ci.yml; this job checks who approved a change to the frozen list itself.
+#
+# Make it REQUIRED: repository Settings -> Rules -> the `main` ruleset -> required status
+# check `frozen-links`. Without that it reports but cannot block a merge.
+
+name: Frozen links
+
+# pull_request_target, on purpose: GitHub runs THIS file and the check script as they
+# are on `main`, never a PR's edited copy, so a PR cannot weaken its own gate. The PR's
+# commits are only fetched and READ (git show / git diff); no PR code is executed here.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
+
+concurrency:
+  group: frozen-links-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
+jobs:
+  frozen-links:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch the PR's commits (read only)
+        run: git fetch --no-tags origin "pull/${{ github.event.pull_request.number }}/head:pr-head"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Owner approval for frozen-link changes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: origin/${{ github.event.pull_request.base.ref }}
+          HEAD_REF: pr-head
+          FROZEN_LINKS_APPROVER: abhayla
+        run: python scripts/check_frozen_links_approval.py

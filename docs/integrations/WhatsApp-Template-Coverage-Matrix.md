@@ -52,6 +52,7 @@
 | `gorefer_zerodha_hin_2026_07_10_v2` | APPROVED | MARK | hi | 2 | 3 | Wati broadcast | Referral invite campaign | - |
 | `gr_platform_gorefer_delivery_report_en_2026_07_21` | APPROVED | UTIL | en | 11 | 0 | Wati-Project daily_report | 21:30 IST delivery report | - |
 | `gr_platform_gorefer_funnel_report_en_2026_07_21` | APPROVED | UTIL | en | 15 | 0 | Wati-Project daily_report | 21:30 IST funnel report | - |
+| `gr_platform_gorefer_link_report_en_2026_11_27` | DRAFT (not submitted) | UTIL (intended) | en | 21 | 0 | GoRefer daily digest, layout v2 (`messaging_digest_layout`) | Link report: open/Step 2/referral/share/disclosure + Kite ID pop-ups; body in `docs/integrations/Digest-Link-Report-v2-Draft.md` | - |
 | `gorefer_prospect_day14_en_v2` | APPROVED | MARK | en | 1 | 0 | Zoho/Wati journey *(inferred - verify)* | Lifecycle nudge | - |
 | `gorefer_prospect_day14_en_v3` | APPROVED | UTIL | en | 1 | 0 | Zoho/Wati journey *(inferred - verify)* | Lifecycle nudge | - |
 | `gorefer_prospect_day14_hi_v2` | APPROVED | MARK | hi | 1 | 0 | Zoho/Wati journey *(inferred - verify)* | Lifecycle nudge | - |
