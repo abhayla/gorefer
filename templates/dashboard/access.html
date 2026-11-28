@@ -1,0 +1,75 @@
+{% extends "dashboard/base.html" %}
+{% block title %}GoRefer Admin — Access list{% endblock %}
+{% block content %}
+{% comment %}Access list (owner decision 2026-11-28; approved mock-up "Access list"). Owners
+only. Who may sign in with Google, and with which roles.{% endcomment %}
+<div class="max-w-[860px] mx-auto space-y-4">
+  <div>
+    <h1 class="text-[20px] font-extrabold tracking-tight">Who can see the report</h1>
+    <p class="text-[12.5px] text-ink-500 mt-0.5">Only these Google accounts can sign in with Google. Every change is logged.</p>
+  </div>
+
+  {% for m in messages %}
+    <div role="status" class="rounded-xl px-3 py-2.5 text-[12.5px] {% if m.tags == 'error' %}bg-danger/10 border border-danger/40 text-danger{% else %}bg-positive/10 border border-positive/40 text-ink-700{% endif %}">{{ m }}</div>
+  {% endfor %}
+
+  <form method="post" action="{% url 'dashboard_access' %}" class="rounded-2xl bg-white border border-line card p-4 flex flex-wrap items-end gap-x-4 gap-y-3">
+    {% csrf_token %}
+    <label for="access-email" class="flex-1 min-w-[220px] flex flex-col gap-1 text-[11.5px] font-semibold text-ink-700">Google email
+      <input id="access-email" name="email" type="email" required placeholder="name@gmail.com"
+             class="rounded-lg border border-line bg-white px-3 py-2.5 text-sm font-normal focus:outline-none focus:ring-2 focus:ring-cobalt-500/30 focus:border-cobalt-500">
+    </label>
+    <label for="access-owner" class="flex items-center gap-2 text-[13px] min-h-[40px]"><input id="access-owner" name="owner" type="checkbox"> Owner</label>
+    <label for="access-admin" class="flex items-center gap-2 text-[13px] min-h-[40px]"><input id="access-admin" name="admin" type="checkbox"> Admin</label>
+    <label for="access-manager" class="flex flex-col gap-1 text-[11.5px] font-semibold text-ink-700">Business manager of
+      <select id="access-manager" name="manager_tenant" class="rounded-lg border border-line bg-white px-3 py-2.5 text-sm font-normal">
+        <option value="">None</option>
+        {% for t in tenants %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="rounded-full bg-cobalt-600 hover:bg-cobalt-500 text-white text-[13px] font-bold px-5 py-2.5 card">Give access</button>
+    <p class="w-full text-[11px] text-ink-500">Adding an email that is already on the list replaces its roles.</p>
+  </form>
+
+  <div class="rounded-2xl bg-white border border-line card overflow-x-auto">
+    <table class="w-full text-[13px]">
+      <thead>
+        <tr class="text-left text-[11px] uppercase tracking-wide text-ink-500">
+          <th class="px-4 py-2.5 border-b border-line">Google account</th>
+          <th class="px-4 py-2.5 border-b border-line">Roles</th>
+          <th class="px-4 py-2.5 border-b border-line">Added</th>
+          <th class="px-4 py-2.5 border-b border-line"><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in people %}
+        <tr>
+          <td class="px-4 py-2.5 border-b border-line font-semibold">{{ p.email }}{% if p.is_me %} <span class="font-normal text-ink-500">(you)</span>{% endif %}</td>
+          <td class="px-4 py-2.5 border-b border-line">{{ p.roles }}</td>
+          <td class="px-4 py-2.5 border-b border-line text-ink-500">{{ p.added|date:"j M Y" }}</td>
+          <td class="px-4 py-2.5 border-b border-line text-right">
+            {% if p.removable %}
+            <form method="post" action="{% url 'dashboard_access_revoke' p.id %}">
+              {% csrf_token %}
+              <button type="submit" class="rounded-lg border border-danger/40 text-danger px-3 py-1.5 text-[12px] font-semibold hover:bg-danger/10">Remove access</button>
+            </form>
+            {% else %}<span class="text-[11px] text-ink-500">Last owner</span>{% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="px-4 py-4 text-ink-500">Nobody is on the list yet. Add your own Google email first, with all your roles.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if log %}
+  <div class="rounded-2xl bg-white border border-line card p-4 space-y-1.5">
+    <h2 class="text-[14px] font-bold">Recent changes</h2>
+    {% for e in log %}
+      <p class="text-[12px] text-ink-700">{{ e.at|date:"j M Y H:i" }} · {{ e.actor_email }} · {{ e.action }} · {{ e.target_email }}{% if e.roles %} ({{ e.roles|join:", " }}){% endif %}</p>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

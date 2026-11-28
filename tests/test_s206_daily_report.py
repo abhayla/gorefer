@@ -295,7 +295,10 @@ def _sample(pattern):
 #: key-authed server-to-server). Any other router must carry StaffSessionAuth.
 _PUBLIC_API_PREFIXES = {"", "/click", "/leads", "/share", "/records-tokens", "/zoho", "/wati",
                         "/callback-request"}
-_REPORT_NAMES = {"dashboard_login", "dashboard_logout", "dashboard_daily", "dashboard_daily_detail"}
+# dashboard_login_google: the staff "Continue with Google" entry. Like dashboard_login it is
+# a pre-auth sign-in step (a 302 to Google, no data); the access list decides afterwards.
+_REPORT_NAMES = {"dashboard_login", "dashboard_login_google", "dashboard_logout",
+                 "dashboard_daily", "dashboard_daily_detail"}
 
 
 @pytest.fixture

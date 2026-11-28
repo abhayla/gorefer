@@ -242,6 +242,9 @@ def otp_verify(request):
 def oauth_start(request):
     if not oauth.configured():
         raise Http404()
+    from apps.dashboard.staff_auth import SESSION_PURPOSE
+
+    request.session.pop(SESSION_PURPOSE, None)  # a referrer sign-in is never a staff one
     return redirect(oauth.build_authorization_redirect(request))
 
 
@@ -249,6 +252,11 @@ def oauth_start(request):
 def oauth_callback(request):
     if not oauth.configured():
         raise Http404()
+    from apps.dashboard import staff_auth
+
+    if staff_auth.is_staff_flow(request):
+        # Staff sign-in started on /admin-panel/login/google (same registered callback).
+        return staff_auth.complete(request)
     if request.GET.get("error"):
         return render(
             request, "accounts/login.html",

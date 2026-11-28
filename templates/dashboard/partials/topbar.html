@@ -59,6 +59,12 @@ screens; the menu is position-absolute so it never widens the page).
           <span class="text-ink-400">⚙</span> Preferences
         </a>
         {% endif %}
+        {% if staff_is_owner %}
+        <a href="{% url 'dashboard_access' %}" role="menuitem"
+           class="flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-ink-700 hover:bg-cobalt-50 focus:bg-cobalt-50 focus:outline-none {% if nav_active == 'access' %}bg-cobalt-50 text-cobalt-600 font-semibold{% endif %}">
+          <span class="text-ink-400">◉</span> Access list
+        </a>
+        {% endif %}
         <a href="{% url 'dashboard_logout' %}" role="menuitem"
            class="flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-ink-700 hover:bg-cobalt-50 focus:bg-cobalt-50 focus:outline-none">
           <span class="text-ink-400">↪</span> Sign out
