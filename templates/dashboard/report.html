@@ -1,0 +1,48 @@
+{% extends "dashboard/base.html" %}
+{% block title %}GoRefer Admin — Daily report{% endblock %}
+{% block content %}
+{% comment %}Role-based daily report (owner-approved mock-up 2026-11-28). Same address every
+day; "View as" and the period are plain links, so every view is bookmarkable.{% endcomment %}
+<div class="space-y-4">
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <div class="text-[11px] font-semibold uppercase tracking-wider text-cobalt-600">GoRefer · {{ scope }}</div>
+      <h1 class="text-[22px] font-extrabold tracking-tight">{{ title }}</h1>
+      <p class="text-[12.5px] text-ink-500">{{ period.label }}</p>
+    </div>
+  </div>
+
+  <div class="rounded-2xl bg-white border border-line card p-3.5 space-y-2.5">
+    {% if roles|length > 1 %}
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-[12px] font-semibold text-ink-700 w-16">View as</span>
+      {% for r in roles %}
+        <a href="?as={{ r.key }}" aria-current="{% if r.key == role %}page{% else %}false{% endif %}"
+           class="rounded-full px-3.5 py-2 text-[12.5px] font-semibold border {% if r.key == role %}bg-cobalt-600 border-cobalt-600 text-white{% else %}bg-white border-line text-ink-900 hover:bg-cobalt-50{% endif %}">{{ r.label }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <form method="get" class="flex flex-wrap items-center gap-2">
+      <input type="hidden" name="as" value="{{ role }}">
+      <span class="text-[12px] font-semibold text-ink-700 w-16">Period</span>
+      {% for key, label in ranges %}
+        <a href="?as={{ role }}&range={{ key }}" aria-current="{% if key == period.key %}page{% else %}false{% endif %}"
+           class="rounded-full px-3.5 py-2 text-[12.5px] font-semibold border {% if key == period.key %}bg-cobalt-600 border-cobalt-600 text-white{% else %}bg-white border-line text-ink-900 hover:bg-cobalt-50{% endif %}">{{ label }}</a>
+      {% endfor %}
+      <label for="report-date" class="text-[12px] text-ink-500 ml-1">Any day</label>
+      <input id="report-date" name="date" type="date" value="{{ period.start|date:'Y-m-d' }}"
+             class="rounded-lg border border-line bg-white px-2.5 py-1.5 text-[12.5px]">
+      <button type="submit" class="rounded-full border border-line bg-white px-3 py-1.5 text-[12px] font-semibold hover:bg-cobalt-50">Show</button>
+    </form>
+    {% if is_live %}
+      <p class="text-[12px] text-ink-500"><span class="rounded-full bg-positive/10 text-positive font-semibold px-2 py-0.5">● Live</span>
+        Today so far. Refreshes every minute.
+        <a href="?as={{ role }}&range=yesterday" class="text-cobalt-600 font-semibold underline">See yesterday</a> for the full day your 9 AM message was about.</p>
+    {% endif %}
+  </div>
+
+  {% include "dashboard/report_body.html" %}
+
+  <p class="text-[11px] text-ink-500">Taps and people are approximate; preview bots and cloud servers are removed. Accounts come only from Zoho, by their real opening date.</p>
+</div>
+{% endblock %}

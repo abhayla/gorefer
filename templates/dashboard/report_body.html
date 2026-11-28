@@ -1,0 +1,180 @@
+{% comment %}The swappable body of the role-based report. Its root keeps the polling
+attributes, so the minute-by-minute refresh carries on after every swap.{% endcomment %}
+<div id="report-body" class="space-y-4"{% if is_live %} hx-get="?as={{ role }}&range=today&partial=1" hx-trigger="every 60s" hx-swap="outerHTML"{% endif %}>
+
+  {% if data.todos %}
+  <section class="rounded-2xl bg-pending/10 border border-pending/40 px-4 py-3">
+    <h2 class="text-[14px] font-bold">{% if role == "owner" %}Needs you{% elif role == "admin" %}Fix today{% else %}People to contact{% endif %}</h2>
+    {% for t in data.todos %}
+      <div class="flex flex-wrap gap-x-3 gap-y-0.5 py-2 border-t border-pending/30 first:border-t-0 text-[13px]">
+        <span class="font-semibold min-w-[200px]">{{ t.what }}</span>
+        <span class="text-ink-700 flex-1 min-w-[220px]">{{ t.why }}</span>
+        <span class="text-[11px] text-ink-500">{{ t.tag }}</span>
+      </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  {% if role == "owner" %}
+  <section class="grid gap-3 grid-cols-1 sm:grid-cols-3">
+    {% for tile in data.tiles %}
+    <div class="rounded-2xl bg-white border border-line card p-4">
+      <div class="text-[12px] text-ink-500">{{ tile.label }}</div>
+      <div class="text-[28px] font-extrabold tabular-nums">{{ tile.value }}</div>
+      <div class="text-[12px] text-ink-700 font-semibold">{{ tile.note }}</div>
+    </div>
+    {% endfor %}
+  </section>
+  <section class="rounded-2xl bg-white border border-line card p-4 space-y-2">
+    <h2 class="text-[15px] font-bold">Accounts opened, last 10 days (Zoho)</h2>
+    <p class="text-[13px] tabular-nums">{{ data.spark|join:" · " }}</p>
+  </section>
+  <section class="rounded-2xl bg-white border border-line card p-4 space-y-2">
+    <h2 class="text-[15px] font-bold">Businesses</h2>
+    <div class="overflow-x-auto"><table class="w-full text-[13px] min-w-[620px]">
+      <thead><tr class="text-left text-[11px] uppercase tracking-wide text-ink-500">
+        <th class="py-2 pr-3">Business</th><th class="py-2 pr-3 text-right">Accounts this month</th>
+        <th class="py-2 pr-3 text-right">vs last month</th><th class="py-2 pr-3 text-right">Active referrers (30 days)</th>
+        <th class="py-2 pr-3 text-right">Messages sent yesterday</th><th class="py-2"></th></tr></thead>
+      <tbody>{% for b in data.businesses %}<tr class="border-t border-line">
+        <td class="py-2 pr-3 font-semibold">{{ b.name }}</td>
+        <td class="py-2 pr-3 text-right tabular-nums font-semibold">{{ b.accounts }}</td>
+        <td class="py-2 pr-3 text-right">{{ b.vs }}</td>
+        <td class="py-2 pr-3 text-right tabular-nums">{{ b.active_30d }}</td>
+        <td class="py-2 pr-3 text-right">{% if b.messages and b.messages.referral_total %}{{ b.messages.delivered }} of {{ b.messages.referral_total }}{% else %}none{% endif %}</td>
+        <td class="py-2 text-right">{% for r in roles %}{% if r.key == "manager" and r.grant.tenant.name == b.name %}<a href="?as=manager" class="text-cobalt-600 font-semibold">Open {{ b.name }}</a>{% endif %}{% endfor %}</td>
+      </tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+  <section class="grid gap-3 grid-cols-1 md:grid-cols-2">
+    <div class="rounded-2xl bg-white border border-line card p-4 space-y-1.5 text-[13px]">
+      <h2 class="text-[15px] font-bold">Where accounts came from (this month, Zoho)</h2>
+      <p>With a credited referrer: <b>{{ data.origin.with_ref }}</b></p>
+      <p>No referrer: <b>{{ data.origin.without }}</b></p>
+      <p class="text-[11px] text-ink-500">Zoho records who was credited, not which link the person tapped, so accounts can't be split by link.</p>
+    </div>
+    <div class="rounded-2xl bg-white border border-line card p-4 space-y-1.5 text-[13px]">
+      <h2 class="text-[15px] font-bold">Platform</h2>
+      <p>People with Google access: <b>{{ data.platform.people }}</b> · <a href="{% url 'dashboard_access' %}" class="text-cobalt-600 font-semibold">manage</a></p>
+      <p>Taps on links of no business ({{ period.label }}): <b>{{ data.platform.no_business_taps }}</b></p>
+    </div>
+  </section>
+
+  {% elif role == "admin" %}
+  <section class="rounded-2xl bg-white border border-line card p-4 space-y-2">
+    <h2 class="text-[15px] font-bold">WhatsApp messages by business</h2>
+    {% if period.single_day %}
+    <div class="overflow-x-auto"><table class="w-full text-[13px] min-w-[620px]">
+      <thead><tr class="text-left text-[11px] uppercase tracking-wide text-ink-500">
+        <th class="py-2 pr-3">Business</th><th class="py-2 pr-3 text-right">Queued</th><th class="py-2 pr-3 text-right">Sent</th>
+        <th class="py-2 pr-3 text-right">Failed</th><th class="py-2 pr-3 text-right">Waiting</th>
+        <th class="py-2 pr-3 text-right">Meta limit</th><th class="py-2 text-right">Wrong number</th></tr></thead>
+      <tbody>{% for m in data.messages %}<tr class="border-t border-line">
+        <td class="py-2 pr-3 font-semibold">{{ m.name }}</td>
+        {% if m.zoho %}
+        <td class="py-2 pr-3 text-right">{{ m.zoho.referral_total }}</td>
+        <td class="py-2 pr-3 text-right">{{ m.zoho.delivered }}{% if m.zoho.rate_pct is not None %} ({{ m.zoho.rate_pct|floatformat:0 }}%){% endif %}</td>
+        <td class="py-2 pr-3 text-right {% if m.zoho.failed %}text-danger font-semibold{% endif %}">{{ m.zoho.failed }}</td>
+        <td class="py-2 pr-3 text-right">{{ m.zoho.pending }}</td>
+        <td class="py-2 pr-3 text-right">{{ m.zoho.capped }}</td>
+        <td class="py-2 text-right">{{ m.zoho.invalid }}</td>
+        {% else %}<td colspan="6" class="py-2 text-ink-500">Not connected to this business's Zoho</td>{% endif %}
+      </tr>{% endfor %}</tbody>
+    </table></div>
+    <p class="text-[11px] text-ink-500">"Sent" means handed to Wati, not proof it reached the phone.</p>
+    {% else %}<p class="text-[13px] text-ink-500">Messages are shown one day at a time. Pick Today, Yesterday or a single day.</p>{% endif %}
+  </section>
+  <section class="rounded-2xl bg-white border border-line card p-4 space-y-2">
+    <h2 class="text-[15px] font-bold">Businesses against their usual</h2>
+    <div class="overflow-x-auto"><table class="w-full text-[13px] min-w-[560px]">
+      <thead><tr class="text-left text-[11px] uppercase tracking-wide text-ink-500">
+        <th class="py-2 pr-3">Business</th><th class="py-2 pr-3 text-right">Accounts (Zoho)</th>
+        <th class="py-2 pr-3 text-right">Referral link taps</th><th class="py-2">Status</th></tr></thead>
+      <tbody>{% for b in data.businesses %}<tr class="border-t border-line">
+        <td class="py-2 pr-3 font-semibold">{{ b.name }}</td>
+        <td class="py-2 pr-3 text-right">{{ b.accounts }} (usual {{ b.accounts_usual }})</td>
+        <td class="py-2 pr-3 text-right">{{ b.taps }} (usual {{ b.taps_usual }})</td>
+        <td class="py-2 font-semibold {% if b.status == 'Normal' %}text-positive{% else %}text-danger{% endif %}">{{ b.status }}</td>
+      </tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+  <section class="grid gap-3 grid-cols-1 md:grid-cols-2">
+    <div class="rounded-2xl bg-white border border-line card p-4 space-y-1.5 text-[13px]">
+      <h2 class="text-[15px] font-bold">Follow-up messages</h2>
+      <p>Due: <b>{{ data.followups.due }}</b> · Sent: <b>{{ data.followups.sent }}</b> · Skipped or cancelled: <b>{{ data.followups.skipped }}</b> · Failed: <b>{{ data.followups.failed }}</b></p>
+    </div>
+    <div class="rounded-2xl bg-white border border-line card p-4 space-y-1.5 text-[13px]">
+      <h2 class="text-[15px] font-bold">Kite ID box</h2>
+      {% for b in data.businesses %}
+        <p><b>{{ b.name }}</b>: referrers asked {{ b.box.shown }} times, {{ b.box.entered }} gave ID, {{ b.box.wrong }} wrong · friends asked {{ b.friends_box.shown }} times, {{ b.friends_box.entered }} gave ID</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% else %}
+  <section class="grid gap-3 grid-cols-2 lg:grid-cols-4">
+    {% for tile in data.tiles %}
+    <div class="rounded-2xl bg-white border border-line card p-4">
+      <div class="text-[12px] text-ink-500">{{ tile.label }}</div>
+      <div class="text-[28px] font-extrabold tabular-nums">{{ tile.value }}</div>
+      <div class="text-[12px] text-ink-500">{{ tile.note }}</div>
+    </div>
+    {% endfor %}
+  </section>
+  <section class="rounded-2xl bg-white border border-line card p-4 space-y-2">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <h2 class="text-[15px] font-bold">Every Kite ID ({{ data.ids|length }})</h2>
+      <form method="get" class="flex items-center gap-2">
+        <input type="hidden" name="as" value="manager"><input type="hidden" name="range" value="{{ period.key }}">
+        <label for="id-search" class="text-[12px] text-ink-500">Find an ID</label>
+        <input id="id-search" name="q" type="search" value="{{ search }}" placeholder="AB1234" class="rounded-lg border border-line bg-white px-2.5 py-1.5 text-[12.5px] w-32">
+      </form>
+    </div>
+    <div class="overflow-x-auto"><table class="w-full text-[13px] min-w-[680px]">
+      <thead><tr class="text-left text-[11px] uppercase tracking-wide text-ink-500">
+        <th class="py-2 pr-3">Kite ID</th><th class="py-2 pr-3 text-right">Accounts (Zoho)</th><th class="py-2 pr-3 text-right">Link taps</th>
+        <th class="py-2 pr-3 text-right">Shares</th><th class="py-2 pr-3 text-right">Typed in box</th><th class="py-2 pr-3">Last activity</th><th class="py-2">Note</th></tr></thead>
+      <tbody>{% for r in data.ids %}<tr class="border-t border-line">
+        <td class="py-2 pr-3 font-mono font-semibold"><a href="{% url 'dashboard_referrer' r.id %}" class="hover:text-cobalt-600">{{ r.id }}</a></td>
+        <td class="py-2 pr-3 text-right font-semibold">{{ r.accounts }}</td>
+        <td class="py-2 pr-3 text-right">{{ r.taps }}</td>
+        <td class="py-2 pr-3 text-right">{{ r.shares }}</td>
+        <td class="py-2 pr-3 text-right">{{ r.typed }}</td>
+        <td class="py-2 pr-3 text-ink-500">{% if r.last %}{{ r.last|timesince }} ago{% endif %}</td>
+        <td class="py-2 text-cobalt-600 text-[12px]">{{ r.note }}</td>
+      </tr>{% empty %}<tr><td colspan="7" class="py-3 text-ink-500">No Kite ID had any activity in this period.</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+  <section class="rounded-2xl bg-white border border-line card p-4 space-y-2">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <h2 class="text-[15px] font-bold">{{ scope }} links</h2>
+      <div class="flex gap-1.5">
+        <a href="?as=manager&range={{ period.key }}&links=opening" class="rounded-full px-3 py-1.5 text-[12px] font-semibold border {% if links_filter != 'all' %}bg-cobalt-600 border-cobalt-600 text-white{% else %}bg-white border-line{% endif %}">Account-opening links</a>
+        <a href="?as=manager&range={{ period.key }}&links=all" class="rounded-full px-3 py-1.5 text-[12px] font-semibold border {% if links_filter == 'all' %}bg-cobalt-600 border-cobalt-600 text-white{% else %}bg-white border-line{% endif %}">All links</a>
+      </div>
+    </div>
+    <div class="overflow-x-auto"><table class="w-full text-[13px] min-w-[560px]">
+      <thead><tr class="text-left text-[11px] uppercase tracking-wide text-ink-500">
+        <th class="py-2 pr-3">Link</th><th class="py-2 pr-3">What it is</th><th class="py-2 pr-3 text-right">Taps</th><th class="py-2">Who gets credit</th></tr></thead>
+      <tbody>{% for l in data.links %}{% if links_filter == "all" or l.opening %}<tr class="border-t border-line">
+        <td class="py-2 pr-3 font-mono text-[12px]">{{ l.path }}</td><td class="py-2 pr-3">{{ l.what }}</td>
+        <td class="py-2 pr-3 text-right font-semibold">{{ l.taps }}</td><td class="py-2 text-ink-500">{{ l.credit }}</td>
+      </tr>{% endif %}{% endfor %}</tbody>
+    </table></div>
+  </section>
+  <section class="grid gap-3 grid-cols-1 md:grid-cols-2">
+    <div class="rounded-2xl bg-white border border-line card p-4 space-y-1.5 text-[13px]">
+      <h2 class="text-[15px] font-bold">Kite ID box</h2>
+      <p><b>Referrers asked for their ID:</b> {{ data.box.share_prompt.shown }} times to {{ data.box.share_prompt.visitors }} people · {{ data.box.share_prompt.entered }} gave ID · {{ data.box.share_prompt.wrong }} wrong · {{ data.box.share_prompt.skipped }} shared without ID</p>
+      <p><b>Friends asked who referred them:</b> {{ data.box.referral_prompt.shown }} times to {{ data.box.referral_prompt.visitors }} people · {{ data.box.referral_prompt.entered }} gave ID · {{ data.box.referral_prompt.skipped }} skipped</p>
+      <p class="text-[11px] text-ink-500">Wrong entries are counted, never shown: they may be phone numbers.</p>
+    </div>
+    <div class="rounded-2xl bg-white border border-line card p-4 space-y-1.5 text-[13px]">
+      <h2 class="text-[15px] font-bold">WhatsApp messages</h2>
+      {% if data.messages %}<p>{{ data.messages.delivered }} of {{ data.messages.referral_total }} sent · {{ data.messages.failed }} failed · {{ data.messages.capped }} hit the Meta limit · {{ data.messages.pending }} waiting</p>
+      {% elif period.single_day %}<p class="text-ink-500">No messages for this day.</p>
+      {% else %}<p class="text-ink-500">Shown one day at a time.</p>{% endif %}
+    </div>
+  </section>
+  {% endif %}
+</div>

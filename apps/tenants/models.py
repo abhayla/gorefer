@@ -62,3 +62,58 @@ class StaffTenantBinding(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.user} -> {self.tenant}"
+
+
+class StaffAccess(models.Model):
+    """Who may open the admin report, and with which roles (owner decision 2026-11-28).
+
+    One row per Google email, managed by an owner on /admin-panel/access/. A person may
+    hold several roles at once and switch with "View as" on the report page:
+      * owner   — every business, plus platform health and the access list;
+      * admin   — every business's referral numbers and messages (operations);
+      * manager — one business only (`manager_tenant`), e.g. the PIFS manager.
+    This supersedes the S2-06 one-role rule for anyone with a row here (owner-approved
+    2026-11-28); users with no row keep the S2-06 behaviour exactly. Roles are resolved
+    ONLY by `apps.tenants.access`; never read this table to decide access directly.
+    A revoked row (`revoked_at` set) grants nothing; rows are never deleted (audit).
+    """
+
+    email = models.EmailField(unique=True)  # stored lower-case
+    is_owner = models.BooleanField(default=False)
+    is_admin = models.BooleanField(default=False)
+    manager_tenant = models.ForeignKey(
+        Tenant, null=True, blank=True, on_delete=models.PROTECT, related_name="staff_managers"
+    )
+    granted_by = models.CharField(max_length=254, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "staff_access"
+
+    def save(self, *args, **kwargs):
+        self.email = (self.email or "").strip().lower()
+        super().save(*args, **kwargs)
+
+    @property
+    def is_active_grant(self) -> bool:
+        has_role = self.is_owner or self.is_admin or self.manager_tenant_id is not None
+        return self.revoked_at is None and has_role
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return self.email
+
+
+class StaffAccessLog(models.Model):
+    """Append-only record of every access-list change: who, what, when."""
+
+    actor_email = models.CharField(max_length=254)
+    action = models.CharField(max_length=20)  # grant | change | revoke
+    target_email = models.CharField(max_length=254)
+    roles = models.JSONField(default=list)
+    at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "staff_access_log"
+        ordering = ["-at"]

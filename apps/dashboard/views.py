@@ -31,6 +31,17 @@ _EVIDENCE_EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "
 _staff_required = super_admin_required
 
 
+def staff_google_start(request):
+    """GET /admin-panel/login/google — staff sign-in with Google (access list decides)."""
+    from django.http import Http404
+
+    from . import staff_auth
+
+    if request.method != "GET" or not staff_auth.available():
+        raise Http404()
+    return staff_auth.start(request)
+
+
 class DashboardLoginView(LoginView):
     """Admin login with a per-IP failed-attempt lockout (Fable5 H3).
 
@@ -65,6 +76,9 @@ class DashboardLoginView(LoginView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         user = self.request.user
+        from . import staff_auth
+
+        ctx["google_available"] = staff_auth.available()
         ctx["signed_in_non_staff"] = (
             user.is_authenticated and resolve_role(user).kind == "denied"
         )

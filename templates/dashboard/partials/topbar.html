@@ -27,6 +27,8 @@ screens; the menu is position-absolute so it never widens the page).
       <a href="{% url 'dashboard_explorer' %}"
          class="flex-none whitespace-nowrap px-3 py-1.5 rounded-full {% if nav_active == 'explorer' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Explorer</a>
       {% endif %}
+      <a href="{% url 'dashboard_report' %}"
+         class="flex-none whitespace-nowrap px-3 py-1.5 rounded-full {% if nav_active == 'report' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Report</a>
       <a href="{% url 'dashboard_daily' %}"
          class="flex-none whitespace-nowrap px-3 py-1.5 rounded-full {% if nav_active == 'daily' %}bg-cobalt-50 text-cobalt-600 font-semibold{% else %}text-ink-500 hover:bg-cobalt-50{% endif %}">Daily report</a>
       {% if not is_ap_admin %}
@@ -57,6 +59,12 @@ screens; the menu is position-absolute so it never widens the page).
         <a href="{% url 'dashboard_preferences' %}" role="menuitem"
            class="flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-ink-700 hover:bg-cobalt-50 focus:bg-cobalt-50 focus:outline-none {% if nav_active == 'preferences' %}bg-cobalt-50 text-cobalt-600 font-semibold{% endif %}">
           <span class="text-ink-400">⚙</span> Preferences
+        </a>
+        {% endif %}
+        {% if staff_is_owner %}
+        <a href="{% url 'dashboard_access' %}" role="menuitem"
+           class="flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-ink-700 hover:bg-cobalt-50 focus:bg-cobalt-50 focus:outline-none {% if nav_active == 'access' %}bg-cobalt-50 text-cobalt-600 font-semibold{% endif %}">
+          <span class="text-ink-400">◉</span> Access list
         </a>
         {% endif %}
         <a href="{% url 'dashboard_logout' %}" role="menuitem"
