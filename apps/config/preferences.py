@@ -998,6 +998,28 @@ MESSAGING_DIGEST_TOP_IDS_CAP_DEFAULT = 5
 MESSAGING_DIGEST_PARAMS_BUDGET = "messaging_digest_params_budget"
 MESSAGING_DIGEST_PARAMS_BUDGET_DEFAULT = 520
 
+# Role-based report page (owner-approved mock-up 2026-11-28, /admin-panel/report). Every
+# number that decides what the page shows or which "to do" items it raises is a cascade
+# key (rail E-6), with the approved value as its default. One dict, read through
+# `report_setting(key, tenant_id)` in apps/dashboard/role_report.py.
+REPORT_SETTINGS_DEFAULTS = {
+    "report_default_range_owner": "mtd",          # owner opens on "This month"
+    "report_default_range_admin": "yesterday",
+    "report_default_range_manager": "yesterday",
+    "report_failed_min": 5,                       # admin: failed messages that need fixing
+    "report_failed_pct": 10,                      #        ... or this % of queued
+    "report_meta_limit_pct": 5,                   # admin/owner: Meta-limit share worth raising
+    "report_sent_rate_min_pct": 70,               # owner: sent rate below this is a decision
+    "report_no_business_taps_min": 3,             # owner: taps on links of no business
+    "report_below_usual_pct": 40,                 # admin: "Below usual" when this far under
+    "report_usual_min": 5,                        #        ... and the usual is at least this
+    "report_quiet_days": 14,                      # manager: referrer gone quiet after N days
+    "report_shared_no_taps_hours": 48,            # manager: shared but no friend tapped in N hours
+    "report_shared_no_taps_min_shares": 3,        #          ... after at least this many shares
+    "report_wrong_ids_min": 2,                    # manager: wrong IDs typed in the share box
+    "report_todo_max": 5,                         # at most this many to-do items per role
+}
+
 # --- WhatsApp opt-out keywords (T-149) ----------------------------------------------
 # The inbound-text words that withdraw WhatsApp consent, per language. A cascade key
 # (rail E-6/§6d), not a literal: final wording is T-150's SSOT conversation-map card —

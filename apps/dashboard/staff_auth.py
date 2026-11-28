@@ -89,4 +89,4 @@ def complete(request):
     if not resolve_grants(user):  # e.g. a grant whose only business is inactive
         return _login_page(request, NOT_ON_LIST, status=403)
     login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-    return redirect(reverse("dashboard"))  # the report page replaces this in step 2
+    return redirect(reverse("dashboard_report"))

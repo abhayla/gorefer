@@ -36,14 +36,18 @@ from apps.events.models import Event
 STEP2_CHANNEL_LABEL = "WhatsApp"  # /open/wa -> metadata["channel"] (gorefer.flags labels)
 
 
-def _bounds(day: date):
+def _bounds(day: date, until: date | None = None):
+    """UTC [start, end) of IST `day`, or of `day`..`until` inclusive (a period)."""
     from .digest import _ist_day_bounds_utc
 
-    return _ist_day_bounds_utc(day)
+    start, end = _ist_day_bounds_utc(day)
+    if until is not None and until > day:
+        end = _ist_day_bounds_utc(until)[1]
+    return start, end
 
 
-def _human_events(tenant, day: date):
-    start, end = _bounds(day)
+def _human_events(tenant, day: date, until: date | None = None):
+    start, end = _bounds(day, until)
     return exclude_synthetic(
         Event.objects.for_tenant(tenant).filter(is_bot=False, timestamp__gte=start, timestamp__lt=end)
     )
@@ -68,9 +72,9 @@ def _prompt_counts(base, mode: str) -> dict:
     }
 
 
-def link_counts(tenant, day: date) -> dict:
-    """Every v2 link figure for one IST day (see module docstring)."""
-    base = _human_events(tenant, day)
+def link_counts(tenant, day: date, until: date | None = None) -> dict:
+    """Every v2 link figure for one IST day, or the period `day`..`until` inclusive."""
+    base = _human_events(tenant, day, until)
     clicks = base.filter(event_type=vocab.CLICK)
     open_clicks = clicks.filter(metadata__origin=vocab.ORIGIN_OPEN)
     step2 = open_clicks.filter(metadata__channel=STEP2_CHANNEL_LABEL)
@@ -100,16 +104,16 @@ def link_counts(tenant, day: date) -> dict:
         "share_prompt": _prompt_counts(base, vocab.PROMPT_MODE_SHARE),
         "referral_prompt": _prompt_counts(base, vocab.PROMPT_MODE_REFERRAL),
         "entered_ids": sorted(entered_ids.items(), key=lambda t: (-t[1], t[0])),
-        "new_referrers": _new_referrers(tenant, day),
-        "accounts": _accounts_opened(tenant, day),
+        "new_referrers": _new_referrers(tenant, day, until),
+        "accounts": _accounts_opened(tenant, day, until),
     }
 
 
-def _new_referrers(tenant, day: date) -> int:
-    """Referrers whose FIRST-ever human click fell on this day (Referral.first_click_at)."""
+def _new_referrers(tenant, day: date, until: date | None = None) -> int:
+    """Referrers whose FIRST-ever human click fell in the period (Referral.first_click_at)."""
     from apps.referrals.models import Referral
 
-    start, end = _bounds(day)
+    start, end = _bounds(day, until)
     return (
         Referral.objects.for_tenant(tenant)
         .filter(referral_identity__isnull=False, first_click_at__gte=start, first_click_at__lt=end)
@@ -117,11 +121,11 @@ def _new_referrers(tenant, day: date) -> int:
     )
 
 
-def _accounts_opened(tenant, day: date) -> dict:
+def _accounts_opened(tenant, day: date, until: date | None = None) -> dict:
     """Zoho-sourced openings by their TRUE date (ADR-017), with the Zoho-credited top referrer."""
     from apps.integrations.models import Conversion
 
-    start, end = _bounds(day)
+    start, end = _bounds(day, until)
     qs = Conversion.objects.for_tenant(tenant).filter(
         is_reversed=False, account_opened_at__gte=start, account_opened_at__lt=end,
     )

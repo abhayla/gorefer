@@ -5,7 +5,7 @@ from django.conf import settings
 from django.contrib.auth.views import LogoutView
 from django.urls import path
 
-from . import access_views, views
+from . import access_views, report_views, views
 
 urlpatterns = [
     path("login/", views.DashboardLoginView.as_view(), name="dashboard_login"),
@@ -28,6 +28,8 @@ urlpatterns = [
     path("daily/<str:day>/", views.daily_detail, name="dashboard_daily_detail"),
     # Preferences / Settings screen (Q-M-PREF / ADR-034).
     path("preferences", views.preferences, name="dashboard_preferences"),
+    # Role-based daily report (owner-approved mock-up 2026-11-28): same address every day.
+    path("report", report_views.report, name="dashboard_report"),
     # Who may open the admin report, with which roles (owners only; owner decision 2026-11-28).
     path("access/", access_views.access_list, name="dashboard_access"),
     path("access/<int:access_id>/revoke", access_views.access_revoke, name="dashboard_access_revoke"),

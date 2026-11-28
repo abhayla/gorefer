@@ -167,3 +167,7 @@ def report_access_required(view):
             raise PermissionDenied
         return view(request, *args, **kwargs)
     return inner
+
+
+#: The role-based report page: anyone holding at least one role.
+any_role_required = _gate(lambda u: bool(resolve_grants(u)))

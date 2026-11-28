@@ -297,8 +297,10 @@ _PUBLIC_API_PREFIXES = {"", "/click", "/leads", "/share", "/records-tokens", "/z
                         "/callback-request"}
 # dashboard_login_google: the staff "Continue with Google" entry. Like dashboard_login it is
 # a pre-auth sign-in step (a 302 to Google, no data); the access list decides afterwards.
+# dashboard_report: the role-based report (2026-11-28). A business manager may open it
+# like the daily report; tests/test_role_report.py pins that it shows only their business.
 _REPORT_NAMES = {"dashboard_login", "dashboard_login_google", "dashboard_logout",
-                 "dashboard_daily", "dashboard_daily_detail"}
+                 "dashboard_daily", "dashboard_daily_detail", "dashboard_report"}
 
 
 @pytest.fixture
